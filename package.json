@@ -1,0 +1,28 @@
+{
+  "name": "overseer",
+  "private": true,
+  "version": "0.0.1",
+  "description": "A single-page web console for driving CLI coding agents.",
+  "type": "module",
+  "workspaces": [
+    "packages/protocol",
+    "packages/web",
+    "packages/server",
+    "packages/adapters/*"
+  ],
+  "engines": {
+    "node": ">=22"
+  },
+  "scripts": {
+    "dev": "npm run dev --workspace packages/server",
+    "dev:web": "npm run dev --workspace packages/web",
+    "build": "npm run build --workspace packages/protocol && npm run build --workspace packages/adapters/mock && npm run build --workspace packages/adapters/claude-code && npm run build --workspace packages/web && npm run build --workspace packages/server",
+    "typecheck": "npm run typecheck --workspaces --if-present",
+    "lint": "npm run lint --workspaces --if-present",
+    "format": "prettier --write ."
+  },
+  "devDependencies": {
+    "prettier": "^3.4.2",
+    "typescript": "^5.7.2"
+  }
+}

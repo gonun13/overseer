@@ -1,0 +1,15 @@
+node_modules/
+dist/
+build/
+*.log
+.DS_Store
+.env
+.env.*
+!.env.example
+
+# host-shared agent workspace — never commit user projects
+/workspace/*
+!/workspace/.gitkeep
+
+# container-owned auth volume never lands here, but guard anyway
+.claude/

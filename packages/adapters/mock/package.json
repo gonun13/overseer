@@ -1,0 +1,19 @@
+{
+  "name": "@overseer/adapter-mock",
+  "version": "0.0.1",
+  "description": "Replays recorded session fixtures over the AgentAdapter interface — no CLI, no auth, no subscription burn.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@overseer/protocol": "*"
+  },
+  "devDependencies": {
+    "typescript": "^5.7.2"
+  }
+}

@@ -1,0 +1,27 @@
+{
+  "name": "@overseer/server",
+  "version": "0.0.1",
+  "description": "Node WS + REST server — session supervisor, adapter registry, static SPA host.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsx watch src/index.ts",
+    "start": "node dist/index.js",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@overseer/adapter-claude-code": "*",
+    "@overseer/adapter-mock": "*",
+    "@overseer/protocol": "*",
+    "express": "^4.21.2",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "@types/express": "^5.0.0",
+    "@types/node": "^22.10.2",
+    "@types/ws": "^8.5.13",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

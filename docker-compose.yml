@@ -1,0 +1,13 @@
+services:
+  overseer:
+    build: .
+    ports:
+      - "127.0.0.1:3000:3000" # loopback only — this is RCE-as-a-service (design doc §6)
+    volumes:
+      - claude-home:/home/node/.claude # container-owned; never bound to the host
+      - ./workspace:/work # the only shared surface
+    environment:
+      - CLAUDE_CONFIG_DIR=/home/node/.claude
+
+volumes:
+  claude-home:

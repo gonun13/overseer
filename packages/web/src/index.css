@@ -1,0 +1,108 @@
+@import "tailwindcss";
+@import "@fontsource/ibm-plex-mono/400.css";
+@import "@fontsource/ibm-plex-mono/500.css";
+@import "@fontsource/ibm-plex-mono/600.css";
+@import "@fontsource/ibm-plex-mono/700.css";
+
+/* Two opposed systems, not light/dark variants of one palette (design-system.md §1). */
+:root {
+  --bg: #090c0a;
+  --panel: #10140e;
+  --panel-alt: #151a12;
+  --border: rgba(140, 210, 160, 0.14);
+  --border-strong: rgba(140, 210, 160, 0.35);
+  --text: #dff2e6;
+  --text-dim: #7f9a89;
+  --text-faint: #4f6356;
+  --accent: #6ee7a0;
+  --warn: #e0a458;
+  --danger: #e2604c;
+}
+
+[data-theme="samaritan"] {
+  --bg: #ffffff;
+  --panel: #f6f6f4;
+  --panel-alt: #ececea;
+  --border: rgba(0, 0, 0, 0.1);
+  --border-strong: rgba(0, 0, 0, 0.22);
+  --text: #111111;
+  --text-dim: rgba(17, 17, 17, 0.6);
+  --text-faint: rgba(17, 17, 17, 0.38);
+  --accent: #d0342c;
+  --warn: #a8660f;
+  --danger: #7a1414;
+}
+
+@theme inline {
+  --color-bg: var(--bg);
+  --color-panel: var(--panel);
+  --color-panel-alt: var(--panel-alt);
+  --color-border: var(--border);
+  --color-border-strong: var(--border-strong);
+  --color-text: var(--text);
+  --color-text-dim: var(--text-dim);
+  --color-text-faint: var(--text-faint);
+  --color-accent: var(--accent);
+  --color-warn: var(--warn);
+  --color-danger: var(--danger);
+  --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 13px;
+  overflow: hidden;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+@keyframes pulse-dot {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+
+.status-dot--live {
+  animation: pulse-dot 2s ease-in-out infinite;
+}
+
+/* machine theme only — samaritan's severity is its clinical flatness (design-system.md §6). */
+.scanline-overlay {
+  display: none;
+}
+
+:root:not([data-theme="samaritan"]) .scanline-overlay {
+  display: block;
+  position: fixed;
+  inset: 0;
+  z-index: 9999;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    to bottom,
+    rgba(255, 255, 255, 0.015) 0px,
+    rgba(255, 255, 255, 0.015) 1px,
+    transparent 1px,
+    transparent 3px
+  );
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .status-dot--live {
+    animation: none;
+  }
+}
