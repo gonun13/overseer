@@ -1,6 +1,8 @@
 import type { IncomingMessage } from "node:http";
 import type { Server } from "node:http";
+import { isClientMessage, type ServerMessage } from "@overseer/protocol";
 import { WebSocketServer, type WebSocket } from "ws";
+import { runDiscovery } from "./discovery.js";
 
 /**
  * Any page in the browser can otherwise open a socket to localhost — check
@@ -35,8 +37,70 @@ export function attachWebSocketServer(httpServer: Server): WebSocketServer {
   });
 
   wss.on("connection", (ws: WebSocket) => {
-    ws.send(JSON.stringify({ type: "connected" }));
-    // TODO: route session events / user turns once the session supervisor exists.
+    /** Sending to a socket the operator just closed is normal, not an error. */
+    const send = (message: ServerMessage) => {
+      if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
+    };
+
+    send({ type: "connected", serverTime: new Date().toISOString() });
+
+    // One discovery pass at a time per connection. Without this a client that
+    // retries on a slow scan gets two interleaved runs writing two snapshots.
+    let discovering = false;
+
+    ws.on("message", async (raw) => {
+      let parsed: unknown;
+      try {
+        parsed = JSON.parse(raw.toString());
+      } catch {
+        send({ type: "error", message: "malformed frame: expected JSON" });
+        return;
+      }
+
+      if (!isClientMessage(parsed)) {
+        const about =
+          typeof parsed === "object" && parsed !== null
+            ? String((parsed as { type?: unknown }).type ?? "")
+            : "";
+        send({
+          type: "error",
+          about: about || undefined,
+          message: `unrecognized message type: ${about || "(none)"}`,
+        });
+        return;
+      }
+
+      // Discovery is the first family routed here; the session supervisor
+      // (webui design doc §1.2) joins this switch rather than replacing it.
+      switch (parsed.type) {
+        case "discovery.run": {
+          if (discovering) {
+            send({
+              type: "error",
+              about: "discovery.run",
+              message: "a discovery pass is already running",
+            });
+            return;
+          }
+          discovering = true;
+          try {
+            await runDiscovery(send);
+          } catch (error) {
+            send({
+              type: "error",
+              about: "discovery.run",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "discovery failed for an unknown reason",
+            });
+          } finally {
+            discovering = false;
+          }
+          return;
+        }
+      }
+    });
   });
 
   return wss;
