@@ -115,9 +115,16 @@ export function Prompt({
           }}
         />
         <div className="composer-meta">
+          {/* Unset options are omitted rather than shown blank, so the line
+              never reads as " · " with the values rubbed out. */}
           <span>
-            {settings.model} · {settings.mode}
-            {settings.agent !== "default" ? ` · ${settings.agent}` : ""}
+            {[
+              settings.model,
+              settings.mode,
+              settings.agent === "default" ? "" : settings.agent,
+            ]
+              .filter(Boolean)
+              .join(" · ")}
           </span>
           <span>
             {busy

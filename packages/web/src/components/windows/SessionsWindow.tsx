@@ -14,6 +14,7 @@ export function SessionsWindow({
 }) {
   return (
     <div>
+      {sessions.length === 0 && <div className="w-empty">no sessions</div>}
       {sessions.map((s) => {
         const project = projects.find((p) => p.id === s.projectId);
         return (

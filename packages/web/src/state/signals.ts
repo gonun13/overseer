@@ -49,7 +49,18 @@ export function deriveSignals(world: WorldState): Signal[] {
     });
   }
 
-  if (!adapter.authenticated) {
+  // An unnamed adapter is one that has never reported in, which is a different
+  // problem from a named one that is not signed in — and naming it anyway would
+  // put a guess in the most prominent line on the screen.
+  if (!adapter.name) {
+    signals.push({
+      id: "no-adapter",
+      activity: "waiting",
+      kicker: "adapter",
+      text: "No adapter is attached — sessions cannot start.",
+      target: { kind: "settings" },
+    });
+  } else if (!adapter.authenticated) {
     signals.push({
       id: "no-auth",
       activity: "waiting",

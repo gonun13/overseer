@@ -1,12 +1,17 @@
 import { WTitle } from "./bits";
 import { COMMANDS } from "../../commands";
 
-export function HelpWindow() {
+/** `adapter` is the attached adapter's name, empty when none is attached — the
+ * about block reports that rather than naming the one it expects to see. */
+export function HelpWindow({ adapter }: { adapter: string }) {
   return (
     <div>
       <WTitle>about</WTitle>
       <div className="w-pre">
-        {"overseer v0.1 — console for cli coding agents\nadapter: claude-code"}
+        {[
+          `overseer v${import.meta.env.VITE_APP_VERSION} — console for cli coding agents`,
+          adapter ? `adapter: ${adapter}` : "adapter: none attached",
+        ].join("\n")}
       </div>
 
       <WTitle>commands</WTitle>

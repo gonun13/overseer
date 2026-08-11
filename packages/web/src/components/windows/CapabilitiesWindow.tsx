@@ -10,6 +10,9 @@ export function CapabilitiesWindow({
 }) {
   return (
     <div>
+      {capabilities.length === 0 && (
+        <div className="w-empty">nothing configured</div>
+      )}
       {capabilities.map((c) => (
         <WRow
           key={c.id}

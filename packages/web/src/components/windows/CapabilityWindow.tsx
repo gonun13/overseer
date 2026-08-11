@@ -43,8 +43,8 @@ export function CapabilityWindow({ name }: { name: string }) {
 
       <WTitle>tools</WTitle>
       <p className="w-note">
-        what this {draft.kind} may call. A subagent cannot be granted a tool the
-        session itself does not have.
+        what this {draft.kind || "capability"} may call. A subagent cannot be
+        granted a tool the session itself does not have.
       </p>
       <div className="btn-row">
         {tools.map((tool) => (
@@ -59,10 +59,14 @@ export function CapabilityWindow({ name }: { name: string }) {
         ))}
       </div>
 
-      <WTitle>file</WTitle>
-      <div className="w-pre">
-        {`.claude/skills/${name || draft.name}/SKILL.md`}
-      </div>
+      {/* The path comes from the draft. Composing one here would invent a
+          location on disk that nothing has created. */}
+      {draft.file && (
+        <>
+          <WTitle>file</WTitle>
+          <div className="w-pre">{draft.file}</div>
+        </>
+      )}
 
       <div className="btn-row">
         <button className="w-btn">save</button>

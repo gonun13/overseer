@@ -13,6 +13,7 @@ export function SettingsPanel({
   open,
   theme,
   adapter,
+  workspace,
   onClose,
   onToggleTheme,
   onOpenCapabilities,
@@ -26,6 +27,8 @@ export function SettingsPanel({
     usage: number;
     spend: string;
   };
+  /** The container's mounts, which only the server knows; empty until it says. */
+  workspace: { root: string; staging: string };
   onClose: () => void;
   onToggleTheme: () => void;
   onOpenCapabilities: () => void;
@@ -84,17 +87,29 @@ export function SettingsPanel({
         </div>
 
         <WTitle>runtime</WTitle>
-        <WInline label="adapter" value={adapter.name} />
-        <WInline label="cli version" value={adapter.version} />
-        <WInline label="spend this window" value={adapter.spend} />
-        <WInline
-          label="plan window used"
-          value={`${Math.round(adapter.usage * 100)}%`}
-        />
+        {adapter.name ? (
+          <>
+            <WInline label="adapter" value={adapter.name} />
+            <WInline label="cli version" value={adapter.version} />
+            <WInline label="spend this window" value={adapter.spend} />
+            <WInline
+              label="plan window used"
+              value={`${Math.round(adapter.usage * 100)}%`}
+            />
+          </>
+        ) : (
+          <div className="w-empty">no adapter attached</div>
+        )}
 
         <WTitle>workspace</WTitle>
-        <WInline label="root" value="/work" />
-        <WInline label="staging" value="/work/_overseer/import" />
+        {workspace.root ? (
+          <>
+            <WInline label="root" value={workspace.root} />
+            <WInline label="staging" value={workspace.staging} />
+          </>
+        ) : (
+          <div className="w-empty">the server has not reported its mounts</div>
+        )}
         <div className="btn-row">
           <button className="w-btn">rescan projects</button>
           <button className="w-btn">import</button>

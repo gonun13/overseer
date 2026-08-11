@@ -57,7 +57,7 @@ export function ConsoleWindow({ adapter }: { adapter: string }) {
           value={value}
           spellCheck={false}
           autoComplete="off"
-          placeholder={`send to ${adapter}`}
+          placeholder={adapter ? `send to ${adapter}` : "no adapter attached"}
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {

@@ -1,5 +1,11 @@
 /** The bottom-left menu. Every row here changes what the *next* prompt does —
- * it is the prompt's control surface, not a nav menu (design-system.md §6). */
+ * it is the prompt's control surface, not a nav menu (design-system.md §6).
+ *
+ * Types only. Which models, modes and subagents an instance actually offers is
+ * a fact about that instance — it comes from the adapter and the project's
+ * config, not from this file. Until the adapter can report them the values live
+ * with the rest of the design fixtures in data/mock.ts, so production ships an
+ * empty control surface instead of inventing an option set. */
 
 export type PromptOptionKey = "model" | "mode" | "agent";
 
@@ -12,25 +18,5 @@ export interface PromptOption {
   danger?: string[];
 }
 
-export const PROMPT_OPTIONS: PromptOption[] = [
-  { key: "model", label: "model", values: ["opus-5", "sonnet-5", "haiku-4.5"] },
-  {
-    key: "mode",
-    label: "mode",
-    values: ["ask", "auto-accept", "plan", "bypass"],
-    danger: ["bypass"],
-  },
-  {
-    key: "agent",
-    label: "agent",
-    values: ["default", "developer", "tech-lead", "project-manager"],
-  },
-];
-
+/** Empty string means "the adapter has not told us yet" — never a stand-in value. */
 export type PromptSettings = Record<PromptOptionKey, string>;
-
-export const DEFAULT_PROMPT_SETTINGS: PromptSettings = {
-  model: "opus-5",
-  mode: "ask",
-  agent: "default",
-};
