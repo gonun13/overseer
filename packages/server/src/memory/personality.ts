@@ -218,7 +218,9 @@ async function ensureScaffold(root: string): Promise<boolean> {
 
     // A real git project, so it is discovered by the ordinary scanner and shows
     // up in the project panel with no special-casing anywhere in the UI.
-    await run("git", ["init", "-q"], { cwd: dir, timeout: 10_000 });
+    // -b main: don't inherit whatever init.defaultBranch happens to be, and
+    // don't emit git's "using master" advice into the scaffold path.
+    await run("git", ["init", "-q", "-b", "main"], { cwd: dir, timeout: 10_000 });
     await run("git", ["add", "-A"], { cwd: dir, timeout: 10_000 });
     await run(
       "git",
