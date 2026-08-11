@@ -21,7 +21,7 @@ export function Clock({ onOpenSettings }: { onOpenSettings: () => void }) {
     .toLowerCase();
 
   return (
-    <div className="clock">
+    <div className="clock settles-in">
       <div className="clock-read">
         <span className="clock-time">{time}</span>
         <span className="clock-date">{date}</span>

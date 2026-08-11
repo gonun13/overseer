@@ -374,7 +374,7 @@ export default function App() {
           />
         )}
         {furniture.footer && (
-          <p className="footer">
+          <p className="footer settles-in">
             overseer v{import.meta.env.VITE_APP_VERSION} | ask for{" "}
             <span style={{ color: "var(--accent)" }}>help</span> |{" "}
             <button className="footer-link" onClick={() => open("console")}>

@@ -1626,9 +1626,34 @@ button {
   animation: blink 0.6s ease-in-out infinite alternate;
 }
 
+/* Furniture blinks slowly into existence when discovery resolves, rather than
+   popping in mid-sentence. An animation and not a transition: these elements
+   mount at the moment they appear, and there is no prior value for a
+   transition to run from. The motion is a state change being reported — the
+   machine has finished looking around — which is the only thing motion is for
+   here (design-system.md §9). */
+@keyframes settle-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.settles-in {
+  animation: settle-in 420ms ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .blink,
   .light.pulse {
+    animation: none;
+  }
+  /* Instant, never nothing: the furniture is simply there, at full opacity,
+     the moment it mounts. The step pacing that stages it is dropped in
+     useDiscovery, which reads the same query. */
+  .settles-in {
     animation: none;
   }
   /* Collapses to an instant state change, not to nothing: the bar still says

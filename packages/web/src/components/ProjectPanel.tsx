@@ -27,7 +27,7 @@ export function ProjectPanel({
   onSelect: (project: Project) => void;
 }) {
   return (
-    <section className="projects">
+    <section className="projects settles-in">
       <div className="projects-head">
         <StatusLight activity={active?.activity ?? "idle"} size={10} />
         <span className="projects-kicker">project</span>

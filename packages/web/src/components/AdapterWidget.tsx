@@ -37,7 +37,7 @@ export function AdapterWidget({
         : "var(--text)";
 
   return (
-    <button className="widget" onClick={onOpenSettings}>
+    <button className="widget settles-in" onClick={onOpenSettings}>
       <span className="widget-frame">
         <span className="widget-head">
           <span className="widget-kicker">adapter</span>
