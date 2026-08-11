@@ -157,7 +157,13 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
 export interface Furniture {
   projectPanel: boolean;
   adapterWidget: boolean;
+  clock: boolean;
+  footer: boolean;
   prompt: boolean;
+  /** Whether the ranked signal list may render at all. Signals describe a world
+   * discovery has not looked at yet, so before it resolves they would state
+   * "no project selected" as a finding rather than as the absence of one. */
+  signals: boolean;
 }
 
 export function furnitureFor(state: WizardState): Furniture {
@@ -165,8 +171,14 @@ export function furnitureFor(state: WizardState): Furniture {
   return {
     projectPanel: discovered,
     adapterWidget: discovered,
+    // The clock and the footer are furniture like the rest: they belong to the
+    // settled screen, not to the boot one, and appear the moment its other
+    // pieces do.
+    clock: discovered,
+    footer: discovered,
     prompt:
       discovered && state.adapters.some((a) => a.status.authenticated),
+    signals: discovered,
   };
 }
 

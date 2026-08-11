@@ -44,6 +44,10 @@ import {
 } from "./data/mock";
 import type { Project, Turn } from "./domain";
 
+/** Module-level so the identity is stable: a fresh [] every render would churn
+ * OverseerSpace's ranking work on every boot frame. */
+const EMPTY_SIGNALS: Signal[] = [];
+
 export default function App() {
   // Samaritan is the reference theme and the default; machine is its opposite.
   const [theme, setTheme] = useState<"machine" | "samaritan">("samaritan");
@@ -116,10 +120,10 @@ export default function App() {
    * not exist. The windows those signals point at may still be fixture-backed
    * (#3 non-goals); the signals themselves may not be.
    *
-   * Deliberately not gated on the wizard being finished: `deriveSignals` runs
-   * against wizard state throughout, so the empty-instance signals ("no project
-   * selected", "no adapter is attached") are the same derivation rules doing
-   * their job, not a special case the wizard bypasses.
+   * The derivation itself runs throughout — the empty-instance signals ("no
+   * project selected", "no adapter is attached") are these same rules doing
+   * their job, not a special case. What is gated is only when the list becomes
+   * *visible*: see `visibleSignals` below.
    */
   const signals = useMemo(
     () =>
@@ -136,6 +140,16 @@ export default function App() {
     [projects, activeProject, adapter, busy, wizard.rejected],
   );
 
+  /**
+   * Signals stay hidden until discovery has actually run. Derived from an empty
+   * wizard state they are all true in form and premature in substance: "no
+   * project selected" on the first frame reads as a finding about the machine,
+   * when the machine has not been looked at yet. The headline and the
+   * operations window are what carry the boot screen; the ranked list below
+   * them arrives with the rest of the furniture.
+   */
+  const visibleSignals = furniture.signals ? signals : EMPTY_SIGNALS;
+
   // The wizard speaks only while it is running, and hands the headline back to
   // ordinary derivation the moment it settles — so a greeting can never end up
   // shadowing a real state word.
@@ -144,6 +158,12 @@ export default function App() {
   const headline = wizardWord
     ? { text: wizardWord, activity: "working" as const }
     : derived;
+  // The wizard's own words always type out. Typing is normally a rare tell that
+  // something is watching, but during boot it is the only thing on screen doing
+  // anything — leaving it to a ~15% roll means most boots show the greeting
+  // simply appearing. Scoped to the wizard: once it hands back to `derived`,
+  // personality (or useOccasionalTyping's default) governs again.
+  const typingChance = wizardWord ? 1 : wizard.personality.typingChance;
 
   // The operations window is the one window the machine summons (§3). Keyed on
   // the phase transition, so dismissing it mid-pass does not bring it back —
@@ -306,14 +326,14 @@ export default function App() {
         </>
       )}
 
-      <Clock onOpenSettings={() => setSettingsOpen(true)} />
+      {furniture.clock && <Clock onOpenSettings={() => setSettingsOpen(true)} />}
 
       <OverseerSpace
-        signals={signals}
+        signals={visibleSignals}
         headline={headline}
         busy={busy}
         loading={isLoading(wizard)}
-        typingChance={wizard.personality.typingChance}
+        typingChance={typingChance}
         onFollow={follow}
       />
 
@@ -353,13 +373,15 @@ export default function App() {
             onInspect={inspectTurn}
           />
         )}
-        <p className="footer">
-          overseer v{import.meta.env.VITE_APP_VERSION} | ask for{" "}
-          <span style={{ color: "var(--accent)" }}>help</span> |{" "}
-          <button className="footer-link" onClick={() => open("console")}>
-            open <span style={{ color: "var(--ok)" }}>console</span>
-          </button>
-        </p>
+        {furniture.footer && (
+          <p className="footer">
+            overseer v{import.meta.env.VITE_APP_VERSION} | ask for{" "}
+            <span style={{ color: "var(--accent)" }}>help</span> |{" "}
+            <button className="footer-link" onClick={() => open("console")}>
+              open <span style={{ color: "var(--ok)" }}>console</span>
+            </button>
+          </p>
+        )}
       </div>
 
       {windows.map((w) => (
