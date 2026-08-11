@@ -1,3 +1,4 @@
+import type { RejectedCustomization } from "@overseer/protocol";
 import { ACTIVITY_HEADLINE, ACTIVITY_RANK, type Activity } from "../status";
 import type { WindowKind } from "../windows";
 import type { Approval, Capability, Project, Session } from "../domain";
@@ -28,6 +29,9 @@ export interface WorldState {
   capabilities: Capability[];
   adapter: { name: string; authenticated: boolean; usage: number };
   busy: boolean;
+  /** Customizations in `overseer-personality` the overseer refused to apply.
+   * Optional because a world that has not run discovery has not been told. */
+  rejected?: RejectedCustomization[];
 }
 
 /**
@@ -38,6 +42,19 @@ export interface WorldState {
 export function deriveSignals(world: WorldState): Signal[] {
   const signals: Signal[] = [];
   const { activeProject, sessions, approvals, capabilities, adapter } = world;
+
+  // A customization the operator wrote that did not take effect. Reported, not
+  // dropped: silently ignoring it leaves them believing it worked, which is
+  // worse than refusing it out loud (docs/overseer.md §6.4).
+  for (const rejection of world.rejected ?? []) {
+    signals.push({
+      id: `personality-${rejection.field}`,
+      activity: "waiting",
+      kicker: "personality",
+      text: `"${rejection.field}" in overseer-personality was not applied: ${rejection.reason}.`,
+      target: { kind: "selector" },
+    });
+  }
 
   if (!activeProject) {
     signals.push({

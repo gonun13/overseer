@@ -16,30 +16,49 @@ import { ConsoleWindow } from "./components/windows/ConsoleWindow";
 import { ContextWindow } from "./components/windows/ContextWindow";
 import { HelpWindow } from "./components/windows/HelpWindow";
 import { DiffWindow } from "./components/windows/DiffWindow";
+import { OverseerWindow } from "./components/windows/OverseerWindow";
 import { useWindows } from "./state/useWindows";
 import { deriveSignals, headlineFor, type Signal } from "./state/signals";
+import { useDiscovery } from "./state/useDiscovery";
+import {
+  furnitureFor,
+  isLoading,
+  projectsFor,
+  wizardHeadline,
+} from "./state/wizard";
 import { matchCommand } from "./commands";
 import type { PromptOptionKey, PromptSettings } from "./prompt";
+// Fixtures, and only for windows outside the overseer's path: the sessions,
+// approvals, capabilities-detail, context, console and diff windows are still
+// design-development surfaces with their own issues (#3 non-goals). The
+// overseer's own inputs — headline, signals, wizard state, the operations
+// window — come from the server and never from here; see the `signals` memo.
 import {
-  mockAdapter,
   mockApprovals,
   mockCapabilities,
   mockContextFiles,
-  mockProjects,
   mockPromptOptions,
   mockPromptSettings,
   mockSessions,
   mockTranscript,
-  mockWorkspace,
 } from "./data/mock";
 import type { Project, Turn } from "./domain";
 
 export default function App() {
   // Samaritan is the reference theme and the default; machine is its opposite.
   const [theme, setTheme] = useState<"machine" | "samaritan">("samaritan");
-  const [activeProject, setActiveProject] = useState<Project | undefined>(
-    mockProjects[0],
-  );
+  // The wizard owns the boot sequence and everything discovery learned. One
+  // state machine decides which furniture is mounted, what the headline says
+  // and what the operations window shows, rather than three sets of
+  // conditionals in here drifting apart (docs/overseer.md §4).
+  const wizard = useDiscovery();
+  const furniture = furnitureFor(wizard);
+  const projects = useMemo(() => projectsFor(wizard), [wizard]);
+  const [selectedPath, setSelectedPath] = useState<string | undefined>();
+  // Defaults to the first discovered project, but an explicit pick wins — so
+  // discovery completing cannot yank the selection out from under the operator.
+  const activeProject: Project | undefined =
+    projects.find((p) => p.path === selectedPath) ?? projects[0];
   // The project panel is furniture, not an overlay: it starts open and stays open.
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -53,6 +72,32 @@ export default function App() {
   const { windows, open, close, closeTop, closeAll, raise, move } =
     useWindows();
 
+  // The adapter widget reads out whatever discovery found — including finding
+  // nothing, which is why it mounts on a bad result too. Usage and spend stay
+  // empty: no adapter has reported them and a plausible 0% is still invented.
+  const adapter = useMemo(() => {
+    const authenticated = wizard.adapters.find((a) => a.status.authenticated);
+    const reported = authenticated ?? wizard.adapters[0];
+    return {
+      name: reported?.id ?? "",
+      version: reported?.status.version ?? "",
+      authenticated: reported?.status.authenticated ?? false,
+      usage: 0,
+      spend: "",
+      context: "",
+    };
+  }, [wizard.adapters]);
+
+  // Where the agent's files live is a deployment fact the server owns, so it is
+  // blank until discovery reports it rather than assumed to be "/workspace".
+  const workspace = useMemo(
+    () => ({
+      root: wizard.workspaceRoot ?? "",
+      staging: wizard.workspaceRoot ? `${wizard.workspaceRoot}/_overseer/import` : "",
+    }),
+    [wizard.workspaceRoot],
+  );
+
   const toggleTheme = useCallback(() => {
     setTheme((t) => (t === "machine" ? "samaritan" : "machine"));
   }, []);
@@ -63,22 +108,50 @@ export default function App() {
     document.documentElement.dataset.theme = theme;
   }, [theme]);
 
+  /**
+   * Every input here is real server state or an honest empty. Sessions,
+   * approvals and capabilities are empty because this build has no session
+   * supervisor and discovers no capabilities yet — that is the true answer, and
+   * feeding the fixtures in would make the overseer report a machine that does
+   * not exist. The windows those signals point at may still be fixture-backed
+   * (#3 non-goals); the signals themselves may not be.
+   *
+   * Deliberately not gated on the wizard being finished: `deriveSignals` runs
+   * against wizard state throughout, so the empty-instance signals ("no project
+   * selected", "no adapter is attached") are the same derivation rules doing
+   * their job, not a special case the wizard bypasses.
+   */
   const signals = useMemo(
     () =>
       deriveSignals({
-        projects: mockProjects,
+        projects,
         activeProject,
-        sessions: mockSessions.filter(
-          (s) => !activeProject || s.projectId === activeProject.id,
-        ),
-        approvals,
-        capabilities: mockCapabilities,
-        adapter: mockAdapter,
+        sessions: [],
+        approvals: [],
+        capabilities: [],
+        adapter,
         busy,
+        rejected: wizard.rejected,
       }),
-    [activeProject, approvals, busy],
+    [projects, activeProject, adapter, busy, wizard.rejected],
   );
-  const headline = headlineFor(signals, busy);
+
+  // The wizard speaks only while it is running, and hands the headline back to
+  // ordinary derivation the moment it settles — so a greeting can never end up
+  // shadowing a real state word.
+  const wizardWord = wizardHeadline(wizard);
+  const derived = headlineFor(signals, busy);
+  const headline = wizardWord
+    ? { text: wizardWord, activity: "working" as const }
+    : derived;
+
+  // The operations window is the one window the machine summons (§3). Keyed on
+  // the phase transition, so dismissing it mid-pass does not bring it back —
+  // an operator who closed it has seen enough, and anything that genuinely
+  // needs them becomes a signal instead.
+  useEffect(() => {
+    if (wizard.phase === "discovery") open("overseer");
+  }, [wizard.phase, open]);
 
   /** Accordion: opening one section closes the others. */
   const toggleControl = useCallback((key: PromptOptionKey) => {
@@ -210,21 +283,28 @@ export default function App() {
 
   return (
     <div className="field">
-      <ProjectPanel
-        projects={mockProjects}
-        active={activeProject}
-        open={projectsOpen}
-        onToggle={() => setProjectsOpen((v) => !v)}
-        onSelect={(project) => {
-          setActiveProject(project);
-          setTurns([]);
-        }}
-      />
+      {/* Furniture mounts as each capability becomes knowable, not as it
+          becomes good — a panel reading "none" is the honest answer, and the
+          rule for which piece appears when lives in wizard.ts, not here. */}
+      {furniture.projectPanel && (
+        <>
+          <ProjectPanel
+            projects={projects}
+            active={activeProject}
+            open={projectsOpen}
+            onToggle={() => setProjectsOpen((v) => !v)}
+            onSelect={(project) => {
+              setSelectedPath(project.path);
+              setTurns([]);
+            }}
+          />
 
-      <ActiveProject
-        project={activeProject}
-        onPick={() => setProjectsOpen(true)}
-      />
+          <ActiveProject
+            project={activeProject}
+            onPick={() => setProjectsOpen(true)}
+          />
+        </>
+      )}
 
       <Clock onOpenSettings={() => setSettingsOpen(true)} />
 
@@ -232,36 +312,47 @@ export default function App() {
         signals={signals}
         headline={headline}
         busy={busy}
+        loading={isLoading(wizard)}
+        typingChance={wizard.personality.typingChance}
         onFollow={follow}
       />
 
-      <PromptControls
-        options={mockPromptOptions}
-        settings={promptSettings}
-        openKey={openControl}
-        contextCount={mockContextFiles.length}
-        onToggle={toggleControl}
-        onSelect={selectControl}
-        onOpenContext={() => open("context")}
-      />
+      {/* The prompt is a control, not a readout: without an authenticated
+          adapter there is nowhere to send a turn, so it stays unmounted rather
+          than mounting broken. */}
+      {furniture.prompt && (
+        <PromptControls
+          options={mockPromptOptions}
+          settings={promptSettings}
+          openKey={openControl}
+          contextCount={mockContextFiles.length}
+          onToggle={toggleControl}
+          onSelect={selectControl}
+          onOpenContext={() => open("context")}
+        />
+      )}
 
-      <AdapterWidget
-        adapter={mockAdapter}
-        onOpenSettings={() => setSettingsOpen(true)}
-      />
+      {furniture.adapterWidget && (
+        <AdapterWidget
+          adapter={adapter}
+          onOpenSettings={() => setSettingsOpen(true)}
+        />
+      )}
 
       <div className="dock">
-        <Prompt
-          expanded={promptOpen}
-          turns={turns}
-          busy={busy}
-          settings={promptSettings}
-          projectName={activeProject?.name}
-          onExpand={() => setPromptOpen(true)}
-          onCollapse={() => setPromptOpen(false)}
-          onSubmit={handleSubmit}
-          onInspect={inspectTurn}
-        />
+        {furniture.prompt && (
+          <Prompt
+            expanded={promptOpen}
+            turns={turns}
+            busy={busy}
+            settings={promptSettings}
+            projectName={activeProject?.name}
+            onExpand={() => setPromptOpen(true)}
+            onCollapse={() => setPromptOpen(false)}
+            onSubmit={handleSubmit}
+            onInspect={inspectTurn}
+          />
+        )}
         <p className="footer">
           overseer v{import.meta.env.VITE_APP_VERSION} | ask for{" "}
           <span style={{ color: "var(--accent)" }}>help</span> |{" "}
@@ -283,10 +374,11 @@ export default function App() {
           onRaise={() => raise(w.id)}
           onMove={(x, y) => move(w.id, x, y)}
         >
+          {w.kind === "overseer" && <OverseerWindow steps={wizard.steps} />}
           {w.kind === "sessions" && (
             <SessionsWindow
               sessions={mockSessions}
-              projects={mockProjects}
+              projects={projects}
               onOpenSession={() => {
                 setTurns(mockTranscript);
                 setPromptOpen(true);
@@ -315,8 +407,8 @@ export default function App() {
           {w.kind === "context" && (
             <ContextWindow projectName={activeProject?.name} />
           )}
-          {w.kind === "console" && <ConsoleWindow adapter={mockAdapter.name} />}
-          {w.kind === "help" && <HelpWindow adapter={mockAdapter.name} />}
+          {w.kind === "console" && <ConsoleWindow adapter={adapter.name} />}
+          {w.kind === "help" && <HelpWindow adapter={adapter.name} />}
           {w.kind === "diff" && <DiffWindow target={String(w.payload ?? "")} />}
         </Window>
       ))}
@@ -324,8 +416,8 @@ export default function App() {
       <SettingsPanel
         open={settingsOpen}
         theme={theme}
-        adapter={mockAdapter}
-        workspace={mockWorkspace}
+        adapter={adapter}
+        workspace={workspace}
         onClose={() => setSettingsOpen(false)}
         onToggleTheme={toggleTheme}
         onOpenCapabilities={() => {
