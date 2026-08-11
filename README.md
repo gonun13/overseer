@@ -34,22 +34,25 @@ Docker; you need nothing installed except Docker.
 ## Develop
 
 ```
-./bin/dev
+./bin/dev-start
 ```
 
 Vite on http://127.0.0.1:5173 with hot reload, API server on http://127.0.0.1:3000. Edit files on
 the host as usual — the source tree is bind-mounted and watched.
 
-| Command            | What it does                                                         |
-| ------------------ | -------------------------------------------------------------------- |
-| `./bin/dev`        | start the dev stack (add `-d` to detach, `--build` to force rebuild) |
-| `./bin/stop`       | stop it; volumes survive                                             |
-| `./bin/logs [svc]` | follow logs (`deps`, `server`, `web`)                                |
-| `./bin/sh [svc]`   | shell into a container (defaults to `server`)                        |
-| `./bin/npm <args>` | run npm inside the container — use this for **all** dependency work  |
-| `./bin/check`      | typecheck + lint                                                     |
-| `./bin/up`         | build and run the production stack                                   |
-| `./bin/reset`      | tear down and discard volumes, including agent auth                  |
+| Command             | What it does                                                             |
+| -------------------- | ------------------------------------------------------------------------- |
+| `./bin/dev-start`  | start the dev stack against real state (`-d` to detach, `--build` to force rebuild) |
+| `./bin/dev-stop`   | stop it; volumes survive                                                  |
+| `./bin/mock-start` | start the dev stack loaded with design fixtures instead of real state     |
+| `./bin/mock-stop`  | stop it — same containers as `dev-start`, so identical to `./bin/dev-stop` |
+| `./bin/start`      | build and run the production stack                                        |
+| `./bin/stop`       | stop the production stack                                                 |
+| `./bin/logs [svc]` | follow dev stack logs (`deps`, `server`, `web`)                           |
+| `./bin/sh [svc]`   | shell into a dev container (defaults to `server`)                        |
+| `./bin/npm <args>` | run npm inside the dev container — use this for **all** dependency work   |
+| `./bin/check`      | typecheck + lint                                                          |
+| `./bin/reset`      | tear down the dev stack and discard volumes, including agent auth         |
 
 Three services: `deps` builds `protocol` + the adapters and holds them in `tsc --watch` (`server`
 and `web` import them through `dist/`, so compose gates both on it), `server` runs `tsx watch`, and
@@ -60,8 +63,9 @@ and `web` import them through `dist/`, so compose gates both on it), `server` ru
 Several windows are still designed against static fixtures in `packages/web/src/data/mock.ts` —
 sessions, approvals, the capability editor, context, console and diff. They are a
 design-development device and they do not ship: they load only when `VITE_OVERSEER_WIREFRAME=1`,
-which the dev stack sets and the production image never does. Vite inlines the variable at build
-time, so `./bin/up` drops the fixtures from the bundle rather than shipping them unused.
+which `./bin/mock-start` sets and nothing else does — `./bin/dev-start` and the production image
+both leave it unset. Vite inlines the variable at build time, so `./bin/start` drops the fixtures
+from the bundle rather than shipping them unused.
 
 **The overseer's own path does not use them.** The headline, signals, wizard state and the
 operations window are computed from real server state or an explicit "not known yet" — no module in
@@ -73,13 +77,8 @@ and subagent lists, the prompt's starting settings, the workspace paths, the ada
 plausible default is invented data too, so the blank side of each pair is empty and the UI reports
 that it has not been told rather than filling the gap in.
 
-To see the dev stack as a fresh instance instead — no projects, sessions, approvals or capabilities:
-
-```
-VITE_OVERSEER_WIREFRAME=0 ./bin/dev
-```
-
-That is the same state `./bin/up` serves today.
+`./bin/dev-start` already gives you a fresh instance — no projects, sessions, approvals or
+capabilities, same as production. Use `./bin/mock-start` instead to preview the fixtures.
 
 Install a dependency with `./bin/npm install --workspace packages/web <pkg>` — never with host npm,
 which would write macOS binaries into a tree only ever read by Linux. `package-lock.json` is
@@ -88,7 +87,7 @@ bind-mounted, so the change lands on the host for committing.
 ## Run it (production)
 
 ```
-./bin/up
+./bin/start
 ```
 
 Serves the compiled SPA from the Node server at http://127.0.0.1:3000 — no bind-mounted source, no

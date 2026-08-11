@@ -88,10 +88,12 @@ services:
       - "127.0.0.1:5173:5173"
     environment:
       - OVERSEER_SERVER_ORIGIN=http://server:3000
-      # Loads the design fixtures. Set here and nowhere else — the production
-      # image never sets it, so a real instance boots empty by construction.
-      # Set to 0 to preview that empty state. See packages/web/src/data/mock.ts.
-      - VITE_OVERSEER_WIREFRAME=${VITE_OVERSEER_WIREFRAME:-1}
+      # Real state by default, matching production — the production image
+      # never sets this at all. ./bin/dev-start leaves it unset (0);
+      # ./bin/mock-start sets it to 1 to load the design fixtures in
+      # packages/web/src/data/mock.ts. Only matters if you invoke `docker
+      # compose` directly instead of the bin/ scripts.
+      - VITE_OVERSEER_WIREFRAME=${VITE_OVERSEER_WIREFRAME:-0}
       - CHOKIDAR_USEPOLLING=${CHOKIDAR_USEPOLLING:-1}
     volumes:
       - .:/app

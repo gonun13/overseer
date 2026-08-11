@@ -1,0 +1,18 @@
+#!/usr/bin/env sh
+# Start the dev stack against static design fixtures
+# (packages/web/src/data/mock.ts) instead of real state — sessions, approvals,
+# the capability editor, context, console and diff windows all populate
+# immediately. The overseer's own path (headline, signals, wizard, operations
+# window) never reads these fixtures regardless of this flag.
+#
+#   ./bin/mock-start           start (rebuilds images if the Dockerfile changed)
+#   ./bin/mock-start --build   force an image rebuild
+#   ./bin/mock-start -d        detached
+#
+# Use ./bin/dev-start instead to see a real, empty instance.
+. "$(dirname -- "$0")/_lib.sh"
+
+require_docker
+
+echo "overseer: starting dev stack (mock data) — web http://127.0.0.1:5173, server http://127.0.0.1:3000"
+VITE_OVERSEER_WIREFRAME=1 dev_compose up "$@"

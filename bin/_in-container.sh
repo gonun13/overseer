@@ -17,7 +17,8 @@ overseer: refusing to run outside the container.
   real ~/.claude and home directory inside the blast radius.
 
   Use instead:
-    ./bin/dev            start the dev stack (web :5173, server :3000)
+    ./bin/dev-start      start the dev stack (web :5173, server :3000)
+    ./bin/mock-start     same, loaded with design fixtures instead of real state
     ./bin/sh             shell into the dev container
     ./bin/npm <args>     run npm inside the container
 
