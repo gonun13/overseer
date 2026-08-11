@@ -5,6 +5,7 @@ import type {
   DiscoveryEvent,
   DiscoveryOutcome,
 } from "@overseer/protocol";
+import { readPersonality, type PersonalityResult } from "./memory/personality.js";
 import { listAdapters } from "./adapters.js";
 import { WORKSPACE_ROOT, scanWorkspace } from "./workspace.js";
 import {
@@ -81,6 +82,37 @@ export async function runDiscovery(emit: Emit): Promise<void> {
   const previous = await readSnapshot();
   const returning = previous !== undefined;
 
+  // Runs before the scan, deliberately: scaffolding the project first is what
+  // lets the ordinary scanner find it, so it reaches the project panel with no
+  // special-casing in the UI (docs/overseer.md §6.3).
+  const personality = await step<PersonalityResult>(
+    "personality",
+    "reading personality",
+    async () => {
+      const result = await readPersonality();
+      if (result.rejected.length > 0) {
+        return {
+          value: result,
+          // Rejections need the operator: they wrote something that did not
+          // take effect. Blocked, not failed — the read itself worked.
+          outcome: "blocked",
+          detail: `${result.rejected.length} customization${
+            result.rejected.length === 1 ? "" : "s"
+          } refused`,
+        };
+      }
+      return {
+        value: result,
+        outcome: "ok",
+        detail: result.scaffolded
+          ? "scaffolded overseer-personality"
+          : Object.keys(result.applied).length > 0
+            ? `${Object.keys(result.applied).length} customization(s) applied`
+            : "no customizations set",
+      };
+    },
+  );
+
   const projects = await step<DiscoveredProject[]>(
     "workspace",
     "scanning workspace",
@@ -144,6 +176,12 @@ export async function runDiscovery(emit: Emit): Promise<void> {
     adapters,
     workspaceRoot: WORKSPACE_ROOT,
     returning,
+    personality: personality.applied,
+    // Omitted rather than sent empty: "nothing was refused" is the absence of
+    // the field, not an empty list the client has to special-case.
+    ...(personality.rejected.length > 0
+      ? { rejected: personality.rejected }
+      : {}),
   });
 
   await Promise.all([
