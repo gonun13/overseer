@@ -32,7 +32,15 @@ export const WINDOW_SPEC: Record<
   // short padded line per step and nothing else, so a wide frame would be
   // mostly empty. The only kind summoned by the machine rather than the
   // operator (docs/overseer.md §3).
-  overseer: { title: "overseer", x: 420, y: 130, w: 460 },
+  //
+  // Top-right, under the clock/settings corner that already owns that region
+  // (design-system.md §1) — the machine's own voice belongs with the machine's
+  // own controls, not over the middle of the field. x is deliberately past any
+  // viewport: the spawn clamp below pins it to `innerWidth - w - 24`, which
+  // right-anchors it on every screen width rather than at one assumed one. y
+  // clears both the clock (top 20, ~42 tall) and the centred active-project
+  // readout (top 18, ~60 tall).
+  overseer: { title: "overseer", x: 9999, y: 96, w: 460 },
   sessions: { title: "sessions", x: 96, y: 168, w: 620 },
   approvals: { title: "approvals", x: 620, y: 148, w: 560 },
   capabilities: { title: "capabilities", x: 150, y: 250, w: 540 },
