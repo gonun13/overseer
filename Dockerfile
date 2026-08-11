@@ -42,6 +42,10 @@ RUN npm ci
 
 ENV NODE_ENV=development
 ENV CLAUDE_CONFIG_DIR=/home/node/.claude
+# The overseer's internal memory (docs/overseer.md §6.2). Stated here rather
+# than inferred at runtime, for the same reason CLAUDE_CONFIG_DIR is: where the
+# store lives is a deployment fact the image owns.
+ENV OVERSEER_INTERNAL_DIR=/app/.overseer
 # Read by bin/_in-container.sh — the only thing that distinguishes a sanctioned
 # run from someone typing `npm run dev` in a host terminal.
 ENV OVERSEER_IN_CONTAINER=1
@@ -49,7 +53,11 @@ ENV OVERSEER_IN_CONTAINER=1
 # node_modules is mounted as named volumes (compose overlays the bind mount of
 # the source tree). Docker seeds each volume from the image dir on first mount,
 # ownership included, so these must be node-owned *before* USER drops.
-RUN mkdir -p /home/node/.claude && chown -R node:node /home/node/.claude /app
+# .overseer is the same deal, and additionally must exist here so the volume it
+# backs is seeded node-owned — in dev the bind mount of the repo covers /app,
+# and this named volume is what keeps the store off the host anyway.
+RUN mkdir -p /home/node/.claude /app/.overseer/logs \
+    && chown -R node:node /home/node/.claude /app
 
 USER node
 EXPOSE 3000 5173
@@ -89,10 +97,13 @@ ENV NODE_ENV=production
 ENV HOST=0.0.0.0
 ENV PORT=3000
 ENV CLAUDE_CONFIG_DIR=/home/node/.claude
+ENV OVERSEER_INTERNAL_DIR=/app/.overseer
 
 # Docker seeds a fresh named volume from the image's dir on first mount,
-# ownership included — without this the node user can't write its own config.
-RUN mkdir -p /home/node/.claude && chown -R node:node /home/node/.claude
+# ownership included — without this the node user can't write its own config,
+# or its own memory (docs/overseer.md §6.2).
+RUN mkdir -p /home/node/.claude /app/.overseer/logs \
+    && chown -R node:node /home/node/.claude /app/.overseer
 
 USER node
 EXPOSE 3000

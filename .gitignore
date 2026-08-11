@@ -11,5 +11,7 @@ build/
 /workspace/*
 !/workspace/.gitkeep
 
-# container-owned auth volume never lands here, but guard anyway
+# container-owned volumes never land here, but guard anyway: the agent's auth,
+# and the overseer's internal memory (docs/overseer.md §6.2)
 .claude/
+.overseer/

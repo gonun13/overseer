@@ -54,10 +54,16 @@ services:
       - HOST=0.0.0.0 # container-internal; the port mapping above is the real boundary
       - PORT=3000
       - CLAUDE_CONFIG_DIR=/home/node/.claude
+      - OVERSEER_INTERNAL_DIR=/app/.overseer
       - CHOKIDAR_USEPOLLING=${CHOKIDAR_USEPOLLING:-1}
     volumes:
       - .:/app
       - claude-home:/home/node/.claude # container-owned; never bound to the host
+      # Internal memory (docs/overseer.md §6.2). This one matters more in dev
+      # than in prod: /app is a bind mount of the repo here, so without this
+      # named volume shadowing it the overseer's private store would be written
+      # straight into the host working tree — exactly the thing it must not be.
+      - overseer-memory:/app/.overseer
       - ./workspace:/workspace # the only surface the agent gets
       - node-modules-root:/app/node_modules
       - node-modules-protocol:/app/packages/protocol/node_modules
@@ -103,6 +109,9 @@ volumes:
   # Shared with the production stack by name only if you run both; the dev
   # project name (overseer-dev) keeps them separate.
   claude-home:
+  # Internal memory: logs, the action register, the world snapshot. Named
+  # volume, never a bind mount — see the server service's note above.
+  overseer-memory:
   # These shadow the bind-mounted host node_modules, which is macOS-built and
   # would break native deps in a linux container.
   node-modules-root:
