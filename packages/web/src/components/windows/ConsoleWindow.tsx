@@ -1,6 +1,7 @@
 import { useEffect, useRef, useState } from "react";
+import { WAdapterNote } from "./bits";
 import { mockConsole } from "../../data/mock";
-import type { ConsoleLine } from "../../domain";
+import type { AdapterInfo, ConsoleLine } from "../../domain";
 
 /**
  * A direct terminal into the adapter's CLI, for operators who already know it.
@@ -13,7 +14,7 @@ import type { ConsoleLine } from "../../domain";
  * continuous stream on one ground, and breaking it into per-line panels would
  * make it stop reading as a terminal (design-system.md §5.3).
  */
-export function ConsoleWindow({ adapter }: { adapter: string }) {
+export function ConsoleWindow({ adapter }: { adapter: AdapterInfo }) {
   const [lines, setLines] = useState<ConsoleLine[]>(mockConsole);
   const [value, setValue] = useState("");
   const end = useRef<HTMLDivElement>(null);
@@ -38,6 +39,7 @@ export function ConsoleWindow({ adapter }: { adapter: string }) {
 
   return (
     <div className="console">
+      <WAdapterNote adapter={adapter} />
       <div className="console-out no-drag">
         {lines.map((line, i) => (
           <div key={i} className={`console-line ${line.kind}`}>
@@ -58,7 +60,9 @@ export function ConsoleWindow({ adapter }: { adapter: string }) {
           value={value}
           spellCheck={false}
           autoComplete="off"
-          placeholder={adapter ? `send to ${adapter}` : "no adapter attached"}
+          placeholder={
+            adapter.name ? `send to ${adapter.name}` : "no adapter attached"
+          }
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {
             if (e.key === "Enter") {

@@ -401,6 +401,7 @@ export default function App() {
             <SessionsWindow
               sessions={mockSessions}
               projects={projects}
+              adapter={adapter}
               onOpenSession={() => {
                 setTurns(mockTranscript);
                 setPromptOpen(true);
@@ -412,6 +413,7 @@ export default function App() {
           {w.kind === "approvals" && (
             <ApprovalsWindow
               approvals={approvals}
+              adapter={adapter}
               onResolve={(id) =>
                 setApprovals((current) => current.filter((a) => a.id !== id))
               }
@@ -420,6 +422,7 @@ export default function App() {
           {w.kind === "capabilities" && (
             <CapabilitiesWindow
               capabilities={mockCapabilities}
+              adapter={adapter}
               onEdit={(name) => open("capability", name, name)}
             />
           )}
@@ -427,10 +430,13 @@ export default function App() {
             <CapabilityWindow name={String(w.payload ?? "")} />
           )}
           {w.kind === "context" && (
-            <ContextWindow projectName={activeProject?.name} />
+            <ContextWindow
+              projectName={activeProject?.name}
+              adapter={adapter}
+            />
           )}
-          {w.kind === "console" && <ConsoleWindow adapter={adapter.name} />}
-          {w.kind === "help" && <HelpWindow adapter={adapter.name} />}
+          {w.kind === "console" && <ConsoleWindow adapter={adapter} />}
+          {w.kind === "help" && <HelpWindow adapter={adapter} />}
           {w.kind === "diff" && <DiffWindow target={String(w.payload ?? "")} />}
         </Window>
       ))}

@@ -1,15 +1,18 @@
-import { WRow } from "./bits";
-import type { Capability } from "../../domain";
+import { WAdapterNote, WRow } from "./bits";
+import type { AdapterInfo, Capability } from "../../domain";
 
 export function CapabilitiesWindow({
   capabilities,
+  adapter,
   onEdit,
 }: {
   capabilities: Capability[];
+  adapter: AdapterInfo;
   onEdit: (name: string) => void;
 }) {
   return (
     <div>
+      <WAdapterNote adapter={adapter} />
       {capabilities.length === 0 && (
         <div className="w-empty">nothing configured</div>
       )}

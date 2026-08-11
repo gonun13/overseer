@@ -1,12 +1,32 @@
 import type { ReactNode } from "react";
 import { StatusLight } from "../StatusLight";
 import { ACTIVITY_STEP_WORD, type Activity } from "../../status";
+import type { AdapterInfo } from "../../domain";
 
 /** Content primitives shared by windows and the settings panel. Nothing here
  * sets a width — the frame owns the width so content can never overflow it. */
 
 export function WTitle({ children }: { children: ReactNode }) {
   return <div className="w-title">{children}</div>;
+}
+
+/**
+ * The `w-note` line every window carries when its controls need an adapter and
+ * none is attached. Renders nothing once one is.
+ *
+ * Above the content rather than instead of it: the window still shows what it
+ * would do, so the operator can read the shape of the thing before deciding
+ * whether attaching an adapter is worth it. Hiding the body would answer a
+ * question they have not asked yet. One place, so six windows cannot drift into
+ * six different phrasings of the same fact.
+ */
+export function WAdapterNote({ adapter }: { adapter: AdapterInfo }) {
+  if (adapter.authenticated) return null;
+  return (
+    <p className="w-note">
+      needs a connected adapter — nothing here can act until one is attached.
+    </p>
+  );
 }
 
 export function WInline({ label, value }: { label: string; value: ReactNode }) {

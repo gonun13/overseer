@@ -1,16 +1,18 @@
-import { WTitle } from "./bits";
+import { WAdapterNote, WTitle } from "./bits";
 import { COMMANDS } from "../../commands";
+import type { AdapterInfo } from "../../domain";
 
-/** `adapter` is the attached adapter's name, empty when none is attached — the
- * about block reports that rather than naming the one it expects to see. */
-export function HelpWindow({ adapter }: { adapter: string }) {
+/** `adapter.name` is empty when none is attached — the about block reports that
+ * rather than naming the one it expects to see. */
+export function HelpWindow({ adapter }: { adapter: AdapterInfo }) {
   return (
     <div>
+      <WAdapterNote adapter={adapter} />
       <WTitle>about</WTitle>
       <div className="w-pre">
         {[
           `overseer v${import.meta.env.VITE_APP_VERSION} — console for cli coding agents`,
-          adapter ? `adapter: ${adapter}` : "adapter: none attached",
+          adapter.name ? `adapter: ${adapter.name}` : "adapter: none attached",
         ].join("\n")}
       </div>
 
