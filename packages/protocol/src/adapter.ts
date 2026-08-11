@@ -62,10 +62,28 @@ export interface SessionHandle {
   close(): Promise<void>;
 }
 
+/**
+ * Whether this adapter could actually start a session right now. Asked before
+ * any session exists — the wizard's auth-check step calls this, so it must not
+ * assume a session, a project or a running process.
+ *
+ * `detail` is the operator-facing half: "not logged in" and "token expired" are
+ * both `authenticated: false` and want different actions. Left undefined when
+ * there is nothing to add beyond the flag.
+ */
+export interface AdapterStatus {
+  authenticated: boolean;
+  detail?: string;
+  /** The adapter's own version, when it can report one. Never guessed. */
+  version?: string;
+}
+
 export interface AgentAdapter {
   id: string;
   capabilities: AdapterCapabilities;
   createSession(opts: SessionOpts): Promise<SessionHandle>;
   resumeSession(id: string): Promise<SessionHandle>;
   listSessions(): Promise<SessionMeta[]>;
+  /** Must resolve rather than throw: a failed check is a status, not an error. */
+  getStatus(): Promise<AdapterStatus>;
 }

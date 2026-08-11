@@ -1,6 +1,7 @@
 import type {
   AgentAdapter,
   AdapterCapabilities,
+  AdapterStatus,
   AgentEvent,
   SessionHandle,
   SessionMeta,
@@ -45,6 +46,12 @@ export const mockAdapter: AgentAdapter = {
   },
   async listSessions(): Promise<SessionMeta[]> {
     return [];
+  },
+  /** Always authenticated, and that is not a placeholder: this adapter replays
+   * fixtures, so there is no account to sign into and nothing that could ever
+   * fail to be signed in. */
+  async getStatus(): Promise<AdapterStatus> {
+    return { authenticated: true, detail: "replays fixtures; no auth needed" };
   },
 };
 
