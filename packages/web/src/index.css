@@ -576,27 +576,39 @@ button {
 }
 
 /* Boot only. Sits where the ▲ marker sits, so the headline block doesn't jump
-   when the wizard swaps one for the other. */
+   when the wizard swaps one for the other. A segmented meter, not a sliding
+   stripe: blocky and monospace-flavoured like everything else here, and
+   monochrome — this is chrome, not a status light, so it doesn't reach for
+   --accent. */
 .loading-bar {
-  width: 150px;
-  height: 4px;
+  width: 160px;
+  height: 14px;
   margin-top: 10px;
-  border: 1px solid var(--text-faint);
+  padding: 2px;
+  border: 2px solid var(--text);
+  box-sizing: border-box;
 }
 
 .loading-bar-fill {
-  width: 30%;
+  width: 8%;
   height: 100%;
-  background: var(--accent);
-  animation: load 1.1s ease-in-out infinite;
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--text) 0,
+    var(--text) 7px,
+    transparent 7px,
+    transparent 10px
+  );
+  animation: load 1.4s ease-in-out infinite;
 }
 
 @keyframes load {
-  0% {
-    transform: translateX(-100%);
-  }
+  0%,
   100% {
-    transform: translateX(333%);
+    width: 8%;
+  }
+  70% {
+    width: 92%;
   }
 }
 
