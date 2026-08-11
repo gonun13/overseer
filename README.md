@@ -52,11 +52,25 @@ the host as usual — the source tree is bind-mounted and watched.
 | `./bin/sh [svc]`   | shell into a dev container (defaults to `server`)                        |
 | `./bin/npm <args>` | run npm inside the dev container — use this for **all** dependency work   |
 | `./bin/check`      | typecheck + lint                                                          |
+| `./bin/test-e2e`   | Playwright acceptance tests against the dev stack (args pass through to `playwright test`) |
 | `./bin/reset`      | tear down the dev stack and discard volumes, including agent auth         |
 
 Three services: `deps` builds `protocol` + the adapters and holds them in `tsc --watch` (`server`
 and `web` import them through `dist/`, so compose gates both on it), `server` runs `tsx watch`, and
-`web` runs Vite proxying `/api` and `/ws` to `server:3000`.
+`web` runs Vite proxying `/api` and `/ws` to `server:3000`. A fourth, `e2e`, is not part of the
+stack — `./bin/test-e2e` runs it on demand, and it reaches `web:5173` over the compose network
+rather than the host.
+
+Tests are no exception to the rule above: `packages/e2e` runs inside its own container, off a
+`test` image that is the `dev` one plus Chromium, so `./bin/dev-start` never pays for the browser
+download. It brings up whatever it needs, so `./bin/test-e2e` on its own is enough.
+
+For manual browser checks, the [Playwright MCP server](https://github.com/microsoft/playwright-mcp)
+is registered project-wide in `.mcp.json`, so Claude Code picks it up automatically in this repo
+with nothing to re-register per session. It is a generic tool driving a browser on the host, not
+this app running there — start the stack first (`./bin/dev-start` or `./bin/mock-start`) so
+`127.0.0.1:5173` and `:3000` are live, then Claude can click through the running instance directly
+instead of writing one-off Playwright scripts.
 
 ### Wireframe fixtures
 

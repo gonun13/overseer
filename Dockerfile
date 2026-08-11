@@ -10,6 +10,7 @@ COPY packages/server/package.json packages/server/package.json
 COPY packages/web/package.json packages/web/package.json
 COPY packages/adapters/mock/package.json packages/adapters/mock/package.json
 COPY packages/adapters/claude-code/package.json packages/adapters/claude-code/package.json
+COPY packages/e2e/package.json packages/e2e/package.json
 RUN npm ci
 
 COPY tsconfig.base.json ./
@@ -38,6 +39,7 @@ COPY packages/server/package.json packages/server/package.json
 COPY packages/web/package.json packages/web/package.json
 COPY packages/adapters/mock/package.json packages/adapters/mock/package.json
 COPY packages/adapters/claude-code/package.json packages/adapters/claude-code/package.json
+COPY packages/e2e/package.json packages/e2e/package.json
 RUN npm ci
 
 ENV NODE_ENV=development
@@ -61,6 +63,20 @@ RUN mkdir -p /home/node/.claude /app/.overseer/logs \
 
 USER node
 EXPOSE 3000 5173
+
+# ---- test: dev image + Playwright browsers, used only by the e2e service ---
+# Split from `dev` so `./bin/dev-start` never pays for a Chromium download —
+# only the `e2e` service (docker-compose.dev.yml, ./bin/test-e2e) builds this.
+FROM dev AS test
+
+USER root
+# --with-deps installs both the apt packages Chromium needs and the browser
+# binary itself. Browsers land under PLAYWRIGHT_BROWSERS_PATH rather than
+# root's default cache dir, because tests run as `node`, same as `dev`.
+ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
+RUN npx playwright install --with-deps chromium \
+    && chown -R node:node "$PLAYWRIGHT_BROWSERS_PATH"
+USER node
 
 # ---- runtime: production deps only + compiled output -----------------------
 FROM node:22-bookworm-slim AS runtime

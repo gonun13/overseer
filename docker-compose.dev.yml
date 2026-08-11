@@ -107,6 +107,37 @@ services:
       deps:
         condition: service_healthy
 
+  # Playwright acceptance tests against the running web + server services —
+  # never against the host (see bin/test-e2e; there is no host-side run path
+  # for this project, tests included). `docker compose run` starts its
+  # depends_on services if they aren't already up, so `./bin/test-e2e` alone
+  # is enough to stand up the stack and run against it.
+  e2e:
+    build:
+      context: .
+      target: test
+    environment:
+      - E2E_BASE_URL=http://web:5173
+      - CI=${CI:-}
+    volumes:
+      - .:/app
+      - node-modules-root:/app/node_modules
+      - node-modules-protocol:/app/packages/protocol/node_modules
+      - node-modules-web:/app/packages/web/node_modules
+      - node-modules-server:/app/packages/server/node_modules
+      - node-modules-mock:/app/packages/adapters/mock/node_modules
+      - node-modules-claude-code:/app/packages/adapters/claude-code/node_modules
+      - node-modules-e2e:/app/packages/e2e/node_modules
+      # Reports and traces land on the host so a failure can be inspected
+      # after the container exits.
+      - ./packages/e2e/playwright-report:/app/packages/e2e/playwright-report
+      - ./packages/e2e/test-results:/app/packages/e2e/test-results
+    depends_on:
+      server:
+        condition: service_started
+      web:
+        condition: service_started
+
 volumes:
   # Shared with the production stack by name only if you run both; the dev
   # project name (overseer-dev) keeps them separate.
@@ -122,3 +153,4 @@ volumes:
   node-modules-server:
   node-modules-mock:
   node-modules-claude-code:
+  node-modules-e2e:

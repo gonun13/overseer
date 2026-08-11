@@ -2,6 +2,11 @@ node_modules/
 dist/
 build/
 *.log
+
+# playwright output — reports and traces from ./bin/test-e2e, written through a
+# bind mount so a failed run can be read on the host
+packages/e2e/playwright-report/
+packages/e2e/test-results/
 .DS_Store
 .env
 .env.*
