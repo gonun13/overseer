@@ -66,14 +66,6 @@ export interface WizardState {
    * the boot: the presentation runs on its own clock and only discovery
    * actually waits on this. */
   connected: boolean;
-  /** How many times the socket has been dialled again after failing to open.
-   * Shown, not hidden: a boot that is quietly on its third attempt looks
-   * identical to one that is simply slow, and they are not the same thing. */
-  attempt: number;
-  /** The socket has taken long enough that saying nothing would be a lie of
-   * omission. The connection is local; past a second or two it is not slow,
-   * it is stuck. */
-  slow: boolean;
 }
 
 export const INITIAL_WIZARD: WizardState = {
@@ -84,8 +76,6 @@ export const INITIAL_WIZARD: WizardState = {
   personality: {},
   rejected: [],
   connected: false,
-  attempt: 0,
-  slow: false,
 };
 
 /** Discovery outcomes are the same five activities in a different register —
@@ -100,10 +90,6 @@ const OUTCOME_ACTIVITY: Record<DiscoveryOutcome, Activity> = {
 export type WizardAction =
   | { type: "socket.open" }
   | { type: "socket.error"; message: string }
-  /** The socket is still not open and the wait has become worth naming. */
-  | { type: "socket.slow" }
-  /** The socket never opened; it has been dropped and dialled again. */
-  | { type: "socket.retry" }
   | { type: "discovery.requested" }
   | { type: "server.event"; event: DiscoveryEvent }
   /** The boot beat has run its designed length. */
@@ -119,21 +105,11 @@ export function wizardReducer(
 ): WizardState {
   switch (action.type) {
     case "socket.open":
-      // Records a fact and moves no phase. Clears `slow` on the way through: a
-      // connection that took three tries still opened, and the headline should
-      // stop apologising once it has.
-      return { ...state, connected: true, slow: false };
+      // Records a fact and moves no phase.
+      return { ...state, connected: true };
 
     case "socket.error":
       return { ...state, error: action.message, connected: false, phase: "ready" };
-
-    case "socket.slow":
-      return state.connected ? state : { ...state, slow: true };
-
-    case "socket.retry":
-      return state.connected
-        ? state
-        : { ...state, attempt: state.attempt + 1, slow: true, connected: false };
 
     case "boot.done":
       return state.phase === "boot" ? { ...state, phase: "welcome" } : state;
@@ -253,11 +229,7 @@ export function wizardHeadline(state: WizardState): string | undefined {
     // The first phase that genuinely needs the connection, so the first one
     // with standing to report it missing.
     case "discovery":
-      if (!state.connected) {
-        if (state.attempt > 0) return "reconnecting";
-        return state.slow ? "still connecting" : "connecting";
-      }
-      return "looking around";
+      return state.connected ? "looking around" : "connecting";
     default:
       return undefined;
   }
