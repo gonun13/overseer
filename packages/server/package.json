@@ -12,12 +12,12 @@
   },
   "dependencies": {
     "@overseer/adapter-claude-code": "*",
-    "@overseer/adapter-mock": "*",
     "@overseer/protocol": "*",
     "express": "^4.21.2",
     "ws": "^8.18.0"
   },
   "devDependencies": {
+    "@overseer/adapter-mock": "*",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
     "@types/ws": "^8.5.13",
