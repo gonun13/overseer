@@ -77,7 +77,7 @@ spawn(
     mode,
   ],
   { cwd: projectDir },
-); // a directory under /work
+); // a directory under /workspace
 ```
 
 - **stdin:** `{"type":"user","message":{"role":"user","content":[...]}}`. Content blocks mean pasted images and file attachments need no separate upload path.
@@ -103,7 +103,7 @@ The container owns its own `~/.claude` in a named Docker volume. The host's conf
 
 **Login from the frontend.** The system zone runs `claude setup-token` under a PTY (`node-pty` — the flow expects a TTY), scrapes the verification URL from its output, and renders it as a link plus a paste-back field for the returned code, which is written to the subprocess stdin. The container is headless and can't open a browser, so URL-out / code-in is the flow. Session state, expiry, and account are shown alongside it.
 
-**Bootstrapping from existing config.** `/work` is the only shared surface, so it's also the sanctioned config channel: drop files at `./workspace/_overseer/import/` on the host, hit IMPORT in the system zone, and the server copies them into `$CLAUDE_CONFIG_DIR`. EXPORT does the reverse for backup. Explicit, auditable, one direction at a time — not a live bind mount that lets host and container race each other.
+**Bootstrapping from existing config.** `/workspace` is the only shared surface, so it's also the sanctioned config channel: drop files at `./workspace/_overseer/import/` on the host, hit IMPORT in the system zone, and the server copies them into `$CLAUDE_CONFIG_DIR`. EXPORT does the reverse for backup. Explicit, auditable, one direction at a time — not a live bind mount that lets host and container race each other.
 
 **Compliance.** Anthropic's Feb 2026 policy restricts Pro/Max OAuth tokens to Claude Code and claude.ai; the Agent SDK requires API-key billing even for personal tools. Headless CLI mode is still Claude Code and stays on subscription auth — hence spawning the binary rather than importing `@anthropic-ai/claude-agent-sdk`. Re-check https://code.claude.com/docs/en/legal-and-compliance; this is actively evolving.
 
@@ -133,7 +133,7 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Interrupt turn                                     | Console  | `control_request` subtype `interrupt`                             |
 | Queue message during a turn                        | Console  | buffer in `SessionHandle.send`                                    |
 | Model + effort selector                            | Console  | `--model`, `--effort`                                             |
-| Create session in a project                        | Sessions | pick a dir under `/work`; mint `--session-id`                     |
+| Create session in a project                        | Sessions | pick a dir under `/workspace`; mint `--session-id`                 |
 | Resume session + history replay                    | Sessions | `--resume`; parse JSONL for backfill (§4)                         |
 | Session list with live status                      | Sessions | supervisor state + JSONL mtime                                    |
 | Account usage + spend                              | Top bar  | §2.1                                                              |
@@ -164,7 +164,7 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Session naming                            | Sessions     | `-n <name>`                                                                                                   |
 | Multi-root workspace                      | Sessions     | `--add-dir`                                                                                                   |
 | Search across sessions                    | Sessions     | index JSONL into SQLite                                                                                       |
-| Config import / export                    | System       | via `/work/_overseer/` (§2)                                                                                   |
+| Config import / export                    | System       | via `/workspace/_overseer/` (§2)                                                                              |
 | Hook event stream                         | System       | `--include-hook-events`                                                                                       |
 | CLI version + health                      | System       | `claude doctor`, version drift warning                                                                        |
 | Settings source inspector                 | System       | `--setting-sources user,project,local` — shows _which_ file a value came from                                 |
@@ -217,7 +217,7 @@ services:
     ports: ["127.0.0.1:3000:3000"]
     volumes:
       - claude-home:/home/node/.claude # container-owned; never bound to host
-      - ./workspace:/work # the only shared surface
+      - ./workspace:/workspace # the only shared surface
     environment:
       - CLAUDE_CONFIG_DIR=/home/node/.claude
 volumes:
@@ -226,10 +226,10 @@ volumes:
 
 One process: the Node server serves the built SPA as static files and handles `/api/*` + `/ws` on the same port. No reverse proxy for local use.
 
-- `/work/<project>/` — one git project per directory. Session creation picks one; it becomes the process `cwd`.
-- `/work/_overseer/` — import/export staging and the local SQLite store for usage, session index, and search.
+- `/workspace/<project>/` — one git project per directory. Session creation picks one; it becomes the process `cwd`.
+- `/workspace/_overseer/` — import/export staging and the local SQLite store for usage, session index, and search.
 - Image needs `git`, `ripgrep`, and a shell alongside Node; the CLI shells out to all three. `node-pty` for the auth flow. Run as non-root.
-- Because `.claude` is container-owned, the previous draft's host/container config race is gone. The remaining overlap is `/work` itself: host-side git operations on a project while an agent writes to it. Normal git discipline covers it; the UI shows each session's `gitBranch` and dirty state so the conflict is at least visible.
+- Because `.claude` is container-owned, the previous draft's host/container config race is gone. The remaining overlap is `/workspace` itself: host-side git operations on a project while an agent writes to it. Normal git discipline covers it; the UI shows each session's `gitBranch` and dirty state so the conflict is at least visible.
 
 ---
 

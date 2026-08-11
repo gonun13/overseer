@@ -64,7 +64,7 @@ const wireframeProjects: Project[] = [
   {
     id: "p1",
     name: "billing-service",
-    path: "/work/billing-service",
+    path: "/workspace/billing-service",
     branch: "fix/refund-race",
     dirty: true,
     activity: "attention",
@@ -73,7 +73,7 @@ const wireframeProjects: Project[] = [
   {
     id: "p2",
     name: "overseer",
-    path: "/work/overseer",
+    path: "/workspace/overseer",
     branch: "main",
     dirty: false,
     activity: "working",
@@ -82,7 +82,7 @@ const wireframeProjects: Project[] = [
   {
     id: "p3",
     name: "docs-site",
-    path: "/work/docs-site",
+    path: "/workspace/docs-site",
     branch: "main",
     dirty: false,
     activity: "done",
@@ -91,7 +91,7 @@ const wireframeProjects: Project[] = [
   {
     id: "p4",
     name: "infra",
-    path: "/work/infra",
+    path: "/workspace/infra",
     branch: "main",
     dirty: false,
     activity: "idle",
@@ -243,7 +243,7 @@ export type ConsoleLine = { kind: "in" | "out" | "err"; text: string };
 const wireframeConsole: ConsoleLine[] = [
   {
     kind: "out",
-    text: "claude-code 2.1.4 — attached to /work/billing-service",
+    text: "claude-code 2.1.4 — attached to /workspace/billing-service",
   },
   { kind: "out", text: "session s1 · fix/refund-race · opus-5" },
   { kind: "out", text: "" },
@@ -328,7 +328,7 @@ const blankPromptSettings: PromptSettings = { model: "", mode: "", agent: "" };
 
 /** Where the agent's files live. A deployment fact the server owns — the
  * container's mounts decide it, so the frontend must be told, not assume. */
-const wireframeWorkspace = { root: "/work", staging: "/work/_overseer/import" };
+const wireframeWorkspace = { root: "/workspace", staging: "/workspace/_overseer/import" };
 const blankWorkspace = { root: "", staging: "" };
 
 /** A real instance has no projects, no sessions and no adapter attached until

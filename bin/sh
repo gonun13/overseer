@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Shell into a dev container.
 #
-#   ./bin/sh               server container (has the claude CLI and /work)
+#   ./bin/sh               server container (has the claude CLI and /workspace)
 #   ./bin/sh web           the vite container
 . "$(dirname -- "$0")/_lib.sh"
 

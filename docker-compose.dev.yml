@@ -2,10 +2,10 @@
 # `dev` stage in the Dockerfile and bin/_in-container.sh.
 #
 # Difference from docker-compose.yml: the source tree is bind-mounted so the
-# watchers see host edits. The production invariant that `/work` is the only
-# shared surface (design doc §6) still holds for the *agent* — it is handed
-# /work, not /app — but a dev container does hold the repo. Do not model
-# production blast radius on this file.
+# watchers see host edits. The production invariant that `/workspace` is the
+# only shared surface (design doc §6) still holds for the *agent* — it is
+# handed /workspace, not /app — but a dev container does hold the repo. Do
+# not model production blast radius on this file.
 name: overseer-dev
 
 services:
@@ -58,7 +58,7 @@ services:
     volumes:
       - .:/app
       - claude-home:/home/node/.claude # container-owned; never bound to the host
-      - ./workspace:/work # the only surface the agent gets
+      - ./workspace:/workspace # the only surface the agent gets
       - node-modules-root:/app/node_modules
       - node-modules-protocol:/app/packages/protocol/node_modules
       - node-modules-web:/app/packages/web/node_modules
