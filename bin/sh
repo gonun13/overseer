@@ -1,0 +1,19 @@
+#!/usr/bin/env sh
+# Shell into a dev container.
+#
+#   ./bin/sh               server container (has the claude CLI and /work)
+#   ./bin/sh web           the vite container
+. "$(dirname -- "$0")/_lib.sh"
+
+require_docker
+
+SERVICE=${1:-server}
+[ $# -gt 0 ] && shift
+
+# `run` rather than `exec` so this works whether or not the stack is up.
+if dev_compose ps --status running --services 2>/dev/null | grep -qx "$SERVICE"; then
+  dev_compose exec "$SERVICE" bash
+else
+  echo "overseer: $SERVICE is not running; starting a throwaway container" >&2
+  dev_compose run --rm --no-deps "$SERVICE" bash
+fi

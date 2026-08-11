@@ -1,0 +1,17 @@
+#!/usr/bin/env sh
+# Run npm inside the container. Use this for anything that touches
+# node_modules — installing a dep on the host writes macOS binaries into a
+# tree that only ever gets read by linux.
+#
+#   ./bin/npm install
+#   ./bin/npm install --workspace packages/web some-package
+#   ./bin/npm run typecheck
+. "$(dirname -- "$0")/_lib.sh"
+
+require_docker
+
+if dev_compose ps --status running --services 2>/dev/null | grep -qx server; then
+  dev_compose exec server npm "$@"
+else
+  dev_compose run --rm --no-deps server npm "$@"
+fi

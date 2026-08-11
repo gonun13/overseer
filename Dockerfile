@@ -16,6 +16,44 @@ COPY tsconfig.base.json ./
 COPY packages ./packages
 RUN npm run build
 
+# ---- dev: full workspace deps + agent CLI; source arrives as a bind mount ---
+# This project has no host-side run path (README "Run it"): `npm run dev` on the
+# host is blocked by bin/_in-container.sh. Dev and prod differ only in how the
+# code gets in — bind mount vs COPY — never in where it executes.
+FROM node:22-bookworm-slim AS dev
+
+# Same toolchain as runtime: the claude-code adapter shells out to git/ripgrep,
+# so a dev container has to be able to exercise the real spawn path.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      git ripgrep ca-certificates \
+    && rm -rf /var/lib/apt/lists/* \
+    && npm install -g @anthropic-ai/claude-code@2.1.226 \
+    && npm cache clean --force
+
+WORKDIR /app
+
+COPY package.json package-lock.json ./
+COPY packages/protocol/package.json packages/protocol/package.json
+COPY packages/server/package.json packages/server/package.json
+COPY packages/web/package.json packages/web/package.json
+COPY packages/adapters/mock/package.json packages/adapters/mock/package.json
+COPY packages/adapters/claude-code/package.json packages/adapters/claude-code/package.json
+RUN npm ci
+
+ENV NODE_ENV=development
+ENV CLAUDE_CONFIG_DIR=/home/node/.claude
+# Read by bin/_in-container.sh — the only thing that distinguishes a sanctioned
+# run from someone typing `npm run dev` in a host terminal.
+ENV OVERSEER_IN_CONTAINER=1
+
+# node_modules is mounted as named volumes (compose overlays the bind mount of
+# the source tree). Docker seeds each volume from the image dir on first mount,
+# ownership included, so these must be node-owned *before* USER drops.
+RUN mkdir -p /home/node/.claude && chown -R node:node /home/node/.claude /app
+
+USER node
+EXPOSE 3000 5173
+
 # ---- runtime: production deps only + compiled output -----------------------
 FROM node:22-bookworm-slim AS runtime
 

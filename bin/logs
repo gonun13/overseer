@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# Follow dev stack logs.
+#
+#   ./bin/logs             all services
+#   ./bin/logs server      one service (deps | server | web)
+. "$(dirname -- "$0")/_lib.sh"
+
+require_docker
+dev_compose logs -f --tail=100 "$@"

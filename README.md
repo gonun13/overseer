@@ -8,6 +8,7 @@ See [docs/claude-code-webui-design.md](docs/claude-code-webui-design.md) for the
 ## Structure
 
 ```
+bin/                  docker shortcuts — the only supported way to run anything
 packages/
   protocol/           shared TS types — the frontend/backend/adapter contract
   web/                React + Vite + Tailwind SPA
@@ -18,31 +19,79 @@ packages/
 workspace/            host-shared dir — git projects live here, mounted into the container
 ```
 
-## Run it (Docker)
+## This never runs on the host
+
+Not in production, not in development, not "just the frontend". The server spawns coding agents
+with filesystem and network access — the container _is_ the security model (design doc §6). A host
+run puts your real `~/.claude`, your home directory, and every repo on the machine inside the blast
+radius, and Node being installed locally is not permission to use it.
+
+`npm run dev` and `npm run dev:web` are wired to refuse on the host. Everything below goes through
+Docker; you need nothing installed except Docker.
+
+## Develop
 
 ```
-docker compose up --build
+./bin/dev
 ```
 
-Serves the app at http://127.0.0.1:3000. The container owns its own `~/.claude` in a named
-volume; `./workspace` is the only directory shared with the host.
+Vite on http://127.0.0.1:5173 with hot reload, API server on http://127.0.0.1:3000. Edit files on
+the host as usual — the source tree is bind-mounted and watched.
 
-## Develop locally
+| Command            | What it does                                                         |
+| ------------------ | -------------------------------------------------------------------- |
+| `./bin/dev`        | start the dev stack (add `-d` to detach, `--build` to force rebuild) |
+| `./bin/stop`       | stop it; volumes survive                                             |
+| `./bin/logs [svc]` | follow logs (`deps`, `server`, `web`)                                |
+| `./bin/sh [svc]`   | shell into a container (defaults to `server`)                        |
+| `./bin/npm <args>` | run npm inside the container — use this for **all** dependency work  |
+| `./bin/check`      | typecheck + lint                                                     |
+| `./bin/up`         | build and run the production stack                                   |
+| `./bin/reset`      | tear down and discard volumes, including agent auth                  |
 
-Requires Node 22+.
+Three services: `deps` builds `protocol` + the adapters and holds them in `tsc --watch` (`server`
+and `web` import them through `dist/`, so compose gates both on it), `server` runs `tsx watch`, and
+`web` runs Vite proxying `/api` and `/ws` to `server:3000`.
+
+Install a dependency with `./bin/npm install --workspace packages/web <pkg>` — never with host npm,
+which would write macOS binaries into a tree only ever read by Linux. `package-lock.json` is
+bind-mounted, so the change lands on the host for committing.
+
+## Run it (production)
 
 ```
-npm install
-npm run build        # protocol + adapters must build before server/web can consume them
-npm run dev:web       # Vite dev server on :5173, proxies /api and /ws to :3000
-npm run dev            # server on :3000 (in a second terminal)
+./bin/up
 ```
 
-Other scripts: `npm run typecheck`, `npm run lint`, `npm run format`.
+Serves the compiled SPA from the Node server at http://127.0.0.1:3000 — no bind-mounted source, no
+watchers. The container owns its own `~/.claude` in a named volume; `./workspace` is the only
+directory shared with the host.
+
+## Features
+
+- **Overseer space** — the centre of the screen ranks what needs attention (approvals, blocked
+  capabilities, running and finished sessions, usage pressure) and every line opens the window,
+  panel or control it refers to. Derived on every render, so it cannot go stale.
+- **Project panel** — a persistent status list of every project, with a status light each, so work
+  happening outside the active project is still visible.
+- **Sessions, approvals, diffs** — summoned as draggable windows rather than laid out in fixed
+  columns.
+- **Capabilities** — MCP servers, skills and subagents, with an editor for a skill's or subagent's
+  instructions, model and tool grants.
+- **Console** — a raw terminal into the adapter's CLI for operators who already know it: its own
+  slash commands, its own errors, verbatim. The escape hatch for anything the considered views
+  don't cover. Open it from the footer or type `console`.
+- **Prompt controls** — model, permission mode, subagent and attached context, armed before the
+  next turn and reachable with bare number keys.
+- **Two themes** — samaritan (default) and machine, its inversion at every level.
 
 ## Status
 
-Docker setup, tooling, and the frontend shell (top bar, nav rail, all five zones per the design
-system, machine/samaritan themes) are in place with placeholder data. The adapter interface and
-protocol types exist; the `claude-code` adapter's actual process-spawning (design doc §1.2) is not
-implemented yet.
+Docker setup, tooling, and the frontend shell are in place with placeholder data. The shell is a
+fixed field of instruments — project panel, active project, clock and settings, prompt controls,
+adapter widget — around the overseer space. Windows are summoned, dragged and dismissed rather than
+laid out.
+
+The adapter interface and protocol types exist; the `claude-code` adapter's actual process-spawning
+(design doc §1.2) and the WS event pipe that would replace the mock data are not implemented yet.
+The console is a mockup — it echoes rather than attaching to a pty.

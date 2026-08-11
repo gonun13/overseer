@@ -26,7 +26,7 @@ packages/
 
 ```typescript
 interface AgentAdapter {
-  id: string;                            // "claude-code"
+  id: string; // "claude-code"
   capabilities: AdapterCapabilities;
   createSession(opts: SessionOpts): Promise<SessionHandle>;
   resumeSession(id: string): Promise<SessionHandle>;
@@ -35,7 +35,7 @@ interface AgentAdapter {
 
 interface SessionHandle {
   events: AsyncIterable<AgentEvent>;
-  send(msg: UserMessage): void;          // queues if a turn is in flight
+  send(msg: UserMessage): void; // queues if a turn is in flight
   interrupt(): void;
   resolvePermission(id: string, d: PermissionDecision): void;
   close(): Promise<void>;
@@ -53,21 +53,31 @@ Normalized event union: `session.init`, `text.delta`, `thinking.delta`, `tool.st
 The `claude-code` adapter holds one process open per active session in bidirectional streaming mode:
 
 ```typescript
-const sessionId = randomUUID();            // mint it — don't discover it afterwards
-spawn("claude", [
-  "-p",
-  "--input-format",  "stream-json",        // user turns written to stdin as JSON
-  "--output-format", "stream-json",
-  "--include-partial-messages",            // token-level deltas
-  "--include-hook-events",                 // lifecycle events in-stream
-  "--forward-subagent-text",               // subagent text, tagged parent_tool_use_id
-  "--replay-user-messages",                // echo of our input = ack + ordering
-  "--verbose",
-  "--session-id",      sessionId,
-  "--model",           model,
-  "--effort",          effort,
-  "--permission-mode", mode,
-], { cwd: projectDir });                   // a directory under /work
+const sessionId = randomUUID(); // mint it — don't discover it afterwards
+spawn(
+  "claude",
+  [
+    "-p",
+    "--input-format",
+    "stream-json", // user turns written to stdin as JSON
+    "--output-format",
+    "stream-json",
+    "--include-partial-messages", // token-level deltas
+    "--include-hook-events", // lifecycle events in-stream
+    "--forward-subagent-text", // subagent text, tagged parent_tool_use_id
+    "--replay-user-messages", // echo of our input = ack + ordering
+    "--verbose",
+    "--session-id",
+    sessionId,
+    "--model",
+    model,
+    "--effort",
+    effort,
+    "--permission-mode",
+    mode,
+  ],
+  { cwd: projectDir },
+); // a directory under /work
 ```
 
 - **stdin:** `{"type":"user","message":{"role":"user","content":[...]}}`. Content blocks mean pasted images and file attachments need no separate upload path.
@@ -111,74 +121,74 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 
 ### MVP — the core loop
 
-| Feature | Zone | Mechanism |
-|---|---|---|
-| Send prompt, stream response | Console | stream-json stdin; `stream_event` deltas out |
-| Transcript: text, tool calls, collapsible thinking | Console | normalized `text.delta` / `tool.*` / `thinking.delta` |
-| Diff rendering for `Edit` / `Write` | Console | parse tool input; unified diff in inspector |
-| Terminal output for `Bash` | Console | ANSI-aware renderer |
-| Live todo checklist | Console | `TodoWrite` tool calls → `todo.update` |
-| Tool approval, inline | Console | `can_use_tool` control request (see §6.1) |
-| Permission mode selector | Top bar | `--permission-mode` at spawn; visible always, colour-coded |
-| Interrupt turn | Console | `control_request` subtype `interrupt` |
-| Queue message during a turn | Console | buffer in `SessionHandle.send` |
-| Model + effort selector | Console | `--model`, `--effort` |
-| Create session in a project | Sessions | pick a dir under `/work`; mint `--session-id` |
-| Resume session + history replay | Sessions | `--resume`; parse JSONL for backfill (§4) |
-| Session list with live status | Sessions | supervisor state + JSONL mtime |
-| Account usage + spend | Top bar | §2.1 |
-| Subscription login | System | `claude setup-token` under PTY |
-| Theme switch | System | `data-theme` on `:root` |
-| Crash / exit / auth-failure surfacing | Console | distinguish exit causes; they look identical at the process level |
+| Feature                                            | Zone     | Mechanism                                                         |
+| -------------------------------------------------- | -------- | ----------------------------------------------------------------- |
+| Send prompt, stream response                       | Console  | stream-json stdin; `stream_event` deltas out                      |
+| Transcript: text, tool calls, collapsible thinking | Console  | normalized `text.delta` / `tool.*` / `thinking.delta`             |
+| Diff rendering for `Edit` / `Write`                | Console  | parse tool input; unified diff in inspector                       |
+| Terminal output for `Bash`                         | Console  | ANSI-aware renderer                                               |
+| Live todo checklist                                | Console  | `TodoWrite` tool calls → `todo.update`                            |
+| Tool approval, inline                              | Console  | `can_use_tool` control request (see §6.1)                         |
+| Permission mode selector                           | Top bar  | `--permission-mode` at spawn; visible always, colour-coded        |
+| Interrupt turn                                     | Console  | `control_request` subtype `interrupt`                             |
+| Queue message during a turn                        | Console  | buffer in `SessionHandle.send`                                    |
+| Model + effort selector                            | Console  | `--model`, `--effort`                                             |
+| Create session in a project                        | Sessions | pick a dir under `/work`; mint `--session-id`                     |
+| Resume session + history replay                    | Sessions | `--resume`; parse JSONL for backfill (§4)                         |
+| Session list with live status                      | Sessions | supervisor state + JSONL mtime                                    |
+| Account usage + spend                              | Top bar  | §2.1                                                              |
+| Subscription login                                 | System   | `claude setup-token` under PTY                                    |
+| Theme switch                                       | System   | `data-theme` on `:root`                                           |
+| Crash / exit / auth-failure surfacing              | Console  | distinguish exit causes; they look identical at the process level |
 
 ### Important
 
-| Feature | Zone | Mechanism |
-|---|---|---|
-| Cross-session approval queue | Approvals | aggregate `permission.request` from every live session |
-| Permission rules editor | Approvals | "allow always" writes `Bash(git *)`-style patterns to `settings.json`; `--allowedTools` / `--disallowedTools` |
-| Plan-mode approval screen | Approvals | `ExitPlanMode` output — an approval surface, not a chat bubble |
-| Nested subagent turns | Console | `--forward-subagent-text`, grouped by `parent_tool_use_id` |
-| Background agents | Sessions | `--bg`; `claude agents` to manage |
-| Context window gauge | Console | token accounting from `turn.end` |
-| Budget ceiling per session | Console | `--max-budget-usd` |
-| MCP server list + health + tool inventory | Capabilities | `claude mcp list` / `get`; `⏸ Pending approval` for unapproved `.mcp.json` |
-| MCP add / remove | Capabilities | `mcp add` (stdio/http/sse, `-e`, `--header`), `add-json`, `remove` |
-| MCP OAuth login | Capabilities | `mcp login` — same URL-out/code-in flow as §2 |
-| Per-session MCP sets | Capabilities | `--mcp-config`, `--strict-mcp-config` |
-| Skills + subagents inventory | Capabilities | filesystem discovery of `.claude/skills`, `.claude/agents` |
-| Agent-driven skill/subagent editing | Capabilities | async side-tasks (§1.3) |
-| Pin a subagent / ephemeral agents | Console | `--agent <name>`, `--agents <json>` |
-| File attachments, image paste | Console | content blocks on stdin |
-| Session fork | Sessions | `--fork-session` |
-| Session naming | Sessions | `-n <name>` |
-| Multi-root workspace | Sessions | `--add-dir` |
-| Search across sessions | Sessions | index JSONL into SQLite |
-| Config import / export | System | via `/work/_overseer/` (§2) |
-| Hook event stream | System | `--include-hook-events` |
-| CLI version + health | System | `claude doctor`, version drift warning |
-| Settings source inspector | System | `--setting-sources user,project,local` — shows *which* file a value came from |
+| Feature                                   | Zone         | Mechanism                                                                                                     |
+| ----------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------- |
+| Cross-session approval queue              | Approvals    | aggregate `permission.request` from every live session                                                        |
+| Permission rules editor                   | Approvals    | "allow always" writes `Bash(git *)`-style patterns to `settings.json`; `--allowedTools` / `--disallowedTools` |
+| Plan-mode approval screen                 | Approvals    | `ExitPlanMode` output — an approval surface, not a chat bubble                                                |
+| Nested subagent turns                     | Console      | `--forward-subagent-text`, grouped by `parent_tool_use_id`                                                    |
+| Background agents                         | Sessions     | `--bg`; `claude agents` to manage                                                                             |
+| Context window gauge                      | Console      | token accounting from `turn.end`                                                                              |
+| Budget ceiling per session                | Console      | `--max-budget-usd`                                                                                            |
+| MCP server list + health + tool inventory | Capabilities | `claude mcp list` / `get`; `⏸ Pending approval` for unapproved `.mcp.json`                                    |
+| MCP add / remove                          | Capabilities | `mcp add` (stdio/http/sse, `-e`, `--header`), `add-json`, `remove`                                            |
+| MCP OAuth login                           | Capabilities | `mcp login` — same URL-out/code-in flow as §2                                                                 |
+| Per-session MCP sets                      | Capabilities | `--mcp-config`, `--strict-mcp-config`                                                                         |
+| Skills + subagents inventory              | Capabilities | filesystem discovery of `.claude/skills`, `.claude/agents`                                                    |
+| Agent-driven skill/subagent editing       | Capabilities | async side-tasks (§1.3)                                                                                       |
+| Pin a subagent / ephemeral agents         | Console      | `--agent <name>`, `--agents <json>`                                                                           |
+| File attachments, image paste             | Console      | content blocks on stdin                                                                                       |
+| Session fork                              | Sessions     | `--fork-session`                                                                                              |
+| Session naming                            | Sessions     | `-n <name>`                                                                                                   |
+| Multi-root workspace                      | Sessions     | `--add-dir`                                                                                                   |
+| Search across sessions                    | Sessions     | index JSONL into SQLite                                                                                       |
+| Config import / export                    | System       | via `/work/_overseer/` (§2)                                                                                   |
+| Hook event stream                         | System       | `--include-hook-events`                                                                                       |
+| CLI version + health                      | System       | `claude doctor`, version drift warning                                                                        |
+| Settings source inspector                 | System       | `--setting-sources user,project,local` — shows _which_ file a value came from                                 |
 
 ### Nice to have
 
-| Feature | Zone | Mechanism |
-|---|---|---|
-| Checkpoints / rewind | Console | `~/.claude/file-history/`; restore working tree to a checkpoint |
-| Git worktree per session | Sessions | `-w/--worktree` — how parallel sessions stop fighting over one tree |
-| Session entity graph | Console | SVG node map of subagents, MCP servers, files touched |
-| Branch tree for forked history | Sessions | full `parentUuid` tree instead of newest-leaf (§4) |
-| Plugin management | Capabilities | `claude plugin`, `--plugin-dir`, `--plugin-url` |
-| Custom system prompt per session | Console | `--system-prompt`, `--append-system-prompt` |
-| Structured job mode | Sessions | `--json-schema` — run-and-return rather than chat |
-| Fallback model chain | System | `--fallback-model a,b` |
-| Prompt suggestions | Console | `--prompt-suggestions`; predicted next prompt after each turn |
-| Resume from a PR | Sessions | `--from-pr` |
-| Troubleshooting modes | System | `--safe-mode`, `--bare` |
-| Raw file editor for skills/agents | Capabilities | needs a watcher + conflict handling; §1.3 makes it optional |
-| Transcript export | Console | markdown / JSON |
-| Command palette | global | keyboard-first jump to any session, zone, or action |
-| Desktop notifications | global | on approval request or turn completion |
-| Additional CLI adapters | — | the reason for §1.1 |
+| Feature                           | Zone         | Mechanism                                                           |
+| --------------------------------- | ------------ | ------------------------------------------------------------------- |
+| Checkpoints / rewind              | Console      | `~/.claude/file-history/`; restore working tree to a checkpoint     |
+| Git worktree per session          | Sessions     | `-w/--worktree` — how parallel sessions stop fighting over one tree |
+| Session entity graph              | Console      | SVG node map of subagents, MCP servers, files touched               |
+| Branch tree for forked history    | Sessions     | full `parentUuid` tree instead of newest-leaf (§4)                  |
+| Plugin management                 | Capabilities | `claude plugin`, `--plugin-dir`, `--plugin-url`                     |
+| Custom system prompt per session  | Console      | `--system-prompt`, `--append-system-prompt`                         |
+| Structured job mode               | Sessions     | `--json-schema` — run-and-return rather than chat                   |
+| Fallback model chain              | System       | `--fallback-model a,b`                                              |
+| Prompt suggestions                | Console      | `--prompt-suggestions`; predicted next prompt after each turn       |
+| Resume from a PR                  | Sessions     | `--from-pr`                                                         |
+| Troubleshooting modes             | System       | `--safe-mode`, `--bare`                                             |
+| Raw file editor for skills/agents | Capabilities | needs a watcher + conflict handling; §1.3 makes it optional         |
+| Transcript export                 | Console      | markdown / JSON                                                     |
+| Command palette                   | global       | keyboard-first jump to any session, zone, or action                 |
+| Desktop notifications             | global       | on approval request or turn completion                              |
+| Additional CLI adapters           | —            | the reason for §1.1                                                 |
 
 ---
 
@@ -194,7 +204,7 @@ Two things the original doc glossed:
 1. **`parentUuid` makes this a tree, not a log.** Rewind and fork branch it. A reader treating it as a flat append-only list renders abandoned branches interleaved with live ones. **Decision:** v1 walks parents back from the newest leaf and shows that single path; the branch tree is a nice-to-have.
 2. **`isSidechain` marks subagent turns.** Nest them under their parent; never inline them into the main transcript.
 
-This is an internal, undocumented format — expect drift across CLI versions. **Mitigation:** treat JSONL strictly as *history backfill*. Live state always comes from the stream. Pin the CLI version in the image; gate replay behind a version check and degrade to "history unavailable for this version" rather than mis-rendering.
+This is an internal, undocumented format — expect drift across CLI versions. **Mitigation:** treat JSONL strictly as _history backfill_. Live state always comes from the stream. Pin the CLI version in the image; gate replay behind a version check and degrade to "history unavailable for this version" rather than mis-rendering.
 
 ---
 
@@ -206,8 +216,8 @@ services:
     build: .
     ports: ["127.0.0.1:3000:3000"]
     volumes:
-      - claude-home:/home/node/.claude    # container-owned; never bound to host
-      - ./workspace:/work                 # the only shared surface
+      - claude-home:/home/node/.claude # container-owned; never bound to host
+      - ./workspace:/work # the only shared surface
     environment:
       - CLAUDE_CONFIG_DIR=/home/node/.claude
 volumes:
@@ -242,6 +252,6 @@ Fallback if not: a `PreToolUse` hook script that POSTs the tool call to the serv
 
 ## 7. Sizing
 
-- Budget ~500 MB–1 GB resident per *live* process — now per open session rather than per in-flight turn. Idle reaping (§1.2) is what keeps a handful of tabs from pinning gigabytes.
+- Budget ~500 MB–1 GB resident per _live_ process — now per open session rather than per in-flight turn. Idle reaping (§1.2) is what keeps a handful of tabs from pinning gigabytes.
 - The CLI has no built-in session timeout; enforce idle and turn limits server-side.
 - `--max-budget-usd` is the cost-side equivalent of a timeout. Set a default.
