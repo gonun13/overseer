@@ -2,8 +2,10 @@
 
 A single-page web console for driving CLI coding agents. Claude Code is the first adapter.
 
-See [docs/claude-code-webui-design.md](docs/claude-code-webui-design.md) for the architecture and
-[docs/design-system.md](docs/design-system.md) for the visual language.
+See [docs/claude-code-webui-design.md](docs/claude-code-webui-design.md) for the architecture,
+[docs/design-system.md](docs/design-system.md) for the visual language, and
+[docs/overseer.md](docs/overseer.md) for the overseer's behavior — what it says, when it says it, and the
+memory precedence model behind it.
 
 ## Structure
 
