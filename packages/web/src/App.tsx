@@ -31,9 +31,8 @@ import {
   mockSessions,
   mockTranscript,
   mockWorkspace,
-  type Project,
-  type Turn,
 } from "./data/mock";
+import type { Project, Turn } from "./domain";
 
 export default function App() {
   // Samaritan is the reference theme and the default; machine is its opposite.

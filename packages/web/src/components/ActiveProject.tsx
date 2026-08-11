@@ -1,5 +1,5 @@
 import { StatusLight } from "./StatusLight";
-import type { Project } from "../data/mock";
+import type { Project } from "../domain";
 
 /**
  * Top-centre, permanent. Every session, approval and tool call in the app runs

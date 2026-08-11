@@ -1,4 +1,5 @@
 export type WindowKind =
+  | "overseer"
   | "sessions"
   | "approvals"
   | "capabilities"
@@ -27,6 +28,11 @@ export const WINDOW_SPEC: Record<
   WindowKind,
   { title: string; x: number; y: number; w: number }
 > = {
+  // The overseer's own report. Narrower than the rest: its content is one
+  // short padded line per step and nothing else, so a wide frame would be
+  // mostly empty. The only kind summoned by the machine rather than the
+  // operator (docs/overseer.md §3).
+  overseer: { title: "overseer", x: 420, y: 130, w: 460 },
   sessions: { title: "sessions", x: 96, y: 168, w: 620 },
   approvals: { title: "approvals", x: 620, y: 148, w: 560 },
   capabilities: { title: "capabilities", x: 150, y: 250, w: 540 },

@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 import { Transcript } from "./Transcript";
 import { CloseIcon } from "./icons";
-import type { Turn } from "../data/mock";
+import type { Turn } from "../domain";
 import type { PromptSettings } from "../prompt";
 
 /**

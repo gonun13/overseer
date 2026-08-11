@@ -1,6 +1,6 @@
 import { ACTIVITY_HEADLINE, ACTIVITY_RANK, type Activity } from "../status";
 import type { WindowKind } from "../windows";
-import type { Approval, Capability, Project, Session } from "../data/mock";
+import type { Approval, Capability, Project, Session } from "../domain";
 
 /** Where a signal sends you when you click it. Every signal is actionable —
  * a message the operator can't act on is noise (design-system.md §4). */

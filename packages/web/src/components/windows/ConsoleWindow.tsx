@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState } from "react";
-import { mockConsole, type ConsoleLine } from "../../data/mock";
+import { mockConsole } from "../../data/mock";
+import type { ConsoleLine } from "../../domain";
 
 /**
  * A direct terminal into the adapter's CLI, for operators who already know it.

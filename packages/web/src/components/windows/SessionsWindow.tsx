@@ -1,5 +1,5 @@
 import { WRow } from "./bits";
-import type { Project, Session } from "../../data/mock";
+import type { Project, Session } from "../../domain";
 
 export function SessionsWindow({
   sessions,

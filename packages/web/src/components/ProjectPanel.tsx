@@ -1,6 +1,6 @@
 import { StatusLight } from "./StatusLight";
 import { ChevronIcon } from "./icons";
-import type { Project } from "../data/mock";
+import type { Project } from "../domain";
 
 /**
  * Top-left, permanent, open by default. It is a **status panel** before it is a

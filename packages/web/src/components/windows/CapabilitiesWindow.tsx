@@ -1,5 +1,5 @@
 import { WRow } from "./bits";
-import type { Capability } from "../../data/mock";
+import type { Capability } from "../../domain";
 
 export function CapabilitiesWindow({
   capabilities,

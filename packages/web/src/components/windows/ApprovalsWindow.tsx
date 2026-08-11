@@ -1,5 +1,5 @@
 import { StatusLight } from "../StatusLight";
-import type { Approval } from "../../data/mock";
+import type { Approval } from "../../domain";
 
 export function ApprovalsWindow({
   approvals,

@@ -1231,6 +1231,58 @@ button {
   color: var(--ink-faint);
 }
 
+/* The operations window's step log. No rules between lines: this is one
+   continuous report, and a border per step would break it into a list of
+   unrelated rows. */
+.w-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.w-step-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.9;
+}
+
+.w-step-label {
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: lowercase;
+}
+
+/* The dots do the padding, so labels of different lengths still line their
+   brackets up — the thing that makes a run of these scannable. Decorative and
+   aria-hidden: a screen reader gets "label" then "[ok]" with no filler. */
+.w-step-dots {
+  flex: 1;
+  min-width: 12px;
+  align-self: flex-end;
+  margin-bottom: 4px;
+  border-bottom: 1px dotted var(--ink-faint);
+}
+
+.w-step-status {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.w-step-detail {
+  display: block;
+  padding-left: 25px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  overflow-wrap: anywhere;
+}
+
 .w-row {
   display: flex;
   align-items: center;

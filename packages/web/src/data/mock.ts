@@ -1,5 +1,16 @@
-import type { Activity } from "../status";
 import type { PromptOption, PromptSettings } from "../prompt";
+import type {
+  AdapterInfo,
+  Approval,
+  Capability,
+  CapabilityDraft,
+  ConsoleLine,
+  DiffLine,
+  Project,
+  Session,
+  Turn,
+  WorkspaceInfo,
+} from "../domain";
 
 /** Static placeholder data — design development only. Replaced by live state
  * once the server's session supervisor and WS event stream exist.
@@ -24,10 +35,6 @@ import type { PromptOption, PromptSettings } from "../prompt";
  * Set VITE_OVERSEER_WIREFRAME=0 to preview the empty state while in dev. */
 const WIREFRAME = import.meta.env.VITE_OVERSEER_WIREFRAME === "1";
 
-export type Turn =
-  | { id: string; kind: "user" | "agent"; text: string }
-  | { id: string; kind: "tool"; tool: string; target: string };
-
 const wireframeTranscript: Turn[] = [
   { id: "t1", kind: "user", text: "Add rate limiting to the refund endpoint." },
   {
@@ -48,17 +55,6 @@ const wireframeTranscript: Turn[] = [
     text: "Tests pass. Limiter caps refunds at 5/min per account.",
   },
 ];
-
-export interface Project {
-  id: string;
-  name: string;
-  path: string;
-  branch: string;
-  dirty: boolean;
-  activity: Activity;
-  /** Why the light is lit — shown next to the project in the selector. */
-  note?: string;
-}
 
 const wireframeProjects: Project[] = [
   {
@@ -98,18 +94,6 @@ const wireframeProjects: Project[] = [
   },
 ];
 
-export interface Session {
-  id: string;
-  activity: Activity;
-  name: string;
-  projectId: string;
-  branch: string;
-  model: string;
-  cost: string;
-  /** One line on what it is doing right now, for the overseer space. */
-  doing: string;
-}
-
 const wireframeSessions: Session[] = [
   {
     id: "s1",
@@ -143,16 +127,6 @@ const wireframeSessions: Session[] = [
   },
 ];
 
-export interface Approval {
-  id: string;
-  activity: Activity;
-  ref: string;
-  sessionId: string;
-  session: string;
-  tool: string;
-  body: string;
-}
-
 const wireframeApprovals: Approval[] = [
   {
     id: "a1",
@@ -173,16 +147,6 @@ const wireframeApprovals: Approval[] = [
     body: "packages/billing/src/refund.ts",
   },
 ];
-
-export interface Capability {
-  id: string;
-  activity: Activity;
-  name: string;
-  kind: string;
-  tools: number;
-  /** Set when the capability needs the operator before it can be used. */
-  problem?: string;
-}
 
 const wireframeCapabilities: Capability[] = [
   {
@@ -211,7 +175,7 @@ const wireframeCapabilities: Capability[] = [
   { id: "c5", activity: "idle", name: "tech-lead", kind: "subagent", tools: 0 },
 ];
 
-const wireframeAdapter = {
+const wireframeAdapter: AdapterInfo = {
   name: "claude-code",
   version: "2.1.4",
   authenticated: false,
@@ -226,8 +190,6 @@ const wireframeContextFiles = [
   { path: "packages/protocol/src/index.ts", tokens: "2.6k" },
 ];
 
-export type DiffLine = { kind: "add" | "del" | "ctx"; text: string };
-
 const wireframeDiff: DiffLine[] = [
   { kind: "ctx", text: "export async function refund(req: RefundRequest) {" },
   { kind: "del", text: "  return processRefund(req);" },
@@ -235,10 +197,6 @@ const wireframeDiff: DiffLine[] = [
   { kind: "add", text: "  return processRefund(req);" },
   { kind: "ctx", text: "}" },
 ];
-
-/** A console line. `in` is what the operator sent to the CLI, `out` is what it
- * printed back, `err` is stderr — the three states a terminal has. */
-export type ConsoleLine = { kind: "in" | "out" | "err"; text: string };
 
 const wireframeConsole: ConsoleLine[] = [
   {
@@ -257,19 +215,6 @@ const wireframeConsole: ConsoleLine[] = [
   { kind: "err", text: "linear: missing API token (LINEAR_API_KEY unset)" },
   { kind: "out", text: "" },
 ];
-
-export interface CapabilityDraft {
-  name: string;
-  kind: string;
-  description: string;
-  /** Free text for a skill or subagent; the thing actually being edited. */
-  instructions: string;
-  model: string;
-  tools: { name: string; enabled: boolean }[];
-  /** Where it lives on disk. The adapter's layout, not the web layer's guess —
-   * `.claude/skills/…` is true of claude-code and of nothing else in general. */
-  file: string;
-}
 
 const wireframeCapabilityDraft: CapabilityDraft = {
   name: "code-review",
@@ -328,13 +273,13 @@ const blankPromptSettings: PromptSettings = { model: "", mode: "", agent: "" };
 
 /** Where the agent's files live. A deployment fact the server owns — the
  * container's mounts decide it, so the frontend must be told, not assume. */
-const wireframeWorkspace = { root: "/workspace", staging: "/workspace/_overseer/import" };
-const blankWorkspace = { root: "", staging: "" };
+const wireframeWorkspace: WorkspaceInfo = { root: "/workspace", staging: "/workspace/_overseer/import" };
+const blankWorkspace: WorkspaceInfo = { root: "", staging: "" };
 
 /** A real instance has no projects, no sessions and no adapter attached until
  * the session supervisor exists. Not even the adapter's name: the registry is
  * behind /api/adapters and the frontend has never asked. */
-const blankAdapter = {
+const blankAdapter: AdapterInfo = {
   name: "",
   version: "",
   authenticated: false,
