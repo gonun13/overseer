@@ -26,13 +26,30 @@ import {
  * nothing is pretending to work during it. Kept short deliberately: the time
  * an operator spends waiting should be spent watching the steps arrive, which
  * is the part that reports something, not watching an empty field first. */
-const WELCOME_MS = 700;
+const WELCOME_MS = 1000;
 
 /** The interval between reveals in the operations window. The server does the
  * real work in milliseconds and emits as it goes, so without this all three
  * steps land in the same frame and the window reads as a list that was always
  * there rather than a pass being run. */
 const STEP_MS = 1000;
+
+/** When to admit the socket is taking too long. This connection is local —
+ * measured at a few milliseconds — so past this it is not slow, it is stuck,
+ * and the headline should stop implying ordinary progress. */
+const SLOW_MS = 2500;
+
+/**
+ * When to give up on a pending socket and dial a fresh one.
+ *
+ * A connection that has not opened by now generally never will, and leaving it
+ * pending is actively harmful: browsers cap concurrent connections per host
+ * (Firefox defaults to six), so a socket parked in "connecting" holds a slot
+ * that the next attempt — and every other request to this origin — has to wait
+ * behind. Dropping it frees the slot, which is the difference between a boot
+ * that recovers in seconds and one that appears to hang for a minute.
+ */
+const CONNECT_TIMEOUT_MS = 6000;
 
 function prefersReducedMotion(): boolean {
   return (
@@ -45,6 +62,9 @@ export function useDiscovery(): WizardState {
   const [state, dispatch] = useReducer(wizardReducer, INITIAL_WIZARD);
   const socket = useRef<WebSocket | null>(null);
   const phase = state.phase;
+  // Drives the socket effect: bumping it is what dials again, so a redial is
+  // an ordinary re-run of the same effect rather than a second code path.
+  const attempt = state.attempt;
 
   // Discovery events wait here for their turn on screen. Paced on the client
   // and only on the client: the server is not slowed down, its work still
@@ -127,7 +147,36 @@ export function useDiscovery(): WizardState {
     const ws = new WebSocket(url);
     socket.current = ws;
 
-    ws.addEventListener("open", () => dispatch({ type: "socket.open" }));
+    // Set whenever *we* discard this socket — redialling it or unmounting.
+    // Closing a socket fires its error and close handlers just as a genuine
+    // failure would, so without this the redial below reports itself as "lost
+    // the connection", ends the boot, and stops the very retry it just began.
+    let abandoned = false;
+
+    // Both fire only while the socket is still trying to open; `open` clears
+    // them, so neither can interrupt a connection that succeeded.
+    const slowTimer = setTimeout(
+      () => dispatch({ type: "socket.slow" }),
+      SLOW_MS,
+    );
+    const redialTimer = setTimeout(() => {
+      // Closing first is the point, not a formality: it releases the browser
+      // connection slot this pending socket is holding. Bumping `attempt` then
+      // re-runs this effect with a fresh socket.
+      abandoned = true;
+      ws.close();
+      dispatch({ type: "socket.retry" });
+    }, CONNECT_TIMEOUT_MS);
+
+    const settleTimers = () => {
+      clearTimeout(slowTimer);
+      clearTimeout(redialTimer);
+    };
+
+    ws.addEventListener("open", () => {
+      settleTimers();
+      dispatch({ type: "socket.open" });
+    });
 
     ws.addEventListener("message", (event) => {
       let message: ServerMessage;
@@ -149,8 +198,12 @@ export function useDiscovery(): WizardState {
     });
 
     // A socket that closes before discovery finishes leaves the operator
-    // watching a step that will never resolve, so say so.
+    // watching a step that will never resolve, so say so — unless it never
+    // opened in the first place, which is the redial timer's business and not
+    // a failure to report yet.
     ws.addEventListener("error", () => {
+      if (abandoned) return;
+      settleTimers();
       stopPacing();
       dispatch({
         type: "socket.error",
@@ -159,13 +212,15 @@ export function useDiscovery(): WizardState {
     });
 
     return () => {
+      abandoned = true;
+      settleTimers();
       socket.current = null;
       ws.close();
       // Under StrictMode this effect runs twice; a pending tick from the first
       // pass would otherwise keep dispatching into the remounted reducer.
       stopPacing();
     };
-  }, [reveal, stopPacing]);
+  }, [attempt, reveal, stopPacing]);
 
   // The welcome beat, then discovery. Separate effect from the socket so a
   // re-render can never re-open the connection.

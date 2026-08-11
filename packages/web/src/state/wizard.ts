@@ -47,6 +47,14 @@ export interface WizardState {
   /** Set when the socket or the pass itself failed. The wizard reports it
    * rather than hanging on a step that will never resolve. */
   error?: string;
+  /** How many times the socket has been dialled again after failing to open.
+   * Shown, not hidden: a boot that is quietly on its third attempt looks
+   * identical to one that is simply slow, and they are not the same thing. */
+  attempt: number;
+  /** The socket has taken long enough that saying nothing would be a lie of
+   * omission. The connection is local; past a second or two it is not slow,
+   * it is stuck. */
+  slow: boolean;
 }
 
 export const INITIAL_WIZARD: WizardState = {
@@ -56,6 +64,8 @@ export const INITIAL_WIZARD: WizardState = {
   adapters: [],
   personality: {},
   rejected: [],
+  attempt: 0,
+  slow: false,
 };
 
 /** Discovery outcomes are the same five activities in a different register —
@@ -70,6 +80,10 @@ const OUTCOME_ACTIVITY: Record<DiscoveryOutcome, Activity> = {
 export type WizardAction =
   | { type: "socket.open" }
   | { type: "socket.error"; message: string }
+  /** The socket is still not open and the wait has become worth naming. */
+  | { type: "socket.slow" }
+  /** The socket never opened; it has been dropped and dialled again. */
+  | { type: "socket.retry" }
   | { type: "discovery.requested" }
   | { type: "server.event"; event: DiscoveryEvent }
   /** The welcome beat has been shown for long enough to read. */
@@ -83,10 +97,24 @@ export function wizardReducer(
 ): WizardState {
   switch (action.type) {
     case "socket.open":
-      return state.phase === "boot" ? { ...state, phase: "welcome" } : state;
+      // Clears `slow` on the way through: a connection that took three tries
+      // still opened, and the headline should stop apologising once it has.
+      return state.phase === "boot"
+        ? { ...state, phase: "welcome", slow: false }
+        : state;
 
     case "socket.error":
       return { ...state, error: action.message, phase: "ready" };
+
+    case "socket.slow":
+      return state.phase === "boot" ? { ...state, slow: true } : state;
+
+    case "socket.retry":
+      // Stays in `boot` — nothing has been learned, so nothing downstream may
+      // proceed. Only the attempt count moves.
+      return state.phase === "boot"
+        ? { ...state, attempt: state.attempt + 1, slow: true }
+        : state;
 
     case "welcome.done":
       return state.phase === "welcome" ? { ...state, phase: "discovery" } : state;
@@ -190,7 +218,11 @@ export function furnitureFor(state: WizardState): Furniture {
 export function wizardHeadline(state: WizardState): string | undefined {
   switch (state.phase) {
     case "boot":
-      return "starting";
+      // A boot that is retrying says so. Staring at "starting" for forty
+      // seconds tells the operator nothing about whether anything is wrong,
+      // and the honest answer is cheap to give.
+      if (state.attempt > 0) return "reconnecting";
+      return state.slow ? "still starting" : "starting";
     case "welcome": {
       if (state.personality.greeting) return state.personality.greeting;
       const name = state.personality.name;

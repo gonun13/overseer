@@ -20,6 +20,19 @@ function isAllowedOrigin(
   }
 }
 
+/**
+ * How often to check that the peer is still there.
+ *
+ * A socket the peer abandoned without a close frame — a tab torn down
+ * mid-load, a laptop suspended, the VM paused — stays ESTABLISHED on this side
+ * forever, because TCP alone will not say otherwise. Two things then go wrong:
+ * this process holds a connection and its fd for a client that is gone, and
+ * the *browser* keeps counting that socket against its per-host connection
+ * limit, so a later page load can sit queued behind sockets that are already
+ * dead. Ping on every beat, drop anything that missed the previous pong.
+ */
+const HEARTBEAT_MS = 30_000;
+
 export function attachWebSocketServer(httpServer: Server): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
 
@@ -41,6 +54,24 @@ export function attachWebSocketServer(httpServer: Server): WebSocketServer {
     const send = (message: ServerMessage) => {
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
     };
+
+    // Liveness. `alive` is set by the peer's pong and cleared by our ping, so a
+    // beat that finds it still false is a peer that did not answer the last
+    // one. `terminate` rather than `close`: there is no one left to complete a
+    // closing handshake with.
+    let alive = true;
+    ws.on("pong", () => {
+      alive = true;
+    });
+    const heartbeat = setInterval(() => {
+      if (!alive) {
+        ws.terminate();
+        return;
+      }
+      alive = false;
+      ws.ping();
+    }, HEARTBEAT_MS);
+    ws.on("close", () => clearInterval(heartbeat));
 
     send({ type: "connected", serverTime: new Date().toISOString() });
 
