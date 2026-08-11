@@ -71,7 +71,10 @@ export interface PermissionRequestEvent extends BaseEvent {
 
 export interface TodoUpdateEvent extends BaseEvent {
   type: "todo.update";
-  items: Array<{ content: string; status: "pending" | "in_progress" | "completed" }>;
+  items: Array<{
+    content: string;
+    status: "pending" | "in_progress" | "completed";
+  }>;
 }
 
 export interface SubagentStartEvent extends BaseEvent {
@@ -93,7 +96,12 @@ export interface SubagentEndEvent extends BaseEvent {
 
 export interface TurnEndEvent extends BaseEvent {
   type: "turn.end";
-  usage: { inputTokens: number; outputTokens: number; cacheReadTokens?: number; cacheWriteTokens?: number };
+  usage: {
+    inputTokens: number;
+    outputTokens: number;
+    cacheReadTokens?: number;
+    cacheWriteTokens?: number;
+  };
   totalCostUsd: number;
   durationMs: number;
   numTurns: number;

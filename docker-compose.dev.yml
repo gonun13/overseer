@@ -1,0 +1,109 @@
+# Development stack. There is no host-side alternative to this file — see the
+# `dev` stage in the Dockerfile and bin/_in-container.sh.
+#
+# Difference from docker-compose.yml: the source tree is bind-mounted so the
+# watchers see host edits. The production invariant that `/work` is the only
+# shared surface (design doc §6) still holds for the *agent* — it is handed
+# /work, not /app — but a dev container does hold the repo. Do not model
+# production blast radius on this file.
+name: overseer-dev
+
+services:
+  # Builds protocol + adapters once, then holds them in tsc --watch. server and
+  # web both resolve @overseer/* through `main: ./dist/index.js`, so neither can
+  # start until this has produced dist/ at least once — hence the healthcheck
+  # gate rather than a plain depends_on.
+  deps:
+    build:
+      context: .
+      target: dev
+    command: bash /app/bin/deps-watch.sh
+    volumes:
+      - .:/app
+      - node-modules-root:/app/node_modules
+      - node-modules-protocol:/app/packages/protocol/node_modules
+      - node-modules-web:/app/packages/web/node_modules
+      - node-modules-server:/app/packages/server/node_modules
+      - node-modules-mock:/app/packages/adapters/mock/node_modules
+      - node-modules-claude-code:/app/packages/adapters/claude-code/node_modules
+    environment:
+      # Bind mounts on Docker Desktop do not deliver inotify reliably; polling
+      # is the cost of hot reload here. Set to 0 in the shell if you'd rather
+      # restart by hand on a hot laptop.
+      - CHOKIDAR_USEPOLLING=${CHOKIDAR_USEPOLLING:-1}
+    healthcheck:
+      test:
+        [
+          "CMD-SHELL",
+          "test -f /app/packages/protocol/dist/index.js && test -f /app/packages/adapters/mock/dist/index.js && test -f /app/packages/adapters/claude-code/dist/index.js",
+        ]
+      interval: 2s
+      timeout: 5s
+      retries: 30
+      start_period: 5s
+
+  server:
+    build:
+      context: .
+      target: dev
+    command: npm run dev --workspace packages/server
+    ports:
+      # Loopback only — this is RCE-as-a-service (design doc §6).
+      - "127.0.0.1:3000:3000"
+    environment:
+      - HOST=0.0.0.0 # container-internal; the port mapping above is the real boundary
+      - PORT=3000
+      - CLAUDE_CONFIG_DIR=/home/node/.claude
+      - CHOKIDAR_USEPOLLING=${CHOKIDAR_USEPOLLING:-1}
+    volumes:
+      - .:/app
+      - claude-home:/home/node/.claude # container-owned; never bound to the host
+      - ./workspace:/work # the only surface the agent gets
+      - node-modules-root:/app/node_modules
+      - node-modules-protocol:/app/packages/protocol/node_modules
+      - node-modules-web:/app/packages/web/node_modules
+      - node-modules-server:/app/packages/server/node_modules
+      - node-modules-mock:/app/packages/adapters/mock/node_modules
+      - node-modules-claude-code:/app/packages/adapters/claude-code/node_modules
+      # Anonymous volume shadows any stale build a host `npm run build` left in
+      # web/dist. The server refuses to serve it in dev anyway (NODE_ENV
+      # guard), but this means the directory doesn't even exist to trip over.
+      - /app/packages/web/dist
+    depends_on:
+      deps:
+        condition: service_healthy
+
+  web:
+    build:
+      context: .
+      target: dev
+    command: npm run dev --workspace packages/web
+    ports:
+      - "127.0.0.1:5173:5173"
+    environment:
+      - OVERSEER_SERVER_ORIGIN=http://server:3000
+      - CHOKIDAR_USEPOLLING=${CHOKIDAR_USEPOLLING:-1}
+    volumes:
+      - .:/app
+      - node-modules-root:/app/node_modules
+      - node-modules-protocol:/app/packages/protocol/node_modules
+      - node-modules-web:/app/packages/web/node_modules
+      - node-modules-server:/app/packages/server/node_modules
+      - node-modules-mock:/app/packages/adapters/mock/node_modules
+      - node-modules-claude-code:/app/packages/adapters/claude-code/node_modules
+    depends_on:
+      deps:
+        condition: service_healthy
+
+volumes:
+  # Shared with the production stack by name only if you run both; the dev
+  # project name (overseer-dev) keeps them separate.
+  claude-home:
+  # These shadow the bind-mounted host node_modules, which is macOS-built and
+  # would break native deps in a linux container.
+  node-modules-root:
+  node-modules-protocol:
+  node-modules-web:
+  node-modules-server:
+  node-modules-mock:
+  node-modules-claude-code:

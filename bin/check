@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# Typecheck + lint, inside the container.
+. "$(dirname -- "$0")/_lib.sh"
+
+require_docker
+
+# --no-deps would skip the protocol/adapter build that typecheck needs, so this
+# goes through the full stack's deps gate.
+dev_compose run --rm server sh -c "npm run typecheck && npm run lint"

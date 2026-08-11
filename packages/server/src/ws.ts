@@ -6,7 +6,10 @@ import { WebSocketServer, type WebSocket } from "ws";
  * Any page in the browser can otherwise open a socket to localhost — check
  * Origin on the upgrade (design doc §6).
  */
-function isAllowedOrigin(origin: string | undefined, host: string | undefined): boolean {
+function isAllowedOrigin(
+  origin: string | undefined,
+  host: string | undefined,
+): boolean {
   if (!origin || !host) return false;
   try {
     return new URL(origin).host === host;
@@ -19,11 +22,16 @@ export function attachWebSocketServer(httpServer: Server): WebSocketServer {
   const wss = new WebSocketServer({ noServer: true });
 
   httpServer.on("upgrade", (req: IncomingMessage, socket, head) => {
-    if (req.url !== "/ws" || !isAllowedOrigin(req.headers.origin, req.headers.host)) {
+    if (
+      req.url !== "/ws" ||
+      !isAllowedOrigin(req.headers.origin, req.headers.host)
+    ) {
       socket.destroy();
       return;
     }
-    wss.handleUpgrade(req, socket, head, (ws) => wss.emit("connection", ws, req));
+    wss.handleUpgrade(req, socket, head, (ws) =>
+      wss.emit("connection", ws, req),
+    );
   });
 
   wss.on("connection", (ws: WebSocket) => {

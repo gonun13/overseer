@@ -23,7 +23,9 @@ const capabilities: AdapterCapabilities = {
 // stream-json in/out) lands with the console feature. Stubbed so the server and
 // frontend can be wired against the real interface shape from day one.
 function notImplemented(): never {
-  throw new Error("adapter-claude-code: session spawning is not implemented yet");
+  throw new Error(
+    "adapter-claude-code: session spawning is not implemented yet",
+  );
 }
 
 export const claudeCodeAdapter: AgentAdapter = {

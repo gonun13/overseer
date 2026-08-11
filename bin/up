@@ -1,0 +1,9 @@
+#!/usr/bin/env sh
+# Production stack: builds the image and serves the compiled SPA from the Node
+# server at http://127.0.0.1:3000. No bind-mounted source, no watchers.
+. "$(dirname -- "$0")/_lib.sh"
+
+require_docker
+
+echo "overseer: building and starting production stack — http://127.0.0.1:3000"
+prod_compose up --build "$@"

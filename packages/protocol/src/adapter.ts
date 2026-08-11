@@ -14,7 +14,8 @@ export interface AdapterCapabilities {
   backgroundAgents: boolean;
 }
 
-export type PermissionMode = "default" | "acceptEdits" | "plan" | "bypassPermissions";
+export type PermissionMode =
+  "default" | "acceptEdits" | "plan" | "bypassPermissions";
 
 export type PermissionDecision =
   | { decision: "allow-once" }
@@ -46,7 +47,10 @@ export interface SessionMeta {
 
 export interface UserMessage {
   role: "user";
-  content: Array<{ type: "text"; text: string } | { type: "image"; source: string; mediaType: string }>;
+  content: Array<
+    | { type: "text"; text: string }
+    | { type: "image"; source: string; mediaType: string }
+  >;
 }
 
 export interface SessionHandle {

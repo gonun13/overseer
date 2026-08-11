@@ -1,6 +1,10 @@
 services:
   overseer:
-    build: .
+    build:
+      context: .
+      # Explicit: the Dockerfile has a `dev` stage after this one, and the
+      # default target is the last stage.
+      target: runtime
     ports:
       - "127.0.0.1:3000:3000" # loopback only — this is RCE-as-a-service (design doc §6)
     volumes:

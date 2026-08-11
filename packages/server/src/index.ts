@@ -21,13 +21,26 @@ app.get("/api/health", (_req, res) => {
 });
 
 app.get("/api/adapters", (_req, res) => {
-  res.json(listAdapters().map(({ id, capabilities }) => ({ id, capabilities })));
+  res.json(
+    listAdapters().map(({ id, capabilities }) => ({ id, capabilities })),
+  );
 });
 
-app.use(express.static(webDist));
-app.get("*", (_req, res) => {
-  res.sendFile(path.join(webDist, "index.html"));
-});
+if (process.env.NODE_ENV === "production") {
+  app.use(express.static(webDist));
+  app.get("*", (_req, res) => {
+    res.sendFile(path.join(webDist, "index.html"));
+  });
+} else {
+  // Dev serves the UI from Vite on :5173, not from here. Never fall back to
+  // web/dist in dev — a stale host build there would silently mask live edits.
+  app.get("*", (_req, res) => {
+    res
+      .status(404)
+      .type("text/plain")
+      .send("overseer dev: this is the API/WS server. The app is at http://127.0.0.1:5173");
+  });
+}
 
 const httpServer = createServer(app);
 attachWebSocketServer(httpServer);
