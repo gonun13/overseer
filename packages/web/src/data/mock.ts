@@ -1,13 +1,34 @@
 import type { Activity } from "../status";
+import type { PromptOption, PromptSettings } from "../prompt";
 
-/** Static placeholder data — wireframe only. Replaced by live state once the
- * server's session supervisor and WS event stream exist. */
+/** Static placeholder data — design development only. Replaced by live state
+ * once the server's session supervisor and WS event stream exist.
+ *
+ * Everything an instance would learn at runtime belongs here, not just the
+ * obviously fake rows: the model and subagent lists, the prompt's starting
+ * settings, the workspace paths and the adapter's own name are all facts about
+ * a running instance, and a build that has never talked to an adapter knows
+ * none of them. A plausible default is still invented data — it just lies more
+ * convincingly — so the blank side of every pair below is genuinely empty.
+ *
+ * None of it ships. The fixtures load only when VITE_OVERSEER_WIREFRAME is
+ * explicitly set, which docker-compose.dev.yml does and the production image
+ * does not, so a real instance cannot serve invented projects, approvals and
+ * spend figures as its own. Vite inlines the variable at build time, so the
+ * selection block at the bottom of this file folds to a constant and the
+ * fixtures are dropped from the bundle rather than shipped-but-unused.
+ *
+ * Deliberately not `import.meta.env.DEV`: that is derived from NODE_ENV, which
+ * the Dockerfile's dev stage sets and its builder stage doesn't — far too
+ * implicit for the switch that decides whether fake data reaches an operator.
+ * Set VITE_OVERSEER_WIREFRAME=0 to preview the empty state while in dev. */
+const WIREFRAME = import.meta.env.VITE_OVERSEER_WIREFRAME === "1";
 
 export type Turn =
   | { id: string; kind: "user" | "agent"; text: string }
   | { id: string; kind: "tool"; tool: string; target: string };
 
-export const mockTranscript: Turn[] = [
+const wireframeTranscript: Turn[] = [
   { id: "t1", kind: "user", text: "Add rate limiting to the refund endpoint." },
   {
     id: "t2",
@@ -39,7 +60,7 @@ export interface Project {
   note?: string;
 }
 
-export const mockProjects: Project[] = [
+const wireframeProjects: Project[] = [
   {
     id: "p1",
     name: "billing-service",
@@ -89,7 +110,7 @@ export interface Session {
   doing: string;
 }
 
-export const mockSessions: Session[] = [
+const wireframeSessions: Session[] = [
   {
     id: "s1",
     activity: "attention",
@@ -132,7 +153,7 @@ export interface Approval {
   body: string;
 }
 
-export const mockApprovals: Approval[] = [
+const wireframeApprovals: Approval[] = [
   {
     id: "a1",
     activity: "waiting",
@@ -163,7 +184,7 @@ export interface Capability {
   problem?: string;
 }
 
-export const mockCapabilities: Capability[] = [
+const wireframeCapabilities: Capability[] = [
   {
     id: "c1",
     activity: "done",
@@ -190,7 +211,7 @@ export const mockCapabilities: Capability[] = [
   { id: "c5", activity: "idle", name: "tech-lead", kind: "subagent", tools: 0 },
 ];
 
-export const mockAdapter = {
+const wireframeAdapter = {
   name: "claude-code",
   version: "2.1.4",
   authenticated: false,
@@ -200,14 +221,14 @@ export const mockAdapter = {
   context: "128k",
 };
 
-export const mockContextFiles = [
+const wireframeContextFiles = [
   { path: "docs/design-system.md", tokens: "4.1k" },
   { path: "packages/protocol/src/index.ts", tokens: "2.6k" },
 ];
 
 export type DiffLine = { kind: "add" | "del" | "ctx"; text: string };
 
-export const mockDiff: DiffLine[] = [
+const wireframeDiff: DiffLine[] = [
   { kind: "ctx", text: "export async function refund(req: RefundRequest) {" },
   { kind: "del", text: "  return processRefund(req);" },
   { kind: "add", text: "  await limiter.consume(req.accountId);" },
@@ -219,7 +240,7 @@ export const mockDiff: DiffLine[] = [
  * printed back, `err` is stderr — the three states a terminal has. */
 export type ConsoleLine = { kind: "in" | "out" | "err"; text: string };
 
-export const mockConsole: ConsoleLine[] = [
+const wireframeConsole: ConsoleLine[] = [
   {
     kind: "out",
     text: "claude-code 2.1.4 — attached to /work/billing-service",
@@ -245,9 +266,12 @@ export interface CapabilityDraft {
   instructions: string;
   model: string;
   tools: { name: string; enabled: boolean }[];
+  /** Where it lives on disk. The adapter's layout, not the web layer's guess —
+   * `.claude/skills/…` is true of claude-code and of nothing else in general. */
+  file: string;
 }
 
-export const mockCapabilityDraft: CapabilityDraft = {
+const wireframeCapabilityDraft: CapabilityDraft = {
   name: "code-review",
   kind: "skill",
   description: "Review the working tree for correctness bugs before a push.",
@@ -261,4 +285,78 @@ export const mockCapabilityDraft: CapabilityDraft = {
     { name: "edit", enabled: false },
     { name: "write", enabled: false },
   ],
+  file: ".claude/skills/code-review/SKILL.md",
 };
+
+const blankCapabilityDraft: CapabilityDraft = {
+  name: "",
+  kind: "",
+  description: "",
+  instructions: "",
+  model: "",
+  tools: [],
+  file: "",
+};
+
+/** What the prompt's control surface offers. Real instances read this from the
+ * adapter (models, permission modes) and the project's `.claude/agents`, so a
+ * build cannot know it — note that the fixture's mode names don't even match
+ * `PermissionMode` in @overseer/protocol, which is what inventing them costs. */
+const wireframePromptOptions: PromptOption[] = [
+  { key: "model", label: "model", values: ["opus-5", "sonnet-5", "haiku-4.5"] },
+  {
+    key: "mode",
+    label: "mode",
+    values: ["ask", "auto-accept", "plan", "bypass"],
+    danger: ["bypass"],
+  },
+  {
+    key: "agent",
+    label: "agent",
+    values: ["default", "developer", "tech-lead", "project-manager"],
+  },
+];
+
+const wireframePromptSettings: PromptSettings = {
+  model: "opus-5",
+  mode: "ask",
+  agent: "default",
+};
+
+/** Nothing is armed for the next turn, because nothing has offered an option. */
+const blankPromptSettings: PromptSettings = { model: "", mode: "", agent: "" };
+
+/** Where the agent's files live. A deployment fact the server owns — the
+ * container's mounts decide it, so the frontend must be told, not assume. */
+const wireframeWorkspace = { root: "/work", staging: "/work/_overseer/import" };
+const blankWorkspace = { root: "", staging: "" };
+
+/** A real instance has no projects, no sessions and no adapter attached until
+ * the session supervisor exists. Not even the adapter's name: the registry is
+ * behind /api/adapters and the frontend has never asked. */
+const blankAdapter = {
+  name: "",
+  version: "",
+  authenticated: false,
+  usage: 0,
+  spend: "",
+  context: "",
+};
+
+export const mockTranscript = WIREFRAME ? wireframeTranscript : [];
+export const mockProjects = WIREFRAME ? wireframeProjects : [];
+export const mockSessions = WIREFRAME ? wireframeSessions : [];
+export const mockApprovals = WIREFRAME ? wireframeApprovals : [];
+export const mockCapabilities = WIREFRAME ? wireframeCapabilities : [];
+export const mockContextFiles = WIREFRAME ? wireframeContextFiles : [];
+export const mockDiff = WIREFRAME ? wireframeDiff : [];
+export const mockConsole = WIREFRAME ? wireframeConsole : [];
+export const mockAdapter = WIREFRAME ? wireframeAdapter : blankAdapter;
+export const mockPromptOptions = WIREFRAME ? wireframePromptOptions : [];
+export const mockPromptSettings = WIREFRAME
+  ? wireframePromptSettings
+  : blankPromptSettings;
+export const mockWorkspace = WIREFRAME ? wireframeWorkspace : blankWorkspace;
+export const mockCapabilityDraft = WIREFRAME
+  ? wireframeCapabilityDraft
+  : blankCapabilityDraft;

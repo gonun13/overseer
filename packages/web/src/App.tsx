@@ -19,20 +19,18 @@ import { DiffWindow } from "./components/windows/DiffWindow";
 import { useWindows } from "./state/useWindows";
 import { deriveSignals, headlineFor, type Signal } from "./state/signals";
 import { matchCommand } from "./commands";
-import {
-  DEFAULT_PROMPT_SETTINGS,
-  PROMPT_OPTIONS,
-  type PromptOptionKey,
-  type PromptSettings,
-} from "./prompt";
+import type { PromptOptionKey, PromptSettings } from "./prompt";
 import {
   mockAdapter,
   mockApprovals,
   mockCapabilities,
   mockContextFiles,
   mockProjects,
+  mockPromptOptions,
+  mockPromptSettings,
   mockSessions,
   mockTranscript,
+  mockWorkspace,
   type Project,
   type Turn,
 } from "./data/mock";
@@ -47,9 +45,8 @@ export default function App() {
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const [promptOpen, setPromptOpen] = useState(false);
-  const [promptSettings, setPromptSettings] = useState<PromptSettings>(
-    DEFAULT_PROMPT_SETTINGS,
-  );
+  const [promptSettings, setPromptSettings] =
+    useState<PromptSettings>(mockPromptSettings);
   const [openControl, setOpenControl] = useState<PromptOptionKey | null>(null);
   const [approvals, setApprovals] = useState(mockApprovals);
   const [turns, setTurns] = useState<Turn[]>([]);
@@ -134,12 +131,12 @@ export default function App() {
       // closed — once it is open, every keystroke belongs to what is being typed.
       if (!e.metaKey && !e.ctrlKey && !e.altKey && !promptOpen && !typing) {
         const index = Number(e.key);
-        if (index >= 1 && index <= PROMPT_OPTIONS.length) {
+        if (index >= 1 && index <= mockPromptOptions.length) {
           e.preventDefault();
-          toggleControl(PROMPT_OPTIONS[index - 1].key);
+          toggleControl(mockPromptOptions[index - 1].key);
           return;
         }
-        if (index === PROMPT_OPTIONS.length + 1) {
+        if (index === mockPromptOptions.length + 1) {
           e.preventDefault();
           open("context");
           return;
@@ -199,8 +196,10 @@ export default function App() {
     ]);
     setBusy(true);
     // Placeholder for the real stream; replaced when the WS event pipe lands.
+    // Outside the wireframe fixtures there is no canned transcript, so the turn
+    // goes nowhere — replacing here would swallow what the operator typed.
     setTimeout(() => {
-      setTurns(mockTranscript);
+      if (mockTranscript.length > 0) setTurns(mockTranscript);
       setBusy(false);
     }, 1200);
   }
@@ -238,6 +237,7 @@ export default function App() {
       />
 
       <PromptControls
+        options={mockPromptOptions}
         settings={promptSettings}
         openKey={openControl}
         contextCount={mockContextFiles.length}
@@ -264,7 +264,7 @@ export default function App() {
           onInspect={inspectTurn}
         />
         <p className="footer">
-          overseer v0.1 | ask for{" "}
+          overseer v{import.meta.env.VITE_APP_VERSION} | ask for{" "}
           <span style={{ color: "var(--accent)" }}>help</span> |{" "}
           <button className="footer-link" onClick={() => open("console")}>
             open <span style={{ color: "var(--ok)" }}>console</span>
@@ -317,7 +317,7 @@ export default function App() {
             <ContextWindow projectName={activeProject?.name} />
           )}
           {w.kind === "console" && <ConsoleWindow adapter={mockAdapter.name} />}
-          {w.kind === "help" && <HelpWindow />}
+          {w.kind === "help" && <HelpWindow adapter={mockAdapter.name} />}
           {w.kind === "diff" && <DiffWindow target={String(w.payload ?? "")} />}
         </Window>
       ))}
@@ -326,6 +326,7 @@ export default function App() {
         open={settingsOpen}
         theme={theme}
         adapter={mockAdapter}
+        workspace={mockWorkspace}
         onClose={() => setSettingsOpen(false)}
         onToggleTheme={toggleTheme}
         onOpenCapabilities={() => {

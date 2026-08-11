@@ -1,8 +1,8 @@
 import { ChevronIcon } from "./icons";
-import {
-  PROMPT_OPTIONS,
-  type PromptOptionKey,
-  type PromptSettings,
+import type {
+  PromptOption,
+  PromptOptionKey,
+  PromptSettings,
 } from "../prompt";
 
 /**
@@ -20,6 +20,7 @@ import {
  * is (design-system.md §6).
  */
 export function PromptControls({
+  options,
   settings,
   openKey,
   contextCount,
@@ -27,6 +28,9 @@ export function PromptControls({
   onSelect,
   onOpenContext,
 }: {
+  /** Empty until an adapter reports what this instance can be set to; the
+   * accordion then has nothing to show and only the context row remains. */
+  options: PromptOption[];
   settings: PromptSettings;
   openKey: PromptOptionKey | null;
   contextCount: number;
@@ -36,7 +40,7 @@ export function PromptControls({
 }) {
   return (
     <div className="controls">
-      {PROMPT_OPTIONS.map((option, i) => {
+      {options.map((option, i) => {
         const open = openKey === option.key;
         const value = settings[option.key];
         return (
@@ -81,7 +85,7 @@ export function PromptControls({
       {/* Context is the one option that needs more than a value, so it opens a window. */}
       <div className="ctl">
         <button className="ctl-head" onClick={onOpenContext}>
-          <span className="ctl-key">{PROMPT_OPTIONS.length + 1}</span>
+          <span className="ctl-key">{options.length + 1}</span>
           <span className="ctl-label">context</span>
           <span className="ctl-value">
             {contextCount === 0 ? "empty" : `${contextCount} attached`}

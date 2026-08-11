@@ -53,6 +53,27 @@ Three services: `deps` builds `protocol` + the adapters and holds them in `tsc -
 and `web` import them through `dist/`, so compose gates both on it), `server` runs `tsx watch`, and
 `web` runs Vite proxying `/api` and `/ws` to `server:3000`.
 
+### Wireframe fixtures
+
+The shell is designed against static fixtures in `packages/web/src/data/mock.ts`, since the WS event
+pipe that would feed it live state does not exist yet (see Status). They are a design-development
+device and they do not ship: they load only when `VITE_OVERSEER_WIREFRAME=1`, which the dev stack
+sets and the production image never does. Vite inlines the variable at build time, so `./bin/up`
+drops the fixtures from the bundle rather than shipping them unused.
+
+Everything an instance learns at runtime lives there, not only the obviously fake rows — the model
+and subagent lists, the prompt's starting settings, the workspace paths, the adapter's own name. A
+plausible default is invented data too, so the blank side of each pair is empty and the UI reports
+that it has not been told rather than filling the gap in.
+
+To see the dev stack as a fresh instance instead — no projects, sessions, approvals or capabilities:
+
+```
+VITE_OVERSEER_WIREFRAME=0 ./bin/dev
+```
+
+That is the same state `./bin/up` serves today.
+
 Install a dependency with `./bin/npm install --workspace packages/web <pkg>` — never with host npm,
 which would write macOS binaries into a tree only ever read by Linux. `package-lock.json` is
 bind-mounted, so the change lands on the host for committing.

@@ -25,6 +25,10 @@ export function AdapterWidget({
 }) {
   const percent = Math.round(adapter.usage * 100);
   const activity: Activity = adapter.authenticated ? "done" : "waiting";
+  // No name means no adapter has reported in. The instrument still sits on the
+  // field — it is permanent furniture — but it reads out nothing, rather than
+  // an empty version and a 0% gauge that look like measurements.
+  const attached = adapter.name !== "";
   const gaugeColor =
     adapter.usage >= 0.95
       ? "var(--accent)"
@@ -40,28 +44,42 @@ export function AdapterWidget({
           <StatusLight activity={activity} />
         </span>
 
-        <span className="widget-row">
-          <span className="widget-name">{adapter.name}</span>
-          <span className="widget-dim">v{adapter.version}</span>
-        </span>
-        <span className="widget-row">
-          <span className="widget-dim">
-            {adapter.authenticated ? "signed in" : "not signed in"}
+        {!attached ? (
+          <span className="widget-row">
+            <span className="widget-dim">none attached</span>
           </span>
-        </span>
+        ) : (
+          <>
+            <span className="widget-row">
+              <span className="widget-name">{adapter.name}</span>
+              {adapter.version && (
+                <span className="widget-dim">v{adapter.version}</span>
+              )}
+            </span>
+            <span className="widget-row">
+              <span className="widget-dim">
+                {adapter.authenticated ? "signed in" : "not signed in"}
+              </span>
+            </span>
 
-        <span className="widget-kicker spaced">usage</span>
-        <span className="gauge">
-          <span
-            className="gauge-fill"
-            style={{ width: `${percent}%`, background: gaugeColor }}
-          />
-        </span>
-        <span className="widget-row">
-          <span className="widget-dim">{percent}% of window</span>
-          <span className="widget-num">{adapter.spend}</span>
-          <span className="widget-num">{adapter.context} ctx</span>
-        </span>
+            <span className="widget-kicker spaced">usage</span>
+            <span className="gauge">
+              <span
+                className="gauge-fill"
+                style={{ width: `${percent}%`, background: gaugeColor }}
+              />
+            </span>
+            <span className="widget-row">
+              <span className="widget-dim">{percent}% of window</span>
+              {adapter.spend && (
+                <span className="widget-num">{adapter.spend}</span>
+              )}
+              {adapter.context && (
+                <span className="widget-num">{adapter.context} ctx</span>
+              )}
+            </span>
+          </>
+        )}
       </span>
     </button>
   );
