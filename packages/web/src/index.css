@@ -4,48 +4,210 @@
 @import "@fontsource/ibm-plex-mono/600.css";
 @import "@fontsource/ibm-plex-mono/700.css";
 
-/* Two opposed systems, not light/dark variants of one palette (design-system.md §1). */
+/* ---------------------------------------------------------------------------
+   Three levels. Samaritan is the reference and the default; machine is its
+   opposite at every level (design-system.md §2).
+
+     field    ground, the overseer space, the active project, widgets, and
+              readouts in general — including the project panel's collapsed
+              header and the prompt controls' rows, both of which are read
+              before they are acted on. Samaritan: light.
+     surface  what you act in — windows, the chat, panels, and the project list
+              once it opens. Samaritan: dark.
+     stamp    what gets printed — session output, chips, and (when it's the one
+              already in effect) a prompt-control's option. Samaritan: a
+              darker light. A stamp stays on the field's side of the scale,
+              one step in toward the surface, so it reads as paper whether it
+              sits on the field or on a surface. Buttons are deliberately
+              excluded — a control must never share a colour with content, or
+              nothing tells you what's clickable (§2, §5.1).
+     void     a fourth, *theme-invariant* ground reserved for a window's own
+              tab and an opened prompt-control's option list — chrome that
+              names or operates the machine itself, not the work in it, so it
+              does not participate in the samaritan/machine inversion at all.
+              Always near-black with light ink, in both themes.
+
+   Because a stamp keeps the field's lightness, it reuses the field's status
+   colours; only surfaces need the `-fill` variants.
+--------------------------------------------------------------------------- */
 :root {
-  --bg: #090c0a;
-  --panel: #10140e;
-  --panel-alt: #151a12;
-  --border: rgba(140, 210, 160, 0.14);
-  --border-strong: rgba(140, 210, 160, 0.35);
-  --text: #dff2e6;
-  --text-dim: #7f9a89;
-  --text-faint: #4f6356;
-  --accent: #6ee7a0;
-  --warn: #e0a458;
-  --danger: #e2604c;
+  /* field */
+  --bg: #ffffff;
+  --bg-vignette: #8f8f8f;
+  --text: #111111;
+  --text-dim: rgba(17, 17, 17, 0.58);
+  --text-faint: rgba(17, 17, 17, 0.32);
+  --edge: rgba(17, 17, 17, 0.85);
+  --accent: #d0342c;
+  --ok: #1e9e57;
+  --warn: #a97400;
+
+  /* the faint lift that makes a widget sit on the field rather than in it */
+  --raise: rgba(17, 17, 17, 0.05);
+
+  /* the field, opaque enough to read as a bounded panel — the transcript's
+     ground, because output is light and input is dark (§7.1) */
+  --page: rgba(255, 255, 255, 0.97);
+
+  /* stamp — the field, one step toward the surface */
+  --stamp: #e4e4e4;
+  --stamp-ink: #111111;
+  --stamp-dim: rgba(17, 17, 17, 0.58);
+  --stamp-faint: rgba(17, 17, 17, 0.34);
+  --stamp-edge: rgba(17, 17, 17, 0.2);
+
+  /* surface — the inversion */
+  --fill: rgba(10, 10, 10, 0.95);
+  --fill-solid: #0a0a0a;
+  --ink: #f3f3f3;
+  --ink-dim: rgba(243, 243, 243, 0.6);
+  --ink-faint: rgba(243, 243, 243, 0.34);
+  --ink-rule: rgba(243, 243, 243, 0.16);
+  --accent-fill: #ff4a44;
+  --ok-fill: #35d67f;
+  --warn-fill: #f1c40f;
+
+  /* void — declared once, never redefined under [data-theme="machine"], so it
+     never inverts. */
+  --void: #0a0a0a;
+  --void-ink: #f3f3f3;
+  --void-dim: rgba(243, 243, 243, 0.6);
+  --void-faint: rgba(243, 243, 243, 0.34);
+  --void-edge: rgba(243, 243, 243, 0.2);
+  --void-raise: rgba(243, 243, 243, 0.08);
+
+  /* status light colours. Surfaces re-point these; stamps inherit the field's,
+     which is the whole reason a stamp keeps the field's lightness. */
+  --light-ok: var(--ok);
+  --light-warn: var(--warn);
+  --light-accent: var(--accent);
+  --light-idle: var(--text-faint);
 }
 
-[data-theme="samaritan"] {
-  --bg: #ffffff;
-  --panel: #f6f6f4;
-  --panel-alt: #ececea;
-  --border: rgba(0, 0, 0, 0.1);
-  --border-strong: rgba(0, 0, 0, 0.22);
-  --text: #111111;
-  --text-dim: rgba(17, 17, 17, 0.6);
-  --text-faint: rgba(17, 17, 17, 0.38);
-  --accent: #d0342c;
-  --warn: #a8660f;
-  --danger: #7a1414;
+/* Machine mirrors samaritan token for token: same alphas, same relationships,
+   opposite lightness. When a value here stops being the mirror of the one
+   above it, that is drift, not a decision. */
+[data-theme="machine"] {
+  /* Charcoal, not carbon — softer than a print-black field. Kept clear of
+     --void (#0a0a0a) so a window tab still separates from the vignette. */
+  --bg: #1c1c1c;
+  --bg-vignette: #101010;
+  --text: #f3f3f3;
+  --text-dim: rgba(243, 243, 243, 0.58);
+  --text-faint: rgba(243, 243, 243, 0.32);
+  --edge: rgba(243, 243, 243, 0.85);
+  --accent: #e11d1d;
+  --ok: #2ecc71;
+  --warn: #f1c40f;
+
+  --raise: rgba(243, 243, 243, 0.05);
+
+  --page: rgba(28, 28, 28, 0.97);
+
+  /* The opposite of a darker light: a lighter dark. The step from --bg has to
+     match samaritan's (255 → 228) or stamps stop separating from the page they
+     print onto; dark grounds need a slightly wider step to read the same, so
+     this is 28 → 51 rather than a literal 28 → 55. */
+  --stamp: #333333;
+  --stamp-ink: #f3f3f3;
+  --stamp-dim: rgba(243, 243, 243, 0.58);
+  --stamp-faint: rgba(243, 243, 243, 0.34);
+  --stamp-edge: rgba(243, 243, 243, 0.2);
+
+  --fill: rgba(238, 238, 238, 0.95);
+  --fill-solid: #eeeeee;
+  --ink: #0d0d0d;
+  --ink-dim: rgba(13, 13, 13, 0.6);
+  --ink-faint: rgba(13, 13, 13, 0.34);
+  --ink-rule: rgba(13, 13, 13, 0.16);
+  --accent-fill: #c0201c;
+  --ok-fill: #1a8a4c;
+  --warn-fill: #8a6100;
 }
 
 @theme inline {
   --color-bg: var(--bg);
-  --color-panel: var(--panel);
-  --color-panel-alt: var(--panel-alt);
-  --color-border: var(--border);
-  --color-border-strong: var(--border-strong);
+  --color-fill: var(--fill);
   --color-text: var(--text);
   --color-text-dim: var(--text-dim);
   --color-text-faint: var(--text-faint);
+  --color-edge: var(--edge);
   --color-accent: var(--accent);
+  --color-ok: var(--ok);
   --color-warn: var(--warn);
-  --color-danger: var(--danger);
   --font-mono: "IBM Plex Mono", ui-monospace, monospace;
+}
+
+/* Anything on a surface uses the surface's own status colours. Input surfaces
+   are in this list too — see the input/output rule below. */
+.window-frame,
+.panel,
+.projects-list,
+.prompt-bar,
+.composer,
+.turn-operator {
+  --light-ok: var(--ok-fill);
+  --light-warn: var(--warn-fill);
+  --light-accent: var(--accent-fill);
+  --light-idle: var(--ink-faint);
+}
+
+/* The transcript panel is field-level; the prompt's input parts are not. */
+.transcript-panel {
+  --light-ok: var(--ok);
+  --light-warn: var(--warn);
+  --light-accent: var(--accent);
+  --light-idle: var(--text-faint);
+}
+
+/* ---- input is dark, output is light --------------------------------------
+   The load-bearing rule of the chat, stated once here rather than rediscovered
+   per component (design-system.md §7.1). In samaritan: everything the operator
+   types through is a dark surface; everything produced for them to read is a
+   light page or a stamp printed on it. Machine inverts both halves, so the
+   *relationship* holds in either theme.
+
+   Input:  .prompt-bar (collapsed prompt), .composer, .turn-operator
+   Output: .transcript-panel (the page), .turn-agent, .turn-tool (stamps)
+
+   The collapsed bar and the expanded composer are the same control at two
+   sizes and must never differ in ground; the transcript appearing above them
+   is the change, not a reason for the input to follow it. */
+.prompt-bar,
+.composer,
+.turn-operator {
+  background: var(--fill);
+  color: var(--ink);
+}
+
+/* Everything that gets printed — labels, values, agent output. Buttons are
+   deliberately excluded: a stamp is content, and content must never share a
+   colour with a control (design-system.md §6.3). Nested inside a surface or
+   sat on the field, a stamp is the same object and carries the field's status
+   colours back with it. */
+.w-title,
+.w-data,
+.turn-agent,
+.turn-tool {
+  --light-ok: var(--ok);
+  --light-warn: var(--warn);
+  --light-accent: var(--accent);
+  --light-idle: var(--text-faint);
+  background: var(--stamp);
+  color: var(--stamp-ink);
+}
+
+/* The two things that operate the machine rather than show its content, so
+   they sit on `--void` instead — fixed, near-black, unmoved by the theme
+   toggle (design-system.md §2). */
+.window-tab,
+.ctl-values {
+  --light-ok: var(--ok);
+  --light-warn: var(--warn);
+  --light-accent: var(--accent);
+  --light-idle: var(--void-faint);
+  background: var(--void);
+  color: var(--void-ink);
 }
 
 html,
@@ -54,55 +216,1372 @@ body,
   height: 100%;
 }
 
-body {
-  margin: 0;
-  background: var(--bg);
-  color: var(--text);
-  font-family: var(--font-mono);
-  font-size: 13px;
-  overflow: hidden;
-}
-
 * {
   box-sizing: border-box;
 }
 
-@keyframes pulse-dot {
+body {
+  margin: 0;
+  color: var(--text);
+  font-family: var(--font-mono);
+  font-size: 14px;
+  overflow: hidden;
+  user-select: none;
+  /* The field: brightest at centre, falling off at the edges. */
+  background: radial-gradient(ellipse at center, var(--bg), var(--bg-vignette));
+}
+
+button {
+  font: inherit;
+  color: inherit;
+  background: transparent;
+  border: 0;
+  padding: 0;
+  text-align: left;
+  cursor: pointer;
+}
+
+.field {
+  position: relative;
+  height: 100%;
+  width: 100%;
+  overflow: hidden;
+}
+
+/* ---- status light --------------------------------------------------------
+   The only circle in the interface. Unlit means idle, so a field of rings is a
+   field with nothing happening on it (design-system.md §3). */
+.light {
+  display: inline-block;
+  flex: none;
+  border-radius: 50%;
+  border: 1px solid var(--light-idle);
+  background: transparent;
+}
+
+.light.working,
+.light.done {
+  border-color: var(--light-ok);
+  background: var(--light-ok);
+  box-shadow: 0 0 6px var(--light-ok);
+}
+
+.light.waiting {
+  border-color: var(--light-warn);
+  background: var(--light-warn);
+  box-shadow: 0 0 6px var(--light-warn);
+}
+
+.light.attention {
+  border-color: var(--light-accent);
+  background: var(--light-accent);
+  box-shadow: 0 0 6px var(--light-accent);
+}
+
+@keyframes pulse {
   0%,
   100% {
     opacity: 1;
   }
   50% {
-    opacity: 0.35;
+    opacity: 0.22;
   }
 }
 
-.status-dot--live {
-  animation: pulse-dot 2s ease-in-out infinite;
+.light.pulse {
+  animation: pulse 1.2s ease-in-out infinite;
 }
 
-/* machine theme only — samaritan's severity is its clinical flatness (design-system.md §6). */
-.scanline-overlay {
-  display: none;
+/* Intervention pulses faster than work in progress — urgency is in the rhythm. */
+.light.attention.pulse {
+  animation-duration: 0.7s;
 }
 
-:root:not([data-theme="samaritan"]) .scanline-overlay {
+/* ---- top left: the project panel -----------------------------------------
+   Split across two levels. The header is a readout — it names the active
+   project the same way the clock names the time — so it stays on the field and
+   blends with the background. The list is what you click into to act, so it is
+   a *surface* and only appears, framed, once it opens. Permanent and open by
+   default: a status panel first and a selector second, so selecting never
+   closes it — only the chevron does. */
+.projects {
+  position: absolute;
+  left: 26px;
+  top: 20px;
+  z-index: 40;
+  width: 320px;
+  max-width: 32vw;
+}
+
+.projects-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  padding: 6px 4px 6px 8px;
+  border-bottom: 1px solid var(--edge);
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.projects-kicker {
+  font-size: 11px;
+  color: var(--text-faint);
+}
+
+.projects-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 15px;
+}
+
+.chevron-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 22px;
+  height: 22px;
+  flex: none;
+  color: var(--text-dim);
+}
+
+.chevron-btn:hover {
+  color: var(--accent);
+}
+
+.projects-list {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  background: var(--fill);
+  color: var(--ink);
+  transition:
+    max-height 0.26s ease-out,
+    opacity 0.16s linear;
+}
+
+/* The horizontal-edges-only framing every surface uses, but only while open —
+   collapsed, there is no surface there yet, just the field header above it. */
+.projects-list.open {
+  max-height: 44vh;
+  overflow-y: auto;
+  opacity: 1;
+  border-style: solid;
+  border-width: 2px 0.5px;
+  border-color: var(--edge) transparent;
+}
+
+.project-row {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 7px 9px;
+  border-bottom: 1px solid var(--ink-rule);
+  font-size: 13px;
+}
+
+.project-row:hover {
+  background: var(--ink-rule);
+}
+
+.project-row.current {
+  border-left: 2px solid var(--accent-fill);
+  padding-left: 7px;
+}
+
+.project-row-name {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.project-row.current .project-row-name {
+  color: var(--accent-fill);
+}
+
+.project-row-branch {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-dim);
+  font-size: 12px;
+}
+
+.project-row-note {
+  margin-left: auto;
+  flex: none;
+  color: var(--ink-faint);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+/* ---- top centre: the active project -------------------------------------- */
+.active-project {
+  position: absolute;
+  left: 50%;
+  top: 18px;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  max-width: 40vw;
+  text-align: center;
+}
+
+.ap-kicker {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.ap-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.active-project.unset .ap-name {
+  color: var(--accent);
+}
+
+.ap-meta {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+
+/* ---- top right: clock and settings --------------------------------------- */
+.clock {
+  position: absolute;
+  right: 24px;
+  top: 20px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.clock-read {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.15;
+}
+
+.clock-time {
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+}
+
+.clock-date {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* A boxed icon — used where the glyph is small enough to need a hit target
+   drawn around it, as in the settings panel's close ✕. */
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--text-faint);
+  color: var(--text-dim);
+}
+
+.icon-btn:hover {
+  border-color: var(--edge);
+  color: var(--text);
+}
+
+/* The gear stands on its own: no box, just a bigger glyph. It sits beside the
+   clock, which is also unboxed, so a border would make it the only framed
+   thing in that corner. */
+.gear-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+}
+
+.gear-btn:hover {
+  color: var(--text);
+}
+
+/* ---- centre: the overseer space ------------------------------------------
+   Derived, ranked, and clickable. Not a log (design-system.md §4). */
+.overseer-space {
+  position: absolute;
+  inset-inline: 0;
+  top: 110px;
+  bottom: 180px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px;
+}
+
+.os-headline {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Only present while the rare typing pass is running (useOccasionalTyping). */
+.os-cursor {
+  display: inline-block;
+  width: 5px;
+  height: 0.8em;
+  margin-left: 3px;
+  background: var(--text);
+  vertical-align: -0.05em;
+}
+
+.os-rule {
+  margin: 10px 0 0;
+  border: 0;
+  border-top: 2px solid var(--text);
+  transition: width 0.3s ease-out;
+}
+
+.os-marker {
+  margin: 4px 0 0;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--accent);
+}
+
+.os-signals {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 720px;
+  margin-top: 28px;
+}
+
+.os-signal {
+  display: flex;
+  align-items: baseline;
+  gap: 10px;
+  padding: 7px 10px;
+  border-left: 1px solid transparent;
+}
+
+.os-signal:hover {
+  border-left-color: var(--accent);
+  background: var(--raise);
+}
+
+.os-signal .light {
+  align-self: center;
+}
+
+.os-kicker {
+  flex: none;
+  width: 92px;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.os-text {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.os-signal:hover .os-text {
+  color: var(--text);
+}
+
+/* ---- bottom left: prompt controls ----------------------------------------
+   Split like the project panel. The rows are a menu — you read them to see
+   what's armed — so they stay on the **field** and blend with the background.
+   Opening one prints its options as a **stamp** below it: that is the part you
+   act on. An accordion, one section open at a time, anchored at the bottom so
+   it grows upward. Bare digits open a section while the prompt is closed. */
+.controls {
+  position: absolute;
+  left: 26px;
+  bottom: 26px;
+  z-index: 30;
+  width: 260px;
+  max-width: 28vw;
+  padding: 3px 0;
+  border-left: 1.5px solid var(--edge);
+}
+
+.ctl-head {
+  display: flex;
+  align-items: center;
+  gap: 9px;
+  width: 100%;
+  padding: 4px 6px 4px 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+
+.ctl-head:hover,
+.ctl.open .ctl-head {
+  color: var(--text);
+}
+
+.ctl-key {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.ctl-head:hover .ctl-key,
+.ctl.open .ctl-key {
+  color: var(--accent);
+}
+
+.ctl-label {
+  flex: none;
+  width: 62px;
+}
+
+.ctl-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.ctl-value.danger {
+  color: var(--accent);
+}
+
+.ctl-chevron {
+  flex: none;
+  display: flex;
+  color: var(--text-faint);
+}
+
+/* The block that appears once a row opens — pressed onto the field on `--void`,
+   not a tint of it. Background and ink come from the void selector above
+   (`.ctl-values`); the edge is gated to `.open` so it doesn't leave a sliver
+   under a collapsed row. */
+.ctl-values {
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  transition:
+    max-height 0.22s ease-out,
+    opacity 0.14s linear;
+}
+
+.ctl.open .ctl-values {
+  max-height: 200px;
+  opacity: 1;
+  border: 1px solid var(--void-edge);
+}
+
+.ctl-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px 4px 31px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--void-dim);
+}
+
+/* A fixed lightening tint — `--raise` flips with the field and would vanish
+   against `--void`'s permanently near-black ground in samaritan. */
+.ctl-option:hover {
+  background: var(--void-raise);
+  color: var(--void-ink);
+}
+
+.ctl-option.current {
+  color: var(--void-ink);
+}
+
+.ctl-option.danger {
+  color: var(--accent);
+}
+
+.ctl-mark {
+  flex: none;
+  width: 8px;
+  color: var(--accent);
+}
+
+/* ---- bottom right: the adapter widget ------------------------------------
+   Widgets stay on the field. They are bracketed at the corners rather than
+   framed and tabbed, so they read as instruments sitting on the background and
+   can never be mistaken for windows (design-system.md §6.2). */
+.widget {
+  position: absolute;
+  right: 26px;
+  bottom: 26px;
+  z-index: 30;
+  width: 252px;
+}
+
+.widget-frame {
+  --corner: 11px;
   display: block;
+  width: 100%;
+  padding: 10px 12px 12px;
+  background-color: var(--raise);
+  background-repeat: no-repeat;
+  background-image:
+    linear-gradient(var(--edge), var(--edge)),
+    linear-gradient(var(--edge), var(--edge)),
+    linear-gradient(var(--edge), var(--edge)),
+    linear-gradient(var(--edge), var(--edge)),
+    linear-gradient(var(--edge), var(--edge)),
+    linear-gradient(var(--edge), var(--edge)),
+    linear-gradient(var(--edge), var(--edge)),
+    linear-gradient(var(--edge), var(--edge));
+  background-size:
+    var(--corner) 1px,
+    1px var(--corner),
+    var(--corner) 1px,
+    1px var(--corner),
+    var(--corner) 1px,
+    1px var(--corner),
+    var(--corner) 1px,
+    1px var(--corner);
+  background-position:
+    left top,
+    left top,
+    right top,
+    right top,
+    left bottom,
+    left bottom,
+    right bottom,
+    right bottom;
+}
+
+/* The brackets are drawn from --edge, so re-pointing it lights the whole frame. */
+.widget:hover .widget-frame {
+  --edge: var(--accent);
+}
+
+.widget-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.widget-kicker {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.widget-kicker.spaced {
+  margin-top: 12px;
+  margin-bottom: 5px;
+}
+
+.widget-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+.widget-name {
+  text-transform: uppercase;
+}
+
+.widget-dim {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.widget-num {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.widget-num + .widget-num {
+  margin-left: 0;
+}
+
+.gauge {
+  display: block;
+  width: 100%;
+  height: 4px;
+  margin-bottom: 6px;
+  background: var(--raise);
+  border: 1px solid var(--text-faint);
+}
+
+.gauge-fill {
+  display: block;
+  height: 100%;
+  transition: width 0.3s ease-out;
+}
+
+/* ---- bottom centre: the prompt -------------------------------------------
+   The prompt is a surface: it is where you act, so it inverts the field at both
+   sizes. What the agent prints into it arrives as stamps (design-system.md §7). */
+.dock {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Ground and ink come from the input rule near the top of this file. */
+.prompt-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 640px;
+  max-width: 86vw;
+  height: 38px;
+  padding: 0 12px;
+  border-style: solid;
+  border-width: 2px 0.5px;
+  border-color: var(--edge) transparent;
+  cursor: text;
+}
+
+.prompt-bar:hover {
+  border-color: var(--accent) transparent;
+}
+
+.prompt-caret {
+  color: var(--accent-fill);
+  font-size: 16px;
+}
+
+.prompt-placeholder {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  color: var(--ink-dim);
+}
+
+.prompt-cursor {
+  flex: none;
+  width: 8px;
+  height: 17px;
+  background: var(--ink);
+}
+
+/* Capped so the expanded chat never covers the two bottom corners it depends on —
+   the prompt controls to its left and the adapter widget to its right.
+   `gap` is what separates the two panels below: they are siblings, not one
+   frame split in half, so the field shows between them. */
+.chat {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: min(880px, max(520px, calc(100vw - 600px)));
+}
+
+/* Output. Its own panel, a sibling of the composer rather than a shared frame
+   wrapping both — the two are different materials (§7.1) and get to be styled
+   independently. Field-level: the operator reads prose here at length, and that
+   reads better as a page than as a lit panel. */
+.transcript-panel {
+  border-style: solid;
+  border-width: 2px 0.5px;
+  border-color: var(--edge) transparent;
+  background: var(--page);
+  color: var(--text);
+}
+
+.transcript {
+  max-height: 46vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 12px 12px 2px;
+  user-select: text;
+}
+
+/* What the agent produced is printed: a stamp laid on the surface. */
+.turn-agent {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--stamp-edge);
+}
+
+/* Your prompt, echoed — input, so it keeps the dark ground the composer has;
+   ground and ink come from the input rule near the top of this file. The accent
+   lane rather than a uniform border is what separates it from a stamp
+   (design-system.md §7.2). */
+.turn-operator {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border-left: 2px solid var(--accent-fill);
+}
+
+.turn-operator .turn-label {
+  color: var(--ink-faint);
+}
+
+.turn-label {
+  margin-bottom: 4px;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--stamp-faint);
+}
+
+.turn-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+/* Terminal output: consecutive tool calls read as one continuous console
+   block, not separate chips with the dark chat surface showing between them
+   — a run shares its top and bottom border and never gaps internally. Spacing
+   after a run is given by whatever follows it, not by the tool row itself, so
+   the run's length doesn't matter. */
+.turn-tool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--stamp-dim);
+  border: 1px solid var(--stamp-edge);
+}
+
+.turn-tool + .turn-tool {
+  border-top: none;
+}
+
+.turn-tool + :not(.turn-tool) {
+  margin-top: 10px;
+}
+
+.turn-tool:hover {
+  border-color: var(--accent);
+  color: var(--stamp-ink);
+}
+
+.turn-tool-name {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.turn-tool-target {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--stamp-faint);
+}
+
+/* Input. Now a panel in its own right rather than a strip inside the
+   transcript's frame, so it carries the same 2px horizontal edges every other
+   framed thing does. Ground and ink come from the input rule near the top. */
+.composer {
+  width: 100%;
+  padding: 10px 12px 9px;
+  border-style: solid;
+  border-width: 2px 0.5px;
+  border-color: var(--edge) transparent;
+}
+
+.composer textarea {
+  display: block;
+  width: 100%;
+  max-height: 168px;
+  resize: none;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  user-select: text;
+}
+
+.composer textarea::placeholder {
+  color: var(--ink-faint);
+}
+
+.composer-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.footer {
+  margin: 12px 0 0;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* Inline in the footer's sentence, so it takes the footer's type rather than
+   the button chrome `.w-btn` would give it — a word you can click, not a
+   control competing with the prompt above it. */
+.footer-link {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+}
+
+.footer-link:hover {
+  color: var(--text);
+}
+
+/* ---- window --------------------------------------------------------------
+   A surface. The tab is a flow child, so its left edge is the frame's left edge
+   by construction. Borders on the horizontal edges only — that is what stops a
+   window reading as a card. */
+.window {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  z-index: 100;
+}
+
+.window.dragging {
+  opacity: 0.6;
+}
+
+.window-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 7px;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: move;
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 0.2s linear;
+}
+
+.window-tab.revealed {
+  clip-path: inset(0 0 0 0);
+}
+
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.tab-close:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.window-frame {
+  width: 100%;
+  padding: 10px 12px;
+  border-style: solid;
+  border-width: 2px 0.5px;
+  border-color: var(--edge) transparent;
+  background: var(--fill);
+  color: var(--ink);
+}
+
+/* Vertical scroll only: a window that scrolls sideways has failed to lay out. */
+.window-body {
+  max-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  transition: max-height 0.5s ease-out;
+}
+
+.window-body.expanded {
+  max-height: min(420px, 52vh);
+}
+
+/* ---- surface content primitives ------------------------------------------ */
+.w-title {
+  display: inline-block;
+  padding: 3px 5px;
+  margin: 14px 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.w-title:first-child {
+  margin-top: 0;
+}
+
+.w-data {
+  display: inline-block;
+  padding: 1px 5px;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.w-inline {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  margin: 6px 0;
+  font-size: 12px;
+}
+
+.w-inline-label {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-dim);
+}
+
+.w-inline-value {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.w-inline-flex {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  text-transform: uppercase;
+}
+
+/* Wraps rather than scrolls sideways — the frame width is the contract. */
+.w-pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.55;
+  user-select: text;
+}
+
+.w-path {
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--ink-dim);
+  overflow-wrap: anywhere;
+}
+
+.w-empty {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--ink-faint);
+}
+
+.w-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--ink-rule);
+}
+
+.w-row.clickable:hover {
+  background: var(--ink-rule);
+}
+
+.w-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.w-row-primary {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.w-row-secondary {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+
+.w-row-right {
+  flex: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dim);
+}
+
+.w-row-actions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+/* Set inline, inside a w-inline value — no top margin to fight the row's own
+   vertical centring. */
+.btn-row.inline {
+  margin-top: 0;
+}
+
+/* Buttons are not stamps — a stamp is content, a button is a control, and the
+   two must never share a colour or an operator can't tell what's clickable.
+   A button is cut out of the surface: transparent, bordered and inked in the
+   surface's own ink, so it reads as part of the machine rather than something
+   printed onto it. It inverts solid on hover — the one moment it does resemble
+   a stamp, and only ever a moment. */
+.w-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.w-btn:hover {
+  background: var(--ink);
+  color: var(--fill-solid);
+}
+
+/* The option already in effect, inside a row of otherwise-equal choices. This
+   is *not* a permanent hover-invert — a resting button that stays filled is a
+   stamp again, the exact confusion the split is meant to prevent. Selection is
+   marked the same way a current value is marked in the prompt controls: a
+   small accent glyph, chrome otherwise untouched (design-system.md §6.3). */
+.w-btn-mark {
+  width: 8px;
+  flex: none;
+  color: var(--accent-fill);
+}
+
+.w-btn.danger {
+  color: var(--accent-fill);
+  border-color: var(--accent-fill);
+}
+
+.w-btn.danger:hover {
+  background: var(--accent-fill);
+  color: var(--fill-solid);
+}
+
+/* A prose field inside a window — a skill's instructions, an agent's brief.
+   Input, so it takes the input ground the composer has (§7.1). */
+.w-editor {
+  display: block;
+  width: 100%;
+  min-height: 110px;
+  max-height: 240px;
+  resize: vertical;
+  padding: 9px 11px;
+  border: 1px solid var(--ink-rule);
+  background: var(--stamp);
+  color: var(--stamp-ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  outline: 0;
+  user-select: text;
+}
+
+.w-editor:focus {
+  border-color: var(--accent-fill);
+}
+
+.w-note {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+/* ---- console -------------------------------------------------------------
+   The raw adapter CLI. Deliberately *not* split into input-dark / output-light
+   panels the way the chat is: a terminal is one continuous stream on one
+   ground, and cutting it into per-line boxes stops it reading as a terminal
+   (design-system.md §5.3). Sent lines are marked by an accent sigil and full
+   ink instead. */
+.console {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+}
+
+.console-out {
+  max-height: min(380px, 46vh);
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 9px 11px;
+  background: var(--stamp);
+  color: var(--stamp-dim);
+  font-size: 12px;
+  line-height: 1.55;
+  user-select: text;
+}
+
+.console-line {
+  display: flex;
+  gap: 7px;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+/* What you sent reads at full strength; what came back sits back a step. */
+.console-line.in {
+  color: var(--stamp-ink);
+}
+
+.console-line.err {
+  color: var(--accent);
+}
+
+.console-sigil {
+  flex: none;
+  color: var(--ok);
+}
+
+.console-in {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 8px 11px;
+  border: 1px solid var(--stamp-edge);
+  background: var(--stamp);
+  cursor: text;
+}
+
+.console-in:focus-within {
+  border-color: var(--ok);
+}
+
+.console-in input {
+  flex: 1;
+  min-width: 0;
+  border: 0;
+  outline: 0;
+  background: transparent;
+  color: var(--stamp-ink);
+  font: inherit;
+  font-size: 12px;
+  user-select: text;
+}
+
+.console-in input::placeholder {
+  color: var(--stamp-faint);
+}
+
+.approval {
+  margin-bottom: 18px;
+}
+
+.approval-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.approval-session {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-dim);
+}
+
+.approval-body {
+  margin: 8px 0;
+  color: var(--accent-fill);
+}
+
+/* ---- settings panel -------------------------------------------------------
+   A surface, because you act in it, but not a window: edge-anchored, single,
+   not draggable. It carries a 2px border on the edge it slides from (§6.1). */
+.panel {
   position: fixed;
-  inset: 0;
-  z-index: 9999;
-  pointer-events: none;
-  background: repeating-linear-gradient(
-    to bottom,
-    rgba(255, 255, 255, 0.015) 0px,
-    rgba(255, 255, 255, 0.015) 1px,
-    transparent 1px,
-    transparent 3px
-  );
+  top: 0;
+  right: 0;
+  bottom: 0;
+  /* Above windows: settings is the machine, and it wins the screen while open. */
+  z-index: 200;
+  display: flex;
+  flex-direction: column;
+  width: 400px;
+  max-width: 92vw;
+  border-left: 2px solid var(--edge);
+  background: var(--fill);
+  color: var(--ink);
+  transform: translateX(100%);
+  transition: transform 0.28s ease-out;
+}
+
+.panel.open {
+  transform: translateX(0);
+}
+
+.panel-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--ink-rule);
+}
+
+.panel-title {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 15px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.panel .icon-btn {
+  border-color: var(--ink-faint);
+  color: var(--ink-dim);
+}
+
+.panel .icon-btn:hover {
+  border-color: var(--ink);
+  color: var(--ink);
+}
+
+.panel-body {
+  flex: 1;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 14px 16px 24px;
+}
+
+.panel-note {
+  margin: 0;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+/* ---- motion -------------------------------------------------------------- */
+@keyframes blink {
+  from {
+    opacity: 1;
+  }
+  to {
+    opacity: 0;
+  }
+}
+
+.blink {
+  animation: blink 0.6s ease-in-out infinite alternate;
 }
 
 @media (prefers-reduced-motion: reduce) {
-  .status-dot--live {
+  .blink,
+  .light.pulse {
     animation: none;
   }
+  .window-tab,
+  .window-body,
+  .projects-list,
+  .ctl-values,
+  .panel,
+  .os-rule,
+  .gauge-fill {
+    transition: none;
+  }
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+}
+
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  border: 1px solid var(--text-faint);
+  background: transparent;
+}
+
+/* Surfaces invert, and so do their scrollbars. The transcript panel is not one
+   — it is field-level and a sibling of the composer, not nested in a frame, so
+   the base rule above already reaches it. */
+.window-frame ::-webkit-scrollbar-thumb,
+.panel ::-webkit-scrollbar-thumb {
+  border-color: var(--ink-faint);
 }
