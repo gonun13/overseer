@@ -21,8 +21,23 @@ import type { OperationStep, Project } from "../domain";
  * imported by this module or anything it pulls in (docs/overseer.md §4).
  */
 
+/**
+ * How long the boot beat runs.
+ *
+ * A designed duration, deliberately not tied to anything the network does.
+ * Nothing is being fetched during it — the bundle has already run and React
+ * has already mounted — so pinning it to the socket would let an event the
+ * operator cannot see decide how long a piece of theatre lasts: invisible at
+ * 10ms on a good connection, a minute on a bad one. The socket opens in
+ * parallel and is waited for where it is genuinely needed, which is discovery.
+ *
+ * `LoadingBar` fills over exactly this long; it reads the value from here so
+ * the animation and the phase cannot drift apart.
+ */
+export const BOOT_MS = 3000;
+
 export type WizardPhase =
-  /** Socket connecting. Nothing is known — not even whether this is a first run. */
+  /** The boot beat. Runs for BOOT_MS on its own clock, not the socket's. */
   | "boot"
   /** Connected, greeting the operator. */
   | "welcome"
@@ -47,6 +62,10 @@ export interface WizardState {
   /** Set when the socket or the pass itself failed. The wizard reports it
    * rather than hanging on a step that will never resolve. */
   error?: string;
+  /** Whether the socket is open. A fact about the connection, not a stage of
+   * the boot: the presentation runs on its own clock and only discovery
+   * actually waits on this. */
+  connected: boolean;
   /** How many times the socket has been dialled again after failing to open.
    * Shown, not hidden: a boot that is quietly on its third attempt looks
    * identical to one that is simply slow, and they are not the same thing. */
@@ -64,6 +83,7 @@ export const INITIAL_WIZARD: WizardState = {
   adapters: [],
   personality: {},
   rejected: [],
+  connected: false,
   attempt: 0,
   slow: false,
 };
@@ -86,6 +106,8 @@ export type WizardAction =
   | { type: "socket.retry" }
   | { type: "discovery.requested" }
   | { type: "server.event"; event: DiscoveryEvent }
+  /** The boot beat has run its designed length. */
+  | { type: "boot.done" }
   /** The welcome beat has been shown for long enough to read. */
   | { type: "welcome.done" }
   /** Furniture has finished mounting; hand back to ordinary derivation. */
@@ -97,24 +119,24 @@ export function wizardReducer(
 ): WizardState {
   switch (action.type) {
     case "socket.open":
-      // Clears `slow` on the way through: a connection that took three tries
-      // still opened, and the headline should stop apologising once it has.
-      return state.phase === "boot"
-        ? { ...state, phase: "welcome", slow: false }
-        : state;
+      // Records a fact and moves no phase. Clears `slow` on the way through: a
+      // connection that took three tries still opened, and the headline should
+      // stop apologising once it has.
+      return { ...state, connected: true, slow: false };
 
     case "socket.error":
-      return { ...state, error: action.message, phase: "ready" };
+      return { ...state, error: action.message, connected: false, phase: "ready" };
 
     case "socket.slow":
-      return state.phase === "boot" ? { ...state, slow: true } : state;
+      return state.connected ? state : { ...state, slow: true };
 
     case "socket.retry":
-      // Stays in `boot` — nothing has been learned, so nothing downstream may
-      // proceed. Only the attempt count moves.
-      return state.phase === "boot"
-        ? { ...state, attempt: state.attempt + 1, slow: true }
-        : state;
+      return state.connected
+        ? state
+        : { ...state, attempt: state.attempt + 1, slow: true, connected: false };
+
+    case "boot.done":
+      return state.phase === "boot" ? { ...state, phase: "welcome" } : state;
 
     case "welcome.done":
       return state.phase === "welcome" ? { ...state, phase: "discovery" } : state;
@@ -217,19 +239,24 @@ export function furnitureFor(state: WizardState): Furniture {
  */
 export function wizardHeadline(state: WizardState): string | undefined {
   switch (state.phase) {
+    // Both beats run on their own clock and say only what they are. The socket
+    // is opening underneath them, and if it is having trouble that is not this
+    // beat's news to break — nothing here was waiting on it.
     case "boot":
-      // A boot that is retrying says so. Staring at "starting" for forty
-      // seconds tells the operator nothing about whether anything is wrong,
-      // and the honest answer is cheap to give.
-      if (state.attempt > 0) return "reconnecting";
-      return state.slow ? "still starting" : "starting";
+      return "starting";
     case "welcome": {
       if (state.personality.greeting) return state.personality.greeting;
       const name = state.personality.name;
       const base = state.returning ? "welcome back" : "welcome";
       return name ? `${base}, ${name}` : base;
     }
+    // The first phase that genuinely needs the connection, so the first one
+    // with standing to report it missing.
     case "discovery":
+      if (!state.connected) {
+        if (state.attempt > 0) return "reconnecting";
+        return state.slow ? "still connecting" : "connecting";
+      }
       return "looking around";
     default:
       return undefined;

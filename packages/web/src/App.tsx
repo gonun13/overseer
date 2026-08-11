@@ -170,8 +170,11 @@ export default function App() {
   // an operator who closed it has seen enough, and anything that genuinely
   // needs them becomes a signal instead.
   useEffect(() => {
-    if (wizard.phase === "discovery") open("overseer");
-  }, [wizard.phase, open]);
+    // Gated on the connection too, so a boot still waiting on the socket does
+    // not summon an empty window to watch. The headline is already saying what
+    // is going on; a frame with no steps in it would add nothing.
+    if (wizard.phase === "discovery" && wizard.connected) open("overseer");
+  }, [wizard.phase, wizard.connected, open]);
 
   /** Accordion: opening one section closes the others. */
   const toggleControl = useCallback((key: PromptOptionKey) => {

@@ -5,6 +5,7 @@ import type {
   ServerMessage,
 } from "@overseer/protocol";
 import {
+  BOOT_MS,
   INITIAL_WIZARD,
   wizardReducer,
   type WizardState,
@@ -65,6 +66,7 @@ export function useDiscovery(): WizardState {
   // Drives the socket effect: bumping it is what dials again, so a redial is
   // an ordinary re-run of the same effect rather than a second code path.
   const attempt = state.attempt;
+  const connected = state.connected;
 
   // Discovery events wait here for their turn on screen. Paced on the client
   // and only on the client: the server is not slowed down, its work still
@@ -222,23 +224,34 @@ export function useDiscovery(): WizardState {
     };
   }, [attempt, reveal, stopPacing]);
 
-  // The welcome beat, then discovery. Separate effect from the socket so a
-  // re-render can never re-open the connection.
+  // The two presentation beats, each on its own clock. Separate effects from
+  // the socket so a re-render can never re-open the connection, and so neither
+  // beat's length depends on anything the network is doing.
+  useEffect(() => {
+    if (phase !== "boot") return;
+    const id = setTimeout(() => dispatch({ type: "boot.done" }), BOOT_MS);
+    return () => clearTimeout(id);
+  }, [phase]);
+
   useEffect(() => {
     if (phase !== "welcome") return;
     const id = setTimeout(() => dispatch({ type: "welcome.done" }), WELCOME_MS);
     return () => clearTimeout(id);
   }, [phase]);
 
+  // Discovery is the one phase that genuinely needs the socket. Depending on
+  // `connected` means that if the beats finish first, the request goes out the
+  // moment the socket opens — including after a redial — rather than this
+  // being the one place a slow connection can strand the boot.
   useEffect(() => {
-    if (phase !== "discovery") return;
+    if (phase !== "discovery" || !connected) return;
     const ws = socket.current;
     if (!ws || ws.readyState !== WebSocket.OPEN) return;
     const request: ClientMessage = { type: "discovery.run" };
     ws.send(JSON.stringify(request));
     // Guarded so a re-render mid-pass cannot fire a second request; the server
     // refuses concurrent passes anyway, but this keeps it from having to.
-  }, [phase]);
+  }, [phase, connected]);
 
   // Furniture mounts as soon as discovery completes; this hands the headline
   // back to ordinary derivation a beat later so the transition is legible

@@ -589,8 +589,11 @@ button {
   box-sizing: border-box;
 }
 
+/* Fills once over the boot beat rather than looping: the beat has a known
+   length, so the bar can show how much of it is left. --boot-ms is set by
+   LoadingBar from the same constant that times the phase. */
 .loading-bar-fill {
-  width: 8%;
+  width: 0;
   height: 100%;
   background-image: repeating-linear-gradient(
     90deg,
@@ -599,16 +602,15 @@ button {
     transparent 7px,
     transparent 10px
   );
-  animation: load 1.4s ease-in-out infinite;
+  animation: load var(--boot-ms, 3000ms) linear forwards;
 }
 
 @keyframes load {
-  0%,
-  100% {
-    width: 8%;
+  from {
+    width: 0;
   }
-  70% {
-    width: 92%;
+  to {
+    width: 100%;
   }
 }
 
