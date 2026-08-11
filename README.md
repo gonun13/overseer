@@ -57,11 +57,16 @@ and `web` import them through `dist/`, so compose gates both on it), `server` ru
 
 ### Wireframe fixtures
 
-The shell is designed against static fixtures in `packages/web/src/data/mock.ts`, since the WS event
-pipe that would feed it live state does not exist yet (see Status). They are a design-development
-device and they do not ship: they load only when `VITE_OVERSEER_WIREFRAME=1`, which the dev stack
-sets and the production image never does. Vite inlines the variable at build time, so `./bin/up`
-drops the fixtures from the bundle rather than shipping them unused.
+Several windows are still designed against static fixtures in `packages/web/src/data/mock.ts` —
+sessions, approvals, the capability editor, context, console and diff. They are a
+design-development device and they do not ship: they load only when `VITE_OVERSEER_WIREFRAME=1`,
+which the dev stack sets and the production image never does. Vite inlines the variable at build
+time, so `./bin/up` drops the fixtures from the bundle rather than shipping them unused.
+
+**The overseer's own path does not use them.** The headline, signals, wizard state and the
+operations window are computed from real server state or an explicit "not known yet" — no module in
+that path imports `data/mock.ts`. Shared UI shapes live in `packages/web/src/domain.ts`, so
+importing a type never drags the fixtures along with it.
 
 Everything an instance learns at runtime lives there, not only the obviously fake rows — the model
 and subagent lists, the prompt's starting settings, the workspace paths, the adapter's own name. A
@@ -95,6 +100,11 @@ directory shared with the host.
 - **Overseer space** — the centre of the screen ranks what needs attention (approvals, blocked
   capabilities, running and finished sessions, usage pressure) and every line opens the window,
   panel or control it refers to. Derived on every render, so it cannot go stale.
+- **The overseer** — a wizard that walks a fresh instance from nothing to a working setup,
+  reporting each discovery step in its own operations window and revealing furniture as each
+  capability comes online. It keeps a private record in `.overseer` and reads customization from
+  `overseer-personality`, a normal workspace project — advisory only, filtered through an internal
+  allowlist, with anything refused reported back as a signal.
 - **Project panel** — a persistent status list of every project, with a status light each, so work
   happening outside the active project is still visible.
 - **Sessions, approvals, diffs** — summoned as draggable windows rather than laid out in fixed
@@ -110,11 +120,17 @@ directory shared with the host.
 
 ## Status
 
-Docker setup, tooling, and the frontend shell are in place with placeholder data. The shell is a
-fixed field of instruments — project panel, active project, clock and settings, prompt controls,
-adapter widget — around the overseer space. Windows are summoned, dragged and dismissed rather than
-laid out.
+Docker setup, tooling and the frontend shell are in place. The shell is a field of instruments —
+project panel, active project, clock and settings, prompt controls, adapter widget — around the
+overseer space, and windows are summoned, dragged and dismissed rather than laid out.
 
-The adapter interface and protocol types exist; the `claude-code` adapter's actual process-spawning
-(design doc §1.2) and the WS event pipe that would replace the mock data are not implemented yet.
-The console is a mockup — it echoes rather than attaching to a pty.
+The overseer is live: a fresh instance boots headline-only and works through a wizard
+(`state/wizard.ts`) that runs a real discovery pass over the WS — scanning `/workspace` for git
+projects, checking each adapter's auth via `getStatus()`, and reading `overseer-personality` —
+streaming each step into the operations window and mounting furniture as capabilities resolve. It
+keeps internal memory in `.overseer` on a container-only volume. See
+[docs/overseer.md](docs/overseer.md).
+
+Still missing: the `claude-code` adapter's process-spawning (design doc §1.2), so there are no
+sessions and no transcript, and the auth check reads the credentials file rather than validating a
+token. The console is a mockup — it echoes rather than attaching to a pty.
