@@ -170,17 +170,25 @@ export default function App() {
   const pickingTone = welcomeNeedsTone(wizard);
   const wizardWord = wizardHeadline(wizard);
   const derived = headlineFor(signals, busy);
-  const headline = wizardWord
-    ? { text: wizardWord, activity: "working" as const }
-    : askingName
-      ? { text: "", activity: "working" as const }
-      : derived;
+  // A fault outranks every other headline. When the socket drops, the wizard
+  // stops driving and no furniture has mounted, so `derived` would report on a
+  // world nothing is watching any more — "no project selected" as a finding,
+  // on a dead connection. The fault is the only true thing left to say.
+  const headline = wizard.error
+    ? { text: wizard.error, activity: "attention" as const }
+    : wizardWord
+      ? { text: wizardWord, activity: "working" as const }
+      : askingName
+        ? { text: "", activity: "working" as const }
+        : derived;
   // The wizard's own words always type out. Typing is normally a rare tell that
   // something is watching, but during boot it is the only thing on screen doing
   // anything — leaving it to a ~15% roll means most boots show the greeting
   // simply appearing. Scoped to the wizard: once it hands back to `derived`,
   // personality (or useOccasionalTyping's default) governs again.
-  const typingChance = wizardWord ? 1 : wizard.personality.typingChance;
+  // A fault is the exception to the exception: it appears at once. Typing it
+  // out spends two seconds performing a state the operator is stuck in.
+  const typingChance = wizard.error ? 0 : wizardWord ? 1 : wizard.personality.typingChance;
 
   // The operations window is the one window the machine summons (§3).
   // Discovery: keyed on the phase so dismissing mid-pass does not bring it
