@@ -17,7 +17,6 @@
     "ws": "^8.18.0"
   },
   "devDependencies": {
-    "@overseer/adapter-mock": "*",
     "@types/express": "^5.0.0",
     "@types/node": "^22.10.2",
     "@types/ws": "^8.5.13",

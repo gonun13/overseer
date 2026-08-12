@@ -57,6 +57,10 @@ export interface WorldSnapshot {
   workspaceRoot: string;
   projects: DiscoveredProject[];
   adapters: DiscoveredAdapter[];
+  /** Last project the operator (or discovery default) made active. */
+  last_active_project?: string;
+  /** Adapter id the operator connected — never auto-picked. */
+  attached_adapter?: string;
 }
 
 let ensured: Promise<void> | undefined;
@@ -170,4 +174,75 @@ export async function writeSnapshot(
 /** True when this instance has completed a discovery pass before. */
 export async function hasRunBefore(): Promise<boolean> {
   return (await readSnapshot()) !== undefined;
+}
+
+/** Record the active project without rewriting the rest of the snapshot.
+ * No-ops (with a log) if there is no snapshot yet — discovery owns the first
+ * write. */
+export async function setActiveProjectPath(path: string): Promise<boolean> {
+  const previous = await readSnapshot();
+  if (!previous) {
+    console.error("overseer: cannot set active project before the first discovery pass");
+    return false;
+  }
+  await writeSnapshot({
+    runCount: previous.runCount,
+    workspaceRoot: previous.workspaceRoot,
+    projects: previous.projects,
+    adapters: previous.adapters,
+    last_active_project: path,
+    attached_adapter: previous.attached_adapter,
+  });
+  await recordAction({
+    actor: "operator",
+    action: "project:select",
+    outcome: "ok",
+    detail: path,
+  });
+  return true;
+}
+
+/** Record which adapter the operator connected. Discovery must have run first. */
+export async function setAttachedAdapter(id: string): Promise<boolean> {
+  const previous = await readSnapshot();
+  if (!previous) {
+    console.error("overseer: cannot attach an adapter before the first discovery pass");
+    return false;
+  }
+  await writeSnapshot({
+    runCount: previous.runCount,
+    workspaceRoot: previous.workspaceRoot,
+    projects: previous.projects,
+    adapters: previous.adapters,
+    last_active_project: previous.last_active_project,
+    attached_adapter: id,
+  });
+  await recordAction({
+    actor: "operator",
+    action: "adapter:connect",
+    outcome: "ok",
+    detail: id,
+  });
+  return true;
+}
+
+/** Refresh the project list in the world snapshot after a live workspace scan.
+ * No-ops until discovery has written the first snapshot. Pass `active` when the
+ * monitor changed (or cleared) the active project; omit it to leave the field. */
+export async function syncSnapshotProjects(
+  projects: DiscoveredProject[],
+  active?: { path: string | undefined },
+): Promise<boolean> {
+  const previous = await readSnapshot();
+  if (!previous) return false;
+  await writeSnapshot({
+    runCount: previous.runCount,
+    workspaceRoot: previous.workspaceRoot,
+    projects,
+    adapters: previous.adapters,
+    last_active_project:
+      active !== undefined ? active.path : previous.last_active_project,
+    attached_adapter: previous.attached_adapter,
+  });
+  return true;
 }

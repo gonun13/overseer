@@ -21,7 +21,7 @@ export function CapabilitiesWindow({
           key={c.id}
           activity={c.activity}
           primary={c.name}
-          secondary={c.problem ? `${c.kind} — ${c.problem}` : c.kind}
+          secondary={c.problem ? `${c.kind} · ${c.problem}` : c.kind}
           right={c.tools ? `${c.tools} tools` : ""}
           actions={
             <>

@@ -11,7 +11,7 @@ export function HelpWindow({ adapter }: { adapter: AdapterInfo }) {
       <WTitle>about</WTitle>
       <div className="w-pre">
         {[
-          `overseer v${import.meta.env.VITE_APP_VERSION} — console for cli coding agents`,
+          `overseer v${import.meta.env.VITE_APP_VERSION} · console for cli coding agents`,
           adapter.name ? `adapter: ${adapter.name}` : "adapter: none attached",
         ].join("\n")}
       </div>

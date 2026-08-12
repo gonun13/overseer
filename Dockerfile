@@ -8,7 +8,6 @@ COPY package.json package-lock.json ./
 COPY packages/protocol/package.json packages/protocol/package.json
 COPY packages/server/package.json packages/server/package.json
 COPY packages/web/package.json packages/web/package.json
-COPY packages/adapters/mock/package.json packages/adapters/mock/package.json
 COPY packages/adapters/claude-code/package.json packages/adapters/claude-code/package.json
 COPY packages/e2e/package.json packages/e2e/package.json
 RUN npm ci
@@ -37,7 +36,6 @@ COPY package.json package-lock.json ./
 COPY packages/protocol/package.json packages/protocol/package.json
 COPY packages/server/package.json packages/server/package.json
 COPY packages/web/package.json packages/web/package.json
-COPY packages/adapters/mock/package.json packages/adapters/mock/package.json
 COPY packages/adapters/claude-code/package.json packages/adapters/claude-code/package.json
 COPY packages/e2e/package.json packages/e2e/package.json
 RUN npm ci
@@ -97,10 +95,6 @@ COPY package.json package-lock.json ./
 COPY packages/protocol/package.json packages/protocol/package.json
 COPY packages/server/package.json packages/server/package.json
 COPY packages/adapters/claude-code/package.json packages/adapters/claude-code/package.json
-# packages/adapters/mock is absent from this stage on purpose — it reports
-# itself authenticated unconditionally, which is only true of a fixture
-# replayer. src/adapters.ts guards its import on NODE_ENV as well; not shipping
-# it is the half of that pair which cannot be undone by an env var.
 RUN npm ci --omit=dev --workspace packages/server \
       --workspace packages/protocol \
       --workspace packages/adapters/claude-code

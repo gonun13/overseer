@@ -2,8 +2,8 @@ import { WStep } from "./bits";
 import type { OperationStep } from "../../domain";
 
 /**
- * The overseer's report on its own multi-step work — discovery today, any
- * automation or adapter-backed query later (docs/overseer.md §3).
+ * The overseer's report on its own multi-step work — discovery, workspace
+ * monitor diffs, and any later automation (docs/overseer.md §3).
  *
  * The one window kind summoned by the machine rather than the operator: no
  * footer link and no typed command opens it. It appears because the overseer

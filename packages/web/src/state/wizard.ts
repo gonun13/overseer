@@ -4,8 +4,11 @@ import type {
   DiscoveredProject,
   DiscoveryEvent,
   DiscoveryOutcome,
+  FurnitureReveal,
   RejectedCustomization,
+  UntrackedFolder,
 } from "@overseer/protocol";
+import { message } from "../lang";
 import type { Activity } from "../status";
 import type { OperationStep, Project } from "../domain";
 
@@ -22,24 +25,24 @@ import type { OperationStep, Project } from "../domain";
  */
 
 /**
- * How long the boot beat runs.
+ * Minimum length of the boot beat.
  *
- * A designed duration, deliberately not tied to anything the network does.
- * Nothing is being fetched during it — the bundle has already run and React
- * has already mounted — so pinning it to the socket would let an event the
- * operator cannot see decide how long a piece of theatre lasts: invisible at
- * 10ms on a good connection, a minute on a bad one. The socket opens in
- * parallel and is waited for where it is genuinely needed, which is discovery.
+ * The beat always runs at least this long so the designed opening is visible
+ * on a healthy connection (the socket opens in ~10ms). Leaving boot also
+ * requires the socket: connection wait belongs here — on the loading bar —
+ * not in discovery, where the wizard should already be running. If `/ws` is
+ * queued behind Firefox connection slots the bar sits full past this mark
+ * with headline "connecting" until the socket opens.
  *
  * `LoadingBar` fills over exactly this long; it reads the value from here so
- * the animation and the phase cannot drift apart.
+ * the animation and the minimum beat cannot drift apart.
  */
 export const BOOT_MS = 3000;
 
 export type WizardPhase =
-  /** The boot beat. Runs for BOOT_MS on its own clock, not the socket's. */
+  /** Boot beat + socket gate. Stays until BOOT_MS has elapsed *and* connected. */
   | "boot"
-  /** Connected, greeting the operator. */
+  /** Connected. First-run walks intro → name → tone → greet; returns skip to name/greet. */
   | "welcome"
   /** Discovery running; the operations window is up and steps are arriving. */
   | "discovery"
@@ -48,13 +51,35 @@ export type WizardPhase =
   /** Done. The wizard stops driving anything and normal derivation takes over. */
   | "ready";
 
+/** Beats inside `welcome`. First turn: intro → name → tone → greet. A return
+ * visit lands on `name` or `greet` depending on whether a name is already known. */
+export type WelcomeBeat = "intro" | "name" | "tone" | "greet";
+
+export type PersonalityTone = NonNullable<AppliedPersonality["tone"]>;
+
+export const TONES: PersonalityTone[] = ["neutral", "dry", "warm"];
+
 export interface WizardState {
   phase: WizardPhase;
+  /** Only set while `phase === "welcome"`. */
+  welcomeBeat?: WelcomeBeat;
   steps: OperationStep[];
   projects: DiscoveredProject[];
+  /** Workspace folders that are not git projects — drive signals. */
+  untrackedFolders: UntrackedFolder[];
   adapters: DiscoveredAdapter[];
+  /** Adapter the operator connected. Undefined until they pick one (or a
+   * prior attach is restored). Never defaults to the first registered id. */
+  attachedAdapterId?: string;
   /** Undefined until discovery reports it — the frontend never assumes a path. */
   workspaceRoot?: string;
+  /** Active project path from internal memory / discovery default. */
+  activeProjectPath?: string;
+  /** Furniture unlocked so far this pass. Permanent once true. */
+  revealed: Record<FurnitureReveal, boolean>;
+  /** Bumps when a worker appends an operations line — App summons the
+   * overseer window for that run (docs/overseer.md §3). */
+  operationTick: number;
   /** Undefined until known. `false` is a real answer; "not yet asked" is not. */
   returning?: boolean;
   personality: AppliedPersonality;
@@ -62,20 +87,36 @@ export interface WizardState {
   /** Set when the socket or the pass itself failed. The wizard reports it
    * rather than hanging on a step that will never resolve. */
   error?: string;
-  /** Whether the socket is open. A fact about the connection, not a stage of
-   * the boot: the presentation runs on its own clock and only discovery
-   * actually waits on this. */
+  /** Whether the socket is open. Boot will not advance until this is true. */
   connected: boolean;
+  /** Server wall clock (ISO). Furniture clock ticks from this, not the browser. */
+  serverTime?: string;
+  /** Whether the minimum boot beat has elapsed. Paired with `connected` to
+   * leave boot — either can arrive first. */
+  bootMinElapsed: boolean;
 }
+
+const NO_REVEAL: Record<FurnitureReveal, boolean> = {
+  clock: false,
+  projectPanel: false,
+  activeProject: false,
+  adapterWidget: false,
+  footer: false,
+  prompt: false,
+};
 
 export const INITIAL_WIZARD: WizardState = {
   phase: "boot",
   steps: [],
   projects: [],
+  untrackedFolders: [],
   adapters: [],
+  revealed: { ...NO_REVEAL },
   personality: {},
   rejected: [],
   connected: false,
+  bootMinElapsed: false,
+  operationTick: 0,
 };
 
 /** Discovery outcomes are the same five activities in a different register —
@@ -88,16 +129,75 @@ const OUTCOME_ACTIVITY: Record<DiscoveryOutcome, Activity> = {
 };
 
 export type WizardAction =
-  | { type: "socket.open" }
+  /** Socket is up *and* the server sent identity for the welcome beat. */
+  | {
+      type: "socket.open";
+      returning: boolean;
+      personality: AppliedPersonality;
+      serverTime: string;
+    }
   | { type: "socket.error"; message: string }
   | { type: "discovery.requested" }
   | { type: "server.event"; event: DiscoveryEvent }
-  /** The boot beat has run its designed length. */
-  | { type: "boot.done" }
-  /** The welcome beat has been shown for long enough to read. */
+  /** The minimum boot beat has elapsed; leave boot only if also connected. */
+  | { type: "boot.ready" }
+  /** First-run intro held long enough — ask for the operator's name. */
+  | { type: "intro.done" }
+  /** First-run: the operator picked a tone. */
+  | { type: "operator.toned"; tone: PersonalityTone }
+  /** First-run welcome: the operator answered with a name. */
+  | { type: "operator.named"; name: string }
+  /** The welcome greet has been shown for long enough to read. */
   | { type: "welcome.done" }
+  /** Operator picked a project in the panel — keep wizard state in sync. */
+  | { type: "project.selected"; path: string }
+  /** Operator connected an adapter from the picker. */
+  | { type: "adapter.connected"; id: string }
+  /** Live workspace scan — projects appeared or vanished under /workspace. */
+  | {
+      type: "workspace.projects";
+      projects: DiscoveredProject[];
+      untrackedFolders: UntrackedFolder[];
+      activeProjectPath?: string;
+    }
+  /** Supervisor worker line for the operations window. */
+  | {
+      type: "overseer.step";
+      id: string;
+      label: string;
+      outcome: DiscoveryOutcome;
+      detail?: string;
+    }
   /** Furniture has finished mounting; hand back to ordinary derivation. */
   | { type: "settled" };
+
+/** Which welcome beat a freshly-connected session should land on. */
+function initialWelcomeBeat(state: WizardState): WelcomeBeat {
+  // First turn of this instance always opens with the intro.
+  if (!state.returning) return "intro";
+  if (!state.personality.name) return "name";
+  // Tone is only "set" when the operator picked it (or wrote it into
+  // personality) — absence means the picker still owes them a turn.
+  if (!state.personality.tone) return "tone";
+  return "greet";
+}
+
+/** Leave boot once both gates are true. Either can arrive first. */
+function leaveBootIfReady(state: WizardState): WizardState {
+  if (
+    state.phase === "boot" &&
+    state.bootMinElapsed &&
+    state.connected &&
+    state.error === undefined
+  ) {
+    return {
+      ...state,
+      phase: "welcome",
+      welcomeBeat: initialWelcomeBeat(state),
+    };
+  }
+  return state;
+}
 
 export function wizardReducer(
   state: WizardState,
@@ -105,20 +205,100 @@ export function wizardReducer(
 ): WizardState {
   switch (action.type) {
     case "socket.open":
-      // Records a fact and moves no phase.
-      return { ...state, connected: true };
+      return leaveBootIfReady({
+        ...state,
+        connected: true,
+        returning: action.returning,
+        personality: action.personality,
+        serverTime: action.serverTime,
+      });
 
     case "socket.error":
       return { ...state, error: action.message, connected: false, phase: "ready" };
 
-    case "boot.done":
-      return state.phase === "boot" ? { ...state, phase: "welcome" } : state;
+    case "boot.ready":
+      return leaveBootIfReady({ ...state, bootMinElapsed: true });
+
+    case "intro.done":
+      if (state.phase !== "welcome" || state.welcomeBeat !== "intro") return state;
+      if (!state.personality.name) return { ...state, welcomeBeat: "name" };
+      if (!state.personality.tone) return { ...state, welcomeBeat: "tone" };
+      return { ...state, welcomeBeat: "greet" };
+
+    case "operator.named": {
+      if (state.phase !== "welcome") return state;
+      const personality = { ...state.personality, name: action.name };
+      // Server ack after an optimistic advance — update the name, don't rewind.
+      if (state.welcomeBeat === "tone" || state.welcomeBeat === "greet") {
+        return { ...state, personality };
+      }
+      return {
+        ...state,
+        personality,
+        // Tone picker runs until a tone is actually on file, first turn or not.
+        welcomeBeat: personality.tone ? "greet" : "tone",
+      };
+    }
+
+    case "operator.toned":
+      if (state.phase !== "welcome" || state.welcomeBeat !== "tone") return state;
+      return {
+        ...state,
+        personality: { ...state.personality, tone: action.tone },
+        welcomeBeat: "greet",
+      };
 
     case "welcome.done":
-      return state.phase === "welcome" ? { ...state, phase: "discovery" } : state;
+      // Never leave welcome while still mid-intro/ask — the greet is the exit.
+      if (state.phase !== "welcome" || state.welcomeBeat !== "greet") return state;
+      if (!state.personality.name) return state;
+      return { ...state, phase: "discovery", welcomeBeat: undefined };
+
+    case "project.selected":
+      return { ...state, activeProjectPath: action.path };
+
+    case "adapter.connected":
+      return { ...state, attachedAdapterId: action.id };
+
+    case "workspace.projects": {
+      const { projects, untrackedFolders } = action;
+      const preferred =
+        action.activeProjectPath ??
+        (state.activeProjectPath !== undefined &&
+        projects.some((p) => p.path === state.activeProjectPath)
+          ? state.activeProjectPath
+          : undefined);
+      return {
+        ...state,
+        projects,
+        untrackedFolders,
+        activeProjectPath: preferred,
+      };
+    }
+
+    case "overseer.step":
+      return {
+        ...state,
+        operationTick: state.operationTick + 1,
+        steps: [
+          ...state.steps,
+          {
+            id: action.id,
+            label: action.label,
+            activity: OUTCOME_ACTIVITY[action.outcome],
+            detail: action.detail,
+          },
+        ],
+      };
 
     case "discovery.requested":
-      return { ...state, phase: "discovery", steps: [] };
+      return {
+        ...state,
+        phase: "discovery",
+        steps: [],
+        welcomeBeat: undefined,
+        revealed: { ...NO_REVEAL },
+      };
 
     case "settled":
       return state.phase === "settling" ? { ...state, phase: "ready" } : state;
@@ -128,10 +308,25 @@ export function wizardReducer(
   }
 }
 
+function applyReveal(
+  revealed: Record<FurnitureReveal, boolean>,
+  keys: FurnitureReveal[] | undefined,
+): Record<FurnitureReveal, boolean> {
+  if (!keys || keys.length === 0) return revealed;
+  const next = { ...revealed };
+  for (const key of keys) next[key] = true;
+  return next;
+}
+
 function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
   switch (event.type) {
     case "discovery.start":
-      return { ...state, phase: "discovery", steps: [] };
+      return {
+        ...state,
+        phase: "discovery",
+        steps: [],
+        revealed: { ...NO_REVEAL },
+      };
 
     case "discovery.step.start":
       return {
@@ -142,7 +337,15 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
         ],
       };
 
-    case "discovery.step.done":
+    case "discovery.step.done": {
+      // Clock detail is formatted here in the browser's locale so it matches
+      // the furniture clock; the server only supplies the ISO instant.
+      const detail =
+        event.serverTime !== undefined
+          ? new Date(event.serverTime).toLocaleTimeString(undefined, {
+              hour12: false,
+            })
+          : event.detail;
       return {
         ...state,
         steps: state.steps.map((step) =>
@@ -150,22 +353,58 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
             ? {
                 ...step,
                 activity: OUTCOME_ACTIVITY[event.outcome],
-                detail: event.detail,
+                detail,
               }
             : step,
         ),
+        ...(event.projects !== undefined ? { projects: event.projects } : {}),
+        ...(event.untrackedFolders !== undefined
+          ? { untrackedFolders: event.untrackedFolders }
+          : {}),
+        ...(event.adapters !== undefined ? { adapters: event.adapters } : {}),
+        ...(event.workspaceRoot !== undefined
+          ? { workspaceRoot: event.workspaceRoot }
+          : {}),
+        ...(event.activeProjectPath !== undefined
+          ? { activeProjectPath: event.activeProjectPath }
+          : {}),
+        ...(event.attachedAdapterId !== undefined
+          ? { attachedAdapterId: event.attachedAdapterId }
+          : {}),
+        ...(event.serverTime !== undefined
+          ? { serverTime: event.serverTime }
+          : {}),
+        ...(event.personality !== undefined
+          ? { personality: event.personality }
+          : {}),
+        ...(event.rejected !== undefined ? { rejected: event.rejected } : {}),
+        revealed: applyReveal(state.revealed, event.reveal),
       };
+    }
 
     case "discovery.complete":
       return {
         ...state,
         phase: "settling",
         projects: event.projects,
+        untrackedFolders: event.untrackedFolders ?? [],
         adapters: event.adapters,
         workspaceRoot: event.workspaceRoot,
+        activeProjectPath: event.activeProjectPath,
+        // Omitted means none attached — do not keep a stale id from a prior pass.
+        attachedAdapterId: event.attachedAdapterId,
         returning: event.returning,
-        personality: event.personality ?? {},
+        personality: event.personality ?? state.personality,
         rejected: event.rejected ?? [],
+        // Complete is the backstop: anything not yet revealed becomes known.
+        revealed: {
+          clock: true,
+          projectPanel: true,
+          activeProject: true,
+          adapterWidget: true,
+          footer: true,
+          prompt: true,
+        },
       };
   }
 }
@@ -182,6 +421,7 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
  */
 export interface Furniture {
   projectPanel: boolean;
+  activeProject: boolean;
   adapterWidget: boolean;
   clock: boolean;
   footer: boolean;
@@ -193,50 +433,94 @@ export interface Furniture {
 }
 
 export function furnitureFor(state: WizardState): Furniture {
-  const discovered = state.phase === "settling" || state.phase === "ready";
+  const { revealed } = state;
   return {
-    projectPanel: discovered,
-    adapterWidget: discovered,
-    // The clock and the footer are furniture like the rest: they belong to the
-    // settled screen, not to the boot one, and appear the moment its other
-    // pieces do.
-    clock: discovered,
-    footer: discovered,
+    clock: revealed.clock,
+    projectPanel: revealed.projectPanel,
+    activeProject: revealed.activeProject,
+    adapterWidget: revealed.adapterWidget,
+    footer: revealed.footer,
+    // Prompt slot is released by the final discovery step; still needs an
+    // attached signed-in adapter — otherwise the composer has nowhere to send.
     prompt:
-      discovered && state.adapters.some((a) => a.status.authenticated),
-    signals: discovered,
+      revealed.prompt &&
+      state.adapters.some(
+        (a) =>
+          a.id === state.attachedAdapterId && a.status.authenticated,
+      ),
+    // Signals need an active project context to mean anything.
+    signals: revealed.activeProject,
   };
+}
+
+/**
+ * True while welcome is waiting for the operator to type a name. The ask is
+ * rendered as an inline field in the headline, not as a typed string — see
+ * OverseerSpace.
+ */
+export function welcomeNeedsName(state: WizardState): boolean {
+  return state.phase === "welcome" && state.welcomeBeat === "name";
+}
+
+/** True while the first-run tone picker is up. */
+export function welcomeNeedsTone(state: WizardState): boolean {
+  return state.phase === "welcome" && state.welcomeBeat === "tone";
 }
 
 /**
  * The headline while the wizard is driving. Returns undefined once it is not —
  * from `settling` on, `headlineFor` owns the headline again, so the wizard can
  * never end up shadowing a real state word with a stale greeting.
+ *
+ * While `welcomeNeedsName` is true this returns undefined: the ask UI owns the
+ * headline slot, and a string here would fight it. Copy comes from
+ * `packages/web/src/lang` and varies with tone.
  */
 export function wizardHeadline(state: WizardState): string | undefined {
+  const tone = state.personality.tone;
   switch (state.phase) {
-    // Both beats run on their own clock and say only what they are. The socket
-    // is opening underneath them, and if it is having trouble that is not this
-    // beat's news to break — nothing here was waiting on it.
     case "boot":
-      return "starting";
+      // Socket wait lives on the loading bar. Past the minimum beat, say so
+      // rather than implying the designed opening is still running.
+      return state.bootMinElapsed && !state.connected
+        ? message(tone, "connecting")
+        : message(tone, "starting");
     case "welcome": {
-      if (state.personality.greeting) return state.personality.greeting;
-      const name = state.personality.name;
-      const base = state.returning ? "welcome back" : "welcome";
-      return name ? `${base}, ${name}` : base;
+      switch (state.welcomeBeat) {
+        case "intro":
+        case "tone":
+          // Self-introduction stays up through the tone pick — the buttons are
+          // the question; the headline is still who is speaking.
+          return message(tone, "intro");
+        case "name":
+          return undefined;
+        case "greet": {
+          if (state.personality.greeting) return state.personality.greeting;
+          const name = state.personality.name!;
+          return message(
+            tone,
+            state.returning ? "welcomeBack" : "welcome",
+            { name },
+          );
+        }
+        default:
+          return undefined;
+      }
     }
-    // The first phase that genuinely needs the connection, so the first one
-    // with standing to report it missing.
+    // Boot already gated on the socket, so discovery always means a live pass.
     case "discovery":
-      return state.connected ? "looking around" : "connecting";
+      return message(tone, "lookingAround");
     default:
       return undefined;
   }
 }
 
-/** True while the loading bar should run: the socket is not up yet and there is
- * genuinely nothing to show. */
+/** Name-ask prefix for the active tone (`welcome...` and variants). */
+export function nameAskPrefix(state: WizardState): string {
+  return message(state.personality.tone, "namePrefix");
+}
+
+/** True for the whole boot phase: minimum beat plus any wait for the socket. */
 export function isLoading(state: WizardState): boolean {
   return state.phase === "boot" && state.error === undefined;
 }

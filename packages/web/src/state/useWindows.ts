@@ -33,6 +33,32 @@ export function useWindows() {
         const cascade = current.filter((w) => w.kind === kind).length * 24;
         // Clamp on spawn so a window never lands off-screen on a small viewport.
         const width = Math.min(spec.w, window.innerWidth - 64);
+
+        // Adapters opens from the instrument that summoned it: right-aligned
+        // with the bottom-right widget, sitting just above it rather than at a
+        // fixed mid-field y (design-system.md §6.2).
+        if (kind === "adapters") {
+          const margin = 26;
+          const widgetClearance = 210; // widget + optional console + gap
+          const assumedHeight = 260;
+          return [
+            ...current,
+            {
+              id: `${kind}-${++seq}`,
+              kind,
+              title: title ?? spec.title,
+              x: Math.max(24, window.innerWidth - width - margin),
+              y: Math.max(
+                56,
+                window.innerHeight - widgetClearance - assumedHeight + cascade,
+              ),
+              w: width,
+              z: ++zSeq,
+              payload,
+            },
+          ];
+        }
+
         return [
           ...current,
           {

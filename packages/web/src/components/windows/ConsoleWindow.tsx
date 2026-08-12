@@ -31,7 +31,7 @@ export function ConsoleWindow({ adapter }: { adapter: AdapterInfo }) {
     setLines((current) => [
       ...current,
       { kind: "in", text: command },
-      { kind: "err", text: "not wired up — the console is a mockup for now" },
+      { kind: "err", text: "not wired up · the console is a mockup for now" },
       { kind: "out", text: "" },
     ]);
     setValue("");

@@ -4,10 +4,23 @@ import type {
   DiscoveredProject,
   DiscoveryEvent,
   DiscoveryOutcome,
+  DiscoveryStepUpdate,
+  UntrackedFolder,
 } from "@overseer/protocol";
-import { readPersonality, type PersonalityResult } from "./memory/personality.js";
+import {
+  PERSONALITY_PROJECT,
+  personalityDir,
+  personalityExists,
+  readPersonality,
+  scaffoldPersonality,
+  type PersonalityResult,
+} from "./memory/personality.js";
 import { listAdapters } from "./adapters.js";
-import { WORKSPACE_ROOT, scanWorkspace } from "./workspace.js";
+import {
+  WORKSPACE_ROOT,
+  describeProject,
+  scanWorkspace,
+} from "./workspace.js";
 import {
   readSnapshot,
   recordAction,
@@ -21,11 +34,21 @@ import {
  * flushed at the end — the operations window renders a growing list, and a
  * batch arriving at completion would defeat the point of showing it at all.
  *
+ * Furniture unlocks ride on each step's `done` frame (docs/overseer.md §4):
+ * clock → personality project list → workspace scan → active project →
+ * adapter → prompt/footer.
+ *
  * Every run is written to internal memory (docs/overseer.md §6.2): one log per
  * run, one action-register entry per step, and a world snapshot at the end.
  */
 
 type Emit = (event: DiscoveryEvent) => void;
+
+type StepResult<T> = {
+  value: T;
+  outcome: DiscoveryOutcome;
+  detail?: string;
+} & DiscoveryStepUpdate;
 
 export async function runDiscovery(emit: Emit): Promise<void> {
   const runId = randomUUID();
@@ -44,10 +67,10 @@ export async function runDiscovery(emit: Emit): Promise<void> {
   const step = async <T>(
     id: string,
     label: string,
-    work: () => Promise<{ value: T; outcome: DiscoveryOutcome; detail?: string }>,
+    work: () => Promise<StepResult<T>>,
   ): Promise<T> => {
     send({ type: "discovery.step.start", runId, id, label });
-    let result: { value: T; outcome: DiscoveryOutcome; detail?: string };
+    let result: StepResult<T>;
     try {
       result = await work();
     } catch (error) {
@@ -61,20 +84,22 @@ export async function runDiscovery(emit: Emit): Promise<void> {
       });
       throw error;
     }
+    const { value, outcome, detail, ...update } = result;
     send({
       type: "discovery.step.done",
       runId,
       id,
-      outcome: result.outcome,
-      detail: result.detail,
+      outcome,
+      detail,
+      ...update,
     });
     await recordAction({
       actor: "overseer",
       action: `discovery:${id}`,
-      outcome: result.outcome,
-      detail: result.detail,
+      outcome,
+      detail,
     });
-    return result.value;
+    return value;
   };
 
   // Read before the pass writes anything, since this pass is what makes the
@@ -82,55 +107,134 @@ export async function runDiscovery(emit: Emit): Promise<void> {
   const previous = await readSnapshot();
   const returning = previous !== undefined;
 
-  // Runs before the scan, deliberately: scaffolding the project first is what
-  // lets the ordinary scanner find it, so it reaches the project panel with no
-  // special-casing in the UI (docs/overseer.md §6.3).
+  // 1. Wall clock — a runtime fact; unlocks clock + settings gear.
+  // Detail is left as ISO; the client reformats it in the browser locale.
+  await step("clock", "checking the time", async () => {
+    const iso = new Date().toISOString();
+    return {
+      value: iso,
+      outcome: "ok",
+      detail: iso,
+      serverTime: iso,
+      reveal: ["clock"],
+    };
+  });
+
+  // 2. Personality project: scaffold if absent, always read. Unlock the
+  // project panel with at least overseer-personality once it exists.
+  const existed = await personalityExists();
+  if (!existed) {
+    await step("scaffold", "creating overseer-personality", async () => {
+      const created = await scaffoldPersonality();
+      return {
+        value: created,
+        outcome: created ? "ok" : "failed",
+        detail: created
+          ? personalityDir()
+          : "could not scaffold overseer-personality",
+      };
+    });
+  }
+
   const personality = await step<PersonalityResult>(
     "personality",
     "reading personality",
     async () => {
-      const result = await readPersonality();
+      const result = await readPersonality(WORKSPACE_ROOT, { scaffold: false });
+      const project = await describeProject(personalityDir());
+      const projects = project ? [project] : [];
       if (result.rejected.length > 0) {
         return {
           value: result,
-          // Rejections need the operator: they wrote something that did not
-          // take effect. Blocked, not failed — the read itself worked.
           outcome: "blocked",
           detail: `${result.rejected.length} customization${
             result.rejected.length === 1 ? "" : "s"
           } refused`,
+          projects,
+          personality: result.applied,
+          rejected: result.rejected,
+          reveal: ["projectPanel"],
+          workspaceRoot: WORKSPACE_ROOT,
         };
       }
       return {
         value: result,
         outcome: "ok",
-        detail: result.scaffolded
-          ? "scaffolded overseer-personality"
-          : Object.keys(result.applied).length > 0
+        detail:
+          Object.keys(result.applied).length > 0
             ? `${Object.keys(result.applied).length} customization(s) applied`
             : "no customizations set",
+        projects,
+        personality: result.applied,
+        reveal: ["projectPanel"],
+        workspaceRoot: WORKSPACE_ROOT,
       };
     },
   );
 
-  const projects = await step<DiscoveredProject[]>(
+  // 3. Full workspace scan — grow the project list; signal non-git folders.
+  const { projects, untrackedFolders } = await step<{
+    projects: DiscoveredProject[];
+    untrackedFolders: UntrackedFolder[];
+  }>(
     "workspace",
     "scanning workspace",
     async () => {
       const found = await scanWorkspace();
+      const untracked = found.untracked;
+      const projectsFound = found.projects;
+      const detailParts: string[] = [];
+      if (projectsFound.length > 0) {
+        detailParts.push(
+          `${projectsFound.length} project${projectsFound.length === 1 ? "" : "s"}`,
+        );
+      } else {
+        detailParts.push("no git projects");
+      }
+      if (untracked.length > 0) {
+        detailParts.push(
+          `${untracked.length} folder${untracked.length === 1 ? "" : "s"} without git`,
+        );
+      }
       return {
-        value: found,
-        // An empty workspace is not a failure — it is the state the wizard
-        // exists to talk the operator through.
-        outcome: found.length > 0 ? "ok" : "blocked",
-        detail:
-          found.length > 0
-            ? `${found.length} project${found.length === 1 ? "" : "s"} in ${WORKSPACE_ROOT}`
-            : `no git projects under ${WORKSPACE_ROOT}`,
+        value: { projects: projectsFound, untrackedFolders: untracked },
+        outcome:
+          projectsFound.length === 0 || untracked.length > 0 ? "blocked" : "ok",
+        detail: `${detailParts.join(" · ")} in ${WORKSPACE_ROOT}`,
+        projects: projectsFound,
+        untrackedFolders: untracked,
       };
     },
   );
 
+  // 4. Active project from internal memory, else overseer-personality.
+  const personalityPath = personalityDir();
+  const activeProjectPath = await step<string>(
+    "active",
+    "selecting project",
+    async () => {
+      const remembered = previous?.last_active_project;
+      const stillThere =
+        remembered !== undefined &&
+        projects.some((project) => project.path === remembered);
+      const chosen = stillThere
+        ? remembered
+        : projects.find((project) => project.path === personalityPath)?.path ??
+          personalityPath;
+      return {
+        value: chosen,
+        outcome: "ok",
+        detail: stillThere
+          ? chosen
+          : `${PERSONALITY_PROJECT} (default)`,
+        activeProjectPath: chosen,
+        reveal: ["activeProject"],
+      };
+    },
+  );
+
+  // 5. Adapters — list what is registered and their auth status. Never
+  // auto-attach: only restore a previously connected id if it is still here.
   const adapters = await step<DiscoveredAdapter[]>(
     "adapters",
     "checking adapter auth",
@@ -141,8 +245,6 @@ export async function runDiscovery(emit: Emit): Promise<void> {
           try {
             return { id: adapter.id, status: await adapter.getStatus() };
           } catch (error) {
-            // An adapter that throws from its own status check is reporting a
-            // status, not breaking the pass.
             return {
               id: adapter.id,
               status: {
@@ -157,28 +259,70 @@ export async function runDiscovery(emit: Emit): Promise<void> {
         }),
       );
 
-      const authed = results.filter((a) => a.status.authenticated);
+      const remembered = previous?.attached_adapter;
+      const attached =
+        remembered !== undefined
+          ? results.find((a) => a.id === remembered)
+          : undefined;
+
+      // Registered alone is not success — the operator still needs to connect
+      // (and sign in). Maps to [BLOCKED] so the operations line matches the
+      // "no adapter is attached" signal.
+      const outcome =
+        attached?.status.authenticated === true ? "ok" : "blocked";
+      const detail =
+        results.length === 0
+          ? "no adapters registered"
+          : attached === undefined
+            ? `${results.length} registered · none attached`
+            : attached.status.authenticated
+              ? `attached ${remembered}`
+              : `attached ${remembered} · not authenticated`;
+
       return {
         value: results,
-        outcome: authed.length > 0 ? "ok" : "blocked",
-        detail:
-          results.length === 0
-            ? "no adapters registered"
-            : `${authed.length}/${results.length} authenticated`,
+        outcome,
+        detail,
+        adapters: results,
+        ...(attached !== undefined ? { attachedAdapterId: remembered } : {}),
+        reveal: ["adapterWidget"],
       };
     },
   );
+
+  const attachedAdapterId =
+    previous?.attached_adapter !== undefined &&
+    adapters.some((a) => a.id === previous.attached_adapter)
+      ? previous.attached_adapter
+      : undefined;
+
+  // 6. Prompt + footer — last beat. Footer always; prompt slot released so it
+  // can mount once an attached adapter is signed in (furniture still gates).
+  const promptReady =
+    attachedAdapterId !== undefined &&
+    adapters.some(
+      (a) => a.id === attachedAdapterId && a.status.authenticated,
+    );
+  await step("prompt", "releasing the prompt", async () => ({
+    value: promptReady,
+    outcome: promptReady ? "ok" : "blocked",
+    detail: promptReady
+      ? "prompt ready"
+      : "held · connect an authenticated adapter",
+    reveal: ["footer", "prompt"],
+  }));
 
   send({
     type: "discovery.complete",
     runId,
     projects,
+    untrackedFolders,
     adapters,
     workspaceRoot: WORKSPACE_ROOT,
     returning,
+    activeProjectPath,
+    ...(attachedAdapterId !== undefined ? { attachedAdapterId } : {}),
     personality: personality.applied,
-    // Omitted rather than sent empty: "nothing was refused" is the absence of
-    // the field, not an empty list the client has to special-case.
     ...(personality.rejected.length > 0
       ? { rejected: personality.rejected }
       : {}),
@@ -191,6 +335,8 @@ export async function runDiscovery(emit: Emit): Promise<void> {
       workspaceRoot: WORKSPACE_ROOT,
       projects,
       adapters,
+      last_active_project: activeProjectPath,
+      attached_adapter: attachedAdapterId,
     }),
   ]);
 }

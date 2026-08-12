@@ -2,7 +2,14 @@ import type { IncomingMessage } from "node:http";
 import type { Server } from "node:http";
 import { isClientMessage, type ServerMessage } from "@overseer/protocol";
 import { WebSocketServer, type WebSocket } from "ws";
+import { listAdapters } from "./adapters.js";
 import { runDiscovery } from "./discovery.js";
+import { hasRunBefore, setActiveProjectPath, setAttachedAdapter } from "./memory/internal.js";
+import {
+  peekPersonality,
+  setOperatorName,
+  setOperatorTone,
+} from "./memory/personality.js";
 
 /**
  * Any page in the browser can otherwise open a socket to localhost — check
@@ -33,8 +40,18 @@ function isAllowedOrigin(
  */
 const HEARTBEAT_MS = 30_000;
 
-export function attachWebSocketServer(httpServer: Server): WebSocketServer {
+export function attachWebSocketServer(httpServer: Server): {
+  wss: WebSocketServer;
+  broadcast: (message: ServerMessage) => void;
+} {
   const wss = new WebSocketServer({ noServer: true });
+
+  const broadcast = (message: ServerMessage) => {
+    const raw = JSON.stringify(message);
+    for (const client of wss.clients) {
+      if (client.readyState === client.OPEN) client.send(raw);
+    }
+  };
 
   httpServer.on("upgrade", (req: IncomingMessage, socket, head) => {
     if (
@@ -73,7 +90,21 @@ export function attachWebSocketServer(httpServer: Server): WebSocketServer {
     }, HEARTBEAT_MS);
     ws.on("close", () => clearInterval(heartbeat));
 
-    send({ type: "connected", serverTime: new Date().toISOString() });
+    // Welcome needs returning + name before discovery runs, so load both here
+    // rather than waiting for the pass. Peek never scaffolds.
+    void (async () => {
+      const [returning, personality] = await Promise.all([
+        hasRunBefore(),
+        peekPersonality(),
+      ]);
+      if (ws.readyState !== ws.OPEN) return;
+      send({
+        type: "connected",
+        serverTime: new Date().toISOString(),
+        returning,
+        ...(Object.keys(personality).length > 0 ? { personality } : {}),
+      });
+    })();
 
     // One discovery pass at a time per connection. Without this a client that
     // retries on a slow scan gets two interleaved runs writing two snapshots.
@@ -104,6 +135,67 @@ export function attachWebSocketServer(httpServer: Server): WebSocketServer {
       // Discovery is the first family routed here; the session supervisor
       // (webui design doc §1.2) joins this switch rather than replacing it.
       switch (parsed.type) {
+        case "operator.name": {
+          const result = await setOperatorName(parsed.name);
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "operator.name",
+              message: result.reason,
+            });
+            return;
+          }
+          send({ type: "operator.named", name: result.name });
+          return;
+        }
+        case "operator.tone": {
+          const result = await setOperatorTone(parsed.tone);
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "operator.tone",
+              message: result.reason,
+            });
+            return;
+          }
+          send({ type: "operator.toned", tone: result.tone });
+          return;
+        }
+        case "project.select": {
+          const ok = await setActiveProjectPath(parsed.path);
+          if (!ok) {
+            send({
+              type: "error",
+              about: "project.select",
+              message: "active project can only be set after discovery",
+            });
+            return;
+          }
+          send({ type: "project.selected", path: parsed.path });
+          return;
+        }
+        case "adapter.connect": {
+          const known = listAdapters().some((a) => a.id === parsed.id);
+          if (!known) {
+            send({
+              type: "error",
+              about: "adapter.connect",
+              message: `unknown adapter: ${parsed.id}`,
+            });
+            return;
+          }
+          const ok = await setAttachedAdapter(parsed.id);
+          if (!ok) {
+            send({
+              type: "error",
+              about: "adapter.connect",
+              message: "adapter can only be attached after discovery",
+            });
+            return;
+          }
+          send({ type: "adapter.connected", id: parsed.id });
+          return;
+        }
         case "discovery.run": {
           if (discovering) {
             send({
@@ -134,5 +226,5 @@ export function attachWebSocketServer(httpServer: Server): WebSocketServer {
     });
   });
 
-  return wss;
+  return { wss, broadcast };
 }

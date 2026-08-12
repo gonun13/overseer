@@ -31,8 +31,8 @@ edges.
 │                                 ─────────                                      │
 │                                     ▲                                          │
 │    ● APPROVAL     2 tool calls are waiting on your decision.                   │
-│    ● ADAPTER      claude-code is not authenticated — sessions cannot start.    │
-│    ● SESSION      overseer / web shell — editing packages/web/src/App.tsx.     │
+│    ● ADAPTER      claude-code is not authenticated · sessions cannot start.    │
+│    ● SESSION      overseer / web shell · editing packages/web/src/App.tsx.     │
 │                                          ↑ the overseer space                  │
 │                                                                                │
 │ │1 MODEL    opus-5    ▾                                    ┌            ┐      │
@@ -243,7 +243,7 @@ so that field gets the room, and it should feel like the composer, because it is
 
 ### 5.3 The console
 
-A raw terminal into the adapter's CLI, opened from the footer's `OPEN CONSOLE` or by typing `console`.
+A raw terminal into the adapter's CLI, opened from the adapter widget's `OPEN CONSOLE` (only when signed in) or by typing `console`.
 Everything else in Overseer is a considered view of what the agent is doing; the console is the standing
 admission that no set of views covers everything, and that an operator who knows the CLI should never be
 walled off from it. Its slash commands, its output and its errors appear verbatim.
@@ -299,11 +299,8 @@ its corner.
    bottom-anchored, so it grows upward. Values that arm something dangerous (`bypass`) render in `--accent`.
    Row 4 has no values — context needs more than a value, so it summons a window. These rows control **the
    next prompt**; this is the prompt's control surface, not navigation.
-5. **AdapterWidget** (bottom-right) — see §6.2.
-6. **Footer** — one line under the prompt: product, version, `ask for HELP` with HELP in `--accent`, and
-   `OPEN CONSOLE` with CONSOLE in `--ok` (§5.3). Footer entries are `.footer-link`: the footer's own type,
-   not button chrome, so they read as words you can click rather than controls competing with the prompt
-   directly above them.
+5. **AdapterWidget** (bottom-right) — see §6.2. When signed in, `OPEN CONSOLE` with CONSOLE in `--ok` sits under it.
+6. **Footer** — one line under the prompt: product, version, and `ask for HELP` with HELP in `--accent`.
 
 ### 6.1 Panels
 

@@ -68,7 +68,7 @@ async function getStatus(): Promise<AdapterStatus> {
     return {
       authenticated: false,
       version,
-      detail: `not logged in — no credentials in ${configDir}`,
+      detail: `not logged in · no credentials in ${configDir}`,
     };
   }
 

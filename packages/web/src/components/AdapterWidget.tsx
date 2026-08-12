@@ -6,12 +6,13 @@ import type { Activity } from "../status";
  *
  * A widget is not a window: it follows the theme instead of inverting it, and it
  * is bracketed at the corners rather than framed and tabbed, so it reads as an
- * instrument sitting on the field (design-system.md §6.2). Readout only —
- * clicking it opens the settings panel, where the facts can be changed.
+ * instrument sitting on the field (design-system.md §6.2). The readout opens
+ * the adapter picker; when an adapter is signed in, OPEN CONSOLE sits under it.
  */
 export function AdapterWidget({
   adapter,
-  onOpenSettings,
+  onOpenAdapters,
+  onOpenConsole,
 }: {
   adapter: {
     name: string;
@@ -21,13 +22,14 @@ export function AdapterWidget({
     spend: string;
     context: string;
   };
-  onOpenSettings: () => void;
+  onOpenAdapters: () => void;
+  onOpenConsole: () => void;
 }) {
   const percent = Math.round(adapter.usage * 100);
   const activity: Activity = adapter.authenticated ? "done" : "waiting";
-  // No name means no adapter has reported in. The instrument still sits on the
-  // field — it is permanent furniture — but it reads out nothing, rather than
-  // an empty version and a 0% gauge that look like measurements.
+  // No name means none attached. The instrument still sits on the field — it
+  // is permanent furniture — but it reads out nothing, rather than an empty
+  // version and a 0% gauge that look like measurements.
   const attached = adapter.name !== "";
   const gaugeColor =
     adapter.usage >= 0.95
@@ -37,8 +39,13 @@ export function AdapterWidget({
         : "var(--text)";
 
   return (
-    <button className="widget settles-in" onClick={onOpenSettings}>
-      <span className="widget-frame">
+    <div className="widget settles-in">
+      <button
+        type="button"
+        className="widget-frame"
+        onClick={onOpenAdapters}
+        aria-label="choose adapter"
+      >
         <span className="widget-head">
           <span className="widget-kicker">adapter</span>
           <StatusLight activity={activity} />
@@ -80,7 +87,17 @@ export function AdapterWidget({
             </span>
           </>
         )}
-      </span>
-    </button>
+      </button>
+
+      {adapter.authenticated && (
+        <button
+          type="button"
+          className="widget-console"
+          onClick={onOpenConsole}
+        >
+          open <span className="widget-console-word">console</span>
+        </button>
+      )}
+    </div>
   );
 }

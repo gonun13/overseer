@@ -24,7 +24,6 @@ services:
       - node-modules-protocol:/app/packages/protocol/node_modules
       - node-modules-web:/app/packages/web/node_modules
       - node-modules-server:/app/packages/server/node_modules
-      - node-modules-mock:/app/packages/adapters/mock/node_modules
       - node-modules-claude-code:/app/packages/adapters/claude-code/node_modules
     environment:
       # Bind mounts on Docker Desktop do not deliver inotify reliably; polling
@@ -35,7 +34,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "test -f /app/packages/protocol/dist/index.js && test -f /app/packages/adapters/mock/dist/index.js && test -f /app/packages/adapters/claude-code/dist/index.js",
+          "test -f /app/packages/protocol/dist/index.js && test -f /app/packages/adapters/claude-code/dist/index.js",
         ]
       interval: 2s
       timeout: 5s
@@ -49,7 +48,9 @@ services:
     command: npm run dev --workspace packages/server
     ports:
       # Loopback only — this is RCE-as-a-service (design doc §6).
-      - "127.0.0.1:3000:3000"
+      # Host :3001 so the dev API can run alongside production on :3000.
+      # Container-internal stays 3000 (Vite proxies to http://server:3000).
+      - "127.0.0.1:3001:3000"
     environment:
       - HOST=0.0.0.0 # container-internal; the port mapping above is the real boundary
       - PORT=3000
@@ -69,7 +70,6 @@ services:
       - node-modules-protocol:/app/packages/protocol/node_modules
       - node-modules-web:/app/packages/web/node_modules
       - node-modules-server:/app/packages/server/node_modules
-      - node-modules-mock:/app/packages/adapters/mock/node_modules
       - node-modules-claude-code:/app/packages/adapters/claude-code/node_modules
       # Anonymous volume shadows any stale build a host `npm run build` left in
       # web/dist. The server refuses to serve it in dev anyway (NODE_ENV
@@ -101,7 +101,6 @@ services:
       - node-modules-protocol:/app/packages/protocol/node_modules
       - node-modules-web:/app/packages/web/node_modules
       - node-modules-server:/app/packages/server/node_modules
-      - node-modules-mock:/app/packages/adapters/mock/node_modules
       - node-modules-claude-code:/app/packages/adapters/claude-code/node_modules
     depends_on:
       deps:
@@ -125,7 +124,6 @@ services:
       - node-modules-protocol:/app/packages/protocol/node_modules
       - node-modules-web:/app/packages/web/node_modules
       - node-modules-server:/app/packages/server/node_modules
-      - node-modules-mock:/app/packages/adapters/mock/node_modules
       - node-modules-claude-code:/app/packages/adapters/claude-code/node_modules
       - node-modules-e2e:/app/packages/e2e/node_modules
       # Reports and traces land on the host so a failure can be inspected
@@ -151,6 +149,5 @@ volumes:
   node-modules-protocol:
   node-modules-web:
   node-modules-server:
-  node-modules-mock:
   node-modules-claude-code:
   node-modules-e2e:

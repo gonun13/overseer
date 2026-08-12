@@ -25,7 +25,7 @@ export function SessionsWindow({
             key={s.id}
             activity={s.activity}
             primary={s.name}
-            secondary={`${project?.name ?? s.projectId} · ${s.branch} · ${s.model} — ${s.doing}`}
+            secondary={`${project?.name ?? s.projectId} · ${s.branch} · ${s.model} · ${s.doing}`}
             right={s.cost}
             actions={
               <>

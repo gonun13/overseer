@@ -18,6 +18,8 @@ project. It is four things at once:
 - **Wizard** — walks a fresh instance from nothing to a working setup, and tells the operator what is still
   missing.
 - **Supervisor** — watches projects, sessions, capabilities and the adapter, and surfaces what changed.
+  The workspace monitor (`packages/server/src/workspace-monitor.ts`) is the live half of that for
+  projects: create/delete under `/workspace` updates the panel over the socket without re-running discovery.
 - **Automation trigger** — starts agents, runs scripts and `claude` CLI commands on the operator's behalf.
 - **Notification point** — the single place an escalation lands. There are no toasts and no modals; an
   escalation becomes a signal and changes the headline (§10 anti-patterns).
@@ -124,13 +126,15 @@ reading personality...    [OK]
 
 ### Lifecycle
 
-- **Auto-summoned** when a multi-step operation starts: the empty-project wizard's discovery pass today, any
-  automation or adapter-backed query later.
+- **Auto-summoned** when a multi-step operation starts: the empty-project wizard's discovery pass, and later
+  any supervisor worker that has something to report (e.g. workspace monitor adding/removing a project).
 - **Appends live.** Steps arrive one at a time and the list grows; it is never rendered as a finished batch.
+  Worker lines use the same telegraphic format (`adding project foo… [OK]`).
 - **Not modal, and not required.** The operator can dismiss it mid-run with `Esc` or the tab's ✕. The operation
   continues — the window is a view of the work, not the work.
-- **Does not re-summon itself** for the same run once dismissed. An operator who closed it said they had seen
-  enough; anything that genuinely needs them becomes a signal instead.
+- **Does not re-summon itself** for the same discovery run once dismissed. An operator who closed it said they
+  had seen enough; anything that genuinely needs them becomes a signal instead. A later worker event is a
+  *new* run and may open the window again.
 - Otherwise ordinary window chrome — draggable tab, `WINDOW_SPEC` width, clamped to viewport ([§5](design-system.md#5-windows)).
 
 ---
@@ -144,9 +148,9 @@ operations window shows.
 
 | Phase        | Headline           | What happens                                                                   |
 | ------------ | ------------------ | ------------------------------------------------------------------------------ |
-| `boot`       | `STARTING`         | Loading bar. The socket is connecting; nothing is known yet.                    |
-| `welcome`    | `WELCOME, {user}`  | Connected. On a return visit (`state.json` has a prior snapshot) this reads `WELCOME BACK` instead. |
-| `discovery`  | `LOOKING AROUND`   | Operations window opens; server runs the discovery pass and streams steps.      |
+| `boot`       | `STARTING`              | Loading bar. The socket is connecting; nothing is known yet.                    |
+| `welcome`    | first turn: `I AM THE OVERSEER` → name → tone → greet | Connected. Asks for name, then tone, whenever those are unset in `overseer-personality`. Copy comes from `packages/web/src/lang` and varies with tone. A return visit with both set greets; missing name or tone re-asks that beat. |
+| `discovery`  | `LOOKING AROUND`        | Operations window opens; server runs the discovery pass and streams steps.      |
 | `settling`   | derived            | Discovery complete. Furniture mounts per resolved capability; the headline hands back to `headlineFor`. |
 | `ready`      | derived            | The wizard is done and stops driving anything. Normal operation.                |
 
@@ -154,21 +158,21 @@ operations window shows.
 
 Furniture is **permanent** — once mounted it stays. What the wizard controls is when each piece first earns its
 place, and the rule is that a piece of furniture appears when the capability it reports on becomes *knowable*,
-not when it becomes *good*:
+not when it becomes *good*. Discovery unlocks pieces on each finished step:
 
 | Furniture         | Mounts when                                                                    |
 | ----------------- | ------------------------------------------------------------------------------ |
 | Overseer space    | Always. It is the thing that explains the absence of everything else.           |
-| Adapter widget    | Discovery has reported on adapters — including reporting that none are attached. |
-| Project panel     | Discovery has finished scanning the workspace, even if it found nothing.        |
-| Active project    | With the project panel.                                                         |
-| Prompt + controls | An adapter exists and is authenticated. Without one, a composer is a lie: there is nothing to send to. |
-| Clock             | Always. It is a runtime fact needing no discovery.                              |
+| Clock + settings  | After the `checking the time` step.                                            |
+| Project panel     | After personality is read (and scaffolded first if it was absent).             |
+| Active project    | After the active project is resolved from internal memory (or defaults to `overseer-personality`). |
+| Adapter widget    | After adapter auth is checked — including reporting that none are attached.    |
+| Footer            | With `releasing the prompt` (version line).                                    |
+| Prompt + controls | After `releasing the prompt`, when an attached adapter is authenticated.       |
+| Ask for help      | With the prompt — same gate.                                                   |
 
-A capability that resolves *badly* still mounts its furniture and reports the bad news — an adapter widget
-reading "none attached" is the honest answer, and hiding it would leave the operator with no place to look.
-The exception is the prompt, which is a control rather than a readout: an input that cannot submit anywhere is
-not a degraded readout, it is a broken control.
+Discovery step order: time → (create personality if missing) → read personality → scan workspace → select
+active project → check adapters → release the prompt.
 
 ### Reduced motion
 
@@ -233,13 +237,13 @@ neither can any workspace project.
 .overseer/
   logs/            structured operation logs — one file per run (discovery, wizard, later agent/script/CLI runs)
   actions.jsonl    append-only action register: timestamp, actor, action, outcome
-  state.json       last-known world snapshot — discovery results, capabilities seen
+  state.json       last-known world snapshot — discovery results, last active project
 ```
 
 - **`actions.jsonl` is append-only and total.** Every action the overseer takes is recorded before it is
   reported. Nothing can turn this off — see the allowlist below.
 - **`state.json`** is what lets a restart know it is not a stranger's first boot; it drives the wizard's
-  "welcome back" branch (§4).
+  "welcome back" branch (§4) and remembers the last active project.
 - Server-side access lives in `packages/server/src/memory/internal.ts`. Nothing in the web package reads or
   writes it directly.
 - `./bin/reset` discards this volume along with `claude-home`. That is correct: reset means "this instance
@@ -265,7 +269,7 @@ This is the exact line #10 implements. Validation lives in `packages/server/src/
 
 | Field         | Effect                                                                          |
 | ------------- | ------------------------------------------------------------------------------- |
-| `tone`        | `neutral` \| `dry` \| `warm` — how the headline's non-state words read.          |
+| `tone`        | `neutral` \| `dry` \| `warm` — selects the copy pack in `packages/web/src/lang`. |
 | `name`        | What the operator is called in the welcome headline.                             |
 | `typingChance`| 0–0.5. How often the headline types out instead of swapping. Capped, not free.   |
 | `greeting`    | A replacement welcome line. Length-capped; it is a headline, not a paragraph.    |
@@ -295,9 +299,11 @@ worse than refusing it loudly — they would go on believing it took effect.
 | Signal derivation             | `packages/web/src/state/signals.ts`              |
 | Headline typing               | `packages/web/src/state/useOccasionalTyping.ts`  |
 | Wizard state machine          | `packages/web/src/state/wizard.ts`               |
+| Tone-aware headline copy      | `packages/web/src/lang/`                         |
 | Discovery client              | `packages/web/src/state/useDiscovery.ts`         |
 | Operations window             | `packages/web/src/components/windows/OverseerWindow.tsx` |
 | Adapter status + discovery events | `packages/protocol/src/adapter.ts`, `packages/protocol/src/discovery.ts` |
 | WS routing + discovery pass   | `packages/server/src/ws.ts`, `packages/server/src/discovery.ts` |
+| Workspace monitor (live projects) | `packages/server/src/workspace-monitor.ts` |
 | Internal memory               | `packages/server/src/memory/internal.ts`         |
 | External memory + validation  | `packages/server/src/memory/personality.ts`      |

@@ -17,7 +17,6 @@ packages/
   server/              Node: WS + REST, static SPA host, adapter registry
   adapters/
     claude-code/      spawns `claude`, normalizes stream-json → protocol (stub)
-    mock/             replays recorded fixtures; no CLI, no auth needed (stub)
 workspace/            host-shared dir — git projects live here, mounted into the container
 ```
 
@@ -37,7 +36,8 @@ Docker; you need nothing installed except Docker.
 ./bin/dev-start
 ```
 
-Vite on http://127.0.0.1:5173 with hot reload, API server on http://127.0.0.1:3000. Edit files on
+Vite on http://127.0.0.1:5173 with hot reload, API server on http://127.0.0.1:3001
+(host port differs from production's `:3000` so both stacks can run at once). Edit files on
 the host as usual — the source tree is bind-mounted and watched.
 
 | Command             | What it does                                                             |
@@ -55,7 +55,7 @@ the host as usual — the source tree is bind-mounted and watched.
 | `./bin/test-e2e`   | Playwright acceptance tests against the dev stack (args pass through to `playwright test`) |
 | `./bin/reset`      | tear down the dev stack and discard volumes, including agent auth         |
 
-Three services: `deps` builds `protocol` + the adapters and holds them in `tsc --watch` (`server`
+Three services: `deps` builds `protocol` + `claude-code` and holds them in `tsc --watch` (`server`
 and `web` import them through `dist/`, so compose gates both on it), `server` runs `tsx watch`, and
 `web` runs Vite proxying `/api` and `/ws` to `server:3000`. A fourth, `e2e`, is not part of the
 stack — `./bin/test-e2e` runs it on demand, and it reaches `web:5173` over the compose network
@@ -69,7 +69,7 @@ For manual browser checks, the [Playwright MCP server](https://github.com/micros
 is registered project-wide in `.mcp.json`, so Claude Code picks it up automatically in this repo
 with nothing to re-register per session. It is a generic tool driving a browser on the host, not
 this app running there — start the stack first (`./bin/dev-start` or `./bin/mock-start`) so
-`127.0.0.1:5173` and `:3000` are live, then Claude can click through the running instance directly
+`127.0.0.1:5173` and `:3001` are live, then Claude can click through the running instance directly
 instead of writing one-off Playwright scripts.
 
 ### Wireframe fixtures

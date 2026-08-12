@@ -24,7 +24,7 @@ export function WAdapterNote({ adapter }: { adapter: AdapterInfo }) {
   if (adapter.authenticated) return null;
   return (
     <p className="w-note">
-      needs a connected adapter — nothing here can act until one is attached.
+      needs a connected adapter · nothing here can act until one is attached.
     </p>
   );
 }

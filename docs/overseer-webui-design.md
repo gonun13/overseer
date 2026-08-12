@@ -17,10 +17,9 @@ packages/
   server/             Node: WS + REST, session supervisor, adapter registry
   adapters/
     claude-code/      spawns `claude`, normalizes stream-json → protocol
-    mock/             replays recorded fixtures; needs no CLI, no auth
 ```
 
-**Frontend-first, adapter-agnostic.** `protocol/` is written to serve the UI, not to mirror any one CLI's output. Adapters translate into it. The `mock` adapter replays recorded session fixtures over the same interface, so the entire frontend can be built and tested with no CLI, no container, and no subscription burn — that is the point of splitting it out on day one.
+**Frontend-first, adapter-agnostic.** `protocol/` is written to serve the UI, not to mirror any one CLI's output. Adapters translate into it.
 
 ### 1.1 The adapter interface
 

@@ -33,6 +33,26 @@ export function personalityDir(root = WORKSPACE_ROOT): string {
   return path.join(root, PERSONALITY_PROJECT);
 }
 
+/** Whether the personality project directory exists (scaffold may still be needed). */
+export async function personalityExists(root = WORKSPACE_ROOT): Promise<boolean> {
+  try {
+    await access(personalityDir(root));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/**
+ * Create the personality project if absent. Returns true when this call
+ * created it. Exported so discovery can show scaffold as its own step.
+ */
+export async function scaffoldPersonality(
+  root = WORKSPACE_ROOT,
+): Promise<boolean> {
+  return ensureScaffold(root);
+}
+
 export interface PersonalityResult {
   applied: AppliedPersonality;
   rejected: RejectedCustomization[];
@@ -57,9 +77,9 @@ const MAX_TYPING_CHANCE = 0.5;
  * `readPersonality` covers the rest.
  */
 const FORBIDDEN: Record<string, string> = {
-  logging: "logging is internal — the overseer's record is not editable",
-  logLevel: "logging is internal — the overseer's record is not editable",
-  disableLogging: "logging is internal — the overseer's record is not editable",
+  logging: "logging is internal · the overseer's record is not editable",
+  logLevel: "logging is internal · the overseer's record is not editable",
+  disableLogging: "logging is internal · the overseer's record is not editable",
   actions: "the action register is an audit trail and cannot be filtered",
   actionRegister: "the action register is an audit trail and cannot be filtered",
   hideActions: "the action register is an audit trail and cannot be filtered",
@@ -69,50 +89,213 @@ const FORBIDDEN: Record<string, string> = {
   workspaceRoot: "paths and mounts are deployment facts, not preferences",
   internalDir: "paths and mounts are deployment facts, not preferences",
   paths: "paths and mounts are deployment facts, not preferences",
-  signals: "signals are derived from real state — editable signals are fiction",
-  signalRanking: "signals are derived from real state — editable signals are fiction",
+  signals: "signals are derived from real state · editable signals are fiction",
+  signalRanking: "signals are derived from real state · editable signals are fiction",
   headlines: "the state vocabulary is fixed; tone is customizable, meaning is not",
 };
+
+/**
+ * Identity needed before discovery: the welcome beat has to know the operator's
+ * name (and whether this is a return visit's greeting) without running the full
+ * pass. Never scaffolds — absent personality is a first-run fact, not an error.
+ */
+export async function peekPersonality(
+  root = WORKSPACE_ROOT,
+): Promise<AppliedPersonality> {
+  let raw: string;
+  try {
+    raw = await readFile(path.join(personalityDir(root), "personality.json"), "utf8");
+  } catch {
+    return {};
+  }
+
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return {};
+  }
+  if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    return {};
+  }
+
+  const { applied } = validatePersonalityObject(
+    parsed as Record<string, unknown>,
+  );
+  // Peek ignores rejections: the welcome beat only needs accepted fields, and
+  // discovery will surface refusals properly when it runs.
+  return applied;
+}
+
+/**
+ * Write the operator's name from the wizard's first-run ask. Scaffolds the
+ * personality project if needed so the name is not stranded waiting for
+ * discovery, then merges into the existing file rather than clobbering it.
+ */
+export async function setOperatorName(
+  rawName: string,
+  root = WORKSPACE_ROOT,
+): Promise<{ ok: true; name: string } | { ok: false; reason: string }> {
+  const name = rawName.trim();
+  if (!name || name.length > MAX_NAME) {
+    return {
+      ok: false,
+      reason: `expected a non-empty string of at most ${MAX_NAME} characters`,
+    };
+  }
+  const result = await patchPersonality({ name }, root);
+  if (!result.ok) return result;
+  return { ok: true, name };
+}
+
+export type PersonalityTone = NonNullable<AppliedPersonality["tone"]>;
+
+/**
+ * Write the tone chosen on the first-run intro. Same scaffold-and-merge path
+ * as the name ask — discovery must not be a prerequisite for remembering it.
+ */
+export async function setOperatorTone(
+  tone: string,
+  root = WORKSPACE_ROOT,
+): Promise<{ ok: true; tone: PersonalityTone } | { ok: false; reason: string }> {
+  if (!TONES.has(tone)) {
+    return {
+      ok: false,
+      reason: `expected one of ${[...TONES].join(", ")}`,
+    };
+  }
+  const chosen = tone as PersonalityTone;
+  const result = await patchPersonality({ tone: chosen }, root);
+  if (!result.ok) return result;
+  return { ok: true, tone: chosen };
+}
+
+async function patchPersonality(
+  patch: { name?: string; tone?: PersonalityTone },
+  root: string,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  await ensureScaffold(root);
+
+  const file = path.join(personalityDir(root), "personality.json");
+  let body: Record<string, unknown>;
+  try {
+    const raw = await readFile(file, "utf8");
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+      body = JSON.parse(SCAFFOLD_CONFIG) as Record<string, unknown>;
+    } else {
+      body = parsed as Record<string, unknown>;
+    }
+  } catch {
+    body = JSON.parse(SCAFFOLD_CONFIG) as Record<string, unknown>;
+  }
+
+  if (patch.name !== undefined) body.name = patch.name;
+  if (patch.tone !== undefined) body.tone = patch.tone;
+
+  try {
+    await writeFile(file, `${JSON.stringify(body, null, 2)}\n`, "utf8");
+  } catch (error) {
+    return {
+      ok: false,
+      reason: error instanceof Error ? error.message : "could not write personality",
+    };
+  }
+
+  if (patch.name !== undefined) {
+    await recordAction({
+      actor: "operator",
+      action: "personality:name",
+      outcome: "ok",
+      detail: patch.name,
+    });
+  }
+  if (patch.tone !== undefined) {
+    await recordAction({
+      actor: "operator",
+      action: "personality:tone",
+      outcome: "ok",
+      detail: patch.tone,
+    });
+  }
+  return { ok: true };
+}
 
 /**
  * Read and validate. Never throws: a broken personality file is a state to
  * report, not a reason to fail discovery. The overseer runs fine with no
  * personality at all — that is the default it ships with.
+ *
+ * `scaffold` defaults to true for callers that still want the old combined
+ * behaviour; discovery passes `false` after running scaffold as its own step.
  */
 export async function readPersonality(
   root = WORKSPACE_ROOT,
+  opts: { scaffold?: boolean } = {},
 ): Promise<PersonalityResult> {
-  const scaffolded = await ensureScaffold(root);
-  const applied: AppliedPersonality = {};
-  const rejected: RejectedCustomization[] = [];
+  const scaffolded = opts.scaffold === false ? false : await ensureScaffold(root);
 
   let raw: string;
   try {
     raw = await readFile(path.join(personalityDir(root), "personality.json"), "utf8");
   } catch {
-    return { applied, rejected, scaffolded };
+    return { applied: {}, rejected: [], scaffolded };
   }
 
   let parsed: unknown;
   try {
     parsed = JSON.parse(raw);
   } catch (error) {
-    rejected.push({
-      field: "personality.json",
-      reason: `not valid JSON: ${error instanceof Error ? error.message : "parse failed"}`,
-    });
-    return { applied, rejected, scaffolded };
+    return {
+      applied: {},
+      rejected: [
+        {
+          field: "personality.json",
+          reason: `not valid JSON: ${error instanceof Error ? error.message : "parse failed"}`,
+        },
+      ],
+      scaffolded,
+    };
   }
 
   if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
-    rejected.push({
-      field: "personality.json",
-      reason: "expected a JSON object at the top level",
-    });
-    return { applied, rejected, scaffolded };
+    return {
+      applied: {},
+      rejected: [
+        {
+          field: "personality.json",
+          reason: "expected a JSON object at the top level",
+        },
+      ],
+      scaffolded,
+    };
   }
 
-  for (const [key, value] of Object.entries(parsed as Record<string, unknown>)) {
+  const { applied, rejected } = validatePersonalityObject(
+    parsed as Record<string, unknown>,
+  );
+
+  for (const entry of rejected) {
+    await recordAction({
+      actor: "overseer",
+      action: `personality:reject:${entry.field}`,
+      outcome: "blocked",
+      detail: entry.reason,
+    });
+  }
+
+  return { applied, rejected, scaffolded };
+}
+
+/** Shared allowlist walk used by both the discovery read and the connect peek. */
+function validatePersonalityObject(parsed: Record<string, unknown>): {
+  applied: AppliedPersonality;
+  rejected: RejectedCustomization[];
+} {
+  const applied: AppliedPersonality = {};
+  const rejected: RejectedCustomization[] = [];
+
+  for (const [key, value] of Object.entries(parsed)) {
     // Comment keys are a convention in hand-edited JSON; ignoring them silently
     // is right because the operator did not intend them as customization.
     if (key.startsWith("//") || key === "$schema") continue;
@@ -156,7 +339,7 @@ export async function readPersonality(
         } else {
           rejected.push({
             field: "greeting",
-            reason: `expected a non-empty string of at most ${MAX_GREETING} characters — it is a headline, not a paragraph`,
+            reason: `expected a non-empty string of at most ${MAX_GREETING} characters · it is a headline, not a paragraph`,
           });
         }
         break;
@@ -180,21 +363,12 @@ export async function readPersonality(
       default:
         rejected.push({
           field: key,
-          reason: "not a customizable field — see docs/overseer.md §6.4",
+          reason: "not a customizable field · see docs/overseer.md §6.4",
         });
     }
   }
 
-  for (const entry of rejected) {
-    await recordAction({
-      actor: "overseer",
-      action: `personality:reject:${entry.field}`,
-      outcome: "blocked",
-      detail: entry.reason,
-    });
-  }
-
-  return { applied, rejected, scaffolded };
+  return { applied, rejected };
 }
 
 /**
@@ -257,9 +431,8 @@ async function ensureScaffold(root: string): Promise<boolean> {
 
 const SCAFFOLD_CONFIG = `{
   "// what this is": "Advisory input to the overseer. Internal memory always wins.",
-  "// customizable": "tone, name, greeting, typingChance — and nothing else.",
-  "// rejected fields": "are reported back to you as a signal, never dropped silently.",
-  "tone": "neutral"
+  "// customizable": "tone, name, greeting, typingChance · and nothing else.",
+  "// rejected fields": "are reported back to you as a signal, never dropped silently."
 }
 `;
 

@@ -201,7 +201,7 @@ const wireframeDiff: DiffLine[] = [
 const wireframeConsole: ConsoleLine[] = [
   {
     kind: "out",
-    text: "claude-code 2.1.4 — attached to /workspace/billing-service",
+    text: "claude-code 2.1.4 · attached to /workspace/billing-service",
   },
   { kind: "out", text: "session s1 · fix/refund-race · opus-5" },
   { kind: "out", text: "" },

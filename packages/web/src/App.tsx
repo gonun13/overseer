@@ -8,6 +8,7 @@ import { AdapterWidget } from "./components/AdapterWidget";
 import { Prompt } from "./components/Prompt";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { Window } from "./components/Window";
+import { AdaptersWindow } from "./components/windows/AdaptersWindow";
 import { SessionsWindow } from "./components/windows/SessionsWindow";
 import { ApprovalsWindow } from "./components/windows/ApprovalsWindow";
 import { CapabilitiesWindow } from "./components/windows/CapabilitiesWindow";
@@ -23,7 +24,10 @@ import { useDiscovery } from "./state/useDiscovery";
 import {
   furnitureFor,
   isLoading,
+  nameAskPrefix,
   projectsFor,
+  welcomeNeedsName,
+  welcomeNeedsTone,
   wizardHeadline,
 } from "./state/wizard";
 import { matchCommand } from "./commands";
@@ -58,11 +62,11 @@ export default function App() {
   const wizard = useDiscovery();
   const furniture = furnitureFor(wizard);
   const projects = useMemo(() => projectsFor(wizard), [wizard]);
-  const [selectedPath, setSelectedPath] = useState<string | undefined>();
-  // Defaults to the first discovered project, but an explicit pick wins — so
-  // discovery completing cannot yank the selection out from under the operator.
+  // Discovery (and later the operator) own the active path in wizard state;
+  // fall back to the first listed project only if somehow unset.
   const activeProject: Project | undefined =
-    projects.find((p) => p.path === selectedPath) ?? projects[0];
+    projects.find((p) => p.path === wizard.activeProjectPath) ??
+    (furniture.activeProject ? projects[0] : undefined);
   // The project panel is furniture, not an overlay: it starts open and stays open.
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
@@ -76,12 +80,13 @@ export default function App() {
   const { windows, open, close, closeTop, closeAll, raise, move } =
     useWindows();
 
-  // The adapter widget reads out whatever discovery found — including finding
-  // nothing, which is why it mounts on a bad result too. Usage and spend stay
-  // empty: no adapter has reported them and a plausible 0% is still invented.
+  // The adapter widget reads the attached adapter only — never the first
+  // registered or first authenticated one. Usage/spend stay empty until an
+  // adapter reports them; a plausible 0% is still invented.
   const adapter = useMemo(() => {
-    const authenticated = wizard.adapters.find((a) => a.status.authenticated);
-    const reported = authenticated ?? wizard.adapters[0];
+    const reported = wizard.adapters.find(
+      (a) => a.id === wizard.attachedAdapterId,
+    );
     return {
       name: reported?.id ?? "",
       version: reported?.status.version ?? "",
@@ -90,7 +95,7 @@ export default function App() {
       spend: "",
       context: "",
     };
-  }, [wizard.adapters]);
+  }, [wizard.adapters, wizard.attachedAdapterId]);
 
   // Where the agent's files live is a deployment fact the server owns, so it is
   // blank until discovery reports it rather than assumed to be "/workspace".
@@ -136,8 +141,16 @@ export default function App() {
         adapter,
         busy,
         rejected: wizard.rejected,
+        untrackedFolders: wizard.untrackedFolders,
       }),
-    [projects, activeProject, adapter, busy, wizard.rejected],
+    [
+      projects,
+      activeProject,
+      adapter,
+      busy,
+      wizard.rejected,
+      wizard.untrackedFolders,
+    ],
   );
 
   /**
@@ -153,11 +166,15 @@ export default function App() {
   // The wizard speaks only while it is running, and hands the headline back to
   // ordinary derivation the moment it settles — so a greeting can never end up
   // shadowing a real state word.
+  const askingName = welcomeNeedsName(wizard);
+  const pickingTone = welcomeNeedsTone(wizard);
   const wizardWord = wizardHeadline(wizard);
   const derived = headlineFor(signals, busy);
   const headline = wizardWord
     ? { text: wizardWord, activity: "working" as const }
-    : derived;
+    : askingName
+      ? { text: "", activity: "working" as const }
+      : derived;
   // The wizard's own words always type out. Typing is normally a rare tell that
   // something is watching, but during boot it is the only thing on screen doing
   // anything — leaving it to a ~15% roll means most boots show the greeting
@@ -165,16 +182,17 @@ export default function App() {
   // personality (or useOccasionalTyping's default) governs again.
   const typingChance = wizardWord ? 1 : wizard.personality.typingChance;
 
-  // The operations window is the one window the machine summons (§3). Keyed on
-  // the phase transition, so dismissing it mid-pass does not bring it back —
-  // an operator who closed it has seen enough, and anything that genuinely
-  // needs them becomes a signal instead.
+  // The operations window is the one window the machine summons (§3).
+  // Discovery: keyed on the phase so dismissing mid-pass does not bring it
+  // back for that same run. Workers: each `overseer.step` is a new run and
+  // re-summons — the operator is owed a view of what just changed.
   useEffect(() => {
-    // Gated on the connection too, so a boot still waiting on the socket does
-    // not summon an empty window to watch. The headline is already saying what
-    // is going on; a frame with no steps in it would add nothing.
     if (wizard.phase === "discovery" && wizard.connected) open("overseer");
   }, [wizard.phase, wizard.connected, open]);
+
+  useEffect(() => {
+    if (wizard.operationTick > 0) open("overseer");
+  }, [wizard.operationTick, open]);
 
   /** Accordion: opening one section closes the others. */
   const toggleControl = useCallback((key: PromptOptionKey) => {
@@ -310,23 +328,23 @@ export default function App() {
           becomes good — a panel reading "none" is the honest answer, and the
           rule for which piece appears when lives in wizard.ts, not here. */}
       {furniture.projectPanel && (
-        <>
-          <ProjectPanel
-            projects={projects}
-            active={activeProject}
-            open={projectsOpen}
-            onToggle={() => setProjectsOpen((v) => !v)}
-            onSelect={(project) => {
-              setSelectedPath(project.path);
-              setTurns([]);
-            }}
-          />
+        <ProjectPanel
+          projects={projects}
+          active={activeProject}
+          open={projectsOpen}
+          onToggle={() => setProjectsOpen((v) => !v)}
+          onSelect={(project) => {
+            wizard.selectProject(project.path);
+            setTurns([]);
+          }}
+        />
+      )}
 
-          <ActiveProject
-            project={activeProject}
-            onPick={() => setProjectsOpen(true)}
-          />
-        </>
+      {furniture.activeProject && (
+        <ActiveProject
+          project={activeProject}
+          onPick={() => setProjectsOpen(true)}
+        />
       )}
 
       {furniture.clock && <Clock onOpenSettings={() => setSettingsOpen(true)} />}
@@ -338,6 +356,11 @@ export default function App() {
         loading={isLoading(wizard)}
         typingChance={typingChance}
         onFollow={follow}
+        onSubmitName={askingName ? wizard.submitOperatorName : undefined}
+        namePrefix={nameAskPrefix(wizard)}
+        onSubmitTone={pickingTone ? wizard.submitOperatorTone : undefined}
+        selectedTone={wizard.personality.tone ?? "neutral"}
+        onHeadlineReady={wizard.onHeadlineReady}
       />
 
       {/* The prompt is a control, not a readout: without an authenticated
@@ -358,7 +381,8 @@ export default function App() {
       {furniture.adapterWidget && (
         <AdapterWidget
           adapter={adapter}
-          onOpenSettings={() => setSettingsOpen(true)}
+          onOpenAdapters={() => open("adapters")}
+          onOpenConsole={() => open("console")}
         />
       )}
 
@@ -378,11 +402,21 @@ export default function App() {
         )}
         {furniture.footer && (
           <p className="footer settles-in">
-            overseer v{import.meta.env.VITE_APP_VERSION} | ask for{" "}
-            <span style={{ color: "var(--accent)" }}>help</span> |{" "}
-            <button className="footer-link" onClick={() => open("console")}>
-              open <span style={{ color: "var(--ok)" }}>console</span>
-            </button>
+            overseer v{import.meta.env.VITE_APP_VERSION}
+            {furniture.prompt && (
+              <>
+                {" "}
+                | ask for{" "}
+                <button
+                  type="button"
+                  className="footer-link"
+                  style={{ color: "var(--accent)" }}
+                  onClick={() => open("help")}
+                >
+                  help
+                </button>
+              </>
+            )}
           </p>
         )}
       </div>
@@ -400,6 +434,16 @@ export default function App() {
           onMove={(x, y) => move(w.id, x, y)}
         >
           {w.kind === "overseer" && <OverseerWindow steps={wizard.steps} />}
+          {w.kind === "adapters" && (
+            <AdaptersWindow
+              adapters={wizard.adapters}
+              attachedId={wizard.attachedAdapterId}
+              onConnect={(id) => {
+                wizard.connectAdapter(id);
+                close(w.id);
+              }}
+            />
+          )}
           {w.kind === "sessions" && (
             <SessionsWindow
               sessions={mockSessions}

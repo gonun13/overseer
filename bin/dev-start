@@ -12,5 +12,5 @@
 
 require_docker
 
-echo "overseer: starting dev stack (real state) — web http://127.0.0.1:5173, server http://127.0.0.1:3000"
+echo "overseer: starting dev stack (real state) — web http://127.0.0.1:5173, server http://127.0.0.1:3001"
 VITE_OVERSEER_WIREFRAME=0 dev_compose up "$@"
