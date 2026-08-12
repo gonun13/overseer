@@ -1,5 +1,5 @@
 import { execFile } from "node:child_process";
-import { readdir, stat } from "node:fs/promises";
+import { readdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import type {
@@ -15,6 +15,36 @@ const run = promisify(execFile);
  * never assumed by anything upstream of here.
  */
 export const WORKSPACE_ROOT = process.env.OVERSEER_WORKSPACE ?? "/workspace";
+
+/**
+ * Whether `candidate` is really a path under the workspace root.
+ *
+ * The check is `realpath` on both sides and then a separator-terminated
+ * prefix test, never a string comparison on the input: `..` segments and
+ * symlinks each survive the string form and neither survives this one. A
+ * symlink matters more here than it looks — it is resolved in the
+ * *container's* namespace, so `ln -s /app/.overseer /workspace/mem` written
+ * from the host would otherwise hand a caller the internal-memory volume
+ * under a workspace-looking path. Internal memory being unreachable from the
+ * workspace is what makes the §6.1 precedence rule a rule (memory/internal.ts).
+ *
+ * Strictly under: the root itself is a mount, not a project, and nothing
+ * should be operating on it as one.
+ */
+export async function isInsideWorkspace(
+  candidate: string,
+  root = WORKSPACE_ROOT,
+): Promise<boolean> {
+  try {
+    const realRoot = await realpath(root);
+    const real = await realpath(candidate);
+    return real.startsWith(realRoot + path.sep);
+  } catch {
+    // Unresolvable is not inside. A path that does not exist, or that we
+    // cannot read, is not one to hand on as a project either way.
+    return false;
+  }
+}
 
 /** Underscore-prefixed entries are the overseer's own staging area, not
  * projects — `/workspace/_overseer/` holds config import/export (webui design
@@ -36,10 +66,17 @@ export interface WorkspaceScan {
  *
  * Non-git folders are returned separately so the overseer can signal them
  * instead of silently ignoring a directory the operator just created.
+ *
+ * `git: false` returns the same shape without `gitBranch`/`dirty`. The monitor
+ * uses it for the change test it runs every few seconds — `rev-parse` plus a
+ * whole-tree `status --porcelain` per project is not something to spend on a
+ * tick that turns out to have changed nothing.
  */
 export async function scanWorkspace(
   root = WORKSPACE_ROOT,
+  opts: { git?: boolean } = {},
 ): Promise<WorkspaceScan> {
+  const withGit = opts.git !== false;
   let entries;
   try {
     entries = await readdir(root, { withFileTypes: true });
@@ -52,11 +89,16 @@ export async function scanWorkspace(
   const projects: DiscoveredProject[] = [];
   const untracked: UntrackedFolder[] = [];
   for (const entry of entries) {
-    // Follow symlinks: a symlinked project is a normal way to expose one repo.
+    // Symlinks are still followed — a symlinked project is a normal way to
+    // expose one repo — but only as far as the workspace. A link the host
+    // wrote pointing at `/app/.overseer` or `claude-home` would otherwise be
+    // listed as an ordinary project, which is exactly the reachability the
+    // rest of the design says these volumes do not have.
     if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;
     if (!isProjectCandidate(entry.name)) continue;
 
     const dir = path.join(root, entry.name);
+    if (!(await isInsideWorkspace(dir, root))) continue;
     try {
       if (!(await stat(dir)).isDirectory()) continue;
     } catch {
@@ -73,7 +115,7 @@ export async function scanWorkspace(
     projects.push({
       name: entry.name,
       path: dir,
-      ...(await readGitState(dir)),
+      ...(withGit ? await readGitState(dir) : {}),
     });
   }
 
@@ -89,6 +131,10 @@ export async function scanWorkspace(
 export async function describeProject(
   dir: string,
 ): Promise<DiscoveredProject | undefined> {
+  // Same containment gate as the scan: this one is reached with a
+  // server-computed path today, but a project is a project by the same rule
+  // however it was named.
+  if (!(await isInsideWorkspace(dir))) return undefined;
   try {
     if (!(await stat(dir)).isDirectory()) return undefined;
     await stat(path.join(dir, ".git"));
