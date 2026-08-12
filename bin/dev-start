@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Start the dev stack against real state — no design fixtures. This is what a
 # fresh instance actually looks like: headline-only until the overseer's
-# wizard discovers something (see docs/overseer.md).
+# wizard discovers something (see docs/overseer-behavior.md).
 #
 #   ./bin/dev-start           start (rebuilds images if the Dockerfile changed)
 #   ./bin/dev-start --build   force an image rebuild

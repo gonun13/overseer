@@ -11,10 +11,9 @@ fi
 cat >&2 <<'EOF'
 overseer: refusing to run outside the container.
 
-  This project never runs on the host, dev included. The server spawns coding
-  agents with filesystem and network access; the sandbox is the whole point of
-  the design (docs/claude-code-webui-design.md §6), and a host run puts your
-  real ~/.claude and home directory inside the blast radius.
+  This project never runs on the host, dev included. Overseer and the agents it
+  spawns live inside Docker (docs/architecture-design.md §6): only ./workspace
+  is shared with the host. Starting Node/npm here skips the container entirely.
 
   Use instead:
     ./bin/dev-start      start the dev stack (web :5173, server :3001)
