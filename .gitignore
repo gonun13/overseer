@@ -7,9 +7,16 @@ build/
 .env.*
 !.env.example
 
-# host-shared agent workspace — never commit user projects
+# Host-shared mount — one independent git repo per project directory.
+# Overseer tracks only the empty mount point; scaffolded projects (e.g.
+# overseer-personality) are created with their own `git init` at runtime.
 /workspace/*
 !/workspace/.gitkeep
 
-# container-owned auth volume never lands here, but guard anyway
+# Playwright — ephemeral run output.
+packages/e2e/playwright-report/
+packages/e2e/test-results/
+
+# Container-owned state that may appear at repo root during local dev.
+.overseer/
 .claude/
