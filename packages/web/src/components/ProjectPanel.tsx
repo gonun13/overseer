@@ -52,8 +52,8 @@ export function ProjectPanel({
             <StatusLight activity={project.activity} />
             <span className="project-row-name">{project.name}</span>
             <span className="project-row-branch">
-              {project.branch}
-              {project.dirty ? " ●" : ""}
+              {project.branch ?? "branch unknown"}
+              {project.dirty === true ? " ●" : ""}
             </span>
             {project.note && (
               <span className="project-row-note">{project.note}</span>

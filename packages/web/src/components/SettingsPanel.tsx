@@ -17,6 +17,7 @@ export function SettingsPanel({
   onClose,
   onToggleTheme,
   onOpenCapabilities,
+  onStartLogin,
 }: {
   open: boolean;
   theme: "machine" | "samaritan";
@@ -28,10 +29,12 @@ export function SettingsPanel({
     spend: string;
   };
   /** The container's mounts, which only the server knows; empty until it says. */
-  workspace: { root: string; staging: string };
+  workspace: { root: string };
   onClose: () => void;
   onToggleTheme: () => void;
   onOpenCapabilities: () => void;
+  /** Close settings and open the adapters picker to sign in. */
+  onStartLogin: () => void;
 }) {
   // The panel overlays the right-hand widgets, so it must not be left open by accident.
   useEffect(() => {
@@ -80,10 +83,12 @@ export function SettingsPanel({
           }
         />
         <div className="btn-row">
-          <button className="w-btn">
+          <button
+            className="w-btn"
+            onClick={adapter.authenticated ? undefined : onStartLogin}
+          >
             {adapter.authenticated ? "sign out" : "start login"}
           </button>
-          <button className="w-btn">use api key</button>
         </div>
 
         <WTitle>runtime</WTitle>
@@ -103,18 +108,10 @@ export function SettingsPanel({
 
         <WTitle>workspace</WTitle>
         {workspace.root ? (
-          <>
-            <WInline label="root" value={workspace.root} />
-            <WInline label="staging" value={workspace.staging} />
-          </>
+          <WInline label="root" value={workspace.root} />
         ) : (
           <div className="w-empty">the server has not reported its mounts</div>
         )}
-        <div className="btn-row">
-          <button className="w-btn">rescan projects</button>
-          <button className="w-btn">import</button>
-          <button className="w-btn">doctor</button>
-        </div>
 
         <WTitle>capabilities</WTitle>
         <p className="panel-note">

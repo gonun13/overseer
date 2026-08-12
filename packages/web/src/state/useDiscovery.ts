@@ -262,6 +262,9 @@ export function useDiscovery(): DiscoveryController {
           projects: message.projects,
           untrackedFolders: message.untrackedFolders,
           activeProjectPath: message.activeProjectPath,
+          personality: message.personality,
+          rejected: message.rejected,
+          personalityMissing: message.personalityMissing,
         });
         return;
       }
@@ -346,7 +349,8 @@ export function useDiscovery(): DiscoveryController {
   }, [phase, welcomeBeat]);
 
   // Welcome already required a live socket, so discovery always starts with
-  // one. Re-check readyState in case the connection dropped between phases.
+  // one — and only after name, tone and the greet presentation have finished.
+  // Re-check readyState in case the connection dropped between phases.
   useEffect(() => {
     if (phase !== "discovery" || !connected) return;
     const ws = socket.current;

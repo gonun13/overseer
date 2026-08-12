@@ -102,7 +102,6 @@ export default function App() {
   const workspace = useMemo(
     () => ({
       root: wizard.workspaceRoot ?? "",
-      staging: wizard.workspaceRoot ? `${wizard.workspaceRoot}/_overseer/import` : "",
     }),
     [wizard.workspaceRoot],
   );
@@ -142,6 +141,9 @@ export default function App() {
         busy,
         rejected: wizard.rejected,
         untrackedFolders: wizard.untrackedFolders,
+        personalityMissing: wizard.personalityMissing,
+        personalityRescued: wizard.personalityRescued,
+        personalityRescueHeadline: wizard.personalityRescueHeadline,
       }),
     [
       projects,
@@ -150,6 +152,9 @@ export default function App() {
       busy,
       wizard.rejected,
       wizard.untrackedFolders,
+      wizard.personalityMissing,
+      wizard.personalityRescued,
+      wizard.personalityRescueHeadline,
     ],
   );
 
@@ -193,14 +198,22 @@ export default function App() {
   // The operations window is the one window the machine summons (§3).
   // Discovery: keyed on the phase so dismissing mid-pass does not bring it
   // back for that same run. Workers: each `overseer.step` is a new run and
-  // re-summons — the operator is owed a view of what just changed.
+  // re-summons — but never during boot/welcome; name, tone and the opening
+  // presentation finish before anything else claims the field.
   useEffect(() => {
     if (wizard.phase === "discovery" && wizard.connected) open("overseer");
   }, [wizard.phase, wizard.connected, open]);
 
   useEffect(() => {
+    if (
+      wizard.phase !== "discovery" &&
+      wizard.phase !== "settling" &&
+      wizard.phase !== "ready"
+    ) {
+      return;
+    }
     if (wizard.operationTick > 0) open("overseer");
-  }, [wizard.operationTick, open]);
+  }, [wizard.operationTick, wizard.phase, open]);
 
   /** Accordion: opening one section closes the others. */
   const toggleControl = useCallback((key: PromptOptionKey) => {
@@ -227,6 +240,10 @@ export default function App() {
           return;
         case "prompt":
           setPromptOpen(true);
+          return;
+        case "restart":
+          // Full boot so discovery can recreate overseer-personality.
+          location.reload();
           return;
       }
     },
@@ -506,6 +523,10 @@ export default function App() {
         onOpenCapabilities={() => {
           open("capabilities");
           setSettingsOpen(false);
+        }}
+        onStartLogin={() => {
+          setSettingsOpen(false);
+          open("adapters");
         }}
       />
     </div>

@@ -30,10 +30,20 @@ export function ActiveProject({
         <StatusLight activity={project.activity} size={9} />
         {project.name}
       </span>
-      <span className="ap-meta">
-        {project.branch} · {project.dirty ? "uncommitted changes" : "clean"} ·{" "}
-        {project.path}
-      </span>
+      <span className="ap-meta">{gitMeta(project)}</span>
     </button>
   );
+}
+
+/** Branch and dirtiness only — the workspace root is implied. Undefined means
+ * git could not answer; never collapse that to "clean" or invent a branch. */
+export function gitMeta(project: Project): string {
+  const branch = project.branch ?? "branch unknown";
+  const status =
+    project.dirty === true
+      ? "uncommitted changes"
+      : project.dirty === false
+        ? "clean"
+        : "status unknown";
+  return `${branch} · ${status}`;
 }

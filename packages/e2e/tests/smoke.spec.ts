@@ -71,6 +71,23 @@ test("boots to a settled state", async ({ page }) => {
   await expect(page.getByText(/scanning workspace/i)).toBeVisible();
 });
 
+test("shows the active project without its workspace path", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await passWizardOpening(page);
+  await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
+
+  const active = page.getByRole("button", { name: /active project/i });
+  await expect(active).toBeVisible();
+  // Meta is branch · dirty only — the workspace root is implied, and an
+  // absolute path here would mean the readout started leaking mount facts.
+  await expect(active).not.toContainText("/workspace");
+  await expect(
+    active.getByText(/· (clean|uncommitted changes|status unknown)/),
+  ).toBeVisible();
+});
+
 test("opens the adapters picker from the widget", async ({ page }) => {
   await page.goto("/");
   await passWizardOpening(page);

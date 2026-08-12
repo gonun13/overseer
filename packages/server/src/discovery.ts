@@ -9,8 +9,8 @@ import type {
 } from "@overseer/protocol";
 import {
   PERSONALITY_PROJECT,
+  personalityConfigExists,
   personalityDir,
-  personalityExists,
   readPersonality,
   scaffoldPersonality,
   type PersonalityResult,
@@ -123,18 +123,30 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
     };
   });
 
-  // 2. Personality project: scaffold if absent, always read. Unlock the
-  // project panel with at least overseer-personality once it exists.
-  const existed = await personalityExists();
+  // 2. Personality project: scaffold if `personality.json` is absent, always
+  // read. Unlock the project panel with at least overseer-personality once it
+  // exists. A returning instance that finds the config gone is a deletion, not
+  // a first boot — complain and restore defaults rather than pretending this
+  // is ordinary.
+  const existed = await personalityConfigExists();
+  let personalityRescued = false;
   if (!existed) {
-    await step("scaffold", "creating overseer-personality", async () => {
+    const restoring = returning;
+    const label = restoring
+      ? "restoring overseer-personality"
+      : "creating overseer-personality";
+    await step("scaffold", label, async () => {
       const created = await scaffoldPersonality();
+      if (restoring && created) personalityRescued = true;
       return {
         value: created,
-        outcome: created ? "ok" : "failed",
-        detail: created
-          ? personalityDir()
-          : "could not scaffold overseer-personality",
+        outcome: !created ? "failed" : restoring ? "blocked" : "ok",
+        detail: !created
+          ? "could not scaffold overseer-personality"
+          : restoring
+            ? "was deleted · recreated with defaults"
+            : personalityDir(),
+        ...(restoring && created ? { personalityRescued: true as const } : {}),
       };
     });
   }
@@ -329,6 +341,7 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
     ...(personality.rejected.length > 0
       ? { rejected: personality.rejected }
       : {}),
+    ...(personalityRescued ? { personalityRescued: true as const } : {}),
   });
 
   await Promise.all([

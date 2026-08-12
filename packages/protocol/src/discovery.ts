@@ -77,6 +77,9 @@ export interface DiscoveryStepUpdate {
   serverTime?: string;
   personality?: AppliedPersonality;
   rejected?: RejectedCustomization[];
+  /** True when this pass had to recreate `overseer-personality` after finding
+   * it gone on a returning instance. */
+  personalityRescued?: true;
   reveal?: FurnitureReveal[];
 }
 
@@ -111,6 +114,8 @@ export type DiscoveryEvent =
       personality?: AppliedPersonality;
       /** Non-empty when the operator wrote something that was refused. */
       rejected?: RejectedCustomization[];
+      /** True when this pass recreated `overseer-personality` after deletion. */
+      personalityRescued?: true;
     };
 
 /** The customizable surface, post-validation. Everything outside this shape was

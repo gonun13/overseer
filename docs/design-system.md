@@ -284,9 +284,10 @@ its corner.
    accent bar in `--accent-fill`, since the list is a surface. **Selecting a project never closes the panel —
    only the chevron in its header does.** The list scrolls vertically at 44vh. Future selectable scopes
    (sessions, worktrees) belong in this same panel, not in a new corner.
-2. **ActiveProject** (top-centre) — kicker, light, name, branch · dirty state · path. Every session, approval
-   and tool call runs against it, so it is stated plainly and never hidden behind a menu. Unset, the name
-   reads `NONE` in `--accent`.
+2. **ActiveProject** (top-centre) — kicker, light, name, branch · dirty state. Every session, approval
+   and tool call runs against it, so it is stated plainly and never hidden behind a menu. The workspace
+   path is implied (projects live under the workspace root) and is not shown. Unset, the name reads
+   `NONE` in `--accent`. When git cannot answer, the meta line says so rather than inventing `clean`.
 3. **Clock** (top-right) — `HH:MM:SS` tabular plus the date, and the gear that opens settings. The gear
    is unboxed and drawn larger than the other glyphs: the clock beside it has no frame either, so a
    border would make the gear the only boxed thing in that corner. A glyph big enough to hit does not

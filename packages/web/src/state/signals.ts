@@ -9,7 +9,9 @@ export type Target =
   | { kind: "window"; window: WindowKind; payload?: string }
   | { kind: "settings" }
   | { kind: "selector" }
-  | { kind: "prompt" };
+  | { kind: "prompt" }
+  /** Full boot — used when `overseer-personality` must be restored by discovery. */
+  | { kind: "restart" };
 
 export interface Signal {
   id: string;
@@ -19,6 +21,11 @@ export interface Signal {
   /** Sentence-case line: what happened and what it means. */
   text: string;
   target: Target;
+  /** Optional system-headline override. When this signal is on top,
+   * `headlineFor` uses it instead of `ACTIVITY_HEADLINE[activity]` — so a
+   * rescued personality can read `DANGER` / `BRAINDEAD` / `WHY???` without
+   * inventing a sixth activity. */
+  headline?: string;
 }
 
 export interface WorldState {
@@ -32,6 +39,12 @@ export interface WorldState {
   /** Customizations in `overseer-personality` the overseer refused to apply.
    * Optional because a world that has not run discovery has not been told. */
   rejected?: RejectedCustomization[];
+  /** True when `overseer-personality` is missing and the operator must restart. */
+  personalityMissing?: boolean;
+  /** True when discovery restored it from defaults after a deletion. */
+  personalityRescued?: boolean;
+  /** Stable pick for the alarm headline — set once when the complaint lands. */
+  personalityRescueHeadline?: string;
   /** Workspace folders that are not git projects. */
   untrackedFolders?: UntrackedFolder[];
 }
@@ -55,6 +68,28 @@ export function deriveSignals(world: WorldState): Signal[] {
       kicker: "personality",
       text: `"${rejection.field}" in overseer-personality was not applied: ${rejection.reason}.`,
       target: { kind: "selector" },
+    });
+  }
+
+  // Required infrastructure. Live deletion asks for a restart; discovery on
+  // the next boot recreates defaults. Never a silent live repair.
+  if (world.personalityMissing) {
+    signals.push({
+      id: "personality-missing",
+      activity: "attention",
+      kicker: "personality",
+      text: "personality was deleted · restart to restore.",
+      target: { kind: "restart" },
+      headline: world.personalityRescueHeadline ?? "danger",
+    });
+  } else if (world.personalityRescued) {
+    signals.push({
+      id: "personality-rescued",
+      activity: "attention",
+      kicker: "personality",
+      text: "overseer-personality was deleted · restored with defaults.",
+      target: { kind: "selector" },
+      headline: world.personalityRescueHeadline ?? "danger",
     });
   }
 
@@ -165,12 +200,17 @@ export function deriveSignals(world: WorldState): Signal[] {
 }
 
 /** The single word above the signal list. Driven by the most urgent signal, so
- * the headline and the list can never disagree. */
+ * the headline and the list can never disagree. A signal may carry its own
+ * headline word (personality rescue); otherwise the activity vocabulary. */
 export function headlineFor(
   signals: Signal[],
   busy: boolean,
 ): { text: string; activity: Activity } {
-  const top = signals[0]?.activity ?? "idle";
+  const top = signals[0];
   if (busy) return { text: ACTIVITY_HEADLINE.working, activity: "working" };
-  return { text: ACTIVITY_HEADLINE[top], activity: top };
+  const activity = top?.activity ?? "idle";
+  return {
+    text: top?.headline ?? ACTIVITY_HEADLINE[activity],
+    activity,
+  };
 }

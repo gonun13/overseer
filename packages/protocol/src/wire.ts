@@ -3,6 +3,7 @@ import type {
   DiscoveredProject,
   DiscoveryEvent,
   DiscoveryOutcome,
+  RejectedCustomization,
   UntrackedFolder,
 } from "./discovery.js";
 
@@ -93,6 +94,13 @@ export interface WorkspaceProjectsMessage {
   /** Present when the previous active project vanished and the server picked
    * a replacement (or cleared). Omitted when the active path is unchanged. */
   activeProjectPath?: string;
+  /** Accepted personality after a change. Empty object means defaults / gone. */
+  personality?: AppliedPersonality;
+  /** Refusals from a live re-read of `personality.json`. */
+  rejected?: RejectedCustomization[];
+  /** True when personality was deleted while running. The client
+   * must ask for a restart — the monitor does not recreate it live. */
+  personalityMissing?: true;
 }
 
 /** One line for the operations window from a supervisor worker (not discovery).

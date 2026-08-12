@@ -68,9 +68,8 @@ export interface WorkspaceScan {
  * instead of silently ignoring a directory the operator just created.
  *
  * `git: false` returns the same shape without `gitBranch`/`dirty`. The monitor
- * uses it for the change test it runs every few seconds — `rev-parse` plus a
- * whole-tree `status --porcelain` per project is not something to spend on a
- * tick that turns out to have changed nothing.
+ * uses it for the cheap path-membership test; live branch/dirtiness is filled
+ * in separately with `withGitMeta` / a full scan when something actually moved.
  */
 export async function scanWorkspace(
   root = WORKSPACE_ROOT,
@@ -148,25 +147,70 @@ export async function describeProject(
   };
 }
 
-/** Branch and dirtiness, or neither. Both stay undefined on failure rather
- * than defaulting — "clean" and "not determined" are different answers, and
- * only one of them is safe to show next to a branch name. */
-async function readGitState(
+/**
+ * Branch and dirtiness from the instance `git` CLI. Each probe is independent:
+ * a failed `status` must not erase a good branch, and neither defaults on
+ * failure — "clean" and "not determined" are different answers.
+ *
+ * Detached HEAD reports as `detached` (`git branch --show-current` is empty
+ * there; `rev-parse --abbrev-ref` would only say `HEAD`).
+ */
+export async function readGitState(
   dir: string,
 ): Promise<{ gitBranch?: string; dirty?: boolean }> {
+  const [gitBranch, dirty] = await Promise.all([
+    readGitBranch(dir),
+    readGitDirty(dir),
+  ]);
+  return {
+    ...(gitBranch !== undefined ? { gitBranch } : {}),
+    ...(dirty !== undefined ? { dirty } : {}),
+  };
+}
+
+/** Re-read branch/dirtiness for an existing list without another readdir. */
+export async function withGitMeta(
+  projects: DiscoveredProject[],
+): Promise<DiscoveredProject[]> {
+  return Promise.all(
+    projects.map(async (project) => ({
+      name: project.name,
+      path: project.path,
+      ...(await readGitState(project.path)),
+    })),
+  );
+}
+
+async function readGitBranch(dir: string): Promise<string | undefined> {
   try {
-    const [branch, status] = await Promise.all([
-      run("git", ["rev-parse", "--abbrev-ref", "HEAD"], {
-        cwd: dir,
-        timeout: 5_000,
-      }),
-      run("git", ["status", "--porcelain"], { cwd: dir, timeout: 5_000 }),
-    ]);
-    return {
-      gitBranch: branch.stdout.trim() || undefined,
-      dirty: status.stdout.trim().length > 0,
-    };
-  } catch {
-    return {};
+    const { stdout } = await run("git", ["branch", "--show-current"], {
+      cwd: dir,
+      timeout: 5_000,
+    });
+    const name = stdout.trim();
+    // Empty stdout with a zero exit is detached HEAD, not a missing answer.
+    return name.length > 0 ? name : "detached";
+  } catch (error) {
+    console.error(
+      `overseer: git branch failed in ${dir}`,
+      error instanceof Error ? error.message : error,
+    );
+    return undefined;
+  }
+}
+
+async function readGitDirty(dir: string): Promise<boolean | undefined> {
+  try {
+    const { stdout } = await run("git", ["status", "--porcelain"], {
+      cwd: dir,
+      timeout: 5_000,
+    });
+    return stdout.trim().length > 0;
+  } catch (error) {
+    console.error(
+      `overseer: git status failed in ${dir}`,
+      error instanceof Error ? error.message : error,
+    );
+    return undefined;
   }
 }
