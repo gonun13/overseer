@@ -149,7 +149,7 @@ operations window shows.
 | Phase        | Headline           | What happens                                                                   |
 | ------------ | ------------------ | ------------------------------------------------------------------------------ |
 | `boot`       | `STARTING`              | Loading bar. The socket is connecting; nothing is known yet.                    |
-| `welcome`    | first turn: `I AM THE OVERSEER` → name → tone → greet | Connected. Asks for name, then tone, whenever those are unset in `overseer-personality`. Copy comes from `packages/web/src/lang` and varies with tone. A return visit with both set greets; missing name or tone re-asks that beat. |
+| `welcome`    | first turn: `I AM THE OVERSEER` → name → tone → greet | Connected. Asks for name, then tone, whenever those are unset in `overseer-personality`. Copy comes from `packages/web/src/lang` and varies with tone. A return visit with both set greets; missing name or tone re-asks that beat. Discovery and the operations window wait until this phase finishes. |
 | `discovery`  | `LOOKING AROUND`        | Operations window opens; server runs the discovery pass and streams steps.      |
 | `settling`   | derived            | Discovery complete. Furniture mounts per resolved capability; the headline hands back to `headlineFor`. |
 | `ready`      | derived            | The wizard is done and stops driving anything. Normal operation.                |
@@ -253,10 +253,16 @@ neither can any workspace project.
 ### 6.3 External memory — `overseer-personality`
 
 A real git project at `/workspace/overseer-personality`, auto-scaffolded on first discovery if absent and never
-clobbered if present. Because it is an ordinary project under the workspace mount, it is discovered by the
-normal scanner, appears in the project panel like anything else, and is editable the three ways any workspace
-project already is — on the host directly, through a session opened against it, or via the async side-task
-editing pattern used for skills and subagents (webui design doc §1.3). No fourth editing path.
+clobbered if present. The overseer **tracks personality**: live edits to the config file are re-read and
+applied (or refused) without a reboot; if it is deleted while the process is up, it **does not recreate it
+live** — it emits an operations-window step (`personality deleted`, outcome blocked), an action-register entry, a
+lasting signal asking the operator to restart, and a headline from the alarm set (`DANGER` / `BRAINDEAD` /
+`WHY???`). Clicking the signal reloads the app; discovery on that boot recreates the config with defaults and
+reports the restore. Silent live repair would hide the damage. Because it is an ordinary project under the
+workspace mount, it is discovered by the normal scanner, appears in the project panel like anything else, and
+is editable the three ways any workspace project already is — on the host directly, through a session opened
+against it, or via the async side-task editing pattern used for skills and subagents (webui design doc §1.3).
+No fourth editing path.
 
 Contents are prose and config, not code: tone preferences, preferred automations, custom triggers — written the
 way a skill is written.

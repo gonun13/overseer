@@ -28,15 +28,32 @@ const run = promisify(execFile);
  */
 
 export const PERSONALITY_PROJECT = "overseer-personality";
+const PERSONALITY_CONFIG = "personality.json";
 
 export function personalityDir(root = WORKSPACE_ROOT): string {
   return path.join(root, PERSONALITY_PROJECT);
+}
+
+export function personalityConfigPath(root = WORKSPACE_ROOT): string {
+  return path.join(personalityDir(root), PERSONALITY_CONFIG);
 }
 
 /** Whether the personality project directory exists (scaffold may still be needed). */
 export async function personalityExists(root = WORKSPACE_ROOT): Promise<boolean> {
   try {
     await access(personalityDir(root));
+    return true;
+  } catch {
+    return false;
+  }
+}
+
+/** Whether `personality.json` is present — the file the overseer actually tracks. */
+export async function personalityConfigExists(
+  root = WORKSPACE_ROOT,
+): Promise<boolean> {
+  try {
+    await access(personalityConfigPath(root));
     return true;
   } catch {
     return false;
@@ -104,7 +121,7 @@ export async function peekPersonality(
 ): Promise<AppliedPersonality> {
   let raw: string;
   try {
-    raw = await readFile(path.join(personalityDir(root), "personality.json"), "utf8");
+    raw = await readFile(personalityConfigPath(root), "utf8");
   } catch {
     return {};
   }
@@ -176,7 +193,7 @@ async function patchPersonality(
 ): Promise<{ ok: true } | { ok: false; reason: string }> {
   await ensureScaffold(root);
 
-  const file = path.join(personalityDir(root), "personality.json");
+  const file = personalityConfigPath(root);
   let body: Record<string, unknown>;
   try {
     const raw = await readFile(file, "utf8");
@@ -237,7 +254,7 @@ export async function readPersonality(
 
   let raw: string;
   try {
-    raw = await readFile(path.join(personalityDir(root), "personality.json"), "utf8");
+    raw = await readFile(personalityConfigPath(root), "utf8");
   } catch {
     return { applied: {}, rejected: [], scaffolded };
   }
@@ -250,7 +267,7 @@ export async function readPersonality(
       applied: {},
       rejected: [
         {
-          field: "personality.json",
+          field: "personality",
           reason: `not valid JSON: ${error instanceof Error ? error.message : "parse failed"}`,
         },
       ],
@@ -263,7 +280,7 @@ export async function readPersonality(
       applied: {},
       rejected: [
         {
-          field: "personality.json",
+          field: "personality",
           reason: "expected a JSON object at the top level",
         },
       ],
@@ -372,50 +389,85 @@ function validatePersonalityObject(parsed: Record<string, unknown>): {
 }
 
 /**
- * Create the project if it is absent. Idempotent by construction: the presence
- * of the directory is the whole test, so an existing one — however the operator
- * has since changed it — is never touched, let alone clobbered.
+ * Create the project / `personality.json` if absent. Idempotent: an existing
+ * config is never clobbered. If the directory is there but the file is gone,
+ * only the defaults file is rewritten (and committed when git is present).
+ * Live deletion is handled by the workspace monitor (complain + ask for
+ * restart); discovery on the next boot calls this again to restore.
  */
 async function ensureScaffold(root: string): Promise<boolean> {
   const dir = personalityDir(root);
-  try {
-    await access(dir);
-    return false;
-  } catch {
-    // Absent; fall through and create it.
-  }
+  const config = personalityConfigPath(root);
+
+  const dirPresent = await access(dir).then(
+    () => true,
+    () => false,
+  );
+  const configPresent = await access(config).then(
+    () => true,
+    () => false,
+  );
+  if (dirPresent && configPresent) return false;
 
   try {
-    await mkdir(dir, { recursive: true });
-    await writeFile(path.join(dir, "personality.json"), SCAFFOLD_CONFIG, "utf8");
-    await writeFile(path.join(dir, "README.md"), SCAFFOLD_README, "utf8");
+    if (!dirPresent) {
+      await mkdir(dir, { recursive: true });
+      await writeFile(config, SCAFFOLD_CONFIG, "utf8");
+      await writeFile(path.join(dir, "README.md"), SCAFFOLD_README, "utf8");
 
-    // A real git project, so it is discovered by the ordinary scanner and shows
-    // up in the project panel with no special-casing anywhere in the UI.
-    // -b main: don't inherit whatever init.defaultBranch happens to be, and
-    // don't emit git's "using master" advice into the scaffold path.
-    await run("git", ["init", "-q", "-b", "main"], { cwd: dir, timeout: 10_000 });
-    await run("git", ["add", "-A"], { cwd: dir, timeout: 10_000 });
-    await run(
-      "git",
-      [
-        "-c",
-        "user.email=overseer@localhost",
-        "-c",
-        "user.name=overseer",
-        "commit",
-        "-q",
-        "-m",
-        "scaffold overseer-personality",
-      ],
-      { cwd: dir, timeout: 10_000 },
-    );
+      // A real git project, so it is discovered by the ordinary scanner and shows
+      // up in the project panel with no special-casing anywhere in the UI.
+      // -b main: don't inherit whatever init.defaultBranch happens to be, and
+      // don't emit git's "using master" advice into the scaffold path.
+      await run("git", ["init", "-q", "-b", "main"], { cwd: dir, timeout: 10_000 });
+      await run("git", ["add", "-A"], { cwd: dir, timeout: 10_000 });
+      await run(
+        "git",
+        [
+          "-c",
+          "user.email=overseer@localhost",
+          "-c",
+          "user.name=overseer",
+          "commit",
+          "-q",
+          "-m",
+          "scaffold overseer-personality",
+        ],
+        { cwd: dir, timeout: 10_000 },
+      );
+    } else {
+      // Directory survived; only the tracked config was deleted.
+      await writeFile(config, SCAFFOLD_CONFIG, "utf8");
+      try {
+        await access(path.join(dir, ".git"));
+        await run("git", ["add", PERSONALITY_CONFIG], {
+          cwd: dir,
+          timeout: 10_000,
+        });
+        await run(
+          "git",
+          [
+            "-c",
+            "user.email=overseer@localhost",
+            "-c",
+            "user.name=overseer",
+            "commit",
+            "-q",
+            "-m",
+            "restore personality defaults",
+          ],
+          { cwd: dir, timeout: 10_000 },
+        );
+      } catch {
+        // Not a git repo (or commit failed) — the file on disk is what matters.
+      }
+    }
 
     await recordAction({
       actor: "overseer",
       action: "personality:scaffold",
       outcome: "ok",
-      detail: dir,
+      detail: config,
     });
     return true;
   } catch (error) {

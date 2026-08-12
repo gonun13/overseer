@@ -84,6 +84,14 @@ export interface WizardState {
   returning?: boolean;
   personality: AppliedPersonality;
   rejected: RejectedCustomization[];
+  /** True while `overseer-personality` is missing on disk and the operator
+   * must restart for discovery to restore defaults. */
+  personalityMissing: boolean;
+  /** True after a returning discovery recreated it from defaults. */
+  personalityRescued: boolean;
+  /** One of the alarm headline words, picked once when the complaint lands
+   * so re-renders do not shuffle `DANGER` → `WHY???`. */
+  personalityRescueHeadline?: string;
   /** Set when the socket or the pass itself failed. The wizard reports it
    * rather than hanging on a step that will never resolve. */
   error?: string;
@@ -114,10 +122,40 @@ export const INITIAL_WIZARD: WizardState = {
   revealed: { ...NO_REVEAL },
   personality: {},
   rejected: [],
+  personalityMissing: false,
+  personalityRescued: false,
   connected: false,
   bootMinElapsed: false,
   operationTick: 0,
 };
+
+/**
+ * Headline words when `overseer-personality` is gone or had to be restored.
+ * Deliberately not the activity vocabulary — deleting the brain is not merely
+ * `blocked`. CSS uppercases them; `why???` keeps its punctuation.
+ */
+export const PERSONALITY_RESCUE_HEADLINES = [
+  "danger",
+  "braindead",
+  "why???",
+] as const;
+
+export function pickPersonalityRescueHeadline(
+  random: () => number = Math.random,
+): string {
+  const i = Math.floor(random() * PERSONALITY_RESCUE_HEADLINES.length);
+  return PERSONALITY_RESCUE_HEADLINES[i] ?? PERSONALITY_RESCUE_HEADLINES[0];
+}
+
+/** First time the complaint lands, pick a headline and keep it stable. */
+function personalityAlarmHeadline(
+  state: WizardState,
+): Pick<WizardState, "personalityRescueHeadline"> {
+  return {
+    personalityRescueHeadline:
+      state.personalityRescueHeadline ?? pickPersonalityRescueHeadline(),
+  };
+}
 
 /** Discovery outcomes are the same five activities in a different register —
  * no second vocabulary (docs/overseer.md §3). */
@@ -159,6 +197,9 @@ export type WizardAction =
       projects: DiscoveredProject[];
       untrackedFolders: UntrackedFolder[];
       activeProjectPath?: string;
+      personality?: AppliedPersonality;
+      rejected?: RejectedCustomization[];
+      personalityMissing?: true;
     }
   /** Supervisor worker line for the operations window. */
   | {
@@ -250,8 +291,9 @@ export function wizardReducer(
 
     case "welcome.done":
       // Never leave welcome while still mid-intro/ask — the greet is the exit.
+      // Name and tone are both owed before discovery may run.
       if (state.phase !== "welcome" || state.welcomeBeat !== "greet") return state;
-      if (!state.personality.name) return state;
+      if (!state.personality.name || !state.personality.tone) return state;
       return { ...state, phase: "discovery", welcomeBeat: undefined };
 
     case "project.selected":
@@ -273,10 +315,25 @@ export function wizardReducer(
         projects,
         untrackedFolders,
         activeProjectPath: preferred,
+        ...(action.personality !== undefined
+          ? { personality: action.personality }
+          : {}),
+        ...(action.rejected !== undefined ? { rejected: action.rejected } : {}),
+        ...(action.personalityMissing
+          ? {
+              personalityMissing: true,
+              ...personalityAlarmHeadline(state),
+            }
+          : action.personality !== undefined
+            ? { personalityMissing: false }
+            : {}),
       };
     }
 
     case "overseer.step":
+      // Name / tone / intro / greet own the screen. Worker lines must not fill
+      // the operations list (or summon the window) until setup has handed off.
+      if (state.phase === "boot" || state.phase === "welcome") return state;
       return {
         ...state,
         operationTick: state.operationTick + 1,
@@ -319,6 +376,15 @@ function applyReveal(
 }
 
 function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
+  // Discovery must not start — or stream steps — until welcome has finished.
+  // A stray frame would open the operations window over the name/tone ask.
+  if (
+    (state.phase === "boot" || state.phase === "welcome") &&
+    event.type.startsWith("discovery.")
+  ) {
+    return state;
+  }
+
   switch (event.type) {
     case "discovery.start":
       return {
@@ -378,6 +444,13 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
           ? { personality: event.personality }
           : {}),
         ...(event.rejected !== undefined ? { rejected: event.rejected } : {}),
+        ...(event.personalityRescued
+          ? {
+              personalityRescued: true,
+              personalityMissing: false,
+              ...personalityAlarmHeadline(state),
+            }
+          : {}),
         revealed: applyReveal(state.revealed, event.reveal),
       };
     }
@@ -396,6 +469,18 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
         returning: event.returning,
         personality: event.personality ?? state.personality,
         rejected: event.rejected ?? [],
+        // Restart path: discovery restored defaults. Clear the live "missing"
+        // ask; keep or set the rescued confirmation.
+        personalityMissing: false,
+        ...(event.personalityRescued
+          ? {
+              personalityRescued: true,
+              ...personalityAlarmHeadline(state),
+            }
+          : {
+              personalityRescued: false,
+              personalityRescueHeadline: undefined,
+            }),
         // Complete is the backstop: anything not yet revealed becomes known.
         revealed: {
           clock: true,

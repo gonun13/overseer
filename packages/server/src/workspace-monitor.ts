@@ -1,4 +1,5 @@
 import { watch, type FSWatcher } from "node:fs";
+import { readFile } from "node:fs/promises";
 import { randomUUID } from "node:crypto";
 import path from "node:path";
 import type {
@@ -11,8 +12,18 @@ import {
   recordAction,
   syncSnapshotProjects,
 } from "./memory/internal.js";
-import { PERSONALITY_PROJECT } from "./memory/personality.js";
-import { WORKSPACE_ROOT, scanWorkspace } from "./workspace.js";
+import {
+  PERSONALITY_PROJECT,
+  personalityConfigExists,
+  personalityConfigPath,
+  personalityDir,
+  readPersonality,
+} from "./memory/personality.js";
+import {
+  WORKSPACE_ROOT,
+  scanWorkspace,
+  withGitMeta,
+} from "./workspace.js";
 
 /**
  * Supervisor worker: keep the project list honest while the process is up.
@@ -21,10 +32,16 @@ import { WORKSPACE_ROOT, scanWorkspace } from "./workspace.js";
  * (and "became a git project" / "stopped being one") under the workspace root
  * update every connected client without replaying the wizard. Diffs also land
  * as `overseer.step` lines so the operations window reports what changed.
+ * `personality.json` is tracked directly: edits are re-read live; deletion
+ * complains and asks for a restart (discovery restores defaults on the next
+ * boot — no silent live repair).
  *
  * Root-only `fs.watch` plus a slow poll: bind mounts (Docker Desktop) miss
  * events, and a clone creates the directory before `.git` exists, so a single
- * event is not enough — a debounced full `scanWorkspace` is the source of truth.
+ * event is not enough — a debounced full `scanWorkspace` is the source of truth
+ * for membership. A dedicated watch on `personality.json` covers nested edits
+ * the root watcher cannot see. Git branch/dirtiness is refreshed on every poll
+ * via the instance `git` CLI even when membership is unchanged.
  */
 
 const DEBOUNCE_MS = 400;
@@ -45,7 +62,24 @@ function scanKey(
   ].join("\0");
 }
 
-/** Prefer overseer-personality, else the first listed project. */
+/** Branch and dirtiness only — path membership is `scanKey`'s job. */
+function gitMetaKey(projects: DiscoveredProject[]): string {
+  return projects
+    .map(
+      (p) =>
+        `${p.path}\t${p.gitBranch ?? "?"}\t${p.dirty === undefined ? "?" : p.dirty ? "1" : "0"}`,
+    )
+    .join("\0");
+}
+
+/** Content fingerprint for live `personality.json` tracking. */
+async function personalityFingerprint(): Promise<string | null> {
+  try {
+    return await readFile(personalityConfigPath(), "utf8");
+  } catch {
+    return null;
+  }
+}
 function fallbackActive(
   projects: DiscoveredProject[],
 ): string | undefined {
@@ -123,6 +157,40 @@ export function startWorkspaceMonitor(broadcast: Broadcast): () => void {
   let lastKey = "";
   let lastProjects: DiscoveredProject[] = [];
   let lastUntracked: UntrackedFolder[] = [];
+  /** Complain once per absence — every poll must not re-fire the same step. */
+  let personalityMissingAnnounced = false;
+  /** Last seen `personality.json` body; null means missing or not seeded. */
+  let lastPersonalityBody: string | null | undefined;
+  let personalityWatcher: FSWatcher | undefined;
+
+  const attachPersonalityWatcher = () => {
+    try {
+      personalityWatcher?.close();
+      personalityWatcher = undefined;
+      const config = personalityConfigPath();
+      personalityWatcher = watch(config, { persistent: true }, () => {
+        schedule();
+      });
+      personalityWatcher.on("error", () => {
+        // File deleted or mount flapped — retry after a beat.
+        setTimeout(attachPersonalityWatcher, 2_000);
+      });
+    } catch {
+      // Config absent: watch the project dir (or workspace) for its return.
+      try {
+        personalityWatcher?.close();
+        const target = personalityDir();
+        personalityWatcher = watch(target, { persistent: true }, (_e, name) => {
+          if (name === "personality.json" || name == null) schedule();
+        });
+        personalityWatcher.on("error", () => {
+          setTimeout(attachPersonalityWatcher, 2_000);
+        });
+      } catch {
+        setTimeout(attachPersonalityWatcher, 2_000);
+      }
+    }
+  };
 
   const refresh = async () => {
     if (running) return;
@@ -133,12 +201,80 @@ export function startWorkspaceMonitor(broadcast: Broadcast): () => void {
       const snapshot = await readSnapshot();
       if (!snapshot) return;
 
+      // Track personality.json itself — the directory can survive a config
+      // delete. Deletion is reported; the operator restarts; discovery restores.
+      const personalityMissing = !(await personalityConfigExists());
+      const justNoticedMissing =
+        personalityMissing && !personalityMissingAnnounced;
+      if (justNoticedMissing) {
+        personalityMissingAnnounced = true;
+        lastPersonalityBody = null;
+        broadcast({
+          type: "overseer.step",
+          id: randomUUID(),
+          label: "personality deleted",
+          outcome: "blocked",
+          detail: "restart to restore",
+        });
+        await recordAction({
+          actor: "overseer",
+          action: "personality:missing",
+          outcome: "blocked",
+          detail: `${personalityConfigPath()} · deleted · restart to restore`,
+        });
+        attachPersonalityWatcher();
+      } else if (!personalityMissing) {
+        if (personalityMissingAnnounced) {
+          personalityMissingAnnounced = false;
+          attachPersonalityWatcher();
+        }
+      }
+
+      // Live re-read when the config body changes (edits on the host / in a
+      // session). Seed on first sight so discovery's applied fields are not
+      // re-broadcast as a change.
+      if (!personalityMissing) {
+        const body = await personalityFingerprint();
+        if (lastPersonalityBody === undefined) {
+          lastPersonalityBody = body;
+        } else if (body !== lastPersonalityBody) {
+          lastPersonalityBody = body;
+          const result = await readPersonality(WORKSPACE_ROOT, {
+            scaffold: false,
+          });
+          broadcast({
+            type: "overseer.step",
+            id: randomUUID(),
+            label: "reading personality",
+            outcome: result.rejected.length > 0 ? "blocked" : "ok",
+            detail:
+              result.rejected.length > 0
+                ? `${result.rejected.length} customization(s) refused`
+                : Object.keys(result.applied).length > 0
+                  ? `${Object.keys(result.applied).length} customization(s) applied`
+                  : "no customizations set",
+          });
+          await recordAction({
+            actor: "overseer",
+            action: "personality:reread",
+            outcome: result.rejected.length > 0 ? "blocked" : "ok",
+            detail: personalityConfigPath(),
+          });
+          // Projects list unchanged — push personality/rejected only.
+          broadcast({
+            type: "workspace.projects",
+            projects: lastProjects.length > 0 ? lastProjects : snapshot.projects,
+            untrackedFolders: lastUntracked,
+            personality: result.applied,
+            rejected: result.rejected,
+          });
+        }
+      }
+
       // Change test first, on a listing that costs a readdir and a stat per
-      // entry. `scanKey` reflects which paths exist and nothing else, so the
-      // git state a full scan reads — `rev-parse` plus a `status --porcelain`
-      // that walks the whole tree, per project — could never move the key, and
-      // on every unchanged tick it was computed and dropped. Once a second,
-      // forever, on a bind mount, for a result nobody read.
+      // entry. Path membership is cheap; git meta is a separate probe because
+      // `status --porcelain` walks each tree and branch checkouts do not move
+      // the path key.
       const listing = await scanWorkspace(WORKSPACE_ROOT, { git: false });
       const key = scanKey(listing.projects, listing.untracked);
 
@@ -150,7 +286,23 @@ export function startWorkspaceMonitor(broadcast: Broadcast): () => void {
         lastUntracked = [];
         lastKey = scanKey(lastProjects, lastUntracked);
       }
-      if (key === lastKey) return;
+
+      if (key === lastKey && !justNoticedMissing) {
+        if (personalityMissing) return; // Client already has the sticky signal.
+        // Same projects: refresh branch/dirtiness via the instance `git` CLI
+        // and push only when meta moved. No operations lines — a checkout is
+        // not a project appearing or vanishing.
+        const projects = await withGitMeta(lastProjects);
+        if (gitMetaKey(projects) === gitMetaKey(lastProjects)) return;
+        lastProjects = projects;
+        await syncSnapshotProjects(projects);
+        broadcast({
+          type: "workspace.projects",
+          projects,
+          untrackedFolders: lastUntracked,
+        });
+        return;
+      }
 
       // Something moved: now pay for branch and dirtiness, which the panel
       // renders for the list it is about to receive.
@@ -196,7 +348,21 @@ export function startWorkspaceMonitor(broadcast: Broadcast): () => void {
       });
 
       // Operations lines first so the window can open before the panel updates.
-      emitProjectDiff(broadcast, previousProjects, projects);
+      // When the whole personality project vanished, the missing complaint
+      // already covers it — skip a redundant "removing project" line.
+      const personalityPath = personalityDir();
+      const personalityProjectGone = !projects.some(
+        (p) => p.path === personalityPath,
+      );
+      if (personalityMissing && personalityProjectGone) {
+        emitProjectDiff(
+          broadcast,
+          previousProjects.filter((p) => p.path !== personalityPath),
+          projects,
+        );
+      } else {
+        emitProjectDiff(broadcast, previousProjects, projects);
+      }
       emitUntrackedDiff(broadcast, previousUntracked, untracked);
 
       broadcast({
@@ -205,6 +371,9 @@ export function startWorkspaceMonitor(broadcast: Broadcast): () => void {
         untrackedFolders: untracked,
         ...(!stillThere && activeProjectPath !== undefined
           ? { activeProjectPath }
+          : {}),
+        ...(personalityMissing
+          ? { personality: {}, personalityMissing: true as const }
           : {}),
       });
     } catch (error) {
@@ -245,11 +414,13 @@ export function startWorkspaceMonitor(broadcast: Broadcast): () => void {
   };
 
   attachWatcher();
+  attachPersonalityWatcher();
   polling = setInterval(schedule, POLL_MS);
 
   return () => {
     if (timer !== null) clearTimeout(timer);
     if (polling !== null) clearInterval(polling);
     watcher?.close();
+    personalityWatcher?.close();
   };
 }
