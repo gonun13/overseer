@@ -165,6 +165,7 @@ export function attachWebSocketServer(httpServer: Server): {
             send({
               type: "error",
               about: "operator.name",
+              benign: true,
               message: result.reason,
             });
             return;
@@ -178,6 +179,7 @@ export function attachWebSocketServer(httpServer: Server): {
             send({
               type: "error",
               about: "operator.tone",
+              benign: true,
               message: result.reason,
             });
             return;
@@ -220,6 +222,7 @@ export function attachWebSocketServer(httpServer: Server): {
             send({
               type: "error",
               about: "adapter.connect",
+              benign: true,
               message: `unknown adapter: ${parsed.id}`,
             });
             return;
@@ -229,6 +232,7 @@ export function attachWebSocketServer(httpServer: Server): {
             send({
               type: "error",
               about: "adapter.connect",
+              benign: true,
               message: "adapter can only be attached after discovery",
             });
             return;

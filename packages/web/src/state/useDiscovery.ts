@@ -276,15 +276,12 @@ export function useDiscovery(): DiscoveryController {
         return;
       }
       if (message.type === "error") {
-        // A refused name/tone/select/connect is not a lost connection — stay put.
-        if (
-          message.about === "operator.name" ||
-          message.about === "operator.tone" ||
-          message.about === "project.select" ||
-          message.about === "adapter.connect"
-        ) {
-          return;
-        }
+        // A refusal the server marked benign is not a lost connection — a
+        // rejected name, a `project.select` the server would not persist —
+        // so stay put. The flag is the server's answer rather than a list of
+        // message types kept in step here, which is how `discovery.run` came
+        // to end the wizard on a connection that was fine.
+        if (message.benign) return;
         // An error is not paced, and it empties the queue: steps still waiting
         // their turn describe a pass that has already stopped being true.
         stopPacing();
