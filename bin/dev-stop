@@ -1,0 +1,7 @@
+#!/usr/bin/env sh
+# Stop the dev stack. Named volumes (claude-home, overseer-memory,
+# node_modules) survive — use ./bin/reset to discard them.
+. "$(dirname -- "$0")/_lib.sh"
+
+require_docker
+dev_compose down "$@"

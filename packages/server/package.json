@@ -12,7 +12,6 @@
   },
   "dependencies": {
     "@overseer/adapter-claude-code": "*",
-    "@overseer/adapter-mock": "*",
     "@overseer/protocol": "*",
     "express": "^4.21.2",
     "ws": "^8.18.0"

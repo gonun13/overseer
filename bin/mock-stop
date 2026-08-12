@@ -1,0 +1,8 @@
+#!/usr/bin/env sh
+# Stop the dev stack started with ./bin/mock-start. Identical to
+# ./bin/dev-stop — mock and dev are the same containers under different
+# fixture flags, so either command stops whichever is running.
+. "$(dirname -- "$0")/_lib.sh"
+
+require_docker
+dev_compose down "$@"

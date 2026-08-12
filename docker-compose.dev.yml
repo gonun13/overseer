@@ -24,7 +24,6 @@ services:
       - node-modules-protocol:/app/packages/protocol/node_modules
       - node-modules-web:/app/packages/web/node_modules
       - node-modules-server:/app/packages/server/node_modules
-      - node-modules-mock:/app/packages/adapters/mock/node_modules
       - node-modules-claude-code:/app/packages/adapters/claude-code/node_modules
     environment:
       # Bind mounts on Docker Desktop do not deliver inotify reliably; polling
@@ -35,7 +34,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "test -f /app/packages/protocol/dist/index.js && test -f /app/packages/adapters/mock/dist/index.js && test -f /app/packages/adapters/claude-code/dist/index.js",
+          "test -f /app/packages/protocol/dist/index.js && test -f /app/packages/adapters/claude-code/dist/index.js",
         ]
       interval: 2s
       timeout: 5s
@@ -49,21 +48,28 @@ services:
     command: npm run dev --workspace packages/server
     ports:
       # Loopback only — this is RCE-as-a-service (design doc §6).
-      - "127.0.0.1:3000:3000"
+      # Host :3001 so the dev API can run alongside production on :3000.
+      # Container-internal stays 3000 (Vite proxies to http://server:3000).
+      - "127.0.0.1:3001:3000"
     environment:
       - HOST=0.0.0.0 # container-internal; the port mapping above is the real boundary
       - PORT=3000
       - CLAUDE_CONFIG_DIR=/home/node/.claude
+      - OVERSEER_INTERNAL_DIR=/app/.overseer
       - CHOKIDAR_USEPOLLING=${CHOKIDAR_USEPOLLING:-1}
     volumes:
       - .:/app
       - claude-home:/home/node/.claude # container-owned; never bound to the host
+      # Internal memory (docs/overseer.md §6.2). This one matters more in dev
+      # than in prod: /app is a bind mount of the repo here, so without this
+      # named volume shadowing it the overseer's private store would be written
+      # straight into the host working tree — exactly the thing it must not be.
+      - overseer-memory:/app/.overseer
       - ./workspace:/workspace # the only surface the agent gets
       - node-modules-root:/app/node_modules
       - node-modules-protocol:/app/packages/protocol/node_modules
       - node-modules-web:/app/packages/web/node_modules
       - node-modules-server:/app/packages/server/node_modules
-      - node-modules-mock:/app/packages/adapters/mock/node_modules
       - node-modules-claude-code:/app/packages/adapters/claude-code/node_modules
       # Anonymous volume shadows any stale build a host `npm run build` left in
       # web/dist. The server refuses to serve it in dev anyway (NODE_ENV
@@ -82,10 +88,12 @@ services:
       - "127.0.0.1:5173:5173"
     environment:
       - OVERSEER_SERVER_ORIGIN=http://server:3000
-      # Loads the design fixtures. Set here and nowhere else — the production
-      # image never sets it, so a real instance boots empty by construction.
-      # Set to 0 to preview that empty state. See packages/web/src/data/mock.ts.
-      - VITE_OVERSEER_WIREFRAME=${VITE_OVERSEER_WIREFRAME:-1}
+      # Real state by default, matching production — the production image
+      # never sets this at all. ./bin/dev-start leaves it unset (0);
+      # ./bin/mock-start sets it to 1 to load the design fixtures in
+      # packages/web/src/data/mock.ts. Only matters if you invoke `docker
+      # compose` directly instead of the bin/ scripts.
+      - VITE_OVERSEER_WIREFRAME=${VITE_OVERSEER_WIREFRAME:-0}
       - CHOKIDAR_USEPOLLING=${CHOKIDAR_USEPOLLING:-1}
     volumes:
       - .:/app
@@ -93,21 +101,53 @@ services:
       - node-modules-protocol:/app/packages/protocol/node_modules
       - node-modules-web:/app/packages/web/node_modules
       - node-modules-server:/app/packages/server/node_modules
-      - node-modules-mock:/app/packages/adapters/mock/node_modules
       - node-modules-claude-code:/app/packages/adapters/claude-code/node_modules
     depends_on:
       deps:
         condition: service_healthy
 
+  # Playwright acceptance tests against the running web + server services —
+  # never against the host (see bin/test-e2e; there is no host-side run path
+  # for this project, tests included). `docker compose run` starts its
+  # depends_on services if they aren't already up, so `./bin/test-e2e` alone
+  # is enough to stand up the stack and run against it.
+  e2e:
+    build:
+      context: .
+      target: test
+    environment:
+      - E2E_BASE_URL=http://web:5173
+      - CI=${CI:-}
+    volumes:
+      - .:/app
+      - node-modules-root:/app/node_modules
+      - node-modules-protocol:/app/packages/protocol/node_modules
+      - node-modules-web:/app/packages/web/node_modules
+      - node-modules-server:/app/packages/server/node_modules
+      - node-modules-claude-code:/app/packages/adapters/claude-code/node_modules
+      - node-modules-e2e:/app/packages/e2e/node_modules
+      # Reports and traces land on the host so a failure can be inspected
+      # after the container exits.
+      - ./packages/e2e/playwright-report:/app/packages/e2e/playwright-report
+      - ./packages/e2e/test-results:/app/packages/e2e/test-results
+    depends_on:
+      server:
+        condition: service_started
+      web:
+        condition: service_started
+
 volumes:
   # Shared with the production stack by name only if you run both; the dev
   # project name (overseer-dev) keeps them separate.
   claude-home:
+  # Internal memory: logs, the action register, the world snapshot. Named
+  # volume, never a bind mount — see the server service's note above.
+  overseer-memory:
   # These shadow the bind-mounted host node_modules, which is macOS-built and
   # would break native deps in a linux container.
   node-modules-root:
   node-modules-protocol:
   node-modules-web:
   node-modules-server:
-  node-modules-mock:
   node-modules-claude-code:
+  node-modules-e2e:

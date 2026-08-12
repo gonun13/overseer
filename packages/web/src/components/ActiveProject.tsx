@@ -1,5 +1,5 @@
 import { StatusLight } from "./StatusLight";
-import type { Project } from "../data/mock";
+import type { Project } from "../domain";
 
 /**
  * Top-centre, permanent. Every session, approval and tool call in the app runs
@@ -15,7 +15,7 @@ export function ActiveProject({
 }) {
   if (!project) {
     return (
-      <button className="active-project unset" onClick={onPick}>
+      <button className="active-project unset settles-in" onClick={onPick}>
         <span className="ap-kicker">active project</span>
         <span className="ap-name">none</span>
         <span className="ap-meta">select a project to begin</span>
@@ -24,7 +24,7 @@ export function ActiveProject({
   }
 
   return (
-    <button className="active-project" onClick={onPick}>
+    <button className="active-project settles-in" onClick={onPick}>
       <span className="ap-kicker">active project</span>
       <span className="ap-name">
         <StatusLight activity={project.activity} size={9} />

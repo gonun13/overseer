@@ -551,6 +551,80 @@ button {
   text-transform: uppercase;
 }
 
+/* First-run welcome ask: prompt-shaped — typed text, blinking block cursor,
+   rule + ▲ tracking under the caret. No native underline or caret. */
+.os-name-ask {
+  display: flex;
+  justify-content: center;
+  cursor: text;
+}
+
+.os-name-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35em;
+}
+
+.os-name-field {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.os-name-type {
+  position: relative;
+  display: inline-block;
+  min-width: 1ch;
+}
+
+.os-name-mirror {
+  display: inline-block;
+  white-space: pre;
+  min-width: 1ch;
+}
+
+.os-name-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-transform: uppercase;
+  outline: none;
+}
+
+/* Rule + ▲ sit under the caret and slide as the mirror grows. */
+.os-name-follow {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* translateX(-50%) centres the column on the caret; nudge by half the
+     block cursor so we track its middle, not its left edge. */
+  margin-left: 2px;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.os-name-rule {
+  display: block;
+  width: 30px;
+  height: 0;
+  border-top: 2px solid var(--text);
+}
+
 /* Only present while the rare typing pass is running (useOccasionalTyping). */
 .os-cursor {
   display: inline-block;
@@ -575,6 +649,84 @@ button {
   color: var(--accent);
 }
 
+/* First-run tone pick: three words under the intro, field chrome not cards.
+   ▪ marks the current/default the same way settings marks the active theme. */
+.os-tone-pick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  margin-top: 28px;
+}
+
+.os-tone-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.os-tone-btn:hover,
+.os-tone-btn[aria-pressed="true"] {
+  color: var(--text);
+}
+
+.os-tone-mark {
+  display: inline-block;
+  width: 0.75em;
+  color: var(--accent);
+  text-align: center;
+}
+
+/* Boot only. Sits where the ▲ marker sits, so the headline block doesn't jump
+   when the wizard swaps one for the other. A segmented meter, not a sliding
+   stripe: blocky and monospace-flavoured like everything else here, and
+   monochrome — this is chrome, not a status light, so it doesn't reach for
+   --accent. */
+.loading-bar {
+  width: 160px;
+  height: 14px;
+  margin-top: 10px;
+  padding: 2px;
+  border: 2px solid var(--text);
+  box-sizing: border-box;
+}
+
+/* Fills once over the minimum boot beat, then holds full if boot is still
+   waiting on the socket. --boot-ms is set by LoadingBar from the same constant
+   that times that minimum. */
+.loading-bar-fill {
+  width: 0;
+  height: 100%;
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--text) 0,
+    var(--text) 7px,
+    transparent 7px,
+    transparent 10px
+  );
+  animation: load var(--boot-ms, 3000ms) linear forwards;
+}
+
+@keyframes load {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
 .os-signals {
   display: flex;
   flex-direction: column;
@@ -585,7 +737,7 @@ button {
 
 .os-signal {
   display: flex;
-  align-items: baseline;
+  align-items: flex-start;
   gap: 10px;
   padding: 7px 10px;
   border-left: 1px solid transparent;
@@ -596,8 +748,10 @@ button {
   background: var(--raise);
 }
 
+/* Keep the light on the first line with the kicker — never centered against a
+   wrapped body, which pulls it away from ADAPTER when the sentence breaks. */
 .os-signal .light {
-  align-self: center;
+  margin-top: 5px;
 }
 
 .os-kicker {
@@ -606,6 +760,7 @@ button {
   font-size: 10px;
   letter-spacing: 1.5px;
   text-transform: uppercase;
+  line-height: 1.5;
   color: var(--text-faint);
 }
 
@@ -753,13 +908,23 @@ button {
   bottom: 26px;
   z-index: 30;
   width: 252px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
 }
 
 .widget-frame {
   --corner: 11px;
   display: block;
   width: 100%;
+  margin: 0;
   padding: 10px 12px 12px;
+  border: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
   background-color: var(--raise);
   background-repeat: no-repeat;
   background-image:
@@ -842,6 +1007,30 @@ button {
 
 .widget-num + .widget-num {
   margin-left: 0;
+}
+
+/* Same register as the old footer console link — a word you can click, with
+   CONSOLE in --ok. Only mounted when the adapter is signed in. */
+.widget-console {
+  margin: 0;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.widget-console:hover {
+  color: var(--text);
+}
+
+.widget-console-word {
+  color: var(--ok);
 }
 
 .gauge {
@@ -1231,6 +1420,58 @@ button {
   color: var(--ink-faint);
 }
 
+/* The operations window's step log. No rules between lines: this is one
+   continuous report, and a border per step would break it into a list of
+   unrelated rows. */
+.w-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.w-step-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.9;
+}
+
+.w-step-label {
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: lowercase;
+}
+
+/* The dots do the padding, so labels of different lengths still line their
+   brackets up — the thing that makes a run of these scannable. Decorative and
+   aria-hidden: a screen reader gets "label" then "[ok]" with no filler. */
+.w-step-dots {
+  flex: 1;
+  min-width: 12px;
+  align-self: flex-end;
+  margin-bottom: 4px;
+  border-bottom: 1px dotted var(--ink-faint);
+}
+
+.w-step-status {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.w-step-detail {
+  display: block;
+  padding-left: 25px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  overflow-wrap: anywhere;
+}
+
 .w-row {
   display: flex;
   align-items: center;
@@ -1315,6 +1556,11 @@ button {
 .w-btn:hover {
   background: var(--ink);
   color: var(--fill-solid);
+}
+
+.w-btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
 }
 
 /* The option already in effect, inside a row of otherwise-equal choices. This
@@ -1549,9 +1795,41 @@ button {
   animation: blink 0.6s ease-in-out infinite alternate;
 }
 
+/* Furniture blinks slowly into existence when discovery resolves, rather than
+   popping in mid-sentence. An animation and not a transition: these elements
+   mount at the moment they appear, and there is no prior value for a
+   transition to run from. The motion is a state change being reported — the
+   machine has finished looking around — which is the only thing motion is for
+   here (design-system.md §9). */
+@keyframes settle-in {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+
+.settles-in {
+  animation: settle-in 420ms ease-out both;
+}
+
 @media (prefers-reduced-motion: reduce) {
   .blink,
   .light.pulse {
+    animation: none;
+  }
+  /* Instant, never nothing: the furniture is simply there, at full opacity,
+     the moment it mounts. The step pacing that stages it is dropped in
+     useDiscovery, which reads the same query. */
+  .settles-in {
+    animation: none;
+  }
+  /* Collapses to an instant state change, not to nothing: the bar still says
+     "starting", it just stops travelling. The headline's typing pass is
+     dropped in useOccasionalTyping, which reads the same query. */
+  .loading-bar-fill {
+    width: 100%;
     animation: none;
   }
   .window-tab,

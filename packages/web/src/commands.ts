@@ -15,6 +15,12 @@ export interface Command {
 
 export const COMMANDS: Command[] = [
   {
+    pattern: /^adapters?$/i,
+    usage: "adapters",
+    help: "choose which adapter is attached",
+    action: { type: "open", kind: "adapters" },
+  },
+  {
     pattern: /^sessions?$/i,
     usage: "sessions",
     help: "list sessions",

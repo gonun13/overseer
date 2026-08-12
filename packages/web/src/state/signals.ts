@@ -1,6 +1,7 @@
+import type { RejectedCustomization, UntrackedFolder } from "@overseer/protocol";
 import { ACTIVITY_HEADLINE, ACTIVITY_RANK, type Activity } from "../status";
 import type { WindowKind } from "../windows";
-import type { Approval, Capability, Project, Session } from "../data/mock";
+import type { Approval, Capability, Project, Session } from "../domain";
 
 /** Where a signal sends you when you click it. Every signal is actionable —
  * a message the operator can't act on is noise (design-system.md §4). */
@@ -28,6 +29,11 @@ export interface WorldState {
   capabilities: Capability[];
   adapter: { name: string; authenticated: boolean; usage: number };
   busy: boolean;
+  /** Customizations in `overseer-personality` the overseer refused to apply.
+   * Optional because a world that has not run discovery has not been told. */
+  rejected?: RejectedCustomization[];
+  /** Workspace folders that are not git projects. */
+  untrackedFolders?: UntrackedFolder[];
 }
 
 /**
@@ -38,6 +44,31 @@ export interface WorldState {
 export function deriveSignals(world: WorldState): Signal[] {
   const signals: Signal[] = [];
   const { activeProject, sessions, approvals, capabilities, adapter } = world;
+
+  // A customization the operator wrote that did not take effect. Reported, not
+  // dropped: silently ignoring it leaves them believing it worked, which is
+  // worse than refusing it out loud (docs/overseer.md §6.4).
+  for (const rejection of world.rejected ?? []) {
+    signals.push({
+      id: `personality-${rejection.field}`,
+      activity: "waiting",
+      kicker: "personality",
+      text: `"${rejection.field}" in overseer-personality was not applied: ${rejection.reason}.`,
+      target: { kind: "selector" },
+    });
+  }
+
+  // A folder under /workspace without .git is invisible to the project panel
+  // until the operator inits a repo — say so rather than leaving them guessing.
+  for (const folder of world.untrackedFolders ?? []) {
+    signals.push({
+      id: `untracked-${folder.path}`,
+      activity: "waiting",
+      kicker: "workspace",
+      text: `"${folder.name}" is in the workspace but is not a git project · it will not appear in the project list until you run git init.`,
+      target: { kind: "selector" },
+    });
+  }
 
   if (!activeProject) {
     signals.push({
@@ -57,16 +88,16 @@ export function deriveSignals(world: WorldState): Signal[] {
       id: "no-adapter",
       activity: "waiting",
       kicker: "adapter",
-      text: "No adapter is attached — sessions cannot start.",
-      target: { kind: "settings" },
+      text: "No adapter is attached · sessions cannot start.",
+      target: { kind: "window", window: "adapters" },
     });
   } else if (!adapter.authenticated) {
     signals.push({
       id: "no-auth",
       activity: "waiting",
       kicker: "adapter",
-      text: `${adapter.name} is not authenticated — sessions cannot start until you sign in.`,
-      target: { kind: "settings" },
+      text: `${adapter.name} is not authenticated · sessions cannot start until you sign in.`,
+      target: { kind: "window", window: "adapters" },
     });
   }
 
@@ -101,7 +132,7 @@ export function deriveSignals(world: WorldState): Signal[] {
       id: `session-${session.id}`,
       activity: session.activity,
       kicker: "session",
-      text: `${session.name} — ${session.doing}.`,
+      text: `${session.name} · ${session.doing}.`,
       target: { kind: "window", window: "sessions" },
     });
   }
@@ -112,7 +143,7 @@ export function deriveSignals(world: WorldState): Signal[] {
       activity: adapter.usage >= 0.95 ? "attention" : "waiting",
       kicker: "usage",
       text: `${Math.round(adapter.usage * 100)}% of the plan window is spent.`,
-      target: { kind: "settings" },
+      target: { kind: "window", window: "adapters" },
     });
   }
 

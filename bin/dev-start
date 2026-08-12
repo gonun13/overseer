@@ -1,0 +1,16 @@
+#!/usr/bin/env sh
+# Start the dev stack against real state — no design fixtures. This is what a
+# fresh instance actually looks like: headline-only until the overseer's
+# wizard discovers something (see docs/overseer.md).
+#
+#   ./bin/dev-start           start (rebuilds images if the Dockerfile changed)
+#   ./bin/dev-start --build   force an image rebuild
+#   ./bin/dev-start -d        detached
+#
+# Use ./bin/mock-start instead to preview the design fixtures.
+. "$(dirname -- "$0")/_lib.sh"
+
+require_docker
+
+echo "overseer: starting dev stack (real state) — web http://127.0.0.1:5173, server http://127.0.0.1:3001"
+VITE_OVERSEER_WIREFRAME=0 dev_compose up "$@"

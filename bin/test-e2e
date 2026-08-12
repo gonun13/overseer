@@ -1,0 +1,13 @@
+#!/usr/bin/env sh
+# Playwright acceptance tests, inside the container, against the running dev
+# stack — never the host. Starts web + server (and their deps gate) if they
+# aren't already up.
+#
+#   ./bin/test-e2e                run every test
+#   ./bin/test-e2e --headed       any extra args pass through to `playwright test`
+#   ./bin/test-e2e tests/smoke.spec.ts
+. "$(dirname -- "$0")/_lib.sh"
+
+require_docker
+
+dev_compose run --rm e2e npm run test --workspace packages/e2e -- "$@"

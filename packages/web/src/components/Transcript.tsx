@@ -1,5 +1,5 @@
 import { useEffect, useRef } from "react";
-import type { Turn } from "../data/mock";
+import type { Turn } from "../domain";
 
 /**
  * Lives inside the expanded prompt, never on the bare field.

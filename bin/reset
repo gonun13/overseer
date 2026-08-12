@@ -1,12 +1,19 @@
 #!/usr/bin/env sh
 # Tear the dev stack down and discard its volumes — including claude-home,
-# which holds the agent's login. You will have to authenticate again.
+# which holds the agent's login, and overseer-memory, which holds the
+# overseer's logs, action register and world snapshot. You will have to
+# authenticate again, and the next boot is a first boot.
+#
+# `down -v` takes every volume the project declares, so overseer-memory is
+# covered without naming it. That is the intended behaviour: reset means this
+# instance forgets what it learned, and an action register that outlived the
+# machine it describes would be a record of something that no longer exists.
 # ./workspace is a host bind mount and is not touched.
 . "$(dirname -- "$0")/_lib.sh"
 
 require_docker
 
-printf 'This deletes the dev node_modules volumes AND claude-home (agent auth).\nContinue? [y/N] '
+printf 'This deletes the dev node_modules volumes, claude-home (agent auth)\nAND overseer-memory (the overseer'"'"'s logs and action register).\nContinue? [y/N] '
 read -r reply
 case "$reply" in
   [yY] | [yY][eE][sS]) ;;

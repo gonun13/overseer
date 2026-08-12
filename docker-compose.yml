@@ -9,9 +9,16 @@ services:
       - "127.0.0.1:3000:3000" # loopback only — this is RCE-as-a-service (design doc §6)
     volumes:
       - claude-home:/home/node/.claude # container-owned; never bound to the host
+      - overseer-memory:/app/.overseer # same: the overseer's internal memory (docs/overseer.md §6.2)
       - ./workspace:/workspace # the only shared surface
     environment:
       - CLAUDE_CONFIG_DIR=/home/node/.claude
+      - OVERSEER_INTERNAL_DIR=/app/.overseer
 
 volumes:
   claude-home:
+  # Internal memory: logs, the action register, the world snapshot. A named
+  # volume and never a bind mount — the precedence rule in docs/overseer.md §6.1
+  # only holds because nothing here is reachable from the host or from
+  # /workspace. Discarded by ./bin/reset along with the agent's auth.
+  overseer-memory:

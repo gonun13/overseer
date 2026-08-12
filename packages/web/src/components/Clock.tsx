@@ -2,7 +2,9 @@ import { useEffect, useState } from "react";
 import { GearIcon } from "./icons";
 
 /** Top-right, permanent: wall clock and the way into settings. An operator
- * watching long-running work needs the time without leaving the field. */
+ * watching long-running work needs the time without leaving the field.
+ *
+ * Browser date and locale — not the server's TZ or a forced `en-GB`. */
 export function Clock({ onOpenSettings }: { onOpenSettings: () => void }) {
   const [now, setNow] = useState(() => new Date());
 
@@ -11,9 +13,9 @@ export function Clock({ onOpenSettings }: { onOpenSettings: () => void }) {
     return () => clearInterval(id);
   }, []);
 
-  const time = now.toLocaleTimeString("en-GB", { hour12: false });
+  const time = now.toLocaleTimeString(undefined, { hour12: false });
   const date = now
-    .toLocaleDateString("en-GB", {
+    .toLocaleDateString(undefined, {
       weekday: "short",
       day: "2-digit",
       month: "short",
@@ -21,7 +23,7 @@ export function Clock({ onOpenSettings }: { onOpenSettings: () => void }) {
     .toLowerCase();
 
   return (
-    <div className="clock">
+    <div className="clock settles-in">
       <div className="clock-read">
         <span className="clock-time">{time}</span>
         <span className="clock-date">{date}</span>

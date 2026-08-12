@@ -1,19 +1,20 @@
 import { StatusLight } from "../StatusLight";
-import type { Approval } from "../../data/mock";
+import { WAdapterNote } from "./bits";
+import type { AdapterInfo, Approval } from "../../domain";
 
 export function ApprovalsWindow({
   approvals,
+  adapter,
   onResolve,
 }: {
   approvals: Approval[];
+  adapter: AdapterInfo;
   onResolve: (id: string) => void;
 }) {
-  if (approvals.length === 0) {
-    return <div className="w-empty">queue empty</div>;
-  }
-
   return (
     <div>
+      <WAdapterNote adapter={adapter} />
+      {approvals.length === 0 && <div className="w-empty">queue empty</div>}
       {approvals.map((a) => (
         <div key={a.id} className="approval">
           <div className="approval-head">

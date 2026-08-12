@@ -1,6 +1,6 @@
 import { StatusLight } from "./StatusLight";
 import { ChevronIcon } from "./icons";
-import type { Project } from "../data/mock";
+import type { Project } from "../domain";
 
 /**
  * Top-left, permanent, open by default. It is a **status panel** before it is a
@@ -27,7 +27,7 @@ export function ProjectPanel({
   onSelect: (project: Project) => void;
 }) {
   return (
-    <section className="projects">
+    <section className="projects settles-in">
       <div className="projects-head">
         <StatusLight activity={active?.activity ?? "idle"} size={10} />
         <span className="projects-kicker">project</span>

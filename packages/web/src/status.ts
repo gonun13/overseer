@@ -28,3 +28,14 @@ export const ACTIVITY_HEADLINE: Record<Activity, string> = {
   done: "ready",
   idle: "idle",
 };
+
+/** The bracketed word in the operations window's `label... [STATUS]` lines.
+ * A second vocabulary would be a second status system — this is the same five
+ * values wearing the register that log reads in (docs/overseer.md §3). */
+export const ACTIVITY_STEP_WORD: Record<Activity, string> = {
+  attention: "failed",
+  waiting: "blocked",
+  working: "...",
+  done: "ok",
+  idle: "skipped",
+};

@@ -1,15 +1,18 @@
-import { WRow } from "./bits";
-import type { Capability } from "../../data/mock";
+import { WAdapterNote, WRow } from "./bits";
+import type { AdapterInfo, Capability } from "../../domain";
 
 export function CapabilitiesWindow({
   capabilities,
+  adapter,
   onEdit,
 }: {
   capabilities: Capability[];
+  adapter: AdapterInfo;
   onEdit: (name: string) => void;
 }) {
   return (
     <div>
+      <WAdapterNote adapter={adapter} />
       {capabilities.length === 0 && (
         <div className="w-empty">nothing configured</div>
       )}
@@ -18,7 +21,7 @@ export function CapabilitiesWindow({
           key={c.id}
           activity={c.activity}
           primary={c.name}
-          secondary={c.problem ? `${c.kind} — ${c.problem}` : c.kind}
+          secondary={c.problem ? `${c.kind} · ${c.problem}` : c.kind}
           right={c.tools ? `${c.tools} tools` : ""}
           actions={
             <>

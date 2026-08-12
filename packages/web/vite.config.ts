@@ -27,6 +27,12 @@ export default defineConfig({
     // Fail loudly instead of drifting to 5174 and silently serving nothing at
     // the mapped port.
     strictPort: true,
+    // Vite's DNS-rebinding guard rejects any Host header it wasn't told about,
+    // and the e2e service reaches this server as "web" over the compose network
+    // (docker-compose.dev.yml, bin/test-e2e) — without this it gets "Blocked
+    // request" instead of the app. Named explicitly rather than `true`: the
+    // guard still holds for every other host, localhost included by default.
+    allowedHosts: ["web"],
     proxy: {
       "/api": serverOrigin,
       "/ws": { target: serverOrigin.replace(/^http/, "ws"), ws: true },
