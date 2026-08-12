@@ -1,6 +1,10 @@
 import type { IncomingMessage } from "node:http";
 import type { Server } from "node:http";
-import { isClientMessage, type ServerMessage } from "@overseer/protocol";
+import {
+  isClientMessage,
+  type DiscoveryEvent,
+  type ServerMessage,
+} from "@overseer/protocol";
 import { WebSocketServer, type WebSocket } from "ws";
 import { listAdapters } from "./adapters.js";
 import { runDiscovery } from "./discovery.js";
@@ -40,6 +44,29 @@ function isAllowedOrigin(
  * dead. Ping on every beat, drop anything that missed the previous pong.
  */
 const HEARTBEAT_MS = 30_000;
+
+/**
+ * The pass in flight, if any — single-flight per process, not per socket.
+ *
+ * What a guard here protects is process-wide: the world snapshot and the run
+ * log. A per-connection flag does not protect them, because two tabs (or a
+ * reload whose old socket has not been reaped yet — that is up to two
+ * `HEARTBEAT_MS` beats) each get their own flag and both passes run, read the
+ * same `previous`, and write two snapshots that record two boots as one.
+ *
+ * A second asker is not refused, though. It is sent the events of the pass
+ * that is already running, because a refusal it cannot act on leaves that tab
+ * watching a step that will never resolve. The client paces what it receives,
+ * so a tab that joined late still watches the pass rather than being handed a
+ * finished world in one frame.
+ */
+let inFlight: Promise<DiscoveryEvent[]> | undefined;
+
+function discoveryFailure(error: unknown): string {
+  return error instanceof Error
+    ? error.message
+    : "discovery failed for an unknown reason";
+}
 
 export function attachWebSocketServer(httpServer: Server): {
   wss: WebSocketServer;
@@ -106,10 +133,6 @@ export function attachWebSocketServer(httpServer: Server): {
         ...(Object.keys(personality).length > 0 ? { personality } : {}),
       });
     })();
-
-    // One discovery pass at a time per connection. Without this a client that
-    // retries on a slow scan gets two interleaved runs writing two snapshots.
-    let discovering = false;
 
     ws.on("message", async (raw) => {
       let parsed: unknown;
@@ -214,28 +237,37 @@ export function attachWebSocketServer(httpServer: Server): {
           return;
         }
         case "discovery.run": {
-          if (discovering) {
-            send({
-              type: "error",
-              about: "discovery.run",
-              message: "a discovery pass is already running",
-            });
+          const running = inFlight;
+          if (running !== undefined) {
+            // Join the pass instead of starting a second one. Whatever it
+            // emitted before this socket asked is replayed, so the operations
+            // window still reads as a run rather than starting mid-list.
+            try {
+              for (const event of await running) send(event);
+            } catch (error) {
+              send({
+                type: "error",
+                about: "discovery.run",
+                message: discoveryFailure(error),
+              });
+            }
             return;
           }
-          discovering = true;
+
+          const pass = runDiscovery(send);
+          inFlight = pass;
           try {
-            await runDiscovery(send);
+            await pass;
           } catch (error) {
             send({
               type: "error",
               about: "discovery.run",
-              message:
-                error instanceof Error
-                  ? error.message
-                  : "discovery failed for an unknown reason",
+              message: discoveryFailure(error),
             });
           } finally {
-            discovering = false;
+            // Joiners already hold the promise, so clearing here only stops
+            // the *next* request from riding a pass that has finished.
+            inFlight = undefined;
           }
           return;
         }

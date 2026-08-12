@@ -50,9 +50,12 @@ type StepResult<T> = {
   detail?: string;
 } & DiscoveryStepUpdate;
 
-export async function runDiscovery(emit: Emit): Promise<void> {
+/** Returns every event the pass emitted, in order, so a client that asked
+ * while this one was already running can be sent the same pass rather than a
+ * refusal (see `ws.ts`). */
+export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
   const runId = randomUUID();
-  const log: unknown[] = [];
+  const log: DiscoveryEvent[] = [];
 
   /** Emits to the client and records to the run log in one move, so the two
    * cannot drift — a step the operator saw that the log does not have would
@@ -339,4 +342,6 @@ export async function runDiscovery(emit: Emit): Promise<void> {
       attached_adapter: attachedAdapterId,
     }),
   ]);
+
+  return log;
 }
