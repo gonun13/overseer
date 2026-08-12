@@ -2,21 +2,21 @@ node_modules/
 dist/
 build/
 *.log
-
-# playwright output — reports and traces from ./bin/test-e2e, written through a
-# bind mount so a failed run can be read on the host
-packages/e2e/playwright-report/
-packages/e2e/test-results/
 .DS_Store
 .env
 .env.*
 !.env.example
 
-# host-shared agent workspace — never commit user projects
+# Host-shared mount — one independent git repo per project directory.
+# Overseer tracks only the empty mount point; scaffolded projects (e.g.
+# overseer-personality) are created with their own `git init` at runtime.
 /workspace/*
 !/workspace/.gitkeep
 
-# container-owned volumes never land here, but guard anyway: the agent's auth,
-# and the overseer's internal memory (docs/overseer.md §6.2)
-.claude/
+# Playwright — ephemeral run output.
+packages/e2e/playwright-report/
+packages/e2e/test-results/
+
+# Container-owned state that may appear at repo root during local dev.
 .overseer/
+.claude/
