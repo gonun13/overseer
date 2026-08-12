@@ -47,6 +47,15 @@ export interface ErrorMessage {
   type: "error";
   /** Echoes the client message `type` that failed, when there was one. */
   about?: string;
+  /**
+   * True when the request was refused but nothing is broken — a duplicate
+   * `discovery.run` while a pass is already in flight, a name that failed
+   * validation. The client must not tear the wizard down for these. Without
+   * the distinction "your other tab asked first" and "the discovery pass
+   * threw" arrive as the same frame, and treating either one as the other is
+   * wrong in a different direction.
+   */
+  benign?: boolean;
   message: string;
 }
 

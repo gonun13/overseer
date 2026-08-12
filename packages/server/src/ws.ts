@@ -10,6 +10,7 @@ import {
   setOperatorName,
   setOperatorTone,
 } from "./memory/personality.js";
+import { isInsideWorkspace } from "./workspace.js";
 
 /**
  * Any page in the browser can otherwise open a socket to localhost — check
@@ -162,12 +163,28 @@ export function attachWebSocketServer(httpServer: Server): {
           return;
         }
         case "project.select": {
-          const ok = await setActiveProjectPath(parsed.path);
-          if (!ok) {
+          // `isClientMessage` only proves this is a string. It is the one frame
+          // that names a filesystem path, and it is persisted as
+          // `last_active_project` and replayed on every later boot — so it is
+          // checked here, before internal memory sees it, against the surface
+          // the design says is the only shared one. Resolve rather than compare
+          // prefixes: `..` and symlinks both survive a string test.
+          if (!(await isInsideWorkspace(parsed.path))) {
             send({
               type: "error",
               about: "project.select",
-              message: "active project can only be set after discovery",
+              benign: true,
+              message: "a project must be a path inside the workspace",
+            });
+            return;
+          }
+          const result = await setActiveProjectPath(parsed.path);
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "project.select",
+              benign: true,
+              message: result.reason,
             });
             return;
           }
