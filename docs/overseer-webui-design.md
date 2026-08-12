@@ -100,7 +100,11 @@ This means the "smart" editing path and the plain chat path are the same machine
 
 The container owns its own `~/.claude` in a named Docker volume. The host's config is never mounted and never touched.
 
-**Login from the frontend.** The system zone runs `claude setup-token` under a PTY (`node-pty` — the flow expects a TTY), scrapes the verification URL from its output, and renders it as a link plus a paste-back field for the returned code, which is written to the subprocess stdin. The container is headless and can't open a browser, so URL-out / code-in is the flow. Session state, expiry, and account are shown alongside it.
+**Login from the frontend.** The system zone runs `claude auth login` as a plain subprocess, reads the verification URL off its stdout, and renders it as a link plus a paste-back field for the returned code, which is written back to the subprocess stdin. The container is headless, so its own "opening browser" attempt is a no-op — the link opens in the *user's* browser, on the user's machine. URL-out / code-in is the flow. Session state, expiry, and account are shown alongside it, read from `claude auth status` (which returns JSON on stdout) rather than sniffing for a credentials file.
+
+No PTY is required: verified against CLI 2.1.226, `claude auth login` under plain pipes emits the URL on stdout in well under a second, one line, with no ANSI. `child_process.spawn` is sufficient and `node-pty` is not needed. Each spawn mints its own PKCE challenge, so the URL and the process are a pair — login has to be single-flight, and the pasted code must go to the process that produced that URL.
+
+> `claude setup-token` is a *different* command — it mints a long-lived (1-year) `CLAUDE_CODE_OAUTH_TOKEN` for CI, scoped to `user:inference` alone, and it does require a TTY. It is not the subscription login path. An earlier draft of this doc specified it here; that was wrong.
 
 **Bootstrapping from existing config.** `/workspace` is the only shared surface, so it's also the sanctioned config channel: drop files at `./workspace/_overseer/import/` on the host, hit IMPORT in the system zone, and the server copies them into `$CLAUDE_CONFIG_DIR`. EXPORT does the reverse for backup. Explicit, auditable, one direction at a time — not a live bind mount that lets host and container race each other.
 
@@ -136,7 +140,7 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Resume session + history replay                    | Sessions | `--resume`; parse JSONL for backfill (§4)                         |
 | Session list with live status                      | Sessions | supervisor state + JSONL mtime                                    |
 | Account usage + spend                              | Top bar  | §2.1                                                              |
-| Subscription login                                 | System   | `claude setup-token` under PTY                                    |
+| Subscription login                                 | System   | `claude auth login`, plain spawn; URL out, code in (§2)           |
 | Theme switch                                       | System   | `data-theme` on `:root`                                           |
 | Crash / exit / auth-failure surfacing              | Console  | distinguish exit causes; they look identical at the process level |
 
@@ -227,7 +231,7 @@ One process: the Node server serves the built SPA as static files and handles `/
 
 - `/workspace/<project>/` — one git project per directory. Session creation picks one; it becomes the process `cwd`.
 - `/workspace/_overseer/` — import/export staging and the local SQLite store for usage, session index, and search.
-- Image needs `git`, `ripgrep`, and a shell alongside Node; the CLI shells out to all three. `node-pty` for the auth flow. Run as non-root.
+- Image needs `git`, `ripgrep`, and a shell alongside Node; the CLI shells out to all three. The auth flow needs no PTY (§2), so the runtime stage needs no native-build toolchain. Run as non-root.
 - Because `.claude` is container-owned, the previous draft's host/container config race is gone. The remaining overlap is `/workspace` itself: host-side git operations on a project while an agent writes to it. Normal git discipline covers it; the UI shows each session's `gitBranch` and dirty state so the conflict is at least visible.
 
 ---
