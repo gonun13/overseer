@@ -28,7 +28,9 @@ import { WORKSPACE_ROOT, scanWorkspace } from "./workspace.js";
  */
 
 const DEBOUNCE_MS = 400;
-/** Safety net when the host FS silently drops inotify/fsevents. */
+/** Safety net when the host FS silently drops inotify/fsevents. Affordable at
+ * this interval only because the tick costs a readdir and a stat per entry —
+ * see the change test in `refresh`. */
 const POLL_MS = 5_000;
 
 type Broadcast = (message: ServerMessage) => void;
@@ -131,8 +133,14 @@ export function startWorkspaceMonitor(broadcast: Broadcast): () => void {
       const snapshot = await readSnapshot();
       if (!snapshot) return;
 
-      const { projects, untracked } = await scanWorkspace();
-      const key = scanKey(projects, untracked);
+      // Change test first, on a listing that costs a readdir and a stat per
+      // entry. `scanKey` reflects which paths exist and nothing else, so the
+      // git state a full scan reads — `rev-parse` plus a `status --porcelain`
+      // that walks the whole tree, per project — could never move the key, and
+      // on every unchanged tick it was computed and dropped. Once a second,
+      // forever, on a bind mount, for a result nobody read.
+      const listing = await scanWorkspace(WORKSPACE_ROOT, { git: false });
+      const key = scanKey(listing.projects, listing.untracked);
 
       // Seed against discovery's project list and an empty untracked set so a
       // pre-existing non-git folder is announced once after the wizard, and
@@ -144,9 +152,16 @@ export function startWorkspaceMonitor(broadcast: Broadcast): () => void {
       }
       if (key === lastKey) return;
 
+      // Something moved: now pay for branch and dirtiness, which the panel
+      // renders for the list it is about to receive.
+      const { projects, untracked } = await scanWorkspace();
+
       const previousProjects = lastProjects;
       const previousUntracked = lastUntracked;
-      lastKey = key;
+      // From the full scan, not the listing: the two are a moment apart, and
+      // remembering a key for a state that was never broadcast would skip the
+      // tick that reports whatever landed in between.
+      lastKey = scanKey(projects, untracked);
       lastProjects = projects;
       lastUntracked = untracked;
 
