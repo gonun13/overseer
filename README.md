@@ -67,10 +67,13 @@ download. It brings up whatever it needs, so `./bin/test-e2e` on its own is enou
 
 For manual browser checks, the [Playwright MCP server](https://github.com/microsoft/playwright-mcp)
 is registered project-wide in `.mcp.json`, so Claude Code picks it up automatically in this repo
-with nothing to re-register per session. It is a generic tool driving a browser on the host, not
-this app running there — start the stack first (`./bin/dev-start` or `./bin/mock-start`) so
-`127.0.0.1:5173` and `:3001` are live, then Claude can click through the running instance directly
-instead of writing one-off Playwright scripts.
+with nothing to re-register per session. It is editor-side tooling, not part of the stack: a
+generic tool driving a browser on the host, not this app running there — start the stack first
+(`./bin/dev-start` or `./bin/mock-start`) so `127.0.0.1:5173` and `:3001` are live, then Claude can
+click through the running instance directly instead of writing one-off Playwright scripts. The
+version there is pinned for the same reason the agent CLI is: `@latest` under `npx -y` means every
+session fetches and runs whatever was published most recently, unreviewed. The acceptance tests are
+a different thing entirely and still run only in the container (`./bin/test-e2e`).
 
 ### Wireframe fixtures
 
