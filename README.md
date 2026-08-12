@@ -2,10 +2,100 @@
 
 A single-page web console for driving CLI coding agents. Claude Code is the first adapter.
 
-See [docs/claude-code-webui-design.md](docs/claude-code-webui-design.md) for the architecture,
-[docs/design-system.md](docs/design-system.md) for the visual language, and
-[docs/overseer.md](docs/overseer.md) for the overseer's behavior — what it says, when it says it, and the
-memory precedence model behind it.
+Built sandboxed, with the paranoid in mind: protect the host from runaway LLMs.
+Agents run in Docker, not on your desktop — they cannot wipe your home directory or
+reach your real accounts. The only shared surface is `./workspace`; keep those
+projects on external git remotes so a bad run is recoverable.
+
+Architecture: [docs/architecture-design.md](docs/architecture-design.md) ·
+UI: [docs/ui-ux-design.md](docs/ui-ux-design.md) ·
+Behavior: [docs/overseer-behavior.md](docs/overseer-behavior.md)
+
+> **Early stage.** The UI shell and overseer wizard are live. Session spawning for the
+> `claude-code` adapter is not implemented yet — there are no live agent sessions or
+> transcripts. See [Status](#status).
+
+## Requirements
+
+- [Docker](https://docs.docker.com/get-docker/) with Compose
+
+Nothing else. Node, npm, and the agent CLI all live inside the container.
+
+## This never runs on the host
+
+Overseer and the agents it spawns always run **inside Docker**. They cannot reach
+your machine except through the `./workspace` bind mount; Claude auth lives in a
+container volume, not your real `~/.claude`
+([architecture §6](docs/architecture-design.md#6-security)).
+
+> **Warning.** Do not start the Node server or agent CLI with host `npm` / Node —
+> that skips the container entirely. `npm run dev` and `npm run dev:web` refuse
+> outside Docker. Use `./bin/*` instead.
+
+## Run (production)
+
+```sh
+./bin/start
+```
+
+Open http://127.0.0.1:3000. The compiled SPA is served by the Node server. The container
+owns its own `~/.claude` in a named volume; `./workspace` is the only directory shared
+with the host.
+
+```sh
+./bin/stop
+```
+
+## Develop
+
+```sh
+./bin/dev-start
+```
+
+Vite on http://127.0.0.1:5173 (hot reload), API on http://127.0.0.1:3001. The host ports
+differ from production's `:3000` so both stacks can run at once. Edit files on the host —
+the source tree is bind-mounted and watched.
+
+| Command            | What it does                                                                 |
+| ------------------ | ---------------------------------------------------------------------------- |
+| `./bin/dev-start`  | Start the dev stack against real state (`-d` to detach, `--build` to rebuild) |
+| `./bin/dev-stop`   | Stop it; volumes survive                                                     |
+| `./bin/mock-start` | Dev stack with design fixtures instead of real state                         |
+| `./bin/mock-stop`  | Same as `./bin/dev-stop`                                                     |
+| `./bin/start`      | Build and run the production stack                                           |
+| `./bin/stop`       | Stop the production stack                                                    |
+| `./bin/logs [svc]` | Follow dev stack logs (`deps`, `server`, `web`)                              |
+| `./bin/sh [svc]`   | Shell into a dev container (defaults to `server`)                            |
+| `./bin/npm <args>` | Run npm inside the dev container — use for **all** dependency work           |
+| `./bin/check`      | Typecheck + lint                                                             |
+| `./bin/test-e2e`   | Playwright acceptance tests (args pass through to `playwright test`)         |
+| `./bin/reset`      | Tear down the dev stack and discard volumes, including agent auth            |
+
+Three services: `deps` builds `protocol` + `claude-code` under `tsc --watch`, `server`
+runs `tsx watch`, and `web` runs Vite proxying `/api` and `/ws` to `server:3000`.
+`./bin/test-e2e` runs a separate `e2e` container on demand against `web:5173` on the
+compose network — it brings up what it needs, so the command alone is enough.
+
+Install dependencies with `./bin/npm install --workspace packages/web <pkg>`, never host
+npm (that would write macOS binaries into a tree only ever read by Linux).
+`package-lock.json` is bind-mounted, so the change lands on the host for committing.
+
+### Wireframe fixtures
+
+Some windows still use static fixtures in `packages/web/src/data/mock.ts` (sessions,
+approvals, capability editor, context, console, diff). They load only when
+`VITE_OVERSEER_WIREFRAME=1`, which `./bin/mock-start` sets. Production and
+`./bin/dev-start` leave it unset, so fixtures do not ship.
+
+The overseer path (headline, signals, wizard, operations window) never reads those
+fixtures — it uses real server state or an explicit empty readout.
+
+### Browser tooling (optional)
+
+A [Playwright MCP server](https://github.com/microsoft/playwright-mcp) is registered in
+`.mcp.json` for editor-side click-through against a running stack
+(`./bin/dev-start` or `./bin/mock-start`). Acceptance tests still run only via
+`./bin/test-e2e`.
 
 ## Structure
 
@@ -14,139 +104,42 @@ bin/                  docker shortcuts — the only supported way to run anythin
 packages/
   protocol/           shared TS types — the frontend/backend/adapter contract
   web/                React + Vite + Tailwind SPA
-  server/              Node: WS + REST, static SPA host, adapter registry
+  server/             Node: WS + REST, static SPA host, adapter registry
   adapters/
-    claude-code/      spawns `claude`, normalizes stream-json → protocol (stub)
+    claude-code/      Claude Code adapter (session spawning not implemented yet)
+  e2e/                Playwright acceptance tests (container-only)
 workspace/            host-shared dir — git projects live here, mounted into the container
 ```
 
-## This never runs on the host
-
-Not in production, not in development, not "just the frontend". The server spawns coding agents
-with filesystem and network access — the container _is_ the security model (design doc §6). A host
-run puts your real `~/.claude`, your home directory, and every repo on the machine inside the blast
-radius, and Node being installed locally is not permission to use it.
-
-`npm run dev` and `npm run dev:web` are wired to refuse on the host. Everything below goes through
-Docker; you need nothing installed except Docker.
-
-## Develop
-
-```
-./bin/dev-start
-```
-
-Vite on http://127.0.0.1:5173 with hot reload, API server on http://127.0.0.1:3001
-(host port differs from production's `:3000` so both stacks can run at once). Edit files on
-the host as usual — the source tree is bind-mounted and watched.
-
-| Command             | What it does                                                             |
-| -------------------- | ------------------------------------------------------------------------- |
-| `./bin/dev-start`  | start the dev stack against real state (`-d` to detach, `--build` to force rebuild) |
-| `./bin/dev-stop`   | stop it; volumes survive                                                  |
-| `./bin/mock-start` | start the dev stack loaded with design fixtures instead of real state     |
-| `./bin/mock-stop`  | stop it — same containers as `dev-start`, so identical to `./bin/dev-stop` |
-| `./bin/start`      | build and run the production stack                                        |
-| `./bin/stop`       | stop the production stack                                                 |
-| `./bin/logs [svc]` | follow dev stack logs (`deps`, `server`, `web`)                           |
-| `./bin/sh [svc]`   | shell into a dev container (defaults to `server`)                        |
-| `./bin/npm <args>` | run npm inside the dev container — use this for **all** dependency work   |
-| `./bin/check`      | typecheck + lint                                                          |
-| `./bin/test-e2e`   | Playwright acceptance tests against the dev stack (args pass through to `playwright test`) |
-| `./bin/reset`      | tear down the dev stack and discard volumes, including agent auth         |
-
-Three services: `deps` builds `protocol` + `claude-code` and holds them in `tsc --watch` (`server`
-and `web` import them through `dist/`, so compose gates both on it), `server` runs `tsx watch`, and
-`web` runs Vite proxying `/api` and `/ws` to `server:3000`. A fourth, `e2e`, is not part of the
-stack — `./bin/test-e2e` runs it on demand, and it reaches `web:5173` over the compose network
-rather than the host.
-
-Tests are no exception to the rule above: `packages/e2e` runs inside its own container, off a
-`test` image that is the `dev` one plus Chromium, so `./bin/dev-start` never pays for the browser
-download. It brings up whatever it needs, so `./bin/test-e2e` on its own is enough.
-
-For manual browser checks, the [Playwright MCP server](https://github.com/microsoft/playwright-mcp)
-is registered project-wide in `.mcp.json`, so Claude Code picks it up automatically in this repo
-with nothing to re-register per session. It is editor-side tooling, not part of the stack: a
-generic tool driving a browser on the host, not this app running there — start the stack first
-(`./bin/dev-start` or `./bin/mock-start`) so `127.0.0.1:5173` and `:3001` are live, then Claude can
-click through the running instance directly instead of writing one-off Playwright scripts. The
-version there is pinned for the same reason the agent CLI is: `@latest` under `npx -y` means every
-session fetches and runs whatever was published most recently, unreviewed. The acceptance tests are
-a different thing entirely and still run only in the container (`./bin/test-e2e`).
-
-### Wireframe fixtures
-
-Several windows are still designed against static fixtures in `packages/web/src/data/mock.ts` —
-sessions, approvals, the capability editor, context, console and diff. They are a
-design-development device and they do not ship: they load only when `VITE_OVERSEER_WIREFRAME=1`,
-which `./bin/mock-start` sets and nothing else does — `./bin/dev-start` and the production image
-both leave it unset. Vite inlines the variable at build time, so `./bin/start` drops the fixtures
-from the bundle rather than shipping them unused.
-
-**The overseer's own path does not use them.** The headline, signals, wizard state and the
-operations window are computed from real server state or an explicit "not known yet" — no module in
-that path imports `data/mock.ts`. Shared UI shapes live in `packages/web/src/domain.ts`, so
-importing a type never drags the fixtures along with it.
-
-Everything an instance learns at runtime lives there, not only the obviously fake rows — the model
-and subagent lists, the prompt's starting settings, the workspace paths, the adapter's own name. A
-plausible default is invented data too, so the blank side of each pair is empty and the UI reports
-that it has not been told rather than filling the gap in.
-
-`./bin/dev-start` already gives you a fresh instance — no projects, sessions, approvals or
-capabilities, same as production. Use `./bin/mock-start` instead to preview the fixtures.
-
-Install a dependency with `./bin/npm install --workspace packages/web <pkg>` — never with host npm,
-which would write macOS binaries into a tree only ever read by Linux. `package-lock.json` is
-bind-mounted, so the change lands on the host for committing.
-
-## Run it (production)
-
-```
-./bin/start
-```
-
-Serves the compiled SPA from the Node server at http://127.0.0.1:3000 — no bind-mounted source, no
-watchers. The container owns its own `~/.claude` in a named volume; `./workspace` is the only
-directory shared with the host.
-
 ## Features
 
-- **Overseer space** — the centre of the screen ranks what needs attention (approvals, blocked
-  capabilities, running and finished sessions, usage pressure) and every line opens the window,
-  panel or control it refers to. Derived on every render, so it cannot go stale.
-- **The overseer** — a wizard that walks a fresh instance from nothing to a working setup,
-  reporting each discovery step in its own operations window and revealing furniture as each
-  capability comes online. It keeps a private record in `.overseer` and reads customization from
-  `overseer-personality`, a normal workspace project — advisory only, filtered through an internal
-  allowlist, with anything refused reported back as a signal.
-- **Project panel** — a persistent status list of every project, with a status light each, so work
-  happening outside the active project is still visible.
-- **Sessions, approvals, diffs** — summoned as draggable windows rather than laid out in fixed
-  columns.
-- **Capabilities** — MCP servers, skills and subagents, with an editor for a skill's or subagent's
-  instructions, model and tool grants.
-- **Console** — a raw terminal into the adapter's CLI for operators who already know it: its own
-  slash commands, its own errors, verbatim. The escape hatch for anything the considered views
-  don't cover. Open it from the footer or type `console`.
-- **Prompt controls** — model, permission mode, subagent and attached context, armed before the
-  next turn and reachable with bare number keys.
-- **Two themes** — samaritan (default) and machine, its inversion at every level.
+- **Overseer space** — ranks what needs attention (approvals, blocked capabilities,
+  sessions, usage) and each line opens the surface it refers to.
+- **The overseer** — a wizard that walks a fresh instance from nothing to a working
+  setup, streaming discovery into an operations window and revealing UI as capabilities
+  come online. Private memory lives in `.overseer`; customization comes from the
+  `overseer-personality` workspace project (advisory only).
+- **Project panel** — persistent status for every project, including work outside the
+  active one.
+- **Sessions, approvals, diffs** — summoned as draggable windows, not fixed columns.
+- **Capabilities** — MCP servers, skills, and subagents, with an editor for instructions,
+  model, and tool grants.
+- **Console** — raw escape hatch into the adapter CLI (currently a mockup that echoes).
+- **Prompt controls** — model, permission mode, subagent, and context, armed before the
+  next turn.
+- **Two themes** — samaritan (default) and machine.
 
 ## Status
 
-Docker setup, tooling and the frontend shell are in place. The shell is a field of instruments —
-project panel, active project, clock and settings, prompt controls, adapter widget — around the
-overseer space, and windows are summoned, dragged and dismissed rather than laid out.
+In place: Docker tooling, frontend shell, and the overseer wizard. A fresh instance boots
+headline-only and runs discovery over the WebSocket — scanning `/workspace` for git
+projects, checking adapter auth via `getStatus()`, and reading `overseer-personality` —
+then mounts furniture as capabilities resolve. Details:
+[docs/overseer-behavior.md](docs/overseer-behavior.md).
 
-The overseer is live: a fresh instance boots headline-only and works through a wizard
-(`state/wizard.ts`) that runs a real discovery pass over the WS — scanning `/workspace` for git
-projects, checking each adapter's auth via `getStatus()`, and reading `overseer-personality` —
-streaming each step into the operations window and mounting furniture as capabilities resolve. It
-keeps internal memory in `.overseer` on a container-only volume. See
-[docs/overseer.md](docs/overseer.md).
+Still missing:
 
-Still missing: the `claude-code` adapter's process-spawning (design doc §1.2), so there are no
-sessions and no transcript, and the auth check reads the credentials file rather than validating a
-token. The console is a mockup — it echoes rather than attaching to a pty.
+- `claude-code` process spawning ([architecture §1.2](docs/architecture-design.md))
+  — no live sessions or transcripts yet
+- Auth check reads the credentials file rather than validating a token
+- Console is a mockup (echoes; no PTY)

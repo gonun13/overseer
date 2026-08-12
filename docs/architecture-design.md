@@ -2,9 +2,9 @@
 
 **What it is:** a single-page, fullscreen web console for driving CLI coding agents. Claude Code is the first adapter; the architecture assumes there will be others.
 
-**Shape:** one Docker container holds the agent CLI, its config, and the web server. The host shares exactly one directory with it — `./workspace`, containing git projects. Everything else, including agent auth, lives inside the container.
+**Shape:** one Docker container holds the agent CLI, its state, and the web server. The only bind mount is `./workspace`, which contains git projects and an import/export staging directory. Auth and application state live in container-owned volumes.
 
-**Aesthetic:** a surveillance console, not a chat app — dense, monospace, border-only chrome, one focus zone at a time. See [design-system.md](design-system.md).
+**Aesthetic:** a surveillance console, not a chat app — dense, monospace, border-only chrome, one focus zone at a time. See [ui-ux-design.md](ui-ux-design.md).
 
 ---
 
@@ -30,26 +30,28 @@ interface AgentAdapter {
   createSession(opts: SessionOpts): Promise<SessionHandle>;
   resumeSession(id: string): Promise<SessionHandle>;
   listSessions(): Promise<SessionMeta[]>;
+  getStatus(): Promise<AdapterStatus>;
 }
 
 interface SessionHandle {
   events: AsyncIterable<AgentEvent>;
   send(msg: UserMessage): void; // queues if a turn is in flight
-  interrupt(): void;
-  resolvePermission(id: string, d: PermissionDecision): void;
+  interrupt(): Promise<void>;
+  setModel(model: string): Promise<void>;
+  setEffort(effort: string): Promise<void>;
+  setPermissionMode(mode: PermissionMode): Promise<void>;
+  resolvePermission(id: string, d: PermissionDecision): Promise<void>;
   close(): Promise<void>;
 }
 ```
 
-`AdapterCapabilities` is a flag set — `streamingDeltas`, `permissionPrompts`, `interrupt`, `subagents`, `mcp`, `skills`, `effortLevels`, `costReporting`, `checkpoints`, `backgroundAgents`. **The UI renders controls from these flags**, so an adapter that can't do mid-turn approval simply doesn't grow an approvals zone rather than showing a dead one.
+`AdapterCapabilities` contains `streamingDeltas`, `permissionPrompts`, `interrupt`, `subagents`, `mcp`, `skills`, `effortLevels`, `costReporting`, `checkpoints`, and `backgroundAgents`. The UI renders only supported controls.
 
-Normalized event union: `session.init`, `text.delta`, `thinking.delta`, `tool.start` / `tool.delta` / `tool.end`, `permission.request`, `todo.update`, `subagent.start` / `subagent.text` / `subagent.end`, `turn.end` (usage + cost), `error`, `exit`.
+Normalized event union: `session.init`, `text.delta`, `thinking.delta`, `tool.start` / `tool.delta` / `tool.end`, `permission.request`, `todo.update`, `subagent.start` / `subagent.text` / `subagent.end`, `turn.end` (usage + cumulative process cost), `usage.limit`, `error`, `exit`.
 
 ### 1.2 Process model — one long-lived process per session
 
-> **Main correction to the previous draft.** It spawned `claude -p <input> --resume <id>` once per turn. That forecloses most of the product: no permission prompts mid-turn, no interrupt, no streaming input, no queued follow-ups, plus a cold start and history re-tokenization every turn.
-
-The `claude-code` adapter holds one process open per active session in bidirectional streaming mode:
+The `claude-code` adapter keeps one process open per active session in bidirectional streaming mode:
 
 ```typescript
 const sessionId = randomUUID(); // mint it — don't discover it afterwards
@@ -79,42 +81,42 @@ spawn(
 ); // a directory under /workspace
 ```
 
-- **stdin:** `{"type":"user","message":{"role":"user","content":[...]}}`. Content blocks mean pasted images and file attachments need no separate upload path.
-- **stdout:** NDJSON. Route `system` (subtype `init` — model, cwd, tools, MCP servers, slash commands), `assistant`, `user`, `stream_event`, `control_request`/`control_response`, `result` (`usage`, `total_cost_usd`, `duration_ms`, `num_turns`).
-- **Interrupt** via a `control_request`, not SIGKILL — killing loses the turn and the process's in-memory context.
-- **Idle reaping:** close after 15 min idle; next message re-spawns with `--resume <sessionId>`. Same UUID, no user-visible seam. The session's dot goes from live to dormant in the UI and back.
+- **stdin:** user content blocks plus control messages. Images can travel over the existing WebSocket as content blocks; no upload endpoint is required.
+- **stdout:** NDJSON: `system`, `assistant`, `user`, `stream_event`, `control_request`, `control_response`, `result`, and `rate_limit_event`.
+- **Runtime control:** use control requests for interrupt, model, permission mode, and other supported settings. Do not kill the process to interrupt a turn.
+- **Idle reaping:** close after 15 minutes; re-spawn with `--resume <sessionId>` on the next message. The UI marks the session dormant while no process is running.
 
-`--forward-subagent-text` and `--include-hook-events` give live subagent activity in-stream, which removes the previous draft's proposed `SubagentStart`/`SubagentStop` hook scripts entirely.
+`--forward-subagent-text` and `--include-hook-events` provide live subagent activity without custom hook scripts.
 
 ### 1.3 Async side-tasks (skills and subagent editing)
 
-Skills and subagents are **not** edited through forms. They are edited by asking the agent, which is what it's good at — and those edits shouldn't block the console the user is working in.
+Skills and subagents are edited by asking the agent, not through dedicated forms.
 
-Every capability item carries an action that opens a **side-task**: a separate short-lived session, scoped to the relevant config directory, running in the background with a generated prompt ("edit the `code-review` skill to also check for N+1 queries"). It reports into the capabilities zone rather than the main transcript, with its own status dot. The user keeps working; results land when they land, and the capability row refreshes from disk.
+Each edit opens a **side-task**: a short-lived session scoped to the relevant config directory. Its status appears in the capabilities zone, and the capability row refreshes from disk when it finishes.
 
-This means the "smart" editing path and the plain chat path are the same machinery, and a raw file editor stays optional (nice-to-have) rather than load-bearing.
+A raw file editor remains optional.
 
 ---
 
 ## 2. Auth & Config
 
-The container owns its own `~/.claude` in a named Docker volume. The host's config is never mounted and never touched.
+The container owns `~/.claude` in a named volume. Host config is never mounted.
 
-**Login from the frontend.** The system zone runs `claude auth login` as a plain subprocess, reads the verification URL off its stdout, and renders it as a link plus a paste-back field for the returned code, which is written back to the subprocess stdin. The container is headless, so its own "opening browser" attempt is a no-op — the link opens in the *user's* browser, on the user's machine. URL-out / code-in is the flow. Session state, expiry, and account are shown alongside it, read from `claude auth status` (which returns JSON on stdout) rather than sniffing for a credentials file.
+**Login from the frontend.** The system zone runs `claude auth login`, renders the emitted verification URL, and writes the returned code to the same subprocess. Account status comes from `claude auth status` JSON, never from inspecting credential files.
 
-No PTY is required: verified against CLI 2.1.226, `claude auth login` under plain pipes emits the URL on stdout in well under a second, one line, with no ANSI. `child_process.spawn` is sufficient and `node-pty` is not needed. Each spawn mints its own PKCE challenge, so the URL and the process are a pair — login has to be single-flight, and the pasted code must go to the process that produced that URL.
+Plain pipes work with CLI 2.1.226; no PTY is required. Login is single-flight because each URL is tied to the subprocess and PKCE challenge that produced it.
 
-> `claude setup-token` is a *different* command — it mints a long-lived (1-year) `CLAUDE_CODE_OAUTH_TOKEN` for CI, scoped to `user:inference` alone, and it does require a TTY. It is not the subscription login path. An earlier draft of this doc specified it here; that was wrong.
+`claude setup-token` is for long-lived CI/script credentials, not interactive subscription login.
 
-**Bootstrapping from existing config.** `/workspace` is the only shared surface, so it's also the sanctioned config channel: drop files at `./workspace/_overseer/import/` on the host, hit IMPORT in the system zone, and the server copies them into `$CLAUDE_CONFIG_DIR`. EXPORT does the reverse for backup. Explicit, auditable, one direction at a time — not a live bind mount that lets host and container race each other.
+**Config import/export.** `/workspace/_overseer/` is the staging channel. IMPORT and EXPORT copy an allowlist of settings, skills, agents, and MCP configuration one direction at a time. Credentials and session history are never staged.
 
-**Compliance.** Anthropic's Feb 2026 policy restricts Pro/Max OAuth tokens to Claude Code and claude.ai; the Agent SDK requires API-key billing even for personal tools. Headless CLI mode is still Claude Code and stays on subscription auth — hence spawning the binary rather than importing `@anthropic-ai/claude-agent-sdk`. Re-check https://code.claude.com/docs/en/legal-and-compliance; this is actively evolving.
+**Compliance.** Subscription OAuth is restricted to Claude Code and claude.ai, while the Agent SDK requires API billing. Overseer therefore spawns the Claude Code binary. Re-check [Anthropic's legal and compliance docs](https://code.claude.com/docs/en/legal-and-compliance) before release.
 
 ### 2.1 Account usage
 
-The top bar carries a persistent usage readout — plan consumption against the rolling limit window, spend, and active session count.
+The top bar shows plan utilization, estimated activity cost, and active session count.
 
-Source of truth, in preference order: (1) rate-limit / usage metadata if the stream surfaces it for subscription accounts — **verify this empirically**, it's the only unknown here; (2) otherwise the server aggregates `usage` and `total_cost_usd` from every `turn.end` across all sessions in a local SQLite store, tracking the rolling window itself. Build the gauge against the local aggregate, since it's needed regardless for per-project and historical spend, and treat any first-party figure as an override when confirmed.
+The adapter normalizes `rate_limit_event` to `usage.limit`, the only source for subscription utilization and reset time. Hide that gauge until an event supplies both. Separately, persist token usage and estimated cost from `result` messages. In streaming mode, `total_cost_usd` is cumulative for the process: store non-negative deltas and treat a lower value after resume as a counter reset. Never present local estimates as plan consumption or billing data.
 
 ---
 
@@ -132,17 +134,17 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Terminal output for `Bash`                         | Console  | ANSI-aware renderer                                               |
 | Live todo checklist                                | Console  | `TodoWrite` tool calls → `todo.update`                            |
 | Tool approval, inline                              | Console  | `can_use_tool` control request (see §6.1)                         |
-| Permission mode selector                           | Top bar  | `--permission-mode` at spawn; visible always, colour-coded        |
-| Interrupt turn                                     | Console  | `control_request` subtype `interrupt`                             |
+| Permission mode selector                           | Top bar  | startup flag + runtime `set_permission_mode` control request      |
+| Interrupt turn                                     | Console  | `interrupt` control request                                      |
 | Queue message during a turn                        | Console  | buffer in `SessionHandle.send`                                    |
-| Model + effort selector                            | Console  | `--model`, `--effort`                                             |
+| Model + effort selector                            | Console  | startup flags + runtime control updates                           |
 | Create session in a project                        | Sessions | pick a dir under `/workspace`; mint `--session-id`                 |
 | Resume session + history replay                    | Sessions | `--resume`; parse JSONL for backfill (§4)                         |
 | Session list with live status                      | Sessions | supervisor state + JSONL mtime                                    |
-| Account usage + spend                              | Top bar  | §2.1                                                              |
+| Plan utilization + estimated spend                 | Top bar  | `usage.limit` + normalized result counters (§2.1)                 |
 | Subscription login                                 | System   | `claude auth login`, plain spawn; URL out, code in (§2)           |
 | Theme switch                                       | System   | `data-theme` on `:root`                                           |
-| Crash / exit / auth-failure surfacing              | Console  | distinguish exit causes; they look identical at the process level |
+| Crash / exit / auth-failure surfacing              | Console  | classify stream errors, result subtype, signal, and exit code     |
 
 ### Important
 
@@ -152,12 +154,12 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Permission rules editor                   | Approvals    | "allow always" writes `Bash(git *)`-style patterns to `settings.json`; `--allowedTools` / `--disallowedTools` |
 | Plan-mode approval screen                 | Approvals    | `ExitPlanMode` output — an approval surface, not a chat bubble                                                |
 | Nested subagent turns                     | Console      | `--forward-subagent-text`, grouped by `parent_tool_use_id`                                                    |
-| Background agents                         | Sessions     | `--bg`; `claude agents` to manage                                                                             |
-| Context window gauge                      | Console      | token accounting from `turn.end`                                                                              |
-| Budget ceiling per session                | Console      | `--max-budget-usd`                                                                                            |
+| Background agents                         | Sessions     | supervisor-managed sessions; `--bg` is incompatible with `-p`                                         |
+| Context window gauge                      | Console      | `get_context_usage` control request                                                                        |
+| Budget ceiling per session                | Console      | persist spend; pass remaining budget via `--max-budget-usd` on each spawn                                |
 | MCP server list + health + tool inventory | Capabilities | `claude mcp list` / `get`; `⏸ Pending approval` for unapproved `.mcp.json`                                    |
 | MCP add / remove                          | Capabilities | `mcp add` (stdio/http/sse, `-e`, `--header`), `add-json`, `remove`                                            |
-| MCP OAuth login                           | Capabilities | `mcp login` — same URL-out/code-in flow as §2                                                                 |
+| MCP OAuth login                           | Capabilities | `mcp login --no-browser`; URL out, redirect URL in                                                            |
 | Per-session MCP sets                      | Capabilities | `--mcp-config`, `--strict-mcp-config`                                                                         |
 | Skills + subagents inventory              | Capabilities | filesystem discovery of `.claude/skills`, `.claude/agents`                                                    |
 | Agent-driven skill/subagent editing       | Capabilities | async side-tasks (§1.3)                                                                                       |
@@ -170,13 +172,13 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Config import / export                    | System       | via `/workspace/_overseer/` (§2)                                                                              |
 | Hook event stream                         | System       | `--include-hook-events`                                                                                       |
 | CLI version + health                      | System       | `claude doctor`, version drift warning                                                                        |
-| Settings source inspector                 | System       | `--setting-sources user,project,local` — shows _which_ file a value came from                                 |
+| Settings source inspector                 | System       | read known files and apply documented user → project → local precedence                                       |
 
 ### Nice to have
 
 | Feature                           | Zone         | Mechanism                                                           |
 | --------------------------------- | ------------ | ------------------------------------------------------------------- |
-| Checkpoints / rewind              | Console      | `~/.claude/file-history/`; restore working tree to a checkpoint     |
+| Checkpoints / rewind              | Console      | `rewind_files` control request                                     |
 | Git worktree per session          | Sessions     | `-w/--worktree` — how parallel sessions stop fighting over one tree |
 | Session entity graph              | Console      | SVG node map of subagents, MCP servers, files touched               |
 | Branch tree for forked history    | Sessions     | full `parentUuid` tree instead of newest-leaf (§4)                  |
@@ -185,9 +187,9 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Structured job mode               | Sessions     | `--json-schema` — run-and-return rather than chat                   |
 | Fallback model chain              | System       | `--fallback-model a,b`                                              |
 | Prompt suggestions                | Console      | `--prompt-suggestions`; predicted next prompt after each turn       |
-| Resume from a PR                  | Sessions     | `--from-pr`                                                         |
+| Resume from a PR                  | Sessions     | find linked session metadata; `--from-pr` itself is interactive     |
 | Troubleshooting modes             | System       | `--safe-mode`, `--bare`                                             |
-| Raw file editor for skills/agents | Capabilities | needs a watcher + conflict handling; §1.3 makes it optional         |
+| Raw file editor for skills/agents | Capabilities | watcher + conflict handling                                        |
 | Transcript export                 | Console      | markdown / JSON                                                     |
 | Command palette                   | global       | keyboard-first jump to any session, zone, or action                 |
 | Desktop notifications             | global       | on approval request or turn completion                              |
@@ -202,12 +204,12 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 - **Message records:** `type`, `uuid`, `parentUuid`, `sessionId`, `timestamp`, `message`, `cwd`, `gitBranch`, `version`, `userType`, `promptId`, `isMeta`, `isSidechain`.
 - **Operation records:** `type`, `operation`, `sessionId`, `timestamp` (compaction and similar).
 
-Two things the original doc glossed:
+Two rules matter:
 
-1. **`parentUuid` makes this a tree, not a log.** Rewind and fork branch it. A reader treating it as a flat append-only list renders abandoned branches interleaved with live ones. **Decision:** v1 walks parents back from the newest leaf and shows that single path; the branch tree is a nice-to-have.
+1. **`parentUuid` makes this a tree, not a log.** V1 walks from the newest leaf to the root and renders that path; a full branch tree is a nice-to-have.
 2. **`isSidechain` marks subagent turns.** Nest them under their parent; never inline them into the main transcript.
 
-This is an internal, undocumented format — expect drift across CLI versions. **Mitigation:** treat JSONL strictly as _history backfill_. Live state always comes from the stream. Pin the CLI version in the image; gate replay behind a version check and degrade to "history unavailable for this version" rather than mis-rendering.
+JSONL is undocumented and may drift. Use it only for history backfill, pin the CLI version, and disable replay for unsupported versions. Live state always comes from the stream.
 
 ---
 
@@ -220,19 +222,23 @@ services:
     ports: ["127.0.0.1:3000:3000"]
     volumes:
       - claude-home:/home/node/.claude # container-owned; never bound to host
+      - overseer-memory:/app/.overseer
       - ./workspace:/workspace # the only shared surface
     environment:
       - CLAUDE_CONFIG_DIR=/home/node/.claude
+      - OVERSEER_INTERNAL_DIR=/app/.overseer
 volumes:
   claude-home:
+  overseer-memory:
 ```
 
-One process: the Node server serves the built SPA as static files and handles `/api/*` + `/ws` on the same port. No reverse proxy for local use.
+One service: the Node server serves the built SPA and handles `/api/*` + `/ws` on the same port. Agent and auth CLIs run as child processes; no reverse proxy is needed locally.
 
 - `/workspace/<project>/` — one git project per directory. Session creation picks one; it becomes the process `cwd`.
-- `/workspace/_overseer/` — import/export staging and the local SQLite store for usage, session index, and search.
+- `/workspace/_overseer/` — import/export staging only.
+- `/app/.overseer/` — internal memory plus SQLite usage history, session index, and search index.
 - Image needs `git`, `ripgrep`, and a shell alongside Node; the CLI shells out to all three. The auth flow needs no PTY (§2), so the runtime stage needs no native-build toolchain. Run as non-root.
-- Because `.claude` is container-owned, the previous draft's host/container config race is gone. The remaining overlap is `/workspace` itself: host-side git operations on a project while an agent writes to it. Normal git discipline covers it; the UI shows each session's `gitBranch` and dirty state so the conflict is at least visible.
+- The remaining shared-write risk is host-side git activity while an agent edits the same project. Show each session's branch and dirty state so conflicts are visible.
 
 ---
 
@@ -240,21 +246,19 @@ One process: the Node server serves the built SPA as static files and handles `/
 
 "Single-user, local" doesn't remove the problem:
 
-- This is **remote code execution as a service**. Bind `127.0.0.1` explicitly. If it ever needs LAN access, put a token in front of it — not "it's on my network".
-- Check `Origin` on the WebSocket upgrade. Otherwise any page in the user's browser can open a socket to `localhost:3000` and drive the agent.
+- This is **remote code execution as a service**. Publish the host port on `127.0.0.1`. LAN access requires authentication.
+- Check `Origin` on WebSocket upgrades and mutating HTTP requests; otherwise another page can drive the local server.
 - The container holds a live subscription token in `claude-home`. Any RCE inside it exfiltrates that token — which is also the argument for not mounting the host's `~/.claude`.
 - `bypassPermissions` removes the last guard. Gate it behind an explicit server-side opt-in mirroring the CLI's own `--allow-dangerously-skip-permissions` gesture, and render it in `--danger` whenever active.
 
-### 6.1 One thing to verify before building the approval queue
+### 6.1 Approval protocol
 
-Does the CLI emit a `can_use_tool` control request on stdout under `--input-format stream-json`? The Agent SDK's `canUseTool` rides this same protocol, so it should — but confirm it before committing.
-
-Fallback if not: a `PreToolUse` hook script that POSTs the tool call to the server and blocks on the HTTP response, returning `{"permissionDecision":"allow"|"deny"|"ask"}`. Either path gives the UI a human-in-the-loop gate; the difference is plumbing, and it's the one thing that would change the adapter's shape. **Resolve first.**
+In streaming-input mode, permission prompts arrive as `control_request` messages and are resolved with matching `control_response` messages. Re-initialization can redeliver pending requests, so the server deduplicates them by request ID. A `PreToolUse` hook is for policy that must inspect every tool call, not for ordinary user approval.
 
 ---
 
 ## 7. Sizing
 
-- Budget ~500 MB–1 GB resident per _live_ process — now per open session rather than per in-flight turn. Idle reaping (§1.2) is what keeps a handful of tabs from pinning gigabytes.
+- Budget roughly 500 MB–1 GB per live process. Idle reaping prevents dormant sessions from pinning memory.
 - The CLI has no built-in session timeout; enforce idle and turn limits server-side.
-- `--max-budget-usd` is the cost-side equivalent of a timeout. Set a default.
+- Enforce session budgets server-side across process restarts.
