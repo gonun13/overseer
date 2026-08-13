@@ -43,7 +43,9 @@ export const BOOT_MS = 3000;
 export type WizardPhase =
   /** Boot beat + socket gate. Stays until BOOT_MS has elapsed *and* connected. */
   | "boot"
-  /** Connected. First-run walks intro → name → tone → greet; returns skip to name/greet. */
+  /** Connected. First-run walks name → tone → greet; returns skip to the
+   * first missing beat. "I AM THE OVERSEER" is the tone-pick headline, not a
+   * beat of its own. */
   | "welcome"
   /** Discovery running; the operations window is up and steps are arriving. */
   | "discovery"
@@ -52,13 +54,44 @@ export type WizardPhase =
   /** Done. The wizard stops driving anything and normal derivation takes over. */
   | "ready";
 
-/** Beats inside `welcome`. First turn: intro → name → tone → greet. A return
- * visit lands on `name` or `greet` depending on whether a name is already known. */
+/** Beats inside `welcome`. Name → tone → greet. A return visit lands on
+ * whichever of those is still owed. */
 export type WelcomeBeat = "intro" | "name" | "tone" | "greet";
 
 export type PersonalityTone = NonNullable<AppliedPersonality["tone"]>;
 
 export const TONES: PersonalityTone[] = ["neutral", "dry", "warm"];
+
+/**
+ * Where the reset flow has got to. Deliberately a field of its own rather than
+ * a `WizardPhase`: a reset can be asked for at any point after the clock
+ * appears, and folding it into the phase would throw away whichever phase was
+ * running — a decline would then have to invent one to go back to.
+ */
+export type ResetStage =
+  /** The decision is up. Nothing has been erased and nothing has been sent. */
+  | "confirm"
+  /** The operator said no. Held for a beat so the answer can be read. */
+  | "declined"
+  /** The wipe is running: steps arrive, furniture leaves. */
+  | "working"
+  /** Everything is gone. One last headline, then the reload. */
+  | "goodbye";
+
+/**
+ * The order furniture is taken away in during a wipe, one piece per delete
+ * step. Controls first and the clock last: the operator loses the ability to
+ * start new work before they lose the ability to read what is happening, which
+ * is the same order the wizard mounts them in, reversed.
+ */
+const TEARDOWN_ORDER: FurnitureReveal[] = [
+  "prompt",
+  "footer",
+  "adapterWidget",
+  "activeProject",
+  "projectPanel",
+  "clock",
+];
 
 export interface WizardState {
   phase: WizardPhase;
@@ -95,6 +128,13 @@ export interface WizardState {
   /** One of the alarm headline words, picked once when the complaint lands
    * so re-renders do not shuffle `DANGER` → `WHY???`. */
   personalityRescueHeadline?: string;
+  /** How far the reset flow has got. Undefined when none has been asked for. */
+  reset?: ResetStage;
+  /** Force the next headline change to type out. Set when a refused reset
+   * hands the headline back to derivation — otherwise `blocked` (and the
+   * rest of the activity words) land as an instant swap and the reset's
+   * typing register breaks. */
+  forceHeadlineType: boolean;
   /** Set when the socket or the pass itself failed. The wizard reports it
    * rather than hanging on a step that will never resolve. */
   error?: string;
@@ -128,6 +168,7 @@ export const INITIAL_WIZARD: WizardState = {
   rejected: [],
   personalityMissing: false,
   personalityRescued: false,
+  forceHeadlineType: false,
   connected: false,
   bootMinElapsed: false,
   operationTick: 0,
@@ -217,15 +258,26 @@ export type WizardAction =
       detail?: string;
     }
   /** Furniture has finished mounting; hand back to ordinary derivation. */
-  | { type: "settled" };
+  | { type: "settled" }
+  /** The operator asked to reset; the decision goes up. Nothing is sent yet. */
+  | { type: "reset.asked" }
+  /** The operator answered no. */
+  | { type: "reset.declined" }
+  /** The declined beat has been read; back to ordinary derivation. */
+  | { type: "reset.dismissed" }
+  /** A forced type-out finished; stop forcing. */
+  | { type: "headline.typed" }
+  /** The operator answered yes. `memory.reset` is on the wire. */
+  | { type: "reset.confirmed" }
+  /** The server finished erasing. Only the goodbye is left. */
+  | { type: "reset.done" };
 
 /** Which welcome beat a freshly-connected session should land on. */
 function initialWelcomeBeat(state: WizardState): WelcomeBeat {
-  // First turn of this instance always opens with the intro.
-  if (!state.returning) return "intro";
+  // Name first. The self-introduction is the headline *behind* the tone
+  // buttons — showing it alone before the ask made "I AM THE OVERSEER" land
+  // twice on a first run (once here, once on tone).
   if (!state.personality.name) return "name";
-  // Tone is only "set" when the operator picked it (or wrote it into
-  // personality) — absence means the picker still owes them a turn.
   if (!state.personality.tone) return "tone";
   return "greet";
 }
@@ -314,6 +366,11 @@ export function wizardReducer(
       return { ...state, attachedAdapterId: action.id };
 
     case "workspace.projects": {
+      // The wipe deletes `personality.json`, so the monitor is about to report
+      // it missing and ask for a restart. That complaint describes an accident;
+      // this is the operator erasing it on purpose, and the reload is already
+      // coming.
+      if (state.reset === "working" || state.reset === "goodbye") return state;
       const { projects, untrackedFolders } = action;
       const preferred =
         action.activeProjectPath ??
@@ -348,6 +405,11 @@ export function wizardReducer(
       return {
         ...state,
         operationTick: state.operationTick + 1,
+        // Each line of the wipe costs the operator a piece of the instrument,
+        // so the report and the field say the same thing at the same time.
+        ...(state.reset === "working"
+          ? { revealed: withoutNextFurniture(state) }
+          : {}),
         steps: [
           ...state.steps,
           {
@@ -371,9 +433,67 @@ export function wizardReducer(
     case "settled":
       return state.phase === "settling" ? { ...state, phase: "ready" } : state;
 
+    case "reset.asked":
+      // Asking again mid-wipe would put the decision back over a teardown that
+      // cannot be stopped. Only an untouched instance — or one that just said
+      // no — can be asked.
+      if (state.reset !== undefined && state.reset !== "declined") return state;
+      return { ...state, reset: "confirm" };
+
+    case "reset.declined":
+      return state.reset === "confirm" ? { ...state, reset: "declined" } : state;
+
+    case "reset.dismissed":
+      return state.reset === "declined"
+        ? { ...state, reset: undefined, forceHeadlineType: true }
+        : state;
+
+    case "headline.typed":
+      return state.forceHeadlineType
+        ? { ...state, forceHeadlineType: false }
+        : state;
+
+    case "reset.confirmed":
+      if (state.reset !== "confirm") return state;
+      return {
+        ...state,
+        reset: "working",
+        // The teardown is its own report; whatever the last operation left in
+        // the window is not part of it.
+        steps: [],
+        // Summons the operations window before the first delete step lands, so
+        // the wipe is watched rather than discovered halfway through.
+        operationTick: state.operationTick + 1,
+      };
+
+    case "reset.done":
+      if (state.reset !== "working") return state;
+      // Whatever furniture outlasted the delete steps goes with the last one.
+      return { ...state, reset: "goodbye", revealed: { ...NO_REVEAL } };
+
     case "server.event":
       return applyEvent(state, action.event);
   }
+}
+
+/**
+ * Take away the first piece still standing, in teardown order.
+ *
+ * What is *revealed* and what is *mounted* are not the same thing — the prompt
+ * slot can be released with no authenticated adapter to submit through — and a
+ * step that unrevealed something the operator could not see would read as a
+ * delete that cost nothing. Whatever is left when the steps run out goes with
+ * `reset.done`.
+ */
+function withoutNextFurniture(
+  state: WizardState,
+): Record<FurnitureReveal, boolean> {
+  const mounted = furnitureFor(state);
+  const next = TEARDOWN_ORDER.find(
+    (key) => state.revealed[key] && mounted[key],
+  );
+  if (next === undefined) return state.revealed;
+  return { ...state.revealed, [next]: false };
 }
 
 function applyReveal(
@@ -571,9 +691,23 @@ export function welcomeNeedsTone(state: WizardState): boolean {
  * While `welcomeNeedsName` is true this returns undefined: the ask UI owns the
  * headline slot, and a string here would fight it. Copy comes from
  * `packages/web/src/lang` and varies with tone.
+ *
+ * A reset outranks the phase entirely. The decision window states the facts;
+ * the headline is the overseer reacting to being asked, which is the one thing
+ * only it can say (docs/overseer-behavior.md §2.3).
  */
 export function wizardHeadline(state: WizardState): string | undefined {
   const tone = state.personality.tone;
+  switch (state.reset) {
+    case "confirm":
+      return message(tone, "resetAsk");
+    case "declined":
+      return message(tone, "resetDeclined");
+    case "working":
+      return message(tone, "resetWorking");
+    case "goodbye":
+      return message(tone, "resetGoodbye");
+  }
   switch (state.phase) {
     case "boot":
       // Socket wait lives on the loading bar. Past the minimum beat, say so
@@ -583,10 +717,13 @@ export function wizardHeadline(state: WizardState): string | undefined {
         : message(tone, "starting");
     case "welcome": {
       switch (state.welcomeBeat) {
-        case "intro":
         case "tone":
           // Self-introduction stays up through the tone pick — the buttons are
           // the question; the headline is still who is speaking.
+          return message(tone, "intro");
+        case "intro":
+          // Kept so an old hold cannot strand the reducer; new sessions never
+          // land here (initialWelcomeBeat skips straight to name).
           return message(tone, "intro");
         case "name":
           return undefined;

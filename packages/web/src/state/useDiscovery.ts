@@ -45,6 +45,12 @@ export interface DiscoveryController extends WizardState {
   selectTheme: (theme: OverseerTheme) => void;
   /** Attach an adapter from the picker (auth is a separate later step). */
   connectAdapter: (id: string) => void;
+  /** Put the reset decision up. Nothing is erased and nothing is sent. */
+  askReset: () => void;
+  /** Answer the decision with no. */
+  declineReset: () => void;
+  /** Answer the decision with yes — the wipe starts on the server. */
+  confirmReset: () => void;
   /** OverseerSpace calls this when the current headline is fully on screen
    * (typing finished, or shown instantly). Arms the intro/greet holds. */
   onHeadlineReady: (text: string) => void;
@@ -116,6 +122,10 @@ export function useDiscovery(): DiscoveryController {
         });
         return;
       }
+      if (message.type === "memory.reset.done") {
+        dispatch({ type: "reset.done" });
+        return;
+      }
       if (message.type === "error") {
         // A refusal the server marked benign is not a lost connection — a
         // rejected name, a `project.select` the server would not persist —
@@ -149,7 +159,23 @@ export function useDiscovery(): DiscoveryController {
     onConnectionLost: handleConnectionLost,
   });
 
-  const { onHeadlineReady } = useWizardTiming(state, dispatch);
+  const { onHeadlineReady: onTimingReady } = useWizardTiming(
+    state,
+    dispatch,
+    () => {
+      location.reload();
+    },
+  );
+
+  // Clear a one-shot forced type (the headline after a refused reset) once it
+  // has landed — otherwise every later change would keep typing.
+  const onHeadlineReady = useCallback(
+    (text: string) => {
+      onTimingReady(text);
+      dispatch({ type: "headline.typed" });
+    },
+    [onTimingReady],
+  );
 
   const submitOperatorName = useCallback(
     (raw: string) => {
@@ -201,6 +227,19 @@ export function useDiscovery(): DiscoveryController {
     [send],
   );
 
+  const askReset = useCallback(() => dispatch({ type: "reset.asked" }), []);
+
+  const declineReset = useCallback(
+    () => dispatch({ type: "reset.declined" }),
+    [],
+  );
+
+  const confirmReset = useCallback(() => {
+    dispatch({ type: "reset.confirmed" });
+    const message: ClientMessage = { type: "memory.reset" };
+    send(message);
+  }, [send]);
+
   // Welcome already required a live socket, so discovery always starts with
   // one — and only after name, tone and the greet presentation have finished.
   // Re-check readyState in case the connection dropped between phases.
@@ -219,6 +258,9 @@ export function useDiscovery(): DiscoveryController {
     selectProject,
     selectTheme,
     connectAdapter,
+    askReset,
+    declineReset,
+    confirmReset,
     onHeadlineReady,
   };
 }

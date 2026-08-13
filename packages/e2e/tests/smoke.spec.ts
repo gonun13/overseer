@@ -31,7 +31,7 @@ async function passWizardOpening(page: Page): Promise<"asked" | "returning"> {
   const settled = page.getByText(SETTLED);
 
   // One of these three is where every boot lands. Nothing is visible for the
-  // first BOOT_MS + the intro hold, so this wait is the boot beat itself.
+  // first BOOT_MS, so this wait is the boot beat itself.
   await expect(nameInput.or(tonePick).or(settled).first()).toBeVisible({
     timeout: 45_000,
   });

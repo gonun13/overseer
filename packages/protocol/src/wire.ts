@@ -30,14 +30,19 @@ export type ClientMessage =
   /** First-run welcome: the operator's name, stored in overseer-personality.
    * The wizard asks before discovery so the greeting can use it. */
   | { type: "operator.name"; name: string }
-  /** First-run intro: tone chosen after "I AM THE OVERSEER". */
+  /** First-run: tone chosen after the name ask — "I AM THE OVERSEER" is the
+   * headline behind the picker. */
   | { type: "operator.tone"; tone: PersonalityTone }
   /** Persist the operator's active project into internal memory. */
   | { type: "project.select"; path: string }
   /** Persist the operator's theme into internal memory. */
   | { type: "theme.select"; theme: OverseerTheme }
   /** Attach an adapter from the picker. Auth is a separate later step. */
-  | { type: "adapter.connect"; id: string };
+  | { type: "adapter.connect"; id: string }
+  /** Erase the overseer's memory — internal `.overseer` and the external
+   * `personality.json`. Adapter auth is not memory and is left alone. Only
+   * sent after the operator answered the decision (ui-ux-design.md §5.2). */
+  | { type: "memory.reset" };
 
 export interface ConnectedMessage {
   type: "connected";
@@ -128,6 +133,13 @@ export interface OverseerStepMessage {
   detail?: string;
 }
 
+/** Every store named by `memory.reset` is gone. The steps of the wipe arrived
+ * as ordinary `overseer.step` lines; this is only the end of them, and the
+ * client's cue to reload into a first run. */
+export interface MemoryResetDoneMessage {
+  type: "memory.reset.done";
+}
+
 export type ServerMessage =
   | ConnectedMessage
   | ErrorMessage
@@ -138,6 +150,7 @@ export type ServerMessage =
   | AdapterConnectedMessage
   | WorkspaceProjectsMessage
   | OverseerStepMessage
+  | MemoryResetDoneMessage
   | DiscoveryEvent;
 
 const TONES = new Set<string>(["neutral", "dry", "warm"]);
@@ -164,5 +177,6 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   if (type === "adapter.connect") {
     return typeof (value as { id?: unknown }).id === "string";
   }
+  if (type === "memory.reset") return true;
   return false;
 }

@@ -2,6 +2,9 @@ import { useEffect } from "react";
 import type { PromptOptionKey } from "../prompt";
 
 interface ShellKeyboardOptions {
+  /** A decision is up. Every command is off, including Escape: the decision is
+   * answered with its own two buttons or not at all (ui-ux-design.md §5.2). */
+  blocked: boolean;
   settingsOpen: boolean;
   windowCount: number;
   openControl: PromptOptionKey | null;
@@ -20,6 +23,7 @@ interface ShellKeyboardOptions {
 
 /** Registers the application shell's global keyboard command layer. */
 export function useShellKeyboard({
+  blocked,
   settingsOpen,
   windowCount,
   openControl,
@@ -37,6 +41,8 @@ export function useShellKeyboard({
 }: ShellKeyboardOptions) {
   useEffect(() => {
     function onKeyDown(event: KeyboardEvent) {
+      if (blocked) return;
+
       if (event.key === "Escape") {
         if (settingsOpen) closeSettings();
         else if (windowCount > 0) closeTopWindow();
@@ -85,6 +91,7 @@ export function useShellKeyboard({
     window.addEventListener("keydown", onKeyDown);
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
+    blocked,
     closeControl,
     closePrompt,
     closeSettings,

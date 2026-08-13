@@ -19,6 +19,7 @@ export function SettingsPanel({
   onSelectTheme,
   onOpenCapabilities,
   onStartLogin,
+  onResetOverseer,
 }: {
   open: boolean;
   theme: OverseerTheme;
@@ -36,6 +37,9 @@ export function SettingsPanel({
   onOpenCapabilities: () => void;
   /** Close settings and open the adapters picker to sign in. */
   onStartLogin: () => void;
+  /** Close settings and put the reset decision up. The panel never wipes
+   * anything itself — it only asks. */
+  onResetOverseer: () => void;
 }) {
   // The panel overlays the right-hand widgets, so it must not be left open by accident.
   useEffect(() => {
@@ -153,7 +157,9 @@ export function SettingsPanel({
         <WTitle>danger</WTitle>
         <div className="btn-row">
           <button className="w-btn danger">stop all sessions</button>
-          <button className="w-btn danger">reset local state</button>
+          <button className="w-btn danger" onClick={onResetOverseer}>
+            reset overseer
+          </button>
         </div>
       </div>
     </aside>

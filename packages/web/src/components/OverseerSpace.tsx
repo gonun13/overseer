@@ -38,6 +38,8 @@ export function OverseerSpace({
   busy,
   loading = false,
   typingChance,
+  holdCaret = false,
+  onGoodbyeClick,
   onFollow,
   onSubmitName,
   namePrefix = "welcome...",
@@ -53,6 +55,10 @@ export function OverseerSpace({
   /** From `overseer-personality`, when the operator set one and it passed
    * validation. Undefined leaves `useOccasionalTyping`'s own default. */
   typingChance?: number;
+  /** Keep the block caret after typing finishes — the goodbye hold. */
+  holdCaret?: boolean;
+  /** Goodbye hold: click the headline to reload without waiting out the timer. */
+  onGoodbyeClick?: () => void;
   onFollow: (signal: Signal) => void;
   /** First-run welcome: ask for a name inline in the headline. */
   onSubmitName?: (name: string) => void;
@@ -88,10 +94,22 @@ export function OverseerSpace({
         <NameAsk prefix={namePrefix} onSubmit={onSubmitName} />
       ) : (
         <>
-          <p className="os-headline">
-            {display}
-            {typing && <span className="os-cursor blink" />}
-          </p>
+          {onGoodbyeClick ? (
+            <button
+              type="button"
+              className="os-headline os-headline-restart"
+              onClick={onGoodbyeClick}
+              title="click to restart"
+            >
+              {display}
+              {(typing || holdCaret) && <span className="os-cursor blink" />}
+            </button>
+          ) : (
+            <p className="os-headline">
+              {display}
+              {(typing || holdCaret) && <span className="os-cursor blink" />}
+            </p>
+          )}
           <hr className="os-rule" style={{ width: busy ? 150 : 30 }} />
           {loading ? <LoadingBar /> : <p className="os-marker">▲</p>}
           {pickingTone && (

@@ -98,9 +98,16 @@ export function useShellPresentation(
         : derivedHeadline;
   const typingChance = wizard.error
     ? 0
-    : wizardWord
+    : wizard.reset || wizard.forceHeadlineType || wizardWord
       ? 1
       : wizard.personality.typingChance;
+
+  // Keep the caret after the goodbye types out — the hold is the last thing
+  // the operator sees, and a line with no caret reads as finished rather than
+  // waiting. A click on the headline restarts without sitting out the full hold.
+  const holdCaret = wizard.reset === "goodbye";
+  const onGoodbyeClick =
+    wizard.reset === "goodbye" ? () => location.reload() : undefined;
 
   // Discovery and each later operation summon the machine-owned window.
   useEffect(() => {
@@ -130,6 +137,8 @@ export function useShellPresentation(
     headline,
     loading: isLoading(wizard),
     typingChance,
+    holdCaret,
+    onGoodbyeClick,
     askingName,
     pickingTone,
     namePrefix: nameAskPrefix(wizard),

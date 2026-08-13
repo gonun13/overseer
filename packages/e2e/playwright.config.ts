@@ -21,7 +21,7 @@ export default defineConfig({
   reporter: process.env.CI
     ? [["list"], ["html", { outputFolder: "playwright-report", open: "never" }]]
     : "list",
-  // A boot is a paced sequence, not a page load: minimum beat, intro hold,
+  // A boot is a paced sequence, not a page load: minimum beat, name ask,
   // greet hold, then discovery revealing a line a second. 30s left no room
   // between "slow" and "broken".
   timeout: 90_000,

@@ -1,4 +1,4 @@
-import { readFile, writeFile } from "node:fs/promises";
+import { readFile, rm, writeFile } from "node:fs/promises";
 import type {
   AppliedPersonality,
   RejectedCustomization,
@@ -117,6 +117,45 @@ export async function setOperatorTone(
   const result = await patchPersonality({ tone: parsed.tone }, root);
   if (!result.ok) return result;
   return { ok: true, tone: parsed.tone };
+}
+
+/**
+ * Delete `personality.json` because the operator asked for it.
+ *
+ * Only the file: the project around it is an ordinary git project with the
+ * operator's own history in it, and a reset is meant to clear what the overseer
+ * remembers, not to remove a repository nobody asked it to touch. Discovery
+ * scaffolds the defaults back on the next boot.
+ *
+ * The action is recorded here even though the register is about to be erased
+ * too — the order in `ws.ts` is deliberate, and a wipe that skipped its own
+ * audit line would be a wipe the trail never knew about if the delete failed.
+ */
+export async function deletePersonalityConfig(
+  root = WORKSPACE_ROOT,
+): Promise<{ ok: true } | { ok: false; reason: string }> {
+  const file = personalityConfigPath(root);
+  try {
+    await rm(file, { force: true });
+  } catch (error) {
+    const reason =
+      error instanceof Error ? error.message : "could not delete personality";
+    await recordAction({
+      actor: "operator",
+      action: "personality:delete",
+      outcome: "failed",
+      detail: `${file} · ${reason}`,
+    });
+    return { ok: false, reason };
+  }
+
+  await recordAction({
+    actor: "operator",
+    action: "personality:delete",
+    outcome: "ok",
+    detail: file,
+  });
+  return { ok: true };
 }
 
 async function patchPersonality(

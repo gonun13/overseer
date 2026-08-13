@@ -51,8 +51,11 @@ In steady state, the headline comes from the most urgent signal via `ACTIVITY_HE
 | `idle`      | `IDLE`      |
 
 The wizard supplies tone-aware transient copy before there is a world to rank: startup and connection status,
-the intro, name/tone prompts, greeting, and discovery status. Recovery may use the explicit alarm set. All
-copy comes from `packages/web/src/lang/` and `packages/web/src/state/wizard.ts`, never ad hoc call sites.
+name/tone prompts (with the self-introduction as the tone-pick headline), greeting, and discovery status.
+Recovery may use the explicit alarm set. A
+reset outranks all of it — while one is up the headline is the overseer's own reaction to being erased
+(§6.5). All copy comes from `packages/web/src/lang/` and `packages/web/src/state/wizard.ts`, never ad hoc
+call sites.
 
 Headline changes normally swap instantly; about 15% type out. Reduced motion makes every change instant
 ([motion](ui-ux-design.md#9-motion)).
@@ -125,19 +128,22 @@ reading personality...    [OK]
 ## 4. The startup wizard
 
 The state machine in `packages/web/src/state/wizard.ts` owns phase, headline, furniture reveal, and operations
-window state.
+window state. It also owns the reset stage (§6.5), which is a field of its own rather than a phase: a reset
+can be asked for at any point once the clock is up, and folding it into the phase would throw away whichever
+phase was running.
 
 | Phase       | Behavior |
 | ----------- | -------- |
 | `boot`      | Show the tone's `starting` copy and loading bar for the minimum beat. If the socket is still unavailable, switch to its `connecting` copy. |
-| `welcome`   | A first instance shows the intro, then fills any missing name or tone before greeting. A returning instance starts at its first missing beat, or greets immediately. Discovery waits. |
+| `welcome`   | Fill any missing name or tone, then greet. "I AM THE OVERSEER" is the headline behind the tone pick, not a beat before the name ask. A returning instance starts at its first missing beat, or greets immediately. Discovery waits. |
 | `discovery` | Show the tone's `lookingAround` copy, summon the operations window, and stream discovery steps. |
 | `settling`  | Mount newly knowable furniture and return the headline to derived state. |
 | `ready`     | Stop driving the interface; normal operation takes over. |
 
 ### Progressive furniture disclosure
 
-Once mounted, furniture stays. It appears when its state becomes *knowable*, not necessarily healthy:
+Once mounted, furniture stays until a confirmed reset takes it away (§6.5). It appears when its state becomes
+*knowable*, not necessarily healthy:
 
 | Furniture         | Mounts when                                                                    |
 | ----------------- | ------------------------------------------------------------------------------ |
@@ -198,7 +204,8 @@ workspace path.
 - **`index.sqlite`** stores application indexes and estimates; it is not billing truth.
 - The server owns all access; current log/state access lives in
   `packages/server/src/memory/internal.ts`.
-- `./bin/reset` discards this volume and `claude-home`.
+- `./bin/reset` discards this volume and `claude-home`. `reset overseer` in the settings panel empties the
+  store from inside the running server and leaves auth alone (§6.5).
 
 ### 6.3 External memory — `overseer-personality`
 
@@ -208,6 +215,9 @@ The overseer watches `personality.json`; valid live edits apply without restart.
 If the file is deleted, the server does not recreate it live. It records a blocked operation and action,
 shows a persistent restart signal, and uses an alarm headline (`DANGER`, `BRAINDEAD`, or `WHY???`). Clicking
 the signal reloads the app; discovery restores defaults on boot and reports it.
+
+That complaint describes an accident. A reset deletes the same file on purpose, so the wizard ignores the
+monitor's report while one is running (§6.5) — the reload it would ask for is already coming.
 
 The project appears in the normal project panel. Edit it on the host, in a project session, or through the
 [async side-task pattern](architecture-design.md#13-async-side-tasks-skills-and-subagent-editing). Its current
@@ -239,6 +249,41 @@ Validation lives in `packages/server/src/memory/personality.ts`.
 
 **A rejection is never silent.** A `waiting` signal names the field and reason and opens the project selector.
 
+### 6.5 Resetting the overseer — forgetting on purpose
+
+`reset overseer` in the settings panel's danger row is the operator's way of making the overseer a stranger
+again. It is the one action that destroys memory, so it is the one action that blocks the interface to ask:
+a [decision](ui-ux-design.md#54-the-decision--the-one-surface-that-blocks) goes up, and until it is answered
+nothing else in the field can be clicked or tabbed to.
+
+**What a confirmed reset erases**, as one `memory.reset` frame handled in `packages/server/src/ws.ts`:
+
+| Store                                        | Erased | Why                                                              |
+| -------------------------------------------- | ------ | ---------------------------------------------------------------- |
+| `state.json` — the world snapshot             | Yes    | Its existence is what makes the next boot a return visit (§6.2). |
+| `actions.jsonl` — the action register         | Yes    | The record is of an instance that will not exist.                |
+| `logs/` — every run log                       | Yes    | Same.                                                             |
+| `personality.json`                            | Yes    | The name and tone were given to this instance (§6.3).            |
+| The `overseer-personality` project around it  | No     | An ordinary git project with the operator's own history in it.   |
+| Workspace projects                            | No     | Never the overseer's to remove.                                  |
+| Adapter auth (`claude-home`)                  | No     | Sign-in is not memory. `./bin/reset` is what discards that.      |
+
+The order is `personality.json` → run logs → action register → snapshot (`erasing memory`). The snapshot
+goes last so the operations window ends on memory itself; the register is still cleared before that so the
+deletes' own audit lines do not survive as the new instance's first memory. A wipe that fails stops there
+and keeps that trail, which is the one case worth having it.
+
+**How it plays out.** The overseer reacts to the question in the headline — surprise, in the tone it was
+given — and answers again when it is refused; the decision itself states the terms in plain machine copy
+(§2.3). On confirmation each delete arrives as an ordinary operations-window step and costs one piece of
+furniture, controls first and the clock last. When the last store is gone the interface is a headline and
+nothing else: one goodbye in the same tone, held for ten seconds with the caret blinking (a click
+restarts immediately), then the page reloads into a first run — discovery finds no
+snapshot, scaffolds `personality.json` back to defaults, and asks for a name.
+
+A wipe that fails partway does not reload. The failed step stands in the operations window and the error
+becomes the headline, because a first-run boot would quietly contradict memory that is still on disk.
+
 ---
 
 ## 7. Where each piece lives
@@ -251,6 +296,7 @@ Validation lives in `packages/server/src/memory/personality.ts`.
 | Wizard state machine          | `packages/web/src/state/wizard.ts`               |
 | Tone-aware headline copy      | `packages/web/src/lang/`                         |
 | Discovery client              | `packages/web/src/state/useDiscovery.ts`         |
+| Reset decision                | `packages/web/src/components/DecisionWindow.tsx` |
 | Operations window             | `packages/web/src/components/windows/OverseerWindow.tsx` |
 | Adapter status + discovery events | `packages/protocol/src/adapter.ts`, `packages/protocol/src/discovery.ts` |
 | WS routing + discovery pass   | `packages/server/src/ws.ts`, `packages/server/src/discovery.ts` |

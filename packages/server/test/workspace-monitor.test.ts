@@ -6,7 +6,11 @@ import type {
   UntrackedFolder,
 } from "@overseer/protocol";
 import type { WorldSnapshot } from "../src/memory/internal.js";
-import { createPersonalityFileWatcher } from "../src/personality-file-watcher.js";
+import {
+  beginIntentionalPersonalityDelete,
+  createPersonalityFileWatcher,
+  endIntentionalPersonalityDelete,
+} from "../src/personality-file-watcher.js";
 import {
   createWorkspaceMembershipWorker,
   emitProjectDiff,
@@ -302,6 +306,42 @@ describe("createPersonalityFileWatcher", () => {
     );
   });
 
+  it("stays quiet when personality is deleted by an intentional reset", async () => {
+    const { messages, broadcast } = collectMessages();
+    const watcher = createPersonalityFileWatcher(
+      () => {},
+      {
+        personalityConfigExists: mock.fn(async () => false),
+        personalityConfigPath: () =>
+          "/workspace/overseer-personality/personality.json",
+        personalityDir: () => "/workspace/overseer-personality",
+        readPersonality: mock.fn(async () => ({ applied: {}, rejected: [] })),
+        readFile: mock.fn(async () => {
+          throw new Error("ENOENT");
+        }),
+        recordAction: mock.fn(async () => {}),
+        watchWithRetry: () => () => undefined,
+      },
+    );
+
+    beginIntentionalPersonalityDelete();
+    try {
+      await watcher.refresh({
+        broadcast,
+        snapshot,
+        lastProjects: snapshot.projects,
+        lastUntracked: [],
+      });
+    } finally {
+      endIntentionalPersonalityDelete();
+    }
+
+    assert.equal(
+      messages.filter((m) => m.type === "overseer.step").length,
+      0,
+    );
+  });
+
   it("re-reads personality edits and broadcasts applied fields", async () => {
     const { messages, broadcast } = collectMessages();
     let body = '{"tone":"dry"}';
@@ -343,6 +383,74 @@ describe("createPersonalityFileWatcher", () => {
     assert.deepEqual(
       (panel as { personality?: { tone?: string } } | undefined)?.personality,
       { tone: "warm" },
+    );
+  });
+
+  it("does not re-announce reading personality when the file returns after a deletion", async () => {
+    // Reset deletes personality.json while the server stays up. Discovery then
+    // restores it and already reports "reading personality" — the monitor must
+    // not append a second copy of the same line.
+    const { messages, broadcast } = collectMessages();
+    let exists = true;
+    let body = '{"tone":"dry","name":"Ada"}';
+    const watcher = createPersonalityFileWatcher(
+      () => {},
+      {
+        personalityConfigExists: mock.fn(async () => exists),
+        personalityConfigPath: () =>
+          "/workspace/overseer-personality/personality.json",
+        personalityDir: () => "/workspace/overseer-personality",
+        readPersonality: mock.fn(async () => ({
+          applied: { tone: "neutral", name: "HUMAN" },
+          rejected: [],
+        })),
+        readFile: mock.fn(async () => {
+          if (!exists) throw new Error("ENOENT");
+          return body;
+        }),
+        recordAction: mock.fn(async () => {}),
+        watchWithRetry: () => () => undefined,
+      },
+    );
+
+    await watcher.refresh({
+      broadcast,
+      snapshot,
+      lastProjects: snapshot.projects,
+      lastUntracked: [],
+    });
+
+    exists = false;
+    await watcher.refresh({
+      broadcast,
+      snapshot,
+      lastProjects: snapshot.projects,
+      lastUntracked: [],
+    });
+    messages.length = 0;
+
+    exists = true;
+    body = '{"tone":"neutral","name":"HUMAN"}';
+    await watcher.refresh({
+      broadcast,
+      snapshot,
+      lastProjects: snapshot.projects,
+      lastUntracked: [],
+    });
+
+    assert.equal(
+      messages.filter(
+        (m) =>
+          m.type === "overseer.step" &&
+          (m as { label: string }).label === "reading personality",
+      ).length,
+      0,
+    );
+    const panel = messages.find((m) => m.type === "workspace.projects");
+    assert.deepEqual(
+      (panel as { personality?: { tone?: string; name?: string } } | undefined)
+        ?.personality,
+      { tone: "neutral", name: "HUMAN" },
     );
   });
 });
