@@ -69,6 +69,7 @@ the source tree is bind-mounted and watched.
 | `./bin/sh [svc]`   | Shell into a dev container (defaults to `server`)                            |
 | `./bin/npm <args>` | Run npm inside the dev container — use for **all** dependency work           |
 | `./bin/check`      | Typecheck + lint                                                             |
+| `./bin/test`       | Run all unit and integration tests                                           |
 | `./bin/test-e2e`   | Playwright acceptance tests (args pass through to `playwright test`)         |
 | `./bin/reset`      | Tear down the dev stack and discard volumes, including agent auth            |
 
