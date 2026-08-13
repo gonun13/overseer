@@ -24,6 +24,7 @@ import {
 import {
   readSnapshot,
   recordAction,
+  themeForSnapshot,
   writeRunLog,
   writeSnapshot,
 } from "./memory/internal.js";
@@ -344,6 +345,7 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
     ...(personalityRescued ? { personalityRescued: true as const } : {}),
   });
 
+  const theme = themeForSnapshot(previous);
   await Promise.all([
     writeRunLog(runId, log),
     writeSnapshot({
@@ -353,6 +355,7 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
       adapters,
       last_active_project: activeProjectPath,
       attached_adapter: attachedAdapterId,
+      ...(theme !== undefined ? { theme } : {}),
     }),
   ]);
 

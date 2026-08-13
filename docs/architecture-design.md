@@ -143,7 +143,7 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Session list with live status                      | Sessions | supervisor state + JSONL mtime                                    |
 | Plan utilization + estimated spend                 | Top bar  | `usage.limit` + normalized result counters (§2.1)                 |
 | Subscription login                                 | System   | `claude auth login`, plain spawn; URL out, code in (§2)           |
-| Theme switch                                       | System   | `data-theme` on `:root`                                           |
+| Theme switch                                       | System   | `data-theme` on `:root`; choice persisted in internal memory      |
 | Crash / exit / auth-failure surfacing              | Console  | classify stream errors, result subtype, signal, and exit code     |
 
 ### Important

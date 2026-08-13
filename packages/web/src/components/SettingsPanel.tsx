@@ -1,4 +1,5 @@
 import { useEffect } from "react";
+import type { OverseerTheme } from "@overseer/protocol";
 import { WInline, WTitle } from "./windows/bits";
 import { CloseIcon } from "./icons";
 import { StatusLight } from "./StatusLight";
@@ -15,12 +16,12 @@ export function SettingsPanel({
   adapter,
   workspace,
   onClose,
-  onToggleTheme,
+  onSelectTheme,
   onOpenCapabilities,
   onStartLogin,
 }: {
   open: boolean;
-  theme: "machine" | "samaritan";
+  theme: OverseerTheme;
   adapter: {
     name: string;
     version: string;
@@ -31,7 +32,7 @@ export function SettingsPanel({
   /** The container's mounts, which only the server knows; empty until it says. */
   workspace: { root: string };
   onClose: () => void;
-  onToggleTheme: () => void;
+  onSelectTheme: (theme: OverseerTheme) => void;
   onOpenCapabilities: () => void;
   /** Close settings and open the adapters picker to sign in. */
   onStartLogin: () => void;
@@ -47,9 +48,9 @@ export function SettingsPanel({
   }, [open, onClose]);
 
   // There are only two themes, so picking the one already active is a no-op —
-  // the toggle only needs to fire when the choice actually changes.
-  function selectTheme(target: "machine" | "samaritan") {
-    if (target !== theme) onToggleTheme();
+  // persistence only needs to fire when the choice actually changes.
+  function selectTheme(target: OverseerTheme) {
+    if (target !== theme) onSelectTheme(target);
   }
 
   return (
@@ -58,7 +59,7 @@ export function SettingsPanel({
     <aside className={`panel ${open ? "open" : ""}`} inert={!open}>
       <header className="panel-head">
         <span className="panel-title">
-          <span style={{ color: "var(--accent-fill)" }}>▽</span> system
+          <span style={{ color: "var(--mark-fill)" }}>▽</span> system
         </span>
         <button
           className="icon-btn"

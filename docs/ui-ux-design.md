@@ -61,18 +61,19 @@ scope.
 
 ## 2. Colour — four levels, and the inversion
 
-**Samaritan is the default and reference theme; machine inverts it at every level except void.**
+**Samaritan is the default and reference theme; machine inverts it at every level.**
 
 | Level       | What lives there                                                                                         | Samaritan (default) | Machine            |
 | ----------- | -------------------------------------------------------------------------------------------------------- | ------------------- | ------------------ |
 | **field**   | ground, the overseer space, the active project, the clock, widgets, readouts, menus, the transcript page | light               | dark               |
 | **surface** | what you act _through_ — windows, panels, the project list once it opens, and every input (§7.1)         | dark                | light              |
 | **stamp**   | what gets printed — session output, headings, and reference chips                                       | a darker light      | a lighter dark     |
-| **void**    | a window's own tab; an opened prompt control's option list                                               | near-black, always  | near-black, always |
+| **void**    | a window's own tab; an opened prompt control's option list                                               | near-black          | near-white         |
 
 A component's level follows **what it is, not where it sits**. Readouts stay on the field; work surfaces
 invert; stamps carry content; machine chrome such as window tabs and opened prompt-control options uses
-theme-invariant void. `--page` is an opaque field used only by the transcript.
+void, which matches the surface's solid ground so a tab continues the frame. `--page` is an opaque field
+used only by the transcript.
 
 Machine preserves Samaritan's alphas, contrast hierarchy, and token relationships. Dark grounds may need a
 wider numeric step to preserve the same perceived contrast; `:root` is the source of truth.
@@ -84,6 +85,8 @@ wider numeric step to preserve the same perceived contrast; `:root` is the sourc
 | `--text` / `--text-dim` / `--text-faint`                | field   | dark                                   | light                             |
 | `--edge`                                                | field   | `rgba(17,17,17,0.85)`                  | `rgba(243,243,243,0.85)`          |
 | `--accent` · `--ok` · `--warn`                          | field   | `#d0342c` · `#1e9e57` · `#a97400`      | `#e11d1d` · `#2ecc71` · `#f1c40f` |
+| `--mark`                                                | field   | `#d0342c` (identity ▲)                 | `#4a90f0`                         |
+| `--mark-fill`                                           | surface | `#ff4a44` (identity ▽)                 | `#1a5bb8`                         |
 | `--raise`                                               | field   | `rgba(17,17,17,0.05)`                  | `rgba(243,243,243,0.05)`          |
 | `--page`                                                | field   | `rgba(255,255,255,0.97)`               | `rgba(28,28,28,0.97)`             |
 | `--stamp`                                               | stamp   | `#e4e4e4`                              | `#333333`                         |
@@ -92,15 +95,18 @@ wider numeric step to preserve the same perceived contrast; `:root` is the sourc
 | `--fill` / `--fill-solid`                               | surface | `rgba(10,10,10,0.95)` / `#0a0a0a`       | `rgba(238,238,238,0.95)` / `#eeeeee` |
 | `--ink` / `--ink-dim` / `--ink-faint` / `--ink-rule`    | surface | light                                  | dark                              |
 | `--accent-fill` · `--ok-fill` · `--warn-fill`           | surface | `#ff4a44` · `#35d67f` · `#f1c40f`      | `#c0201c` · `#1a8a4c` · `#8a6100` |
-| `--void` / `--void-ink` / `--void-dim` / `--void-faint` | void    | near-black, light — fixed, both themes |
-| `--void-edge` / `--void-raise`                          | void    | fixed, both themes                     |
+| `--void` / `--void-ink` / `--void-dim` / `--void-faint` | void    | near-black, light ink                  | near-white, dark ink              |
+| `--void-edge` / `--void-raise`                          | void    | light on near-black                    | dark on near-white                |
 
 Rules:
 
 - Field uses `--text*` and `--accent`; surfaces use `--ink*` and `--accent-fill`.
+- Identity triangles (headline `▲`, window/panel `▽`) and selection marks
+  (active project, `▪` current options) use `--mark` / `--mark-fill` — red in
+  samaritan, blue in machine. Danger and attention stay on `--accent*`.
 - Stamps bring `--stamp*` ground, ink, and edge tokens.
 - Controls use the foreground of the level they act on; they never look like content stamps.
-- Declare `--void*` once at `:root`; machine must not override it.
+- Void matches `--fill-solid` / `--ink` so a tab continues its frame; machine must invert `--void*` with the surface.
 - Status lights use contextual `--light-*` tokens, never hard-coded colors.
 
 ---
@@ -159,9 +165,10 @@ command, or a system escalation.
 - **Borders on the horizontal edges only** — `border-width: 2px 0.5px`, left/right transparent. This is what
   keeps them from reading as cards.
 - The **tab is a flow child of the window box**, sitting on top of the frame: `--void`, not a stamp, because
-  it is the machine's own label for the window rather than anything the window contains — a fixed near-black
-  in both themes, red `▽` glyph, `///` separator, the label, then a **close ✕**. Because it is in flow, its
-  left edge _is_ the frame's left edge; there is no offset left to drift. It wipes in via `clip-path`.
+  it is the machine's own label for the window rather than anything the window contains — matching the
+  frame's solid ground in both themes, `--mark-fill` `▽` glyph (red in samaritan, blue in machine),
+  `///` separator, the label, then a **close ✕**. Because it is in flow, its left edge _is_ the
+  frame's left edge; there is no offset left to drift. It wipes in via `clip-path`.
 - Window chrome is draggable; `.no-drag`, inputs, and buttons remain interactive.
 - Dismissed by the ✕, or `Esc` for the topmost surface.
 - **Multiple windows coexist and may overlap.** They are not modal and never block the prompt.
@@ -173,7 +180,8 @@ and may be dismissed without cancelling the operation. Lifecycle rules live in
 ### 5.1 Windows carry controls
 
 Structured input belongs in a window with real buttons. `.w-btn` is transparent, bordered, inked with
-`--ink`, and fills only on hover. Destructive actions use `--accent-fill`.
+`--ink`, and bolds type and border on hover — it does not fill. Destructive actions use `--accent-fill`
+and still invert solid on hover.
 
 ### 5.2 Content primitives
 
@@ -218,7 +226,7 @@ options use void.
 1. **ProjectPanel** (top-left) — appears after project discovery and opens by default. It is a status panel
    before it is a selector: its lights show work in projects that are **not** active. Each row
    is a light, a name, a branch, and a note saying why the light is lit; the active row is marked with an
-   accent bar in `--accent-fill`, since the list is a surface. **Selecting a project never closes the panel —
+   accent bar in `--mark-fill`, since the list is a surface. **Selecting a project never closes the panel —
    only the chevron in its header does.** The list scrolls vertically at 44vh. Future selectable scopes
    (sessions, worktrees) belong in this same panel, not in a new corner.
 2. **ActiveProject** (top-centre) — kicker, light, name, branch · dirty state. New prompts and sessions target
@@ -267,8 +275,8 @@ shadow.
 ### 6.3 Choice groups
 
 For a small fixed choice, show every option inline instead of a button describing the next state. Mark the
-current option with `.w-btn-mark`, a leading `--accent-fill` glyph with reserved width. Persistent selections
-never use the hover fill.
+current option with `.w-btn-mark`, a leading `--mark-fill` glyph with reserved width. Persistent selections
+never use a hover fill.
 
 ---
 
@@ -365,8 +373,9 @@ Motion means the system changed state. Never decoration.
 ## 10. Anti-patterns
 
 - **A horizontal scrollbar.** Anywhere. It is always a layout bug.
-- Wrong-level tokens, hard-coded status colors, or machine overrides for `--void*`.
-- Buttons shaped like stamps or persistently filled; use a selection mark and reserve fill for hover.
+- Wrong-level tokens, hard-coded status colors, or a machine theme that leaves `--void*` uninverted.
+- Buttons shaped like stamps or persistently filled; use a selection mark. Ordinary hover bolds — only
+  danger may fill.
 - A verb-labelled toggle for a small fixed choice; show all options inline (§6.3).
 - A widget styled as a window, or a window that does not invert. The transcript is the documented exception.
 - Input and output that violate §7.1's contrast or material relationships.

@@ -20,11 +20,13 @@ export function CloseIcon() {
 }
 
 /** Larger than the other glyphs and unboxed — it is its own control, so it
- * carries its own weight rather than borrowing a border to be findable. */
+ * carries its own weight rather than borrowing a border to be findable.
+ * The hub uses `--mark` so it tracks the theme identity colour (red /
+ * blue); the ring stays on the button's ink. */
 export function GearIcon() {
   return (
-    <svg {...base} width={20} height={20}>
-      <circle cx="8" cy="8" r="2.6" />
+    <svg {...base} width={30} height={30}>
+      <circle cx="8" cy="8" r="2.6" stroke="var(--mark)" />
       <circle cx="8" cy="8" r="6.2" strokeDasharray="1.7 2.3" />
     </svg>
   );
