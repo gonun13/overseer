@@ -281,6 +281,48 @@ export async function hasRunBefore(): Promise<boolean> {
   return (await readSnapshot()) !== undefined;
 }
 
+/**
+ * The wipe, in the three pieces the operator watches it happen in.
+ *
+ * Each goes through `serialized` for the same reason every other write does:
+ * the workspace monitor and a discovery pass can both be mid-update when the
+ * operator answers the decision, and a delete that lands between another
+ * writer's read and its write would be published straight back.
+ *
+ * `ensureDirs` is memoised on a tree that no longer exists after this, so the
+ * memo is dropped — otherwise the first `recordAction` of the new run appends
+ * into a directory nothing recreated.
+ */
+export function clearSnapshot(): Promise<void> {
+  return serialized(async () => {
+    pendingTheme = undefined;
+    await rm(stateFile(), { force: true });
+  });
+}
+
+export function clearActionRegister(): Promise<void> {
+  return serialized(() => rm(actionsFile(), { force: true }));
+}
+
+export function clearRunLogs(): Promise<void> {
+  return serialized(async () => {
+    await rm(logsDir(), { recursive: true, force: true });
+    ensured = undefined;
+    ensuredRoot = undefined;
+    await ensureDirs();
+  });
+}
+
+/** Everything internal memory holds, in one call. The socket erases the three
+ * pieces separately so it can report each one; this is for callers that only
+ * want the outcome. The register goes last for the same reason it does there:
+ * the deletes record themselves. */
+export async function clearInternalMemory(): Promise<void> {
+  await clearSnapshot();
+  await clearRunLogs();
+  await clearActionRegister();
+}
+
 export type MemoryWrite =
   | { ok: true }
   | { ok: false; reason: string };

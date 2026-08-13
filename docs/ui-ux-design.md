@@ -89,6 +89,7 @@ wider numeric step to preserve the same perceived contrast; `:root` is the sourc
 | `--mark-fill`                                           | surface | `#ff4a44` (identity ▽)                 | `#1a5bb8`                         |
 | `--raise`                                               | field   | `rgba(17,17,17,0.05)`                  | `rgba(243,243,243,0.05)`          |
 | `--page`                                                | field   | `rgba(255,255,255,0.97)`               | `rgba(28,28,28,0.97)`             |
+| `--scrim`                                               | field   | `rgba(255,255,255,0.74)`               | `rgba(28,28,28,0.74)`             |
 | `--stamp`                                               | stamp   | `#e4e4e4`                              | `#333333`                         |
 | `--stamp-ink` / `--stamp-dim` / `--stamp-faint`         | stamp   | dark                                   | light                             |
 | `--stamp-edge`                                          | stamp   | `rgba(17,17,17,0.2)`                   | `rgba(243,243,243,0.2)`           |
@@ -215,12 +216,30 @@ The console is a continuous stream on one stamp, so §7.1's input/output split d
 The input is a separate bordered row below scrollback. `--ok` marks its sigil, focus border, and the
 `CONSOLE` footer label.
 
+### 5.4 The decision — the one surface that blocks
+
+Windows are never modal (§5) and escalations become signals rather than dialogs (§10). **A decision is the
+single exception, and it exists only for an action that destroys memory** — today, `reset overseer` (§6.5 of
+[overseer-behavior.md](overseer-behavior.md)). A signal can be ignored and a window can be dismissed; neither
+is an acceptable way to answer "erase everything I know".
+
+- Built from the window's parts — tab, frame, `w-btn` answers — but the **tab is centred**, which is the tell
+  that this is not a window the operator summoned.
+- **Centred horizontally and placed above the headline**, never over it: the overseer answers the decision in
+  the headline, so the question and its answer must be readable together.
+- **No ✕, no drag, no `Esc`, no dismiss-on-outside-click.** It is answered by its two buttons or not at all.
+- Above the settings panel in the stack, over a `--scrim` wash of the field — thin enough that the operator
+  can still see what they are about to erase.
+- The field behind it is `inert`, not merely covered: a scrim stops the mouse and nothing else.
+- The decision states facts in plain machine copy. Personality belongs to the headline, never to the terms
+  (§2.3 of [overseer-behavior.md](overseer-behavior.md)).
+
 ---
 
 ## 6. Permanent furniture
 
 Furniture is not summoned or dismissed, but it appears progressively as discovery makes each readout
-meaningful. Readouts stay on the field; opened project choices use a surface, and opened prompt-control
+meaningful. Nothing takes it away except a confirmed reset (§5.4), which removes it a piece at a time. Readouts stay on the field; opened project choices use a surface, and opened prompt-control
 options use void.
 
 1. **ProjectPanel** (top-left) — appears after project discovery and opens by default. It is a status panel
@@ -365,6 +384,8 @@ Motion means the system changed state. Never decoration.
 - **Blink** — 0.6s alternate on prompt and typing cursors.
 - **Headline typing** — about 15% of real headline changes type at ~55ms per character; never on mount or idle.
 - **Furniture reveal** — newly knowable furniture settles into place once; it does not replay on ordinary updates.
+- **Teardown** — a confirmed reset takes one piece of furniture away per delete step, controls first and the
+  clock last, so the report and the field say the same thing at the same time.
 - Transcript append is instant; auto-scroll unless the operator has scrolled up.
 - Honour `prefers-reduced-motion`; every transition becomes instant.
 
@@ -386,6 +407,7 @@ Motion means the system changed state. Never decoration.
 - Card-style layout containers: shadows, large radii, and boxed chrome.
 - A tab, chip or label that does not align to the edge of the thing it names.
 - Modals that block, and toasts. Escalations become a signal in the overseer space and change the headline.
+  The decision (§5.4) is the only exception, and only for destroying memory.
 - Spinners. Use the boot bar or headline rule.
 - Message bubbles, side-aligned turns, avatars, emoji in chrome. Authorship is carried by stamp-vs-plain.
 - A readout the operator cannot act on sitting in the overseer space.

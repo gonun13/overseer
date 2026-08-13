@@ -1,5 +1,11 @@
 import { useCallback, useEffect, useRef, type Dispatch } from "react";
-import { BOOT_MS, type WelcomeBeat, type WizardAction, type WizardPhase } from "./wizard";
+import {
+  BOOT_MS,
+  type ResetStage,
+  type WelcomeBeat,
+  type WizardAction,
+  type WizardPhase,
+} from "./wizard";
 
 /** How long a typed welcome headline stays up *after typing finishes* before
  * the next beat. Name ask and tone pick wait on the operator, not this timer. */
@@ -10,39 +16,81 @@ const WELCOME_MS = 1000;
  * rather than everything changing in the same frame. */
 const SETTLING_MS = 600;
 
+/** How long the overseer's answer to a refused reset stays up *after typing
+ * finishes* before the headline goes back to reporting the world. */
+const DECLINED_MS = 1800;
+
+/** How long the goodbye stays up *after typing finishes*, caret still
+ * blinking, before the reload. A click restarts sooner — this is only the
+ * unattended wait. */
+const GOODBYE_HOLD_MS = 10_000;
+
 interface WizardTimingState {
   phase: WizardPhase;
   welcomeBeat?: WelcomeBeat;
+  reset?: ResetStage;
 }
 
 /**
  * Phase timers that are not part of discovery pacing: boot minimum, welcome
- * headline holds, and settling transition.
+ * headline holds, settling transition, and the reset decline/goodbye holds.
  */
 export function useWizardTiming(
   state: WizardTimingState,
   dispatch: Dispatch<WizardAction>,
+  onGoodbyeHoldEnd?: () => void,
 ) {
-  const { phase, welcomeBeat } = state;
+  const { phase, welcomeBeat, reset } = state;
   const dispatchRef = useRef(dispatch);
   dispatchRef.current = dispatch;
+  const goodbyeRef = useRef(onGoodbyeHoldEnd);
+  goodbyeRef.current = onGoodbyeHoldEnd;
 
   const phaseRef = useRef(phase);
   const beatRef = useRef(welcomeBeat);
+  const resetRef = useRef(reset);
   phaseRef.current = phase;
   beatRef.current = welcomeBeat;
+  resetRef.current = reset;
 
-  // Hold timer for intro → name and greet → discovery. Armed by onHeadlineReady
-  // once typing has finished, not when the beat flips.
+  // Hold timer for intro → name, greet → discovery, declined → ready, and
+  // goodbye → reload. Armed by onHeadlineReady once typing has finished.
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdFor = useRef<string | null>(null);
 
-  /** Start the intro/greet hold once the line is fully on screen. */
+  /** Start a hold once the line is fully on screen. */
   const onHeadlineReady = useCallback((text: string) => {
+    if (!text) return;
+
+    const resetStage = resetRef.current;
+    if (resetStage === "declined") {
+      const key = `reset:declined:${text}`;
+      if (holdFor.current === key) return;
+      holdFor.current = key;
+      if (holdTimer.current !== null) clearTimeout(holdTimer.current);
+      holdTimer.current = setTimeout(() => {
+        holdTimer.current = null;
+        dispatchRef.current({ type: "reset.dismissed" });
+      }, DECLINED_MS);
+      return;
+    }
+
+    if (resetStage === "goodbye") {
+      const key = `reset:goodbye:${text}`;
+      if (holdFor.current === key) return;
+      holdFor.current = key;
+      if (holdTimer.current !== null) clearTimeout(holdTimer.current);
+      holdTimer.current = setTimeout(() => {
+        holdTimer.current = null;
+        goodbyeRef.current?.();
+      }, GOODBYE_HOLD_MS);
+      return;
+    }
+
     if (phaseRef.current !== "welcome") return;
     const beat = beatRef.current;
     if (beat !== "intro" && beat !== "greet") return;
-    if (!text || holdFor.current === `${beat}:${text}`) return;
+    if (holdFor.current === `${beat}:${text}`) return;
     holdFor.current = `${beat}:${text}`;
     if (holdTimer.current !== null) clearTimeout(holdTimer.current);
     holdTimer.current = setTimeout(() => {
@@ -65,9 +113,13 @@ export function useWizardTiming(
     return () => clearTimeout(id);
   }, [phase]);
 
-  // Drop a pending hold if we leave an auto-advancing beat.
+  // Drop a pending hold if we leave an auto-advancing beat or reset stage.
   useEffect(() => {
-    if (phase === "welcome" && (welcomeBeat === "intro" || welcomeBeat === "greet")) {
+    const welcomeHold =
+      phase === "welcome" &&
+      (welcomeBeat === "intro" || welcomeBeat === "greet");
+    const resetHold = reset === "declined" || reset === "goodbye";
+    if (welcomeHold || resetHold) {
       return () => {
         if (holdTimer.current !== null) clearTimeout(holdTimer.current);
         holdTimer.current = null;
@@ -76,7 +128,7 @@ export function useWizardTiming(
     if (holdTimer.current !== null) clearTimeout(holdTimer.current);
     holdTimer.current = null;
     holdFor.current = null;
-  }, [phase, welcomeBeat]);
+  }, [phase, welcomeBeat, reset]);
 
   // Furniture mounts as soon as discovery completes; this hands the headline
   // back to ordinary derivation a beat later so the transition is legible

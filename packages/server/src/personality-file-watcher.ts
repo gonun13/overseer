@@ -51,6 +51,24 @@ const defaultDeps: PersonalityFileWatcherDeps = {
   watchWithRetry,
 };
 
+/**
+ * Set while `memory.reset` is erasing `personality.json` on purpose.
+ *
+ * The watcher otherwise treats every absence as an accident — "personality
+ * deleted · restart to restore" — which is wrong in the middle of a wipe the
+ * operator just confirmed. The reset step already reports the delete.
+ */
+let intentionalPersonalityDelete = false;
+
+/** Call before an intentional wipe of `personality.json`; pair with `end`. */
+export function beginIntentionalPersonalityDelete(): void {
+  intentionalPersonalityDelete = true;
+}
+
+export function endIntentionalPersonalityDelete(): void {
+  intentionalPersonalityDelete = false;
+}
+
 /** Content fingerprint for live `personality.json` tracking. */
 async function personalityFingerprint(
   readFileFn: typeof readFile,
@@ -113,24 +131,51 @@ export function createPersonalityFileWatcher(
     if (justNoticedMissing) {
       personalityMissingAnnounced = true;
       lastPersonalityBody = null;
-      broadcast({
-        type: "overseer.step",
-        id: randomUUID(),
-        label: "personality deleted",
-        outcome: "blocked",
-        detail: "restart to restore",
-      });
-      await d.recordAction({
-        actor: "overseer",
-        action: "personality:missing",
-        outcome: "blocked",
-        detail: `${d.personalityConfigPath()} · deleted · restart to restore`,
-      });
       attachPersonalityWatcher();
+      // An intentional wipe already has its own operations line. Complaining
+      // here would show as a second, failed "personality deleted" under the
+      // reset that just succeeded.
+      if (!intentionalPersonalityDelete) {
+        broadcast({
+          type: "overseer.step",
+          id: randomUUID(),
+          label: "personality deleted",
+          outcome: "blocked",
+          detail: "restart to restore",
+        });
+        await d.recordAction({
+          actor: "overseer",
+          action: "personality:missing",
+          outcome: "blocked",
+          detail: `${d.personalityConfigPath()} · deleted · restart to restore`,
+        });
+      }
     } else if (!personalityMissing) {
       if (personalityMissingAnnounced) {
         personalityMissingAnnounced = false;
         attachPersonalityWatcher();
+        // The file is back — discovery already reported the restore (or the
+        // operator put it back). Seed the fingerprint and push applied fields
+        // quietly; another "reading personality" step would duplicate the
+        // discovery line the operator just watched.
+        lastPersonalityBody = await personalityFingerprint(
+          d.readFile,
+          d.personalityConfigPath(),
+        );
+        if (lastPersonalityBody !== null) {
+          const result = await d.readPersonality(WORKSPACE_ROOT, {
+            scaffold: false,
+          });
+          broadcast({
+            type: "workspace.projects",
+            projects:
+              lastProjects.length > 0 ? lastProjects : snapshot.projects,
+            untrackedFolders: lastUntracked,
+            personality: result.applied,
+            rejected: result.rejected,
+          });
+        }
+        return { personalityMissing, justNoticedMissing };
       }
     }
 

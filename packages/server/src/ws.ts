@@ -1,3 +1,4 @@
+import { randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Server } from "node:http";
 import {
@@ -9,16 +10,25 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { listAdapters } from "./adapters.js";
 import { runDiscovery } from "./discovery.js";
 import {
+  clearActionRegister,
+  clearRunLogs,
+  clearSnapshot,
   readSnapshot,
+  recordAction,
   setActiveProjectPath,
   setAttachedAdapter,
   setTheme,
 } from "./memory/internal.js";
 import {
+  deletePersonalityConfig,
   peekPersonality,
   setOperatorName,
   setOperatorTone,
 } from "./memory/personality/api.js";
+import {
+  beginIntentionalPersonalityDelete,
+  endIntentionalPersonalityDelete,
+} from "./personality-file-watcher.js";
 import { isInsideWorkspace } from "./workspace.js";
 
 /**
@@ -71,6 +81,24 @@ function discoveryFailure(error: unknown): string {
   return error instanceof Error
     ? error.message
     : "discovery failed for an unknown reason";
+}
+
+/**
+ * Between the delete steps of a reset.
+ *
+ * Four `rm` calls finish faster than a frame, and the client does not pace
+ * `overseer.step` the way it paces discovery — so without this the operator
+ * asks to erase the overseer and is handed a finished list. The teardown is
+ * the one report they cannot go back and read afterwards.
+ */
+const RESET_STEP_MS = 1100;
+
+function delay(ms: number): Promise<void> {
+  return new Promise((resolve) => setTimeout(resolve, ms));
+}
+
+function resetFailure(error: unknown): string {
+  return error instanceof Error ? error.message : "could not erase";
 }
 
 export function attachWebSocketServer(httpServer: Server): {
@@ -259,6 +287,83 @@ export function attachWebSocketServer(httpServer: Server): {
             return;
           }
           send({ type: "adapter.connected", id: parsed.id });
+          return;
+        }
+        case "memory.reset": {
+          // A pass in flight ends by writing a fresh snapshot. Let it land
+          // first, or the overseer wakes up remembering the world it was just
+          // asked to forget.
+          if (inFlight !== undefined) {
+            try {
+              await inFlight;
+            } catch {
+              // The pass already reported itself; the wipe does not care how
+              // it ended, only that it is over.
+            }
+          }
+
+          // Written before the register is erased, so a wipe that fails
+          // halfway still leaves the reason it started in the trail.
+          await recordAction({
+            actor: "operator",
+            action: "overseer:reset",
+            outcome: "ok",
+            detail: "internal memory · personality.json",
+          });
+
+          let failure: string | undefined;
+          const erase = async (label: string, work: () => Promise<void>) => {
+            if (failure !== undefined) return;
+            try {
+              await work();
+            } catch (error) {
+              failure = resetFailure(error);
+            }
+            send({
+              type: "overseer.step",
+              id: randomUUID(),
+              label,
+              outcome: failure === undefined ? "ok" : "failed",
+              ...(failure !== undefined ? { detail: failure } : {}),
+            });
+            await delay(RESET_STEP_MS);
+          };
+
+          // External memory first. The action register is cleared before the
+          // final "erasing memory" (snapshot) step so the lines these deletes
+          // write about themselves do not survive as the new instance's first
+          // memory — except when a wipe fails mid-way, which is the one case
+          // worth keeping the trail.
+          //
+          // The personality watcher must not treat this delete as an accident
+          // — otherwise the operations window gets a second, blocked
+          // "personality deleted · restart to restore" under the wipe.
+          beginIntentionalPersonalityDelete();
+          try {
+            await erase("deleting personality", async () => {
+              const result = await deletePersonalityConfig();
+              if (!result.ok) throw new Error(result.reason);
+            });
+            await erase("erasing run logs", clearRunLogs);
+            await erase("erasing action register", clearActionRegister);
+            await erase("erasing memory", clearSnapshot);
+          } finally {
+            endIntentionalPersonalityDelete();
+          }
+
+          if (failure !== undefined) {
+            // Not benign: memory the operator was told would be gone is still
+            // there, and the client must say so instead of reloading into a
+            // boot that would quietly contradict it.
+            send({
+              type: "error",
+              about: "memory.reset",
+              message: `reset failed · ${failure}`,
+            });
+            return;
+          }
+
+          send({ type: "memory.reset.done" });
           return;
         }
         case "discovery.run": {

@@ -10,4 +10,8 @@ export const neutral: OverseerMessages = {
   welcome: "welcome, {name}",
   welcomeBack: "welcome back, {name}",
   lookingAround: "looking around",
+  resetAsk: "you want to erase me?",
+  resetDeclined: "still here",
+  resetWorking: "forgetting",
+  resetGoodbye: "goodbye",
 };

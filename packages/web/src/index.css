@@ -54,6 +54,10 @@
      ground, because output is light and input is dark (§7.1) */
   --page: rgba(255, 255, 255, 0.97);
 
+  /* the field again, thin enough to read what it covers — behind a decision,
+     which is the one surface allowed to block (§5.2) */
+  --scrim: rgba(255, 255, 255, 0.74);
+
   /* stamp — the field, one step toward the surface */
   --stamp: #e4e4e4;
   --stamp-ink: #111111;
@@ -111,6 +115,8 @@
   --raise: rgba(243, 243, 243, 0.05);
 
   --page: rgba(28, 28, 28, 0.97);
+
+  --scrim: rgba(28, 28, 28, 0.74);
 
   /* The opposite of a darker light: a lighter dark. The step from --bg has to
      match samaritan's (255 → 228) or stamps stop separating from the page they
@@ -565,6 +571,12 @@ button {
   line-height: 1;
   letter-spacing: 1px;
   text-transform: uppercase;
+}
+
+/* Goodbye hold — the line is the restart control until the unattended timer
+   fires. Cursor says so; no other chrome. */
+.os-headline-restart {
+  cursor: pointer;
 }
 
 /* First-run welcome ask: prompt-shaped — typed text, blinking block cursor,
@@ -1359,6 +1371,75 @@ button {
   max-height: min(420px, 52vh);
 }
 
+/* ---- decision -------------------------------------------------------------
+   A window that blocks, which no other window does. It sits above the settings
+   panel because it outranks the machine's own controls: while it is up, the
+   only two things in the interface are its answers. The scrim is the field at
+   low opacity rather than a black wash — the operator can still see what they
+   are about to erase. */
+.decision-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: var(--scrim);
+  animation: settle-in 200ms ease-out both;
+}
+
+/* Above the headline, not over it: the overseer answers this in the headline
+   while the decision is up, so the two must be readable together. The bottom
+   edge sits clear of the vertical centre where the headline lives. */
+.decision {
+  position: absolute;
+  left: 50%;
+  bottom: calc(50% + 72px);
+  transform: translateX(-50%);
+  width: min(460px, calc(100vw - 48px));
+  max-height: calc(50% - 72px - 56px);
+  display: flex;
+  flex-direction: column;
+  /* Centred, where a window's tab is left-anchored — the tab is the tell. */
+  align-items: center;
+}
+
+.decision-tab {
+  cursor: default;
+  flex: none;
+}
+
+.decision .window-frame {
+  min-height: 0;
+  width: 100%;
+}
+
+.decision .window-body.expanded {
+  max-height: min(280px, calc(50vh - 140px));
+}
+
+/* Two large answers, centred as a pair but kept apart so a miss of one cannot
+   land on the other. */
+.decision-actions {
+  display: flex;
+  justify-content: center;
+  gap: 48px;
+  margin-top: 22px;
+}
+
+.decision-btn {
+  min-width: 120px;
+  justify-content: center;
+  padding: 12px 28px;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+.decision-btn:hover {
+  padding: 11px 27px;
+}
+
+.decision-btn.danger:hover {
+  padding: 12px 28px;
+}
+
 /* ---- surface content primitives ------------------------------------------ */
 .w-title {
   display: inline-block;
@@ -1837,7 +1918,8 @@ button {
   /* Instant, never nothing: the furniture is simply there, at full opacity,
      the moment it mounts. The step pacing that stages it is dropped in
      useDiscovery, which reads the same query. */
-  .settles-in {
+  .settles-in,
+  .decision-scrim {
     animation: none;
   }
   /* Collapses to an instant state change, not to nothing: the bar still says

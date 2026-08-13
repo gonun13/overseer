@@ -10,4 +10,8 @@ export const dry: OverseerMessages = {
   welcome: "ah. {name}",
   welcomeBack: "you again, {name}",
   lookingAround: "looking",
+  resetAsk: "erase me. really.",
+  resetDeclined: "thought not",
+  resetWorking: "deleting myself",
+  resetGoodbye: "well. bye.",
 };

@@ -10,4 +10,8 @@ export const warm: OverseerMessages = {
   welcome: "good to meet you, {name}",
   welcomeBack: "good to see you, {name}",
   lookingAround: "taking a look around",
+  resetAsk: "wait — you'd erase me?",
+  resetDeclined: "oh. thank you",
+  resetWorking: "forgetting everything",
+  resetGoodbye: "goodbye, then",
 };

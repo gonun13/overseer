@@ -10,7 +10,7 @@ export interface OverseerMessages {
   starting: string;
   /** Boot beat past the minimum, still waiting on the socket. */
   connecting: string;
-  /** First-turn self-introduction. */
+  /** Self-introduction — headline behind the tone pick, not a solo beat. */
   intro: string;
   /** Prefix on the name ask: `welcome... [_____]?` */
   namePrefix: string;
@@ -22,6 +22,15 @@ export interface OverseerMessages {
   welcomeBack: string;
   /** Discovery pass in flight. */
   lookingAround: string;
+  /** The reset decision is up and the overseer has read it. This is the one
+   * headline that is about the overseer rather than about the work. */
+  resetAsk: string;
+  /** The operator answered no. */
+  resetDeclined: string;
+  /** The wipe is running and the furniture is going. */
+  resetWorking: string;
+  /** Last line before the reload. Nothing follows it. */
+  resetGoodbye: string;
 }
 
 export type MessageKey = keyof OverseerMessages;
