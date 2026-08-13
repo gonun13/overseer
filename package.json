@@ -1,7 +1,7 @@
 {
   "name": "overseer",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.1.1",
   "description": "A single-page web console for driving CLI coding agents.",
   "type": "module",
   "workspaces": [
@@ -12,7 +12,7 @@
     "packages/e2e"
   ],
   "engines": {
-    "node": ">=22"
+    "node": ">=24"
   },
   "scripts": {
     "dev": "bin/_in-container.sh && npm run dev --workspace packages/server",

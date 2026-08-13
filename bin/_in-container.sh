@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
 # Guard for the root npm scripts. OVERSEER_IN_CONTAINER is set only by the
 # Dockerfile `dev` stage, so this fails on the host no matter what is installed
-# there — having Node 22 available is not permission to use it.
+# there — having Node 24 available is not permission to use it.
 set -eu
 
 if [ "${OVERSEER_IN_CONTAINER:-}" = "1" ]; then

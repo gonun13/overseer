@@ -4,6 +4,8 @@ Three docs, three concerns. [architecture-design.md](architecture-design.md) def
 [ui-ux-design.md](ui-ux-design.md) defines the interface, and this document defines **behavior**: what the
 overseer says, when it says it, and what it remembers.
 
+This document is the **ship bar for `0.1.x`** — see [architecture-design.md §8](architecture-design.md#8-versioning).
+
 Visual details are not repeated here; see [the overseer space](ui-ux-design.md#4-the-overseer-space) and
 [windows](ui-ux-design.md#5-windows).
 

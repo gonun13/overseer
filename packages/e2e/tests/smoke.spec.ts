@@ -1,4 +1,5 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
+import rootPkg from "../../../package.json" with { type: "json" };
 
 // Boot is asynchronous: discovery runs against the real adapters and paces
 // its reveal at roughly one line a second before the footer mounts with
@@ -6,7 +7,10 @@ import { test, expect, type Locator, type Page } from "@playwright/test";
 
 /** Footer copy — mounts only once discovery has settled. Also the anchor for
  * "the wizard had nothing left to ask", so it is worth naming once. */
-const SETTLED = /overseer v/i;
+const SETTLED = new RegExp(
+  `overseer v${rootPkg.version.replaceAll(".", "\\.")}`,
+  "i",
+);
 
 /**
  * Advance past whatever the wizard is actually showing, and report which

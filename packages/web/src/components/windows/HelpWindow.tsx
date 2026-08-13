@@ -1,3 +1,4 @@
+import { overseerVersionLabel } from "../../appVersion";
 import { WAdapterNote, WTitle } from "./bits";
 import { COMMANDS } from "../../commands";
 import type { AdapterInfo } from "../../domain";
@@ -11,7 +12,7 @@ export function HelpWindow({ adapter }: { adapter: AdapterInfo }) {
       <WTitle>about</WTitle>
       <div className="w-pre">
         {[
-          `overseer v${import.meta.env.VITE_APP_VERSION} · console for cli coding agents`,
+          `${overseerVersionLabel()} · console for cli coding agents`,
           adapter.name ? `adapter: ${adapter.name}` : "adapter: none attached",
         ].join("\n")}
       </div>
