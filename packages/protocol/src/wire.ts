@@ -17,6 +17,10 @@ import type {
 
 export type PersonalityTone = NonNullable<AppliedPersonality["tone"]>;
 
+/** UI theme — samaritan is the default; machine inverts it. Persisted in
+ * internal memory the same way the active project is. */
+export type OverseerTheme = "samaritan" | "machine";
+
 export type ClientMessage =
   /** Ask the server to run a discovery pass. Explicit rather than
    * connect-time-automatic: a reconnect must not silently re-run a scan the
@@ -30,6 +34,8 @@ export type ClientMessage =
   | { type: "operator.tone"; tone: PersonalityTone }
   /** Persist the operator's active project into internal memory. */
   | { type: "project.select"; path: string }
+  /** Persist the operator's theme into internal memory. */
+  | { type: "theme.select"; theme: OverseerTheme }
   /** Attach an adapter from the picker. Auth is a separate later step. */
   | { type: "adapter.connect"; id: string };
 
@@ -42,6 +48,8 @@ export interface ConnectedMessage {
   /** Accepted personality fields known before discovery (name/greeting for the
    * welcome beat). Absent fields mean unset, not "not yet asked". */
   personality?: AppliedPersonality;
+  /** Theme remembered in internal memory. Absent means the samaritan default. */
+  theme?: OverseerTheme;
 }
 
 export interface ErrorMessage {
@@ -76,6 +84,12 @@ export interface OperatorTonedMessage {
 export interface ProjectSelectedMessage {
   type: "project.selected";
   path: string;
+}
+
+/** Ack that the theme was recorded in internal memory. */
+export interface ThemeSelectedMessage {
+  type: "theme.selected";
+  theme: OverseerTheme;
 }
 
 /** Ack that an adapter was attached (not necessarily authenticated). */
@@ -120,12 +134,14 @@ export type ServerMessage =
   | OperatorNamedMessage
   | OperatorTonedMessage
   | ProjectSelectedMessage
+  | ThemeSelectedMessage
   | AdapterConnectedMessage
   | WorkspaceProjectsMessage
   | OverseerStepMessage
   | DiscoveryEvent;
 
 const TONES = new Set<string>(["neutral", "dry", "warm"]);
+const THEMES = new Set<string>(["samaritan", "machine"]);
 
 /** Narrows an unknown parsed frame to a client message. The socket is a trust
  * boundary even on loopback — nothing downstream should be casting. */
@@ -141,6 +157,9 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   }
   if (type === "project.select") {
     return typeof (value as { path?: unknown }).path === "string";
+  }
+  if (type === "theme.select") {
+    return THEMES.has((value as { theme?: unknown }).theme as string);
   }
   if (type === "adapter.connect") {
     return typeof (value as { id?: unknown }).id === "string";

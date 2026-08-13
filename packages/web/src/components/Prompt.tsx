@@ -82,7 +82,7 @@ export function Prompt({
   return (
     <div className="chat">
       <div className="window-tab revealed">
-        <span style={{ color: "var(--accent)" }}>▽</span>
+        <span style={{ color: "var(--mark-fill)" }}>▽</span>
         <span style={{ opacity: 0.5, fontSize: 12 }}>///</span>
         <span>{projectName ? `session · ${projectName}` : "session"}</span>
         <button

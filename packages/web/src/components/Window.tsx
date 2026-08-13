@@ -89,7 +89,7 @@ export function Window({
       }}
     >
       <div className={`window-tab ${revealed ? "revealed" : ""}`}>
-        <span style={{ color: "var(--accent)" }}>▽</span>
+        <span style={{ color: "var(--mark-fill)" }}>▽</span>
         <span style={{ opacity: 0.5, fontSize: 12 }}>///</span>
         <span>{title}</span>
         <button

@@ -189,12 +189,12 @@ workspace path.
 .overseer/
   logs/            structured operation logs — one file per run (discovery, wizard, later agent/script/CLI runs)
   actions.jsonl    append-only action register: timestamp, actor, action, outcome
-  state.json       last-known world snapshot — discovery results, last active project
+  state.json       last-known world snapshot — discovery results, last active project, theme
   index.sqlite     planned usage history, session metadata, and search index
 ```
 
 - **`actions.jsonl`** records every overseer action before it is reported.
-- **`state.json`** drives returning-instance behavior and remembers the active project.
+- **`state.json`** drives returning-instance behavior and remembers the active project and theme.
 - **`index.sqlite`** stores application indexes and estimates; it is not billing truth.
 - The server owns all access; current log/state access lives in
   `packages/server/src/memory/internal.ts`.

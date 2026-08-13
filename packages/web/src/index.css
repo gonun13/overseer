@@ -5,8 +5,8 @@
 @import "@fontsource/ibm-plex-mono/700.css";
 
 /* ---------------------------------------------------------------------------
-   Three levels. Samaritan is the reference and the default; machine is its
-   opposite at every level (design-system.md §2).
+   Four levels. Samaritan is the reference and the default; machine is its
+   opposite at every level (ui-ux-design.md §2).
 
      field    ground, the overseer space, the active project, widgets, and
               readouts in general — including the project panel's collapsed
@@ -21,11 +21,11 @@
               sits on the field or on a surface. Buttons are deliberately
               excluded — a control must never share a colour with content, or
               nothing tells you what's clickable (§2, §5.1).
-     void     a fourth, *theme-invariant* ground reserved for a window's own
-              tab and an opened prompt-control's option list — chrome that
-              names or operates the machine itself, not the work in it, so it
-              does not participate in the samaritan/machine inversion at all.
-              Always near-black with light ink, in both themes.
+     void     chrome that names or operates the machine itself — a window's
+              own tab and an opened prompt-control's option list — not the
+              work in it. Matches the surface's solid ground so a tab
+              continues the frame; machine inverts it with everything else.
+              Samaritan: near-black with light ink.
 
    Because a stamp keeps the field's lightness, it reuses the field's status
    colours; only surfaces need the `-fill` variants.
@@ -41,6 +41,11 @@
   --accent: #d0342c;
   --ok: #1e9e57;
   --warn: #a97400;
+
+  /* Identity triangles — headline ▲ and window/panel ▽. Same red as --accent
+     in samaritan; machine recolours them blue without touching danger. */
+  --mark: #d0342c;
+  --mark-fill: #ff4a44;
 
   /* the faint lift that makes a widget sit on the field rather than in it */
   --raise: rgba(17, 17, 17, 0.05);
@@ -67,8 +72,7 @@
   --ok-fill: #35d67f;
   --warn-fill: #f1c40f;
 
-  /* void — declared once, never redefined under [data-theme="machine"], so it
-     never inverts. */
+  /* void — same solid as the surface, so a window tab continues the frame */
   --void: #0a0a0a;
   --void-ink: #f3f3f3;
   --void-dim: rgba(243, 243, 243, 0.6);
@@ -88,8 +92,8 @@
    opposite lightness. When a value here stops being the mirror of the one
    above it, that is drift, not a decision. */
 [data-theme="machine"] {
-  /* Charcoal, not carbon — softer than a print-black field. Kept clear of
-     --void (#0a0a0a) so a window tab still separates from the vignette. */
+  /* Charcoal, not carbon — softer than a print-black field. Light void tabs
+     still separate cleanly from this ground and the vignette. */
   --bg: #1c1c1c;
   --bg-vignette: #101010;
   --text: #f3f3f3;
@@ -99,6 +103,10 @@
   --accent: #e11d1d;
   --ok: #2ecc71;
   --warn: #f1c40f;
+
+  /* Machine's own mark — blue on the dark field, deeper blue on light surfaces. */
+  --mark: #4a90f0;
+  --mark-fill: #1a5bb8;
 
   --raise: rgba(243, 243, 243, 0.05);
 
@@ -123,6 +131,15 @@
   --accent-fill: #c0201c;
   --ok-fill: #1a8a4c;
   --warn-fill: #8a6100;
+
+  /* Void inverts with the surface: light tab on a dark field, continuous with
+     the light frame — the opposite of samaritan's near-black tab. */
+  --void: #eeeeee;
+  --void-ink: #0d0d0d;
+  --void-dim: rgba(13, 13, 13, 0.6);
+  --void-faint: rgba(13, 13, 13, 0.34);
+  --void-edge: rgba(13, 13, 13, 0.2);
+  --void-raise: rgba(13, 13, 13, 0.08);
 }
 
 @theme inline {
@@ -198,8 +215,7 @@
 }
 
 /* The two things that operate the machine rather than show its content, so
-   they sit on `--void` instead — fixed, near-black, unmoved by the theme
-   toggle (design-system.md §2). */
+   they sit on `--void` instead of stamp or surface (ui-ux-design.md §2). */
 .window-tab,
 .ctl-values {
   --light-ok: var(--ok);
@@ -388,7 +404,7 @@ button {
 }
 
 .project-row.current {
-  border-left: 2px solid var(--accent-fill);
+  border-left: 2px solid var(--mark-fill);
   padding-left: 7px;
 }
 
@@ -398,7 +414,7 @@ button {
 }
 
 .project-row.current .project-row-name {
-  color: var(--accent-fill);
+  color: var(--mark-fill);
 }
 
 .project-row-branch {
@@ -646,7 +662,7 @@ button {
   margin: 4px 0 0;
   font-size: 20px;
   line-height: 1;
-  color: var(--accent);
+  color: var(--mark);
 }
 
 /* First-run tone pick: three words under the intro, field chrome not cards.
@@ -684,7 +700,7 @@ button {
 .os-tone-mark {
   display: inline-block;
   width: 0.75em;
-  color: var(--accent);
+  color: var(--mark);
   text-align: center;
 }
 
@@ -737,7 +753,7 @@ button {
 
 .os-signal {
   display: flex;
-  align-items: flex-start;
+  align-items: center;
   gap: 10px;
   padding: 7px 10px;
   border-left: 1px solid transparent;
@@ -746,12 +762,6 @@ button {
 .os-signal:hover {
   border-left-color: var(--accent);
   background: var(--raise);
-}
-
-/* Keep the light on the first line with the kicker — never centered against a
-   wrapped body, which pulls it away from ADAPTER when the sentence breaks. */
-.os-signal .light {
-  margin-top: 5px;
 }
 
 .os-kicker {
@@ -877,8 +887,8 @@ button {
   color: var(--void-dim);
 }
 
-/* A fixed lightening tint — `--raise` flips with the field and would vanish
-   against `--void`'s permanently near-black ground in samaritan. */
+/* Void's own raise — `--raise` follows the field and would vanish against
+   samaritan's near-black void (and the inverted light void in machine). */
 .ctl-option:hover {
   background: var(--void-raise);
   color: var(--void-ink);
@@ -895,7 +905,7 @@ button {
 .ctl-mark {
   flex: none;
   width: 8px;
-  color: var(--accent);
+  color: var(--mark-fill);
 }
 
 /* ---- bottom right: the adapter widget ------------------------------------
@@ -1538,8 +1548,7 @@ button {
    two must never share a colour or an operator can't tell what's clickable.
    A button is cut out of the surface: transparent, bordered and inked in the
    surface's own ink, so it reads as part of the machine rather than something
-   printed onto it. It inverts solid on hover — the one moment it does resemble
-   a stamp, and only ever a moment. */
+   printed onto it. Hover bolds the type and the border — it does not fill. */
 .w-btn {
   display: inline-flex;
   align-items: center;
@@ -1549,13 +1558,15 @@ button {
   background: transparent;
   color: var(--ink);
   font-size: 11px;
+  font-weight: 400;
   letter-spacing: 0.5px;
   text-transform: uppercase;
 }
 
 .w-btn:hover {
-  background: var(--ink);
-  color: var(--fill-solid);
+  padding: 2px 7px;
+  border-width: 2px;
+  font-weight: 700;
 }
 
 .w-btn:disabled {
@@ -1564,14 +1575,14 @@ button {
 }
 
 /* The option already in effect, inside a row of otherwise-equal choices. This
-   is *not* a permanent hover-invert — a resting button that stays filled is a
+   is *not* a permanent hover weight — a resting button that stays filled is a
    stamp again, the exact confusion the split is meant to prevent. Selection is
    marked the same way a current value is marked in the prompt controls: a
-   small accent glyph, chrome otherwise untouched (design-system.md §6.3). */
+   small `--mark-fill` glyph, chrome otherwise untouched (ui-ux-design.md §6.3). */
 .w-btn-mark {
   width: 8px;
   flex: none;
-  color: var(--accent-fill);
+  color: var(--mark-fill);
 }
 
 .w-btn.danger {
@@ -1579,7 +1590,11 @@ button {
   border-color: var(--accent-fill);
 }
 
+/* Danger keeps the solid invert — the one case where hover fills. */
 .w-btn.danger:hover {
+  padding: 3px 8px;
+  border-width: 1px;
+  font-weight: 400;
   background: var(--accent-fill);
   color: var(--fill-solid);
 }

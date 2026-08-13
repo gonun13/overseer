@@ -129,7 +129,7 @@ workspace/            host-shared dir — git projects live here, mounted into t
 - **Console** — raw escape hatch into the adapter CLI (currently a mockup that echoes).
 - **Prompt controls** — model, permission mode, subagent, and context, armed before the
   next turn.
-- **Two themes** — samaritan (default) and machine.
+- **Two themes** — samaritan (default) and machine; choice is remembered in internal memory.
 
 ## Status
 

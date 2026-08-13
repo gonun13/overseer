@@ -8,7 +8,12 @@ import {
 import { WebSocketServer, type WebSocket } from "ws";
 import { listAdapters } from "./adapters.js";
 import { runDiscovery } from "./discovery.js";
-import { hasRunBefore, setActiveProjectPath, setAttachedAdapter } from "./memory/internal.js";
+import {
+  readSnapshot,
+  setActiveProjectPath,
+  setAttachedAdapter,
+  setTheme,
+} from "./memory/internal.js";
 import {
   peekPersonality,
   setOperatorName,
@@ -119,18 +124,20 @@ export function attachWebSocketServer(httpServer: Server): {
     ws.on("close", () => clearInterval(heartbeat));
 
     // Welcome needs returning + name before discovery runs, so load both here
-    // rather than waiting for the pass. Peek never scaffolds.
+    // rather than waiting for the pass. Theme comes from the same snapshot.
+    // Peek never scaffolds.
     void (async () => {
-      const [returning, personality] = await Promise.all([
-        hasRunBefore(),
+      const [snapshot, personality] = await Promise.all([
+        readSnapshot(),
         peekPersonality(),
       ]);
       if (ws.readyState !== ws.OPEN) return;
       send({
         type: "connected",
         serverTime: new Date().toISOString(),
-        returning,
+        returning: snapshot !== undefined,
         ...(Object.keys(personality).length > 0 ? { personality } : {}),
+        ...(snapshot?.theme !== undefined ? { theme: snapshot.theme } : {}),
       });
     })();
 
@@ -214,6 +221,20 @@ export function attachWebSocketServer(httpServer: Server): {
             return;
           }
           send({ type: "project.selected", path: parsed.path });
+          return;
+        }
+        case "theme.select": {
+          const result = await setTheme(parsed.theme);
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "theme.select",
+              benign: true,
+              message: result.reason,
+            });
+            return;
+          }
+          send({ type: "theme.selected", theme: parsed.theme });
           return;
         }
         case "adapter.connect": {

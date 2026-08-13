@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { DiscoveredAdapter, DiscoveredProject } from "@overseer/protocol";
+import type { DiscoveredAdapter, DiscoveredProject, OverseerTheme } from "@overseer/protocol";
 
 /**
  * Internal memory — the overseer's own record of itself.
@@ -37,14 +37,32 @@ import type { DiscoveredAdapter, DiscoveredProject } from "@overseer/protocol";
  * `/app`, so a cwd-relative default would quietly put the store in two
  * different places. Both `src/memory/` and `dist/memory/` sit four levels under
  * the app root.
+ *
+ * Resolved per call so tests can point `OVERSEER_INTERNAL_DIR` at a temp dir
+ * without racing a module-load constant.
  */
-const ROOT =
-  process.env.OVERSEER_INTERNAL_DIR ??
-  path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../../../..", ".overseer");
+function root(): string {
+  return (
+    process.env.OVERSEER_INTERNAL_DIR ??
+    path.resolve(
+      path.dirname(fileURLToPath(import.meta.url)),
+      "../../../..",
+      ".overseer",
+    )
+  );
+}
 
-const LOGS_DIR = path.join(ROOT, "logs");
-const ACTIONS_FILE = path.join(ROOT, "actions.jsonl");
-const STATE_FILE = path.join(ROOT, "state.json");
+function logsDir(): string {
+  return path.join(root(), "logs");
+}
+
+function actionsFile(): string {
+  return path.join(root(), "actions.jsonl");
+}
+
+function stateFile(): string {
+  return path.join(root(), "state.json");
+}
 
 /** Every action the overseer takes, before it is reported. Append-only, and
  * nothing in `overseer-personality` can filter it (docs/overseer.md §6.4). */
@@ -69,19 +87,33 @@ export interface WorldSnapshot {
   last_active_project?: string;
   /** Adapter id the operator connected — never auto-picked. */
   attached_adapter?: string;
+  /** Last theme the operator chose. Absent means samaritan (the default). */
+  theme?: OverseerTheme;
 }
 
+/** Theme chosen before the first discovery snapshot exists — stamped in when
+ * discovery writes `state.json`, the same way a mid-pass project pick would
+ * otherwise be lost. Cleared by `themeForSnapshot`. */
+let pendingTheme: OverseerTheme | undefined;
+
 let ensured: Promise<void> | undefined;
+/** Directory the memoised `ensureDirs` last prepared — invalidate when the
+ * env-configured root moves (tests). */
+let ensuredRoot: string | undefined;
 
 /** Idempotent, and memoised so a burst of appends does not stat the tree once
  * per call. The memo is dropped on failure: a `mkdir` that lost to a volume
  * not yet mounted at boot is transient, and caching that rejection would
  * disable the action register and the run log for the life of the process. */
 function ensureDirs(): Promise<void> {
-  ensured ??= mkdir(LOGS_DIR, { recursive: true }).then(
+  const current = root();
+  if (ensured && ensuredRoot === current) return ensured;
+  ensuredRoot = current;
+  ensured = mkdir(logsDir(), { recursive: true }).then(
     () => undefined,
     (error: unknown) => {
       ensured = undefined;
+      ensuredRoot = undefined;
       throw error;
     },
   );
@@ -89,7 +121,7 @@ function ensureDirs(): Promise<void> {
 }
 
 export function internalMemoryRoot(): string {
-  return ROOT;
+  return root();
 }
 
 /**
@@ -103,7 +135,7 @@ export async function recordAction(
   const record: ActionRecord = { at: new Date().toISOString(), ...entry };
   try {
     await ensureDirs();
-    await appendFile(ACTIONS_FILE, `${JSON.stringify(record)}\n`, "utf8");
+    await appendFile(actionsFile(), `${JSON.stringify(record)}\n`, "utf8");
   } catch (error) {
     console.error("overseer: could not write to the action register", error);
   }
@@ -119,7 +151,7 @@ export async function recordAction(
 export async function readActions(limit?: number): Promise<ActionRecord[]> {
   let raw: string;
   try {
-    raw = await readFile(ACTIONS_FILE, "utf8");
+    raw = await readFile(actionsFile(), "utf8");
   } catch {
     return [];
   }
@@ -148,7 +180,7 @@ export async function writeRunLog(
     // through basename anyway so this can't become a path-traversal write if
     // that ever stops being true.
     await writeFile(
-      path.join(LOGS_DIR, `${path.basename(runId)}.jsonl`),
+      path.join(logsDir(), `${path.basename(runId)}.jsonl`),
       `${body}\n`,
       "utf8",
     );
@@ -159,7 +191,7 @@ export async function writeRunLog(
 
 export async function readSnapshot(): Promise<WorldSnapshot | undefined> {
   try {
-    return JSON.parse(await readFile(STATE_FILE, "utf8")) as WorldSnapshot;
+    return JSON.parse(await readFile(stateFile(), "utf8")) as WorldSnapshot;
   } catch {
     return undefined;
   }
@@ -169,8 +201,8 @@ export async function readSnapshot(): Promise<WorldSnapshot | undefined> {
  * Serialises every access to the snapshot file.
  *
  * Temp-file-plus-rename buys crash safety, not concurrency safety, and there
- * are four writers here: discovery, the workspace monitor's poll,
- * `setActiveProjectPath` and `setAttachedAdapter`. Each is a read, an await,
+ * are five writers here: discovery, the workspace monitor's poll,
+ * `setActiveProjectPath`, `setAttachedAdapter` and `setTheme`. Each is a read, an await,
  * then a write, so two that interleave lose one of the two updates — the
  * monitor reads, the operator attaches an adapter, the monitor writes back its
  * stale `attached_adapter` and the connection silently reverts. Chaining on a
@@ -199,7 +231,8 @@ function serialized<T>(work: () => Promise<T>): Promise<T> {
 async function publishSnapshot(
   snapshot: Omit<WorldSnapshot, "at">,
 ): Promise<void> {
-  const tmp = `${STATE_FILE}.${randomUUID()}.tmp`;
+  const file = stateFile();
+  const tmp = `${file}.${randomUUID()}.tmp`;
   try {
     await ensureDirs();
     const body = JSON.stringify(
@@ -208,7 +241,7 @@ async function publishSnapshot(
       2,
     );
     await writeFile(tmp, body, "utf8");
-    await rename(tmp, STATE_FILE);
+    await rename(tmp, file);
   } catch (error) {
     console.error("overseer: could not write the world snapshot", error);
     // A temp file left by a failed write is never picked up by anything, so it
@@ -278,6 +311,7 @@ export async function setActiveProjectPath(
       adapters: previous.adapters,
       last_active_project: projectPath,
       attached_adapter: previous.attached_adapter,
+      theme: previous.theme,
     };
   });
 
@@ -301,6 +335,53 @@ export async function setActiveProjectPath(
   return { ok: true };
 }
 
+/**
+ * Record the operator's theme without rewriting the rest of the snapshot.
+ *
+ * Before the first discovery pass there is no `state.json` yet — remember the
+ * choice in-process and let discovery stamp it when it writes the first
+ * snapshot, so a settings toggle mid-pass is not lost.
+ */
+export async function setTheme(theme: OverseerTheme): Promise<MemoryWrite> {
+  const written = await updateSnapshot((previous) => ({
+    runCount: previous.runCount,
+    workspaceRoot: previous.workspaceRoot,
+    projects: previous.projects,
+    adapters: previous.adapters,
+    last_active_project: previous.last_active_project,
+    attached_adapter: previous.attached_adapter,
+    theme,
+  }));
+
+  if (!written) {
+    pendingTheme = theme;
+    await recordAction({
+      actor: "operator",
+      action: "theme:select",
+      outcome: "ok",
+      detail: `${theme} · pending discovery`,
+    });
+    return { ok: true };
+  }
+
+  await recordAction({
+    actor: "operator",
+    action: "theme:select",
+    outcome: "ok",
+    detail: theme,
+  });
+  return { ok: true };
+}
+
+/** Theme to include when discovery (re)writes the world snapshot. */
+export function themeForSnapshot(
+  previous: WorldSnapshot | undefined,
+): OverseerTheme | undefined {
+  const pending = pendingTheme;
+  pendingTheme = undefined;
+  return pending ?? previous?.theme;
+}
+
 /** Record which adapter the operator connected. Discovery must have run first. */
 export async function setAttachedAdapter(id: string): Promise<boolean> {
   const written = await updateSnapshot((previous) => ({
@@ -310,6 +391,7 @@ export async function setAttachedAdapter(id: string): Promise<boolean> {
     adapters: previous.adapters,
     last_active_project: previous.last_active_project,
     attached_adapter: id,
+    theme: previous.theme,
   }));
   if (!written) {
     console.error("overseer: cannot attach an adapter before the first discovery pass");
@@ -339,5 +421,6 @@ export async function syncSnapshotProjects(
     last_active_project:
       active !== undefined ? active.path : previous.last_active_project,
     attached_adapter: previous.attached_adapter,
+    theme: previous.theme,
   }));
 }

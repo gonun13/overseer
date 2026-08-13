@@ -15,23 +15,19 @@ import { useShellKeyboard } from "./state/useShellKeyboard";
 import { useShellPresentation } from "./state/useShellPresentation";
 import { useWindows } from "./state/useWindows";
 
-type Theme = "machine" | "samaritan";
-
 const PROMPT_OPTION_KEYS = mockPromptOptions.map((option) => option.key);
 
 export default function App() {
-  const [theme, setTheme] = useState<Theme>("samaritan");
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const wizard = useDiscovery();
   const { windows, open, close, closeTop, closeAll, raise, move } =
     useWindows();
 
+  const selectTheme = wizard.selectTheme;
   const toggleTheme = useCallback(() => {
-    setTheme((current) =>
-      current === "machine" ? "samaritan" : "machine",
-    );
-  }, []);
+    selectTheme(wizard.theme === "machine" ? "samaritan" : "machine");
+  }, [selectTheme, wizard.theme]);
   const openSettings = useCallback(() => setSettingsOpen(true), []);
   const closeSettings = useCallback(() => setSettingsOpen(false), []);
   const toggleSettings = useCallback(
@@ -75,8 +71,8 @@ export default function App() {
   });
 
   useEffect(() => {
-    document.documentElement.dataset.theme = theme;
-  }, [theme]);
+    document.documentElement.dataset.theme = wizard.theme;
+  }, [wizard.theme]);
 
   const followSignal = useCallback(
     (signal: Signal) => {
@@ -189,11 +185,11 @@ export default function App() {
 
       <SettingsPanel
         open={settingsOpen}
-        theme={theme}
+        theme={wizard.theme}
         adapter={shell.adapter}
         workspace={shell.workspace}
         onClose={closeSettings}
-        onToggleTheme={toggleTheme}
+        onSelectTheme={selectTheme}
         onOpenCapabilities={() => {
           open("capabilities");
           closeSettings();

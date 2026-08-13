@@ -2,6 +2,7 @@ import { useCallback, useEffect, useReducer } from "react";
 import type {
   ClientMessage,
   DiscoveryEvent,
+  OverseerTheme,
   PersonalityTone,
   ServerMessage,
 } from "@overseer/protocol";
@@ -40,6 +41,8 @@ export interface DiscoveryController extends WizardState {
   submitOperatorTone: (tone: PersonalityTone) => void;
   /** Persist the active project into internal memory. */
   selectProject: (path: string) => void;
+  /** Persist the theme into internal memory. */
+  selectTheme: (theme: OverseerTheme) => void;
   /** Attach an adapter from the picker (auth is a separate later step). */
   connectAdapter: (id: string) => void;
   /** OverseerSpace calls this when the current headline is fully on screen
@@ -66,6 +69,7 @@ export function useDiscovery(): DiscoveryController {
           returning: message.returning,
           personality: message.personality ?? {},
           serverTime: message.serverTime,
+          theme: message.theme,
         });
         return;
       }
@@ -79,6 +83,10 @@ export function useDiscovery(): DiscoveryController {
       }
       if (message.type === "project.selected") {
         dispatch({ type: "project.selected", path: message.path });
+        return;
+      }
+      if (message.type === "theme.selected") {
+        dispatch({ type: "theme.selected", theme: message.theme });
         return;
       }
       if (message.type === "adapter.connected") {
@@ -175,6 +183,15 @@ export function useDiscovery(): DiscoveryController {
     [send],
   );
 
+  const selectTheme = useCallback(
+    (theme: OverseerTheme) => {
+      dispatch({ type: "theme.selected", theme });
+      const message: ClientMessage = { type: "theme.select", theme };
+      send(message);
+    },
+    [send],
+  );
+
   const connectAdapter = useCallback(
     (id: string) => {
       dispatch({ type: "adapter.connected", id });
@@ -200,6 +217,7 @@ export function useDiscovery(): DiscoveryController {
     submitOperatorName,
     submitOperatorTone,
     selectProject,
+    selectTheme,
     connectAdapter,
     onHeadlineReady,
   };

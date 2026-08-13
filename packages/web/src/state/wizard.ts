@@ -5,6 +5,7 @@ import type {
   DiscoveryEvent,
   DiscoveryOutcome,
   FurnitureReveal,
+  OverseerTheme,
   RejectedCustomization,
   UntrackedFolder,
 } from "@overseer/protocol";
@@ -75,6 +76,8 @@ export interface WizardState {
   workspaceRoot?: string;
   /** Active project path from internal memory / discovery default. */
   activeProjectPath?: string;
+  /** Theme from internal memory. Samaritan until the server says otherwise. */
+  theme: OverseerTheme;
   /** Furniture unlocked so far this pass. Permanent once true. */
   revealed: Record<FurnitureReveal, boolean>;
   /** Bumps when a worker appends an operations line — App summons the
@@ -119,6 +122,7 @@ export const INITIAL_WIZARD: WizardState = {
   projects: [],
   untrackedFolders: [],
   adapters: [],
+  theme: "samaritan",
   revealed: { ...NO_REVEAL },
   personality: {},
   rejected: [],
@@ -173,6 +177,7 @@ export type WizardAction =
       returning: boolean;
       personality: AppliedPersonality;
       serverTime: string;
+      theme?: OverseerTheme;
     }
   | { type: "socket.error"; message: string }
   | { type: "discovery.requested" }
@@ -189,6 +194,8 @@ export type WizardAction =
   | { type: "welcome.done" }
   /** Operator picked a project in the panel — keep wizard state in sync. */
   | { type: "project.selected"; path: string }
+  /** Operator picked a theme — keep wizard state in sync. */
+  | { type: "theme.selected"; theme: OverseerTheme }
   /** Operator connected an adapter from the picker. */
   | { type: "adapter.connected"; id: string }
   /** Live workspace scan — projects appeared or vanished under /workspace. */
@@ -252,6 +259,7 @@ export function wizardReducer(
         returning: action.returning,
         personality: action.personality,
         serverTime: action.serverTime,
+        ...(action.theme !== undefined ? { theme: action.theme } : {}),
       });
 
     case "socket.error":
@@ -298,6 +306,9 @@ export function wizardReducer(
 
     case "project.selected":
       return { ...state, activeProjectPath: action.path };
+
+    case "theme.selected":
+      return { ...state, theme: action.theme };
 
     case "adapter.connected":
       return { ...state, attachedAdapterId: action.id };
