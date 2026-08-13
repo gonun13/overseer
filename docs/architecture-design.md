@@ -262,3 +262,67 @@ In streaming-input mode, permission prompts arrive as `control_request` messages
 - Budget roughly 500 MB–1 GB per live process. Idle reaping prevents dormant sessions from pinning memory.
 - The CLI has no built-in session timeout; enforce idle and turn limits server-side.
 - Enforce session budgets server-side across process restarts.
+
+---
+
+## 8. Versioning
+
+**Current release:** `0.1.1`
+
+Versions follow [SemVer](https://semver.org/) (`MAJOR.MINOR.PATCH`). The number reflects **which
+design-doc milestone is shipped**, not commit count or PR volume. When in doubt, compare the running
+product against the doc sections below — not git history alone.
+
+### 8.1 Monorepo rule
+
+The repo is private and unpublished. Every workspace package stays in **lockstep** with the root
+`package.json` version:
+
+| Package                         | Role                          |
+| ------------------------------- | ----------------------------- |
+| `overseer` (root)               | source of truth               |
+| `@overseer/protocol`            | shared types                  |
+| `@overseer/web`                 | SPA — footer reads root version via `appVersion.ts` |
+| `@overseer/server`              | API / WS                      |
+| `@overseer/adapter-claude-code` | adapter                       |
+| `@overseer/e2e`                 | Playwright suite              |
+
+On every release bump **all** of those `version` fields, sync the matching entries in
+`package-lock.json`, and tag `vX.Y.Z` on the merge commit to `main`. Do not hard-code a version in UI
+source — `packages/web/src/appVersion.ts` imports the root `package.json` version for the footer and
+help window ([ui-ux-design.md §6](ui-ux-design.md#6-permanent-furniture)).
+
+### 8.2 Milestone map
+
+Each **MINOR** pre-1.0 marks a doc-defined tier becoming operator-visible. **PATCH** is fixes,
+refactors, or docs within the current tier. Do not bump MINOR for work that only closes gaps inside
+the tier already claimed by the current version.
+
+| Version   | Design-doc tier | Ship bar |
+| --------- | --------------- | -------- |
+| `0.0.x`   | —               | Scaffold only: repo layout, container, no behavioral spec live. |
+| `0.1.x`   | [overseer-behavior.md](overseer-behavior.md) | **Overseer shell** — wizard phases (§4), progressive furniture (§4), internal memory (§6.2), `overseer-personality` (§6.3), workspace discovery, adapter `getStatus()` surfacing. Wireframe windows may still use fixtures; the overseer path uses real server state. |
+| `0.2+`    | TBD             | Reserve the next MINOR for the next coherent pre-MVP tier once it is written into a design doc and listed under README [Status](../README.md#status). Do not invent a number in advance. |
+| `1.0.0`   | §3 **MVP**      | **Core loop** — every row in the MVP table (§3) works end-to-end for `claude-code`: spawn/resume sessions, stream transcript + tools, inline approval, model/mode controls, subscription login from the UI, usage surfacing, crash/auth failure handling. |
+| `1.x`     | §3 **Important**| Additive features from the Important tier. Each MINOR should map to a closed subset of that table (call it out in release notes). |
+| `2.x+`    | §3 **Nice to have** + later adapters | Major product expansion; breaking protocol or UX contract bumps MAJOR. |
+
+**Explicit non-goals for `0.1.x`:** §3 MVP (sessions, live console, approvals queue), §5 adapter-backed
+querying in [overseer-behavior.md](overseer-behavior.md) ("planned, not built"), and credential-file
+auth checks instead of `claude auth status` — see README [Status](../README.md#status).
+
+### 8.3 Release checklist
+
+1. Walk the milestone table: does the product meet the ship bar for the target version?
+2. Update README [Status](../README.md#status) if the "in place" / "still missing" lists changed.
+3. Bump the same version in root and every `@overseer/*` `package.json`; sync `package-lock.json`.
+   The footer and help window pick up the root version automatically — no separate UI edit.
+4. Set **Current release** at the top of this section and in README [Versioning](../README.md#versioning).
+5. Tag `vX.Y.Z` on the merge commit to `main` (annotated tag preferred).
+6. Mention the version in the PR or release notes when the bump is intentional — not as a drive-by in
+   unrelated work.
+
+### 8.4 After `1.0.0`
+
+Normal SemVer applies on top of the tier map: breaking protocol or UX changes → `MAJOR`; new Important-tier
+capability → `MINOR`; fix or internal cleanup → `PATCH`.

@@ -1,7 +1,7 @@
 {
   "name": "@overseer/e2e",
   "private": true,
-  "version": "0.0.1",
+  "version": "0.1.1",
   "description": "Playwright acceptance tests against the dev stack — runs inside the container, never on the host.",
   "type": "module",
   "scripts": {
@@ -10,7 +10,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.49.0",
-    "@types/node": "^22.10.2",
+    "@types/node": "^24.13.3",
     "typescript": "^5.7.2"
   }
 }

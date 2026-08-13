@@ -1,4 +1,5 @@
 import type { ReactNode } from "react";
+import { overseerVersionLabel } from "../appVersion";
 import type { Turn } from "../domain";
 import type {
   PromptOption,
@@ -84,7 +85,7 @@ export function PromptSessionChrome({
         )}
         {footerVisible && (
           <p className="footer settles-in">
-            overseer v{import.meta.env.VITE_APP_VERSION}
+            {overseerVersionLabel()}
             {promptVisible && (
               <>
                 {" "}

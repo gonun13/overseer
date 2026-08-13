@@ -9,7 +9,8 @@ projects on external git remotes so a bad run is recoverable.
 
 Architecture: [docs/architecture-design.md](docs/architecture-design.md) ·
 UI: [docs/ui-ux-design.md](docs/ui-ux-design.md) ·
-Behavior: [docs/overseer-behavior.md](docs/overseer-behavior.md)
+Behavior: [docs/overseer-behavior.md](docs/overseer-behavior.md) ·
+Versioning: [docs/architecture-design.md §8](docs/architecture-design.md#8-versioning)
 
 > **Early stage.** The UI shell and overseer wizard are live. Session spawning for the
 > `claude-code` adapter is not implemented yet — there are no live agent sessions or
@@ -143,3 +144,13 @@ Still missing:
   — no live sessions or transcripts yet
 - Auth check reads the credentials file rather than validating a token
 - Console is a mockup (echoes; no PTY)
+
+## Versioning
+
+Current release: **0.1.1** — the **overseer shell** milestone
+([overseer-behavior.md](docs/overseer-behavior.md)). **`1.0.0`** waits on the §3 MVP core loop
+([architecture-design.md §8](docs/architecture-design.md#8-versioning)).
+
+Bump rules, monorepo lockstep, release checklist, and the full milestone map live in
+[architecture-design.md §8](docs/architecture-design.md#8-versioning). The footer reads the root
+version from `package.json` automatically.
