@@ -1,0 +1,10 @@
+#!/usr/bin/env sh
+# Unit and integration tests, inside the container. Browser acceptance tests
+# remain separate under ./bin/test-e2e.
+. "$(dirname -- "$0")/_lib.sh"
+
+require_docker
+
+# Use the full stack's deps gate because tests may import built workspace
+# packages.
+dev_compose run --rm server npm test

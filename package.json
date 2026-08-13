@@ -20,7 +20,8 @@
     "build": "npm run build --workspace packages/protocol && npm run build --workspace packages/adapters/claude-code && npm run build --workspace packages/web && npm run build --workspace packages/server",
     "typecheck": "npm run typecheck --workspaces --if-present",
     "lint": "npm run lint --workspaces --if-present",
-    "test:e2e": "npm run test --workspace packages/e2e",
+    "test": "npm run test --workspaces --if-present",
+    "test:e2e": "npm run test:e2e --workspace packages/e2e",
     "format": "prettier --write ."
   },
   "devDependencies": {
