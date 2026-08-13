@@ -13,7 +13,7 @@ import {
   peekPersonality,
   setOperatorName,
   setOperatorTone,
-} from "./memory/personality.js";
+} from "./memory/personality/api.js";
 import { isInsideWorkspace } from "./workspace.js";
 
 /**

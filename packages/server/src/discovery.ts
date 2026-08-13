@@ -14,7 +14,7 @@ import {
   readPersonality,
   scaffoldPersonality,
   type PersonalityResult,
-} from "./memory/personality.js";
+} from "./memory/personality/api.js";
 import { listAdapters } from "./adapters.js";
 import {
   WORKSPACE_ROOT,

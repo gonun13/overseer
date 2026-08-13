@@ -1,0 +1,137 @@
+import { useEffect, useMemo } from "react";
+import type { AdapterInfo, Project } from "../domain";
+import type { WindowKind } from "../windows";
+import { deriveSignals, headlineFor, type Signal } from "./signals";
+import type { DiscoveryController } from "./useDiscovery";
+import {
+  furnitureFor,
+  isLoading,
+  nameAskPrefix,
+  projectsFor,
+  welcomeNeedsName,
+  welcomeNeedsTone,
+  wizardHeadline,
+} from "./wizard";
+
+/** Stable empty state so OverseerSpace does not repeat its ranking work during boot. */
+const EMPTY_SIGNALS: Signal[] = [];
+
+type OpenWindow = (
+  kind: WindowKind,
+  payload?: unknown,
+  title?: string,
+) => void;
+
+/**
+ * Adapts discovery state into the values rendered by the application shell.
+ * The wizard remains the source of truth; this hook only derives presentation.
+ */
+export function useShellPresentation(
+  wizard: DiscoveryController,
+  busy: boolean,
+  openWindow: OpenWindow,
+) {
+  const furniture = furnitureFor(wizard);
+  const projects = useMemo(() => projectsFor(wizard), [wizard]);
+  const activeProject: Project | undefined =
+    projects.find((project) => project.path === wizard.activeProjectPath) ??
+    (furniture.activeProject ? projects[0] : undefined);
+
+  const adapter: AdapterInfo = useMemo(() => {
+    const reported = wizard.adapters.find(
+      (candidate) => candidate.id === wizard.attachedAdapterId,
+    );
+    return {
+      name: reported?.id ?? "",
+      version: reported?.status.version ?? "",
+      authenticated: reported?.status.authenticated ?? false,
+      usage: 0,
+      spend: "",
+      context: "",
+    };
+  }, [wizard.adapters, wizard.attachedAdapterId]);
+
+  const workspace = useMemo(
+    () => ({ root: wizard.workspaceRoot ?? "" }),
+    [wizard.workspaceRoot],
+  );
+
+  const signals = useMemo(
+    () =>
+      deriveSignals({
+        projects,
+        activeProject,
+        sessions: [],
+        approvals: [],
+        capabilities: [],
+        adapter,
+        busy,
+        rejected: wizard.rejected,
+        untrackedFolders: wizard.untrackedFolders,
+        personalityMissing: wizard.personalityMissing,
+        personalityRescued: wizard.personalityRescued,
+        personalityRescueHeadline: wizard.personalityRescueHeadline,
+      }),
+    [
+      projects,
+      activeProject,
+      adapter,
+      busy,
+      wizard.rejected,
+      wizard.untrackedFolders,
+      wizard.personalityMissing,
+      wizard.personalityRescued,
+      wizard.personalityRescueHeadline,
+    ],
+  );
+
+  const askingName = welcomeNeedsName(wizard);
+  const pickingTone = welcomeNeedsTone(wizard);
+  const wizardWord = wizardHeadline(wizard);
+  const derivedHeadline = headlineFor(signals, busy);
+  const headline = wizard.error
+    ? { text: wizard.error, activity: "attention" as const }
+    : wizardWord
+      ? { text: wizardWord, activity: "working" as const }
+      : askingName
+        ? { text: "", activity: "working" as const }
+        : derivedHeadline;
+  const typingChance = wizard.error
+    ? 0
+    : wizardWord
+      ? 1
+      : wizard.personality.typingChance;
+
+  // Discovery and each later operation summon the machine-owned window.
+  useEffect(() => {
+    if (wizard.phase === "discovery" && wizard.connected) {
+      openWindow("overseer");
+    }
+  }, [wizard.phase, wizard.connected, openWindow]);
+
+  useEffect(() => {
+    if (
+      wizard.phase !== "discovery" &&
+      wizard.phase !== "settling" &&
+      wizard.phase !== "ready"
+    ) {
+      return;
+    }
+    if (wizard.operationTick > 0) openWindow("overseer");
+  }, [wizard.operationTick, wizard.phase, openWindow]);
+
+  return {
+    furniture,
+    projects,
+    activeProject,
+    adapter,
+    workspace,
+    signals: furniture.signals ? signals : EMPTY_SIGNALS,
+    headline,
+    loading: isLoading(wizard),
+    typingChance,
+    askingName,
+    pickingTone,
+    namePrefix: nameAskPrefix(wizard),
+  };
+}

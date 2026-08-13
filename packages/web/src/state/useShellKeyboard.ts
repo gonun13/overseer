@@ -1,0 +1,103 @@
+import { useEffect } from "react";
+import type { PromptOptionKey } from "../prompt";
+
+interface ShellKeyboardOptions {
+  settingsOpen: boolean;
+  windowCount: number;
+  openControl: PromptOptionKey | null;
+  promptOpen: boolean;
+  promptOptionKeys: readonly PromptOptionKey[];
+  closeSettings: () => void;
+  closeTopWindow: () => void;
+  closeControl: () => void;
+  closePrompt: () => void;
+  toggleControl: (key: PromptOptionKey) => void;
+  openContext: () => void;
+  openPrompt: () => void;
+  toggleProjects: () => void;
+  toggleSettings: () => void;
+}
+
+/** Registers the application shell's global keyboard command layer. */
+export function useShellKeyboard({
+  settingsOpen,
+  windowCount,
+  openControl,
+  promptOpen,
+  promptOptionKeys,
+  closeSettings,
+  closeTopWindow,
+  closeControl,
+  closePrompt,
+  toggleControl,
+  openContext,
+  openPrompt,
+  toggleProjects,
+  toggleSettings,
+}: ShellKeyboardOptions) {
+  useEffect(() => {
+    function onKeyDown(event: KeyboardEvent) {
+      if (event.key === "Escape") {
+        if (settingsOpen) closeSettings();
+        else if (windowCount > 0) closeTopWindow();
+        else if (openControl) closeControl();
+        else closePrompt();
+        return;
+      }
+
+      const target = event.target as HTMLElement | null;
+      const typing = !!target?.closest("input, textarea");
+
+      // Bare digits control the closed prompt; an open prompt owns every key.
+      if (
+        !event.metaKey &&
+        !event.ctrlKey &&
+        !event.altKey &&
+        !promptOpen &&
+        !typing
+      ) {
+        const index = Number(event.key);
+        if (index >= 1 && index <= promptOptionKeys.length) {
+          event.preventDefault();
+          toggleControl(promptOptionKeys[index - 1]);
+          return;
+        }
+        if (index === promptOptionKeys.length + 1) {
+          event.preventDefault();
+          openContext();
+          return;
+        }
+      }
+
+      if (!(event.metaKey || event.ctrlKey)) return;
+      if (event.key === "k") {
+        event.preventDefault();
+        openPrompt();
+      } else if (event.key === "p") {
+        event.preventDefault();
+        toggleProjects();
+      } else if (event.key === ",") {
+        event.preventDefault();
+        toggleSettings();
+      }
+    }
+
+    window.addEventListener("keydown", onKeyDown);
+    return () => window.removeEventListener("keydown", onKeyDown);
+  }, [
+    closeControl,
+    closePrompt,
+    closeSettings,
+    closeTopWindow,
+    openContext,
+    openControl,
+    openPrompt,
+    promptOpen,
+    promptOptionKeys,
+    settingsOpen,
+    toggleControl,
+    toggleProjects,
+    toggleSettings,
+    windowCount,
+  ]);
+}
