@@ -72,6 +72,9 @@ export interface AdapterInfo {
   name: string;
   version: string;
   authenticated: boolean;
+  /** True when this instance was signed in on an earlier run and now is not —
+   * an expired or revoked credential, not a login never started. */
+  authExpired?: boolean;
   /** Fraction of the plan's window consumed. */
   usage: number;
   spend: string;

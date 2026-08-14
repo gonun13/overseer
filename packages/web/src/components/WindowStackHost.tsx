@@ -75,10 +75,17 @@ export function WindowStackHost({
         <AdaptersWindow
           adapters={wizard.adapters}
           attachedId={wizard.attachedAdapterId}
+          auth={wizard.auth}
           onConnect={(id) => {
+            // Stays open: connecting an unauthenticated adapter hands this
+            // window straight to its login step, and closing it would put the
+            // operator back at square one for the step they just unlocked.
             wizard.connectAdapter(id);
-            closeWindow(windowState.id);
           }}
+          onStartLogin={wizard.startLogin}
+          onSubmitCode={wizard.submitAuthCode}
+          onCancelLogin={wizard.cancelLogin}
+          onSignOut={wizard.signOut}
         />
       )}
       {windowState.kind === "sessions" && (

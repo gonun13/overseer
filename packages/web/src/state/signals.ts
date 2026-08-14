@@ -10,6 +10,9 @@ export type Target =
   | { kind: "settings" }
   | { kind: "selector" }
   | { kind: "prompt" }
+  /** The login surface — opens the adapters window on its authenticate step
+   * *and* starts the flow, so following the signal is one click, not two. */
+  | { kind: "login" }
   /** Full boot — used when `overseer-personality` must be restored by discovery. */
   | { kind: "restart" };
 
@@ -34,7 +37,13 @@ export interface WorldState {
   sessions: Session[];
   approvals: Approval[];
   capabilities: Capability[];
-  adapter: { name: string; authenticated: boolean; usage: number };
+  adapter: {
+    name: string;
+    authenticated: boolean;
+    usage: number;
+    /** True when this instance was signed in and now is not. */
+    authExpired?: boolean;
+  };
   busy: boolean;
   /** Customizations in `overseer-personality` the overseer refused to apply.
    * Optional because a world that has not run discovery has not been told. */
@@ -126,13 +135,26 @@ export function deriveSignals(world: WorldState): Signal[] {
       text: "No adapter is attached · sessions cannot start.",
       target: { kind: "window", window: "adapters" },
     });
+  } else if (adapter.authExpired) {
+    // An adapter that *was* signed in and now is not did not lose its
+    // credential because of anything the operator did, and everything
+    // downstream of it is about to start failing. Its own signal, ranked above
+    // "you have not signed in yet", because it is news rather than a step not
+    // taken (docs/overseer.md §2.2).
+    signals.push({
+      id: "auth-expired",
+      activity: "attention",
+      kicker: "adapter",
+      text: `${adapter.name} was signed in and is not any more · its credential expired or was revoked. sign in again to keep working.`,
+      target: { kind: "login" },
+    });
   } else if (!adapter.authenticated) {
     signals.push({
       id: "no-auth",
       activity: "waiting",
       kicker: "adapter",
       text: `${adapter.name} is not authenticated · sessions cannot start until you sign in.`,
-      target: { kind: "window", window: "adapters" },
+      target: { kind: "login" },
     });
   }
 

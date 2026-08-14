@@ -42,6 +42,18 @@ export interface UntrackedFolder {
 export interface DiscoveredAdapter {
   id: string;
   status: AdapterStatus;
+  /**
+   * True when this adapter was signed in on a previous run and now is not.
+   *
+   * A credential that stopped working is a different event from one that was
+   * never obtained, and the more urgent of the two: nothing the operator did
+   * caused it, and everything downstream of it will start failing. It gets its
+   * own signal rather than being folded into "not authenticated".
+   *
+   * Cleared by a successful login, and by a deliberate sign-out — an operator
+   * who signed out on purpose has not suffered an expiry.
+   */
+  authExpired?: true;
 }
 
 /** A customization the overseer refused to apply, and why. Surfaced to the

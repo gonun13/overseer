@@ -258,20 +258,29 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
       const registered = listAdapters();
       const results = await Promise.all(
         registered.map(async (adapter): Promise<DiscoveredAdapter> => {
+          let status;
           try {
-            return { id: adapter.id, status: await adapter.getStatus() };
+            status = await adapter.getStatus();
           } catch (error) {
-            return {
-              id: adapter.id,
-              status: {
-                authenticated: false,
-                detail:
-                  error instanceof Error
-                    ? error.message
-                    : "status check failed",
-              },
+            status = {
+              authenticated: false,
+              detail:
+                error instanceof Error ? error.message : "status check failed",
             };
           }
+          // An adapter this instance was signed into and now is not has had a
+          // credential stop working — carried forward until a login or a
+          // sign-out clears it, so a restart does not forget that it happened.
+          const before = previous?.adapters.find((a) => a.id === adapter.id);
+          const expired =
+            !status.authenticated &&
+            (before?.authExpired === true ||
+              before?.status.authenticated === true);
+          return {
+            id: adapter.id,
+            status,
+            ...(expired ? { authExpired: true as const } : {}),
+          };
         }),
       );
 

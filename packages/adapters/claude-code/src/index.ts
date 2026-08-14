@@ -1,7 +1,3 @@
-import { execFile } from "node:child_process";
-import { access } from "node:fs/promises";
-import path from "node:path";
-import { promisify } from "node:util";
 import type {
   AgentAdapter,
   AdapterCapabilities,
@@ -10,8 +6,7 @@ import type {
   SessionMeta,
   SessionOpts,
 } from "@overseer/protocol";
-
-const run = promisify(execFile);
+import { readAuthStatus, signOut, startLogin } from "./login.js";
 
 const capabilities: AdapterCapabilities = {
   streamingDeltas: true,
@@ -24,6 +19,7 @@ const capabilities: AdapterCapabilities = {
   costReporting: true,
   checkpoints: false,
   backgroundAgents: false,
+  login: true,
 };
 
 // Process spawning (design doc §1.2 — one long-lived `claude` process per session,
@@ -39,44 +35,15 @@ function notImplemented(): never {
  * Two independent facts, checked separately because they fail separately: is
  * the CLI here at all, and has anyone signed it in.
  *
- * The login check is the presence of `.credentials.json` under
- * `CLAUDE_CONFIG_DIR` — where the CLI writes its OAuth token. It is a file
- * test, not a token validation: this cannot tell a live token from an expired
- * one, so it never claims to. `detail` says what was actually checked rather
- * than implying more, and the PTY `setup-token` flow (design doc §2) will
- * replace this with a real answer when it lands.
+ * The second question is put to the CLI (`claude auth status`) rather than
+ * inferred from a `.credentials.json` on disk. A file-presence test could not
+ * tell a live token from an expired one and had to say so in its own `detail`;
+ * this can, so it does.
  *
  * Never throws — a failed check is a status, not an error.
  */
 async function getStatus(): Promise<AdapterStatus> {
-  let version: string | undefined;
-  try {
-    const { stdout } = await run("claude", ["--version"], { timeout: 5_000 });
-    // "2.1.226 (Claude Code)" — take the version, drop the parenthetical.
-    version = stdout.trim().split(/\s+/)[0];
-  } catch {
-    return {
-      authenticated: false,
-      detail: "claude CLI not found on PATH",
-    };
-  }
-
-  const configDir = process.env.CLAUDE_CONFIG_DIR ?? "/home/node/.claude";
-  try {
-    await access(path.join(configDir, ".credentials.json"));
-  } catch {
-    return {
-      authenticated: false,
-      version,
-      detail: `not logged in · no credentials in ${configDir}`,
-    };
-  }
-
-  return {
-    authenticated: true,
-    version,
-    detail: "credentials present (not validated against the API)",
-  };
+  return readAuthStatus();
 }
 
 export const claudeCodeAdapter: AgentAdapter = {
@@ -92,6 +59,10 @@ export const claudeCodeAdapter: AgentAdapter = {
     return [];
   },
   getStatus,
+  login: {
+    start: startLogin,
+    signOut,
+  },
 };
 
 export default claudeCodeAdapter;

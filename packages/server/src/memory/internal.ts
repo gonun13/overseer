@@ -448,6 +448,48 @@ export async function setAttachedAdapter(id: string): Promise<boolean> {
   return true;
 }
 
+/**
+ * Record an adapter's auth status in the world snapshot after a login or a
+ * sign-out, without waiting for the next discovery pass to observe it.
+ *
+ * This is the *only* thing a login persists. The CLI owns the credential and is
+ * the source of truth for "am I signed in" — but the snapshot already carries
+ * every adapter's last-known status, and one fact does need to survive a
+ * restart: whether this instance was ever signed in. Without it, an adapter
+ * reading `authenticated: false` cannot be told apart from one that never
+ * signed in at all, and the two want different words on the screen (an expired
+ * token is more urgent than an unstarted login).
+ *
+ * A deliberate sign-out writes `false` here too, so it does not come back as an
+ * expiry on the next boot.
+ *
+ * No-ops before the first snapshot exists — there is nowhere to write yet, and
+ * discovery will observe the real status on its way past.
+ */
+export async function setAdapterAuthenticated(
+  id: string,
+  authenticated: boolean,
+): Promise<boolean> {
+  return updateSnapshot((previous) => {
+    if (!previous.adapters.some((adapter) => adapter.id === id)) return undefined;
+    return {
+      runCount: previous.runCount,
+      workspaceRoot: previous.workspaceRoot,
+      projects: previous.projects,
+      adapters: previous.adapters.map((adapter) => {
+        if (adapter.id !== id) return adapter;
+        // `authExpired` is dropped on both paths: a fresh login is not expired,
+        // and a sign-out is a choice rather than an expiry.
+        const { authExpired: _dropped, ...rest } = adapter;
+        return { ...rest, status: { ...adapter.status, authenticated } };
+      }),
+      last_active_project: previous.last_active_project,
+      attached_adapter: previous.attached_adapter,
+      theme: previous.theme,
+    };
+  });
+}
+
 /** Refresh the project list in the world snapshot after a live workspace scan.
  * No-ops until discovery has written the first snapshot. Pass `active` when the
  * monitor changed (or cleared) the active project; omit it to leave the field. */
