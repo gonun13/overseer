@@ -7,6 +7,7 @@ import type {
   SessionOpts,
 } from "@overseer/protocol";
 import { readAuthStatus, signOut, startLogin } from "./login.js";
+import { withUsage } from "./usage.js";
 
 const capabilities: AdapterCapabilities = {
   streamingDeltas: true,
@@ -32,18 +33,18 @@ function notImplemented(): never {
 }
 
 /**
- * Two independent facts, checked separately because they fail separately: is
- * the CLI here at all, and has anyone signed it in.
+ * Three independent facts, checked separately because they fail separately: is
+ * the CLI here at all, has anyone signed it in, and — only then — what the
+ * subscription windows read.
  *
- * The second question is put to the CLI (`claude auth status`) rather than
- * inferred from a `.credentials.json` on disk. A file-presence test could not
- * tell a live token from an expired one and had to say so in its own `detail`;
- * this can, so it does.
+ * Auth is put to the CLI (`claude auth status`) rather than inferred from a
+ * `.credentials.json` on disk. Usage is the CLI's own `/usage` report, asked
+ * headlessly; a miss omits the windows rather than drawing a 0% gauge.
  *
  * Never throws — a failed check is a status, not an error.
  */
 async function getStatus(): Promise<AdapterStatus> {
-  return readAuthStatus();
+  return withUsage(await readAuthStatus());
 }
 
 export const claudeCodeAdapter: AgentAdapter = {

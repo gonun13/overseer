@@ -120,9 +120,19 @@ Plain pipes work with CLI 2.1.226; no PTY is required. Login is single-flight be
 
 ### 2.1 Account usage
 
-The top bar shows plan utilization, estimated activity cost, and active session count.
+The adapter widget shows subscription window utilization — Claude's short
+session window and the weekly cap — plus the CLI's own reset phrases.
 
-The adapter normalizes `rate_limit_event` to `usage.limit`, the only source for subscription utilization and reset time. Hide that gauge until an event supplies both. Separately, persist token usage and estimated cost from `result` messages. In streaming mode, `total_cost_usd` is cumulative for the process: store non-negative deltas and treat a lower value after resume as a counter reset. Never present local estimates as plan consumption or billing data.
+`getStatus()` asks `claude -p "/usage"` when the operator is signed in
+(`--output-format json --no-session-persistence`). Hide each gauge until a
+parse supplies a percentage. Never present local token estimates as plan
+consumption or billing data.
+
+Once sessions exist, `rate_limit_event` (normalized to `usage.limit`) can
+refresh the same windows live. Persist token usage and estimated cost from
+`result` messages separately. In streaming mode, `total_cost_usd` is
+cumulative for the process: store non-negative deltas and treat a lower
+value after resume as a counter reset.
 
 ---
 
@@ -147,7 +157,7 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Create session in a project                        | Sessions | pick a dir under `/workspace`; mint `--session-id`                 |
 | Resume session + history replay                    | Sessions | `--resume`; parse JSONL for backfill (§4)                         |
 | Session list with live status                      | Sessions | supervisor state + JSONL mtime                                    |
-| Plan utilization + estimated spend                 | Top bar  | `usage.limit` + normalized result counters (§2.1)                 |
+| Plan utilization + estimated spend                 | Adapter  | `/usage` via getStatus; later `usage.limit` (§2.1) |
 | Subscription login                                 | System   | `claude auth login`, plain spawn, no PTY; URL out to the operator's own browser, pasted code in (§2) |
 | Theme switch                                       | System   | `data-theme` on `:root`; choice persisted in internal memory      |
 | Crash / exit / auth-failure surfacing              | Console  | classify stream errors, result subtype, signal, and exit code     |

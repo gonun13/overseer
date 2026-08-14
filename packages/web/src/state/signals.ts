@@ -1,4 +1,8 @@
-import type { RejectedCustomization, UntrackedFolder } from "@overseer/protocol";
+import type {
+  AdapterUsageWindow,
+  RejectedCustomization,
+  UntrackedFolder,
+} from "@overseer/protocol";
 import { ACTIVITY_HEADLINE, ACTIVITY_RANK, type Activity } from "../status";
 import type { WindowKind } from "../windows";
 import type { Approval, Capability, Project, Session } from "../domain";
@@ -40,7 +44,7 @@ export interface WorldState {
   adapter: {
     name: string;
     authenticated: boolean;
-    usage: number;
+    usage: AdapterUsageWindow[];
     /** True when this instance was signed in and now is not. */
     authExpired?: boolean;
   };
@@ -194,12 +198,13 @@ export function deriveSignals(world: WorldState): Signal[] {
     });
   }
 
-  if (adapter.usage >= 0.8) {
+  const hottest = hottestUsage(adapter.usage);
+  if (hottest && hottest.used >= 0.8) {
     signals.push({
       id: "usage",
-      activity: adapter.usage >= 0.95 ? "attention" : "waiting",
+      activity: hottest.used >= 0.95 ? "attention" : "waiting",
       kicker: "usage",
-      text: `${Math.round(adapter.usage * 100)}% of the plan window is spent.`,
+      text: `${Math.round(hottest.used * 100)}% of the ${hottest.label} window is spent.`,
       target: { kind: "window", window: "adapters" },
     });
   }
@@ -235,4 +240,14 @@ export function headlineFor(
     text: top?.headline ?? ACTIVITY_HEADLINE[activity],
     activity,
   };
+}
+
+function hottestUsage(
+  windows: AdapterUsageWindow[],
+): AdapterUsageWindow | undefined {
+  let hottest: AdapterUsageWindow | undefined;
+  for (const window of windows) {
+    if (hottest === undefined || window.used > hottest.used) hottest = window;
+  }
+  return hottest;
 }

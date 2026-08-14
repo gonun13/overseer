@@ -1,5 +1,6 @@
 import { useEffect } from "react";
 import type { OverseerTheme } from "@overseer/protocol";
+import type { AdapterInfo } from "../domain";
 import { WInline, WTitle } from "./windows/bits";
 import { CloseIcon } from "./icons";
 import { StatusLight } from "./StatusLight";
@@ -24,13 +25,7 @@ export function SettingsPanel({
 }: {
   open: boolean;
   theme: OverseerTheme;
-  adapter: {
-    name: string;
-    version: string;
-    authenticated: boolean;
-    usage: number;
-    spend: string;
-  };
+  adapter: AdapterInfo;
   /** The container's mounts, which only the server knows; empty until it says. */
   workspace: { root: string };
   onClose: () => void;
@@ -104,11 +99,20 @@ export function SettingsPanel({
           <>
             <WInline label="adapter" value={adapter.name} />
             <WInline label="cli version" value={adapter.version} />
-            <WInline label="spend this window" value={adapter.spend} />
-            <WInline
-              label="plan window used"
-              value={`${Math.round(adapter.usage * 100)}%`}
-            />
+            {adapter.usage.map((window) => (
+              <WInline
+                key={window.id}
+                label={window.label}
+                value={
+                  window.resets
+                    ? `${Math.round(window.used * 100)}% · resets ${window.resets}`
+                    : `${Math.round(window.used * 100)}%`
+                }
+              />
+            ))}
+            {adapter.spend ? (
+              <WInline label="spend this window" value={adapter.spend} />
+            ) : null}
           </>
         ) : (
           <div className="w-empty">no adapter attached</div>

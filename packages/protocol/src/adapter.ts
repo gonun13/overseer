@@ -67,6 +67,25 @@ export interface SessionHandle {
 }
 
 /**
+ * One subscription quota window the adapter was able to read. Absent windows
+ * are omitted — never filled in with a placeholder 0.
+ *
+ * `session` is Claude's short rolling window (five hours, labelled "Current
+ * session" by the CLI). `week` is the weekly all-models cap. Extra caps such
+ * as a per-model weekly pool use `week:<name>`.
+ */
+export interface AdapterUsageWindow {
+  /** Stable id: `session`, `week`, or `week:<model>` for extra caps. */
+  id: string;
+  /** Operator-facing name, lowercase: `session`, `week`, `fable`. */
+  label: string;
+  /** Fraction consumed, 0–1 inclusive. */
+  used: number;
+  /** The CLI's own reset phrase, when it gave one. Not parsed into a date. */
+  resets?: string;
+}
+
+/**
  * Whether this adapter could actually start a session right now. Asked before
  * any session exists — the wizard's auth-check step calls this, so it must not
  * assume a session, a project or a running process.
@@ -80,6 +99,8 @@ export interface AdapterStatus {
   detail?: string;
   /** The adapter's own version, when it can report one. Never guessed. */
   version?: string;
+  /** Subscription windows, when the adapter has a real reading. */
+  usage?: AdapterUsageWindow[];
 }
 
 /**

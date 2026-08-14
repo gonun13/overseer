@@ -1,3 +1,4 @@
+import type { AdapterUsageWindow } from "@overseer/protocol";
 import type { Activity } from "./status";
 
 /**
@@ -75,8 +76,8 @@ export interface AdapterInfo {
   /** True when this instance was signed in on an earlier run and now is not —
    * an expired or revoked credential, not a login never started. */
   authExpired?: boolean;
-  /** Fraction of the plan's window consumed. */
-  usage: number;
+  /** Subscription windows. Empty means "not been told yet", never a stand-in. */
+  usage: AdapterUsageWindow[];
   spend: string;
   context: string;
 }
