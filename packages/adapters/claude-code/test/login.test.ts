@@ -47,7 +47,9 @@ if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
   exit 1
 fi
 if [ "$1" = "auth" ] && [ "$2" = "login" ]; then
-  trap 'exit 0' INT
+  # STUBBORN reproduces the case the escalation exists for: a child that
+  # installs a SIGINT handler and declines to die from it.
+  if [ "$STUBBORN" = "1" ]; then trap '' INT; else trap 'exit 0' INT; fi
   printf 'Opening browser to sign in...\\nIf the browser didn'"'"'t open, visit: %s\\nPaste code here if prompted > ' "$LOGIN_URL"
   while IFS= read -r line; do
     printf '%s\\n' "$line" >> "$CAPTURE_FILE"
@@ -152,6 +154,45 @@ describe("startLogin", () => {
     const last = updates.at(-1);
     assert.equal(last?.phase, "failed");
     assert.equal(last?.detail, "login cancelled");
+  });
+
+  it("escalates to SIGKILL when the child ignores SIGINT", async () => {
+    // Regression: `cancel()` used to send SIGINT and wait. A child that does
+    // not honour it left `done` pending forever — and because the server frees
+    // its single-flight slot on `done`, every later `auth.start` took the join
+    // branch, replayed a dead frame, spawned nothing and reported success.
+    // Login stayed broken for the life of the process, silently.
+    process.env.STUBBORN = "1";
+    try {
+      const updates: LoginUpdate[] = [];
+      const handle = startLogin((update) => updates.push(update), {
+        killGraceMs: 300,
+      });
+      await waitFor(updates, (u) => u.phase === "awaiting-code");
+      handle.cancel();
+      // The assertion is simply that this resolves at all.
+      const status = await handle.done;
+      assert.equal(status.authenticated, false);
+      assert.equal(updates.at(-1)?.phase, "failed");
+    } finally {
+      delete process.env.STUBBORN;
+    }
+  });
+
+  it("settles `done` even when the update listener throws", async () => {
+    // Regression: `onUpdate` is the server's broadcast → `ws.send`. It used to
+    // run *before* `resolve`, inside an uncaught `.then`, so one throw from a
+    // dead socket wedged the slot and raised an unhandled rejection.
+    const handle = startLogin((update) => {
+      if (update.phase === "failed" || update.phase === "success") {
+        throw new Error("listener exploded");
+      }
+    });
+    // Give it a moment to reach the prompt, then end it.
+    await new Promise((r) => setTimeout(r, 200));
+    handle.cancel();
+    const status = await handle.done;
+    assert.equal(status.authenticated, false);
   });
 
   it("never puts the URL or the code in a phase it does not belong in", async () => {

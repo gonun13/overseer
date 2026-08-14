@@ -40,6 +40,14 @@ interface LiveLogin {
   /** The last frame broadcast, kept verbatim so a joiner is replayed exactly
    * what everyone else already has. */
   last: AuthStateMessage;
+  /**
+   * Resolves once the flow is over *and* everything it writes has landed.
+   *
+   * `handle.done` alone is not enough for a caller that needs to write after
+   * it: the login's own bookkeeping hangs off the same promise and is still
+   * awaiting disk when a second `.then` on it resumes. Never rejects.
+   */
+  finished: Promise<void>;
 }
 
 let live: LiveLogin | undefined;
@@ -125,17 +133,40 @@ export function startLogin(
     adapterId,
     phase: "starting",
   };
+
+  /**
+   * Free the slot, but only if it is still *this* login's.
+   *
+   * Once the slot is released on the terminal frame, a new login can start
+   * before this one's bookkeeping has finished — and a blind `live = undefined`
+   * from the old flow would then clear the new flow's record and let a third
+   * `auth.start` spawn a second child.
+   */
+  let record: LiveLogin | undefined;
+  const release = () => {
+    if (live === record) live = undefined;
+  };
+
   const publish = (update: LoginUpdate) => {
     latest = toFrame(adapterId, update);
     if (live !== undefined) live.last = latest;
     if (update.phase === "success") lastSettled = latest;
+    // The slot is freed on the terminal frame, not when the bookkeeping that
+    // follows it finishes.
+    //
+    // This frame is what enables "try again" in the UI, and it is broadcast
+    // synchronously from the child's `close` handler — well before `done`'s
+    // continuation has awaited two disk writes. Clearing `live` only after
+    // those would leave a window where the operator can see a failed login,
+    // click retry, and hit the join branch: replayed the same dead frame,
+    // no child spawned, nothing said.
+    if (update.phase === "success" || update.phase === "failed") release();
     broadcast(latest);
   };
 
   const handle = adapter.login.start(publish);
-  live = { adapterId, handle, last: latest };
 
-  void handle.done
+  const finished = handle.done
     .then(async (status) => {
       // The one fact worth keeping: whether this instance is signed in. It
       // rides in the world snapshot the adapters already occupy, so nothing new
@@ -152,9 +183,16 @@ export function startLogin(
           : `${adapterId} · not signed in`,
       });
     })
-    .finally(() => {
-      live = undefined;
-    });
+    .catch((error: unknown) => {
+      // The flow is already over and the operator has already been told how it
+      // ended; a failed snapshot write must not be the thing that keeps the
+      // slot occupied.
+      console.error("overseer: could not record the login outcome", error);
+    })
+    .finally(release);
+
+  record = { adapterId, handle, last: latest, finished };
+  live = record;
 
   return { ok: true };
 }
@@ -192,9 +230,21 @@ export async function signOut(
     };
   }
 
-  // A login in flight is now moot — tear it down before the credentials it is
-  // racing for stop being wanted.
-  if (live !== undefined && live.adapterId === adapterId) live.handle.cancel();
+  // A login in flight is now moot — tear it down, and **wait for it to be
+  // over** before signing out.
+  //
+  // Not waiting lets the dying login's tail race this one. It ends by
+  // re-reading the CLI's status and writing it, so it can put `true` into the
+  // snapshot *after* the sign-out wrote `false` (leaving a restart convinced it
+  // is signed in), and its `phase: "failed"` can arrive after this `idle`,
+  // leaving "login failed" on screen after a sign-out that worked. `done` never
+  // rejects and the driver escalates to SIGKILL, so this cannot hang.
+  const dying =
+    live !== undefined && live.adapterId === adapterId ? live : undefined;
+  if (dying !== undefined) {
+    dying.handle.cancel();
+    await dying.finished;
+  }
 
   await adapter.login.signOut();
   const status = await adapter.getStatus();

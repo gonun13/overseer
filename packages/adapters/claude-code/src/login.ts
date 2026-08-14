@@ -65,6 +65,21 @@ const URL_TIMEOUT_MS = 30_000;
 /** A login left sitting at the prompt holds the single-flight slot forever. */
 const IDLE_TIMEOUT_MS = 10 * 60_000;
 
+/**
+ * How long a signalled child gets to exit on its own before it is killed
+ * outright.
+ *
+ * SIGINT is a *request*, and this child installs its own handler for it at the
+ * prompt — so a build that changes what that handler does, or one wedged in the
+ * middle of a network call, may never act on it. Nothing downstream can
+ * recover from that on its own: `done` only settles from `close`, and the
+ * server's single-flight slot only frees when `done` settles, so one child that
+ * ignores a SIGINT disables login for the life of the process without
+ * surfacing an error anywhere. Every signal this module sends is therefore
+ * followed by a SIGKILL it cannot decline.
+ */
+const KILL_GRACE_MS = 5_000;
+
 // ---- auth status ----------------------------------------------------------
 
 /** What `claude auth status --json` answers with. Extra fields are ignored. */
@@ -193,7 +208,15 @@ function lineReader(onLine: (line: string) => void): (chunk: Buffer) => void {
  */
 export function startLogin(
   onUpdate: (update: LoginUpdate) => void,
+  /**
+   * Only the kill grace is adjustable, and only so a test can prove the
+   * escalation happens without sitting out the real five seconds. `AdapterLogin`
+   * declares `start(onUpdate)`, which this still satisfies — no caller in the
+   * server passes it.
+   */
+  options: { killGraceMs?: number } = {},
 ): LoginHandle {
+  const killGraceMs = options.killGraceMs ?? KILL_GRACE_MS;
   const child = spawn(CLI, ["auth", "login"], {
     stdio: ["pipe", "pipe", "pipe"],
   });
@@ -204,18 +227,42 @@ export function startLogin(
   let failure: string | undefined;
   let cancelled = false;
 
+  /**
+   * A caller's `onUpdate` throwing must not strand the flow. It is the server's
+   * publish → broadcast → `ws.send`, which can fail for reasons that have
+   * nothing to do with this login; letting that escape would abandon the child
+   * and wedge the single-flight slot behind a promise that never settles.
+   */
+  const notify = (update: LoginUpdate) => {
+    try {
+      onUpdate(update);
+    } catch (error) {
+      console.error("overseer: login update listener threw", error);
+    }
+  };
+
   const emit = (update: LoginUpdate) => {
     if (settled) return;
-    onUpdate(update);
+    notify(update);
   };
 
   emit({ phase: "starting" });
+
+  /** SIGINT, then SIGKILL if it was ignored. See `KILL_GRACE_MS`. */
+  let killTimer: NodeJS.Timeout | undefined;
+  const end = (signal: "SIGINT" | "SIGKILL") => {
+    child.kill(signal);
+    if (signal === "SIGKILL" || killTimer !== undefined) return;
+    killTimer = setTimeout(() => child.kill("SIGKILL"), killGraceMs);
+    // A grace timer is not a reason to hold the event loop open.
+    killTimer.unref?.();
+  };
 
   const urlTimer = setTimeout(() => {
     if (verificationUrl !== undefined) return;
     failure =
       "could not read the CLI's login output — no verification URL appeared";
-    child.kill("SIGKILL");
+    end("SIGKILL");
   }, URL_TIMEOUT_MS);
 
   let idleTimer: NodeJS.Timeout | undefined;
@@ -223,7 +270,7 @@ export function startLogin(
     if (idleTimer !== undefined) clearTimeout(idleTimer);
     idleTimer = setTimeout(() => {
       failure = "login timed out waiting for a code";
-      child.kill("SIGINT");
+      end("SIGINT");
     }, IDLE_TIMEOUT_MS);
   };
 
@@ -272,14 +319,41 @@ export function startLogin(
     failure = `could not run ${CLI}: ${error.message}`;
   });
 
+  // A pipe can break under a write that is already in flight — most easily
+  // right after a kill. Unhandled, that surfaces as an EPIPE on the stream and
+  // takes the whole server down with it. The stream's death is already covered
+  // by `close`; there is nothing to do here but refuse to make it fatal.
+  const ignore = () => {};
+  child.stdin.on("error", ignore);
+  child.stdout.on("error", ignore);
+  child.stderr.on("error", ignore);
+
   const done = new Promise<AdapterStatus>((resolve) => {
     child.on("close", () => {
       clearTimeout(urlTimer);
       if (idleTimer !== undefined) clearTimeout(idleTimer);
+      if (killTimer !== undefined) clearTimeout(killTimer);
       // The verdict. Cancel and success are both exit 0, and a login can also
       // die after having printed a URL — so the only trustworthy answer is to
       // ask the CLI again.
-      void readAuthStatus().then((status) => {
+      //
+      // This must settle no matter what `readAuthStatus` or the listener does:
+      // the server frees its single-flight slot on `done`, so an unsettled
+      // promise here is a login button that silently stops working until the
+      // process restarts.
+      void (async () => {
+        let status: AdapterStatus;
+        try {
+          status = await readAuthStatus();
+        } catch (error) {
+          status = {
+            authenticated: false,
+            detail:
+              error instanceof Error
+                ? `could not re-check auth status · ${error.message}`
+                : "could not re-check auth status",
+          };
+        }
         const update: LoginUpdate = status.authenticated
           ? { phase: "success", status }
           : {
@@ -289,10 +363,12 @@ export function startLogin(
                 ? "login cancelled"
                 : (failure ?? "login did not complete"),
             };
-        onUpdate(update);
+        // `settled` before the notify, so a listener that re-enters cannot be
+        // handed a second terminal frame; `notify` swallows its own throw.
         settled = true;
+        notify(update);
         resolve(status);
-      });
+      })();
     });
   });
 
@@ -312,8 +388,9 @@ export function startLogin(
       if (settled) return;
       cancelled = true;
       // SIGINT is what the CLI handles at its prompt. It exits 0 doing so,
-      // which is why `done` re-checks rather than reading the status.
-      child.kill("SIGINT");
+      // which is why `done` re-checks rather than reading the status — and it
+      // is a handler, so `end` escalates to SIGKILL if it is not honoured.
+      end("SIGINT");
     },
     done,
   };
