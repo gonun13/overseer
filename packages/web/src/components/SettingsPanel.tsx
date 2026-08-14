@@ -19,6 +19,7 @@ export function SettingsPanel({
   onSelectTheme,
   onOpenCapabilities,
   onStartLogin,
+  onSignOut,
   onResetOverseer,
 }: {
   open: boolean;
@@ -35,8 +36,10 @@ export function SettingsPanel({
   onClose: () => void;
   onSelectTheme: (theme: OverseerTheme) => void;
   onOpenCapabilities: () => void;
-  /** Close settings and open the adapters picker to sign in. */
+  /** Close settings, open the login surface, and start the flow. */
   onStartLogin: () => void;
+  /** `claude auth logout` on the container's CLI. Idempotent. */
+  onSignOut: () => void;
   /** Close settings and put the reset decision up. The panel never wipes
    * anything itself — it only asks. */
   onResetOverseer: () => void;
@@ -90,7 +93,7 @@ export function SettingsPanel({
         <div className="btn-row">
           <button
             className="w-btn"
-            onClick={adapter.authenticated ? undefined : onStartLogin}
+            onClick={adapter.authenticated ? onSignOut : onStartLogin}
           >
             {adapter.authenticated ? "sign out" : "start login"}
           </button>

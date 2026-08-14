@@ -104,7 +104,13 @@ The container owns `~/.claude` in a named volume. Host config is never mounted.
 
 **Login from the frontend.** The system zone runs `claude auth login`, renders the emitted verification URL, and writes the returned code to the same subprocess. Account status comes from `claude auth status` JSON, never from inspecting credential files.
 
-Plain pipes work with CLI 2.1.226; no PTY is required. Login is single-flight because each URL is tied to the subprocess and PKCE challenge that produced it.
+**The browser is the operator's, on the operator's machine, and paste-back is the only channel.** The container is headless — no `xdg-open`, no `DISPLAY` — so its own "Opening browser to sign in…" is a no-op that is dropped rather than rendered. The URL goes out over `/ws`, the operator opens it themselves, claude.com shows them a code, and that code comes back over `/ws` into the subprocess's stdin. There is no callback for a browser to reach: the printed URL redirects to `platform.claude.com`, not to us, so no port is published and no compose change is needed. The CLI does open a loopback listener during a login; it is unreachable from the host, its port is ephemeral, and one GET to it with a wrong `state` kills the login in flight — nothing in the container may probe local ports while one is running.
+
+The pasted value is `<code>#<state>` and reaches stdin verbatim. The `#` is not a URL fragment: stripping it fails every login with a message that blames the operator's copy/paste.
+
+Cancel and success both exit 0, so the exit code is never the verdict — `claude auth status` is re-run after the child ends and that answer is reported.
+
+Plain pipes work with CLI 2.1.226; no PTY is required. Login is single-flight because each URL is tied to the subprocess and PKCE challenge that produced it; a second tab joins the flow in progress rather than spawning its own.
 
 `claude setup-token` is for long-lived CI/script credentials, not interactive subscription login.
 
@@ -142,7 +148,7 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Resume session + history replay                    | Sessions | `--resume`; parse JSONL for backfill (§4)                         |
 | Session list with live status                      | Sessions | supervisor state + JSONL mtime                                    |
 | Plan utilization + estimated spend                 | Top bar  | `usage.limit` + normalized result counters (§2.1)                 |
-| Subscription login                                 | System   | `claude auth login`, plain spawn; URL out, code in (§2)           |
+| Subscription login                                 | System   | `claude auth login`, plain spawn, no PTY; URL out to the operator's own browser, pasted code in (§2) |
 | Theme switch                                       | System   | `data-theme` on `:root`; choice persisted in internal memory      |
 | Crash / exit / auth-failure surfacing              | Console  | classify stream errors, result subtype, signal, and exit code     |
 

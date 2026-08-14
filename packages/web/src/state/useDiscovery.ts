@@ -45,6 +45,14 @@ export interface DiscoveryController extends WizardState {
   selectTheme: (theme: OverseerTheme) => void;
   /** Attach an adapter from the picker (auth is a separate later step). */
   connectAdapter: (id: string) => void;
+  /** Start (or join) the adapter's login. The URL comes back over the socket. */
+  startLogin: (adapterId: string) => void;
+  /** Relay the operator's paste. Sent exactly as typed — see `AdaptersWindow`. */
+  submitAuthCode: (code: string) => void;
+  /** Abandon the login in flight. */
+  cancelLogin: () => void;
+  /** `claude auth logout` on the container's CLI. */
+  signOut: (adapterId: string) => void;
   /** Put the reset decision up. Nothing is erased and nothing is sent. */
   askReset: () => void;
   /** Answer the decision with no. */
@@ -97,6 +105,20 @@ export function useDiscovery(): DiscoveryController {
       }
       if (message.type === "adapter.connected") {
         dispatch({ type: "adapter.connected", id: message.id });
+        return;
+      }
+      if (message.type === "auth.state") {
+        dispatch({
+          type: "auth.state",
+          state: {
+            adapterId: message.adapterId,
+            phase: message.phase,
+            verificationUrl: message.verificationUrl,
+            detail: message.detail,
+            retryable: message.retryable,
+            status: message.status,
+          },
+        });
         return;
       }
       if (message.type === "workspace.projects") {
@@ -227,6 +249,42 @@ export function useDiscovery(): DiscoveryController {
     [send],
   );
 
+  const startLogin = useCallback(
+    (adapterId: string) => {
+      // Show `starting` on the click rather than on the first server frame.
+      // The URL lands ~400ms after the CLI spawns, and a surface that stays
+      // blank until then reads as a button that did nothing.
+      dispatch({ type: "auth.requested", adapterId });
+      const message: ClientMessage = { type: "auth.start", adapterId };
+      send(message);
+    },
+    [send],
+  );
+
+  const submitAuthCode = useCallback(
+    (code: string) => {
+      // Nothing is done to `code` here, and nothing may be. It is
+      // `<code>#<state>`, the `#` is not a URL fragment, and stripping it is a
+      // login that fails while telling the operator they copied it wrong.
+      const message: ClientMessage = { type: "auth.code", code };
+      send(message);
+    },
+    [send],
+  );
+
+  const cancelLogin = useCallback(() => {
+    const message: ClientMessage = { type: "auth.cancel" };
+    send(message);
+  }, [send]);
+
+  const signOut = useCallback(
+    (adapterId: string) => {
+      const message: ClientMessage = { type: "auth.signout", adapterId };
+      send(message);
+    },
+    [send],
+  );
+
   const askReset = useCallback(() => dispatch({ type: "reset.asked" }), []);
 
   const declineReset = useCallback(
@@ -258,6 +316,10 @@ export function useDiscovery(): DiscoveryController {
     selectProject,
     selectTheme,
     connectAdapter,
+    startLogin,
+    submitAuthCode,
+    cancelLogin,
+    signOut,
     askReset,
     declineReset,
     confirmReset,

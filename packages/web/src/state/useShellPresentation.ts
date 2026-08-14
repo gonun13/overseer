@@ -45,6 +45,7 @@ export function useShellPresentation(
       name: reported?.id ?? "",
       version: reported?.status.version ?? "",
       authenticated: reported?.status.authenticated ?? false,
+      authExpired: reported?.authExpired === true,
       usage: 0,
       spend: "",
       context: "",

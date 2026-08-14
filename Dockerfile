@@ -84,7 +84,8 @@ FROM ${NODE_IMAGE} AS runtime
 # git and ripgrep: the CLI shells out to both. Pinned CLI version: JSONL
 # session history is an undocumented format that drifts across releases
 # (design doc §4) — bump deliberately, not via floating `@latest`.
-# node-pty (auth PTY flow, §2) needs build-essential/python3 added here once it lands.
+# No native-build toolchain: `claude auth login` runs under plain pipes, so the
+# auth flow needs no PTY and therefore no node-pty (architecture-design.md §2).
 RUN apt-get update && apt-get install -y --no-install-recommends \
       git ripgrep ca-certificates \
     && rm -rf /var/lib/apt/lists/* \

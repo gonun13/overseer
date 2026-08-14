@@ -1703,6 +1703,33 @@ button {
   border-color: var(--accent-fill);
 }
 
+/* One-line field inside a window — the verification code paste. Same input
+   ground as `.w-editor` (§7.1); grows to fill its btn-row so the value stays
+   readable, since the operator has to be able to see that what they pasted is
+   what they copied. */
+.w-input {
+  flex: 1 1 180px;
+  min-width: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--ink-rule);
+  background: var(--stamp);
+  color: var(--stamp-ink);
+  font: inherit;
+  font-size: 11px;
+  outline: 0;
+  user-select: text;
+}
+
+.w-input:focus {
+  border-color: var(--accent-fill);
+}
+
+/* An anchor doing a button's job — the verification link. Text-decoration is
+   the only thing `.w-btn` does not already neutralise. */
+a.w-btn {
+  text-decoration: none;
+}
+
 .w-note {
   margin: 0 0 8px;
   font-size: 11px;

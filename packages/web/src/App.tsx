@@ -84,6 +84,20 @@ export default function App() {
     askReset();
   }, [askReset, closeSettings]);
 
+  // The login surface is the adapters window in its authenticate step, so this
+  // both summons it and starts the flow — the URL has to be on screen a beat
+  // after the click, not after a second click the operator has to find.
+  //
+  // With nothing attached there is nothing to sign in, and the same window's
+  // picker step is the honest place to land.
+  const attachedAdapterId = wizard.attachedAdapterId;
+  const wizardStartLogin = wizard.startLogin;
+  const startLogin = useCallback(() => {
+    closeSettings();
+    open("adapters");
+    if (attachedAdapterId !== undefined) wizardStartLogin(attachedAdapterId);
+  }, [attachedAdapterId, closeSettings, open, wizardStartLogin]);
+
   // The goodbye is a headline and nothing else — including the operations
   // window that just finished reporting the wipe.
   useEffect(() => {
@@ -105,12 +119,15 @@ export default function App() {
         case "prompt":
           openPrompt();
           return;
+        case "login":
+          startLogin();
+          return;
         case "restart":
           location.reload();
           return;
       }
     },
-    [open, openProjectSelector, openPrompt, openSettings],
+    [open, openProjectSelector, openPrompt, openSettings, startLogin],
   );
 
   return (
@@ -216,9 +233,9 @@ export default function App() {
             open("capabilities");
             closeSettings();
           }}
-          onStartLogin={() => {
-            closeSettings();
-            open("adapters");
+          onStartLogin={startLogin}
+          onSignOut={() => {
+            if (shell.adapter.name) wizard.signOut(shell.adapter.name);
           }}
           onResetOverseer={startReset}
         />

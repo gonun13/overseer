@@ -1,5 +1,7 @@
 import type {
+  AdapterStatus,
   AppliedPersonality,
+  AuthStateMessage,
   DiscoveredAdapter,
   DiscoveredProject,
   DiscoveryEvent,
@@ -93,6 +95,21 @@ const TEARDOWN_ORDER: FurnitureReveal[] = [
   "clock",
 ];
 
+/**
+ * The login flow as the console holds it. A straight copy of the server's
+ * `auth.state` frame minus the envelope: the server owns this machine (it is
+ * the thing holding the child process), and a second client-side model of it
+ * would only be able to disagree.
+ */
+export interface AuthFlow {
+  adapterId: string;
+  phase: AuthStateMessage["phase"];
+  verificationUrl?: string;
+  detail?: string;
+  retryable?: boolean;
+  status?: AdapterStatus;
+}
+
 export interface WizardState {
   phase: WizardPhase;
   /** Only set while `phase === "welcome"`. */
@@ -105,6 +122,9 @@ export interface WizardState {
   /** Adapter the operator connected. Undefined until they pick one (or a
    * prior attach is restored). Never defaults to the first registered id. */
   attachedAdapterId?: string;
+  /** The login flow, when one has been started or joined. Undefined means no
+   * login has happened this session — not that the adapter is signed out. */
+  auth?: AuthFlow;
   /** Undefined until discovery reports it — the frontend never assumes a path. */
   workspaceRoot?: string;
   /** Active project path from internal memory / discovery default. */
@@ -239,6 +259,11 @@ export type WizardAction =
   | { type: "theme.selected"; theme: OverseerTheme }
   /** Operator connected an adapter from the picker. */
   | { type: "adapter.connected"; id: string }
+  /** Whole login state from the server, in one frame. */
+  | { type: "auth.state"; state: AuthFlow }
+  /** The operator asked to start a login — shows the surface as `starting`
+   * before the server's first frame, so the click is never a dead beat. */
+  | { type: "auth.requested"; adapterId: string }
   /** Live workspace scan — projects appeared or vanished under /workspace. */
   | {
       type: "workspace.projects";
@@ -364,6 +389,32 @@ export function wizardReducer(
 
     case "adapter.connected":
       return { ...state, attachedAdapterId: action.id };
+
+    case "auth.requested":
+      return {
+        ...state,
+        auth: { adapterId: action.adapterId, phase: "starting" },
+      };
+
+    case "auth.state": {
+      const { state: auth } = action;
+      // A settled flow carries the re-checked status. Fold it into the adapter
+      // list so the prompt gate, the widget and the signals all follow from
+      // the same fact — otherwise the login says "success" while everything
+      // around it still reads the status discovery saw at boot, and only a
+      // page reload would agree.
+      const adapters =
+        auth.status === undefined
+          ? state.adapters
+          : state.adapters.map((adapter) => {
+              if (adapter.id !== auth.adapterId) return adapter;
+              const { authExpired: _cleared, ...rest } = adapter;
+              return auth.status!.authenticated
+                ? { ...rest, status: auth.status! }
+                : { ...adapter, status: auth.status! };
+            });
+      return { ...state, auth, adapters };
+    }
 
     case "workspace.projects": {
       // The wipe deletes `personality.json`, so the monitor is about to report

@@ -10,6 +10,13 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { listAdapters } from "./adapters.js";
 import { runDiscovery } from "./discovery.js";
 import {
+  cancelLogin,
+  currentAuthState,
+  signOut as runSignOut,
+  startLogin,
+  submitCode,
+} from "./login.js";
+import {
   clearActionRegister,
   clearRunLogs,
   clearSnapshot,
@@ -167,6 +174,11 @@ export function attachWebSocketServer(httpServer: Server): {
         ...(Object.keys(personality).length > 0 ? { personality } : {}),
         ...(snapshot?.theme !== undefined ? { theme: snapshot.theme } : {}),
       });
+      // A tab opened while a login is in flight has to see the same URL and the
+      // same phase as the one that started it — otherwise "join, don't refuse"
+      // only holds for a tab that happens to click the button again.
+      const auth = currentAuthState();
+      if (auth !== undefined) send(auth);
     })();
 
     ws.on("message", async (raw) => {
@@ -287,6 +299,60 @@ export function attachWebSocketServer(httpServer: Server): {
             return;
           }
           send({ type: "adapter.connected", id: parsed.id });
+          return;
+        }
+        // Auth state always goes out on `broadcast`, never on `send`: a login
+        // finished in one tab has to land in every tab. The only per-socket
+        // frame is the replay a joiner gets, which the broker sends itself.
+        case "auth.start": {
+          const result = startLogin(parsed.adapterId, broadcast, send);
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "auth.start",
+              benign: true,
+              message: result.reason,
+            });
+          }
+          return;
+        }
+        case "auth.code": {
+          // Straight through. The server does not trim, split on `#`,
+          // URL-decode or otherwise touch the operator's paste — the CLI
+          // validates it, and a mangled one fails blaming their copy/paste.
+          const result = submitCode(parsed.code);
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "auth.code",
+              benign: true,
+              message: result.reason,
+            });
+          }
+          return;
+        }
+        case "auth.cancel": {
+          const result = cancelLogin();
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "auth.cancel",
+              benign: true,
+              message: result.reason,
+            });
+          }
+          return;
+        }
+        case "auth.signout": {
+          const result = await runSignOut(parsed.adapterId, broadcast);
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "auth.signout",
+              benign: true,
+              message: result.reason,
+            });
+          }
           return;
         }
         case "memory.reset": {

@@ -1,3 +1,4 @@
+import type { AdapterStatus, LoginPhase } from "./adapter.js";
 import type {
   AppliedPersonality,
   DiscoveredProject,
@@ -39,6 +40,18 @@ export type ClientMessage =
   | { type: "theme.select"; theme: OverseerTheme }
   /** Attach an adapter from the picker. Auth is a separate later step. */
   | { type: "adapter.connect"; id: string }
+  /** Start the adapter's login. Single-flight on the server: a second asker
+   * joins the flow already running rather than spawning a second one, because
+   * each spawn mints its own PKCE challenge and the operator would be holding
+   * a code that only the other process can redeem. */
+  | { type: "auth.start"; adapterId: string }
+  /** The operator's paste, `<code>#<state>`. Relayed to the CLI's stdin
+   * verbatim — the server does not parse, split or decode it. */
+  | { type: "auth.code"; code: string }
+  /** Abandon the login in flight. Nothing to say if there isn't one. */
+  | { type: "auth.cancel" }
+  /** `claude auth logout`. Idempotent. */
+  | { type: "auth.signout"; adapterId: string }
   /** Erase the overseer's memory — internal `.overseer` and the external
    * `personality.json`. Adapter auth is not memory and is left alone. Only
    * sent after the operator answered the decision (ui-ux-design.md §5.2). */
@@ -103,6 +116,39 @@ export interface AdapterConnectedMessage {
   id: string;
 }
 
+/**
+ * The whole state of the login flow in one frame.
+ *
+ * One state frame rather than a stream of deltas: a tab that connects (or asks)
+ * mid-flow has to be handed the whole picture in a single message, which is
+ * what joining an in-flight login instead of refusing it requires.
+ *
+ * Always broadcast, never sent to one socket — a login finished in one tab has
+ * to land in all of them.
+ */
+export interface AuthStateMessage {
+  type: "auth.state";
+  adapterId: string;
+  phase: "idle" | LoginPhase;
+  /**
+   * Present from `awaiting-code` on. The operator clicks it in *their* browser,
+   * on their own machine; the container never opens anything and there is no
+   * callback for a browser to reach.
+   *
+   * Carries a PKCE challenge — a secret. It goes to the operator's screen and
+   * nowhere else: not the run logs, not the action register, not the
+   * operations window.
+   */
+  verificationUrl?: string;
+  /** Operator-facing reason when `phase === "failed"`, in the CLI's own words. */
+  detail?: string;
+  /** True when the CLI is still at the prompt and another code may be pasted. */
+  retryable?: boolean;
+  /** Refreshed status once the flow settles — same shape discovery reports, so
+   * `DiscoveredAdapter.status` and this frame never diverge. */
+  status?: AdapterStatus;
+}
+
 /** Live workspace project list from the monitor worker — create/delete under
  * `/workspace`, not a full discovery pass. */
 export interface WorkspaceProjectsMessage {
@@ -148,6 +194,7 @@ export type ServerMessage =
   | ProjectSelectedMessage
   | ThemeSelectedMessage
   | AdapterConnectedMessage
+  | AuthStateMessage
   | WorkspaceProjectsMessage
   | OverseerStepMessage
   | MemoryResetDoneMessage
@@ -177,6 +224,17 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   if (type === "adapter.connect") {
     return typeof (value as { id?: unknown }).id === "string";
   }
+  if (type === "auth.start" || type === "auth.signout") {
+    return typeof (value as { adapterId?: unknown }).adapterId === "string";
+  }
+  if (type === "auth.code") {
+    // Only that it is a string. The shape of a code is the CLI's business —
+    // anything stricter here would be this process guessing at a format it does
+    // not own, and rejecting a valid paste is indistinguishable to the operator
+    // from a broken login.
+    return typeof (value as { code?: unknown }).code === "string";
+  }
+  if (type === "auth.cancel") return true;
   if (type === "memory.reset") return true;
   return false;
 }
