@@ -326,7 +326,7 @@ the tier already claimed by the current version.
 | Version   | Design-doc tier | Ship bar |
 | --------- | --------------- | -------- |
 | `0.0.x`   | —               | Scaffold only: repo layout, container, no behavioral spec live. |
-| `0.1.x`   | [overseer-behavior.md](overseer-behavior.md) | **Overseer shell** — wizard phases (§4), progressive furniture (§4), internal memory (§6.2), `overseer-personality` (§6.3), workspace discovery, provider status surfacing via `getStatus()`. Wireframe windows may still use fixtures; the overseer path uses real server state. |
+| `0.1.x`   | [overseer-behavior.md](overseer-behavior.md) | **Overseer shell** — wizard phases (§4), progressive furniture (§4), internal memory (§6.2), `overseer-personality` (§6.3), workspace discovery, provider status surfacing via `getStatus()`. The overseer path uses real server state; other windows stay empty until live APIs land. |
 | `0.2+`    | TBD             | Reserve the next MINOR for the next coherent pre-MVP tier once it is written into a design doc and listed under README [Status](../README.md#status). Do not invent a number in advance. |
 | `1.0.0`   | §3 **MVP**      | **Core loop** — every row in the MVP table (§3) works end-to-end for `claude-code`: spawn/resume sessions, stream transcript + tools, inline approval, model/mode controls, subscription login from the UI, usage surfacing, crash/auth failure handling. |
 | `1.x`     | §3 **Important**| Additive features from the Important tier. Each MINOR should map to a closed subset of that table (call it out in release notes). |

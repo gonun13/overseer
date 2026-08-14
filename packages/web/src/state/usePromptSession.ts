@@ -1,12 +1,10 @@
 import { useCallback, useState } from "react";
 import { matchCommand } from "../commands";
-import {
-  mockPromptSettings,
-  mockTranscript,
-} from "../data/mock";
 import type { Turn } from "../domain";
 import type { PromptOptionKey, PromptSettings } from "../prompt";
 import type { WindowKind } from "../windows";
+
+const BLANK_PROMPT_SETTINGS: PromptSettings = { model: "", mode: "", agent: "" };
 
 type OpenWindow = (
   kind: WindowKind,
@@ -32,7 +30,7 @@ export function usePromptSession({
 }: PromptSessionActions) {
   const [open, setOpen] = useState(false);
   const [settings, setSettings] =
-    useState<PromptSettings>(mockPromptSettings);
+    useState<PromptSettings>(BLANK_PROMPT_SETTINGS);
   const [openControl, setOpenControl] = useState<PromptOptionKey | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
@@ -89,7 +87,6 @@ export function usePromptSession({
       setBusy(true);
       // Placeholder for the real stream; replaced when the WS event pipe lands.
       setTimeout(() => {
-        if (mockTranscript.length > 0) setTurns(mockTranscript);
         setBusy(false);
       }, 1200);
     },

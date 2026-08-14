@@ -8,7 +8,7 @@ import { PromptSessionChrome } from "./components/PromptSessionChrome";
 import { ProviderWidget } from "./components/ProviderWidget";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { WindowStackHost } from "./components/WindowStackHost";
-import { mockContextFiles, mockPromptOptions } from "./data/mock";
+import type { PromptOptionKey } from "./prompt";
 import type { Signal } from "./state/signals";
 import { useDiscovery } from "./state/useDiscovery";
 import { usePromptSession } from "./state/usePromptSession";
@@ -16,7 +16,7 @@ import { useShellKeyboard } from "./state/useShellKeyboard";
 import { useShellPresentation } from "./state/useShellPresentation";
 import { useWindows } from "./state/useWindows";
 
-const PROMPT_OPTION_KEYS = mockPromptOptions.map((option) => option.key);
+const PROMPT_OPTION_KEYS: PromptOptionKey[] = [];
 
 export default function App() {
   const [projectsOpen, setProjectsOpen] = useState(true);
@@ -185,9 +185,9 @@ export default function App() {
           turns={prompt.turns}
           busy={prompt.busy}
           settings={prompt.settings}
-          options={mockPromptOptions}
+          options={[]}
           openControl={prompt.openControl}
-          contextCount={mockContextFiles.length}
+          contextCount={0}
           projectName={shell.activeProject?.name}
           rightInstrument={
             shell.furniture.providerWidget ? (
