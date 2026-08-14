@@ -179,8 +179,20 @@ const wireframeAdapter: AdapterInfo = {
   name: "claude-code",
   version: "2.1.4",
   authenticated: false,
-  /** Fraction of the plan's window consumed. */
-  usage: 0.78,
+  usage: [
+    {
+      id: "session",
+      label: "session",
+      used: 0.42,
+      resets: "Aug 14, 11:30pm (UTC)",
+    },
+    {
+      id: "week",
+      label: "week",
+      used: 0.78,
+      resets: "Aug 21, 3am (UTC)",
+    },
+  ],
   spend: "$4.12",
   context: "128k",
 };
@@ -283,7 +295,7 @@ const blankAdapter: AdapterInfo = {
   name: "",
   version: "",
   authenticated: false,
-  usage: 0,
+  usage: [],
   spend: "",
   context: "",
 };

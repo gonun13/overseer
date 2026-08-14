@@ -998,9 +998,21 @@ button {
   color: var(--text-faint);
 }
 
-.widget-kicker.spaced {
+.widget-usage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
   margin-top: 12px;
-  margin-bottom: 5px;
+}
+
+.widget-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.widget-meter .gauge {
+  margin-bottom: 0;
 }
 
 .widget-row {

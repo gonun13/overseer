@@ -6,10 +6,11 @@ import type {
   LoginHandle,
   LoginUpdate,
 } from "@overseer/protocol";
+import { withUsage } from "./usage.js";
 
 /**
  * Every point of contact with the `claude` CLI's *undocumented* surface lives
- * in this file, and nowhere else.
+ * in this package (`login.ts`, `usage.ts`), and nowhere else.
  *
  * The prompt strings below are scraped from a pinned build (2.1.226, see the
  * Dockerfile) and are not part of any contract Anthropic publishes. A version
@@ -344,7 +345,7 @@ export function startLogin(
       void (async () => {
         let status: AdapterStatus;
         try {
-          status = await readAuthStatus();
+          status = await withUsage(await readAuthStatus());
         } catch (error) {
           status = {
             authenticated: false,
