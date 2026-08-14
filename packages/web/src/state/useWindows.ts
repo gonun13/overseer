@@ -33,6 +33,10 @@ export function useWindows() {
         const cascade = current.filter((w) => w.kind === kind).length * 24;
         // Clamp on spawn so a window never lands off-screen on a small viewport.
         const width = Math.min(spec.w, window.innerWidth - 64);
+        const height =
+          spec.h === undefined
+            ? undefined
+            : Math.min(spec.h, window.innerHeight - 160);
 
         // Providers opens from the instrument that summoned it: right-aligned
         // with the bottom-right widget, sitting just above it rather than at a
@@ -59,6 +63,35 @@ export function useWindows() {
           ];
         }
 
+        // Console: mid-right — right-aligned like the provider instrument, but
+        // vertically centred so a tall terminal doesn't sit on top of it.
+        if (kind === "console") {
+          const margin = 26;
+          const bodyH = height ?? 480;
+          const chrome = 36; // tab above the body
+          return [
+            ...current,
+            {
+              id: `${kind}-${++seq}`,
+              kind,
+              title: title ?? spec.title,
+              x: Math.max(24, window.innerWidth - width - margin),
+              y: Math.max(
+                56,
+                Math.min(
+                  window.innerHeight - bodyH - chrome - 24,
+                  Math.round((window.innerHeight - bodyH - chrome) / 2) +
+                    cascade,
+                ),
+              ),
+              w: width,
+              h: bodyH,
+              z: ++zSeq,
+              payload,
+            },
+          ];
+        }
+
         return [
           ...current,
           {
@@ -74,6 +107,7 @@ export function useWindows() {
               Math.min(spec.y + cascade, window.innerHeight - 200),
             ),
             w: width,
+            ...(height !== undefined ? { h: height } : {}),
             z: ++zSeq,
             payload,
           },
@@ -98,11 +132,32 @@ export function useWindows() {
 
   const closeAll = useCallback(() => setWindows([]), []);
 
+  /** Dismiss every window of a kind (e.g. console when the active project flips). */
+  const closeKind = useCallback((kind: WindowKind) => {
+    setWindows((current) => current.filter((w) => w.kind !== kind));
+  }, []);
+
   const move = useCallback((id: string, x: number, y: number) => {
     setWindows((current) =>
       current.map((w) => (w.id === id ? { ...w, x, y } : w)),
     );
   }, []);
 
-  return { windows, open, close, closeTop, closeAll, raise, move };
+  const resize = useCallback((id: string, w: number, h: number) => {
+    setWindows((current) =>
+      current.map((win) => (win.id === id ? { ...win, w, h } : win)),
+    );
+  }, []);
+
+  return {
+    windows,
+    open,
+    close,
+    closeTop,
+    closeAll,
+    closeKind,
+    raise,
+    move,
+    resize,
+  };
 }

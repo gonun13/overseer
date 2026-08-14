@@ -2,10 +2,13 @@ import type {
   AgentAdapter,
   AdapterCapabilities,
   AdapterStatus,
+  ConsoleHandle,
+  ConsoleOpts,
   SessionHandle,
   SessionMeta,
   SessionOpts,
 } from "@overseer/protocol";
+import { openConsole } from "./console.js";
 import { readAuthStatus, signOut, startLogin } from "./login.js";
 import { withUsage } from "./usage.js";
 
@@ -23,9 +26,9 @@ const capabilities: AdapterCapabilities = {
   login: true,
 };
 
-// Process spawning (design doc §1.2 — one long-lived `claude` process per session,
-// stream-json in/out) lands with the console feature. Stubbed so the server and
-// frontend can be wired against the real interface shape from day one.
+// Process spawning for stream-json agent sessions (design doc §1.2) is still
+// stubbed. The raw PTY console (`openConsole`) is the interactive CLI escape
+// hatch and is implemented separately.
 function notImplemented(): never {
   throw new Error(
     "adapter-claude-code: session spawning is not implemented yet",
@@ -63,6 +66,9 @@ export const claudeCodeAdapter: AgentAdapter = {
   login: {
     start: startLogin,
     signOut,
+  },
+  openConsole(opts: ConsoleOpts): Promise<ConsoleHandle> {
+    return openConsole(opts);
   },
 };
 

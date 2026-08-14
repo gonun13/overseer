@@ -163,6 +163,41 @@ export interface AdapterLogin {
   signOut(): Promise<void>;
 }
 
+/**
+ * Options for the raw CLI console — a PTY escape hatch into the provider's
+ * interactive CLI, not a stream-json agent session.
+ */
+export interface ConsoleOpts {
+  /** Absolute path inside `/workspace` — the CLI's cwd. */
+  cwd: string;
+  cols: number;
+  rows: number;
+}
+
+export interface ConsoleExit {
+  exitCode: number;
+  /** Present when the process ended on a signal rather than an exit code. */
+  signal?: number;
+}
+
+/**
+ * One live provider-CLI PTY. I/O is opaque bytes as strings: Overseer does not
+ * interpret slash commands, ANSI, or prompts — that is the CLI's job.
+ */
+export interface ConsoleHandle {
+  onData(listener: (data: string) => void): void;
+  onExit(listener: (info: ConsoleExit) => void): void;
+  write(data: string): void;
+  resize(cols: number, rows: number): void;
+  /**
+   * Ask the child to die. Idempotent. Implementations escalate from a graceful
+   * signal to a forced kill so a wedged CLI cannot pin the console slot.
+   */
+  kill(): void;
+  /** Settles once the process has exited. Never rejects. */
+  done: Promise<ConsoleExit>;
+}
+
 export interface AgentAdapter {
   id: string;
   capabilities: AdapterCapabilities;
@@ -173,4 +208,10 @@ export interface AgentAdapter {
   getStatus(): Promise<AdapterStatus>;
   /** Present only when `capabilities.login` is true. */
   login?: AdapterLogin;
+  /**
+   * Open a raw interactive CLI console. Absent when the adapter has no PTY
+   * escape hatch — the server must refuse `console.open` in that case rather
+   * than invent a pipe.
+   */
+  openConsole?(opts: ConsoleOpts): Promise<ConsoleHandle>;
 }

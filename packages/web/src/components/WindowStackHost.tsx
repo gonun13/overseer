@@ -1,4 +1,9 @@
 import { useState } from "react";
+import type {
+  ClientMessage,
+  OverseerTheme,
+  ServerMessage,
+} from "@overseer/protocol";
 import type { Approval, Project, ProviderInfo, Turn } from "../domain";
 import type { DiscoveryController } from "../state/useDiscovery";
 import type { OpenWindow, WindowKind } from "../windows";
@@ -26,12 +31,18 @@ interface WindowStackHostProps {
   projects: Project[];
   activeProject?: Project;
   provider: ProviderInfo;
+  theme: OverseerTheme;
   openWindow: OpenWindowAction;
   closeWindow: (id: string) => void;
   raiseWindow: (id: string) => void;
   moveWindow: (id: string, x: number, y: number) => void;
+  resizeWindow: (id: string, w: number, h: number) => void;
   openProjectSelector: () => void;
   openTranscript: (turns: Turn[]) => void;
+  send: (message: ClientMessage) => void;
+  subscribeConsole: (
+    listener: (message: ServerMessage) => void,
+  ) => () => void;
 }
 
 /** Renders window frames and dispatches each window kind to its content. */
@@ -41,12 +52,16 @@ export function WindowStackHost({
   projects,
   activeProject,
   provider,
+  theme,
   openWindow,
   closeWindow,
   raiseWindow,
   moveWindow,
+  resizeWindow,
   openProjectSelector,
   openTranscript,
+  send,
+  subscribeConsole,
 }: WindowStackHostProps) {
   const [approvals, setApprovals] = useState<Approval[]>([]);
 
@@ -58,9 +73,16 @@ export function WindowStackHost({
       y={windowState.y}
       z={windowState.z}
       width={windowState.w}
+      height={windowState.h}
+      variant={windowState.kind === "console" ? "console" : undefined}
       onClose={() => closeWindow(windowState.id)}
       onRaise={() => raiseWindow(windowState.id)}
       onMove={(x, y) => moveWindow(windowState.id, x, y)}
+      onResize={
+        windowState.kind === "console"
+          ? (w, h) => resizeWindow(windowState.id, w, h)
+          : undefined
+      }
     >
       {windowState.kind === "overseer" && (
         <OverseerWindow steps={wizard.steps} />
@@ -122,7 +144,13 @@ export function WindowStackHost({
         />
       )}
       {windowState.kind === "console" && (
-        <ConsoleWindow provider={provider} />
+        <ConsoleWindow
+          provider={provider}
+          theme={theme}
+          send={send}
+          subscribe={subscribeConsole}
+          onProcessExit={() => closeWindow(windowState.id)}
+        />
       )}
       {windowState.kind === "help" && <HelpWindow provider={provider} />}
       {windowState.kind === "diff" && (

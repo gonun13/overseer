@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer } from "react";
+import { useCallback, useEffect, useReducer, useRef } from "react";
 import type {
   ClientMessage,
   DiscoveryEvent,
@@ -62,11 +62,20 @@ export interface DiscoveryController extends WizardState {
   /** OverseerSpace calls this when the current headline is fully on screen
    * (typing finished, or shown instantly). Arms the intro/greet holds. */
   onHeadlineReady: (text: string) => void;
+  /** Send a frame on the shared `/ws` socket. */
+  send: (message: ClientMessage) => void;
+  /** Subscribe to console.* (and console-related error) frames. */
+  subscribeConsole: (
+    listener: (message: ServerMessage) => void,
+  ) => () => void;
 }
 
 export function useDiscovery(): DiscoveryController {
   const [state, dispatch] = useReducer(wizardReducer, INITIAL_WIZARD);
   const { phase, connected } = state;
+  const consoleListeners = useRef(
+    new Set<(message: ServerMessage) => void>(),
+  );
 
   const dispatchEvent = useCallback(
     (event: DiscoveryEvent) => dispatch({ type: "server.event", event }),
@@ -77,6 +86,17 @@ export function useDiscovery(): DiscoveryController {
 
   const handleServerMessage = useCallback(
     (message: ServerMessage) => {
+      if (
+        message.type === "console.opened" ||
+        message.type === "console.output" ||
+        message.type === "console.exit" ||
+        (message.type === "error" && message.about?.startsWith("console."))
+      ) {
+        for (const listener of consoleListeners.current) listener(message);
+        // Console errors are benign refusals (not signed in, stale id) — they
+        // must not tear the wizard down the way a lost socket would.
+        return;
+      }
       if (message.type === "connected") {
         dispatch({
           type: "socket.open",
@@ -298,6 +318,16 @@ export function useDiscovery(): DiscoveryController {
     send(message);
   }, [send]);
 
+  const subscribeConsole = useCallback(
+    (listener: (message: ServerMessage) => void) => {
+      consoleListeners.current.add(listener);
+      return () => {
+        consoleListeners.current.delete(listener);
+      };
+    },
+    [],
+  );
+
   // Welcome already required a live socket, so discovery always starts with
   // one — and only after name, tone and the greet presentation have finished.
   // Re-check readyState in case the connection dropped between phases.
@@ -324,5 +354,7 @@ export function useDiscovery(): DiscoveryController {
     declineReset,
     confirmReset,
     onHeadlineReady,
+    send,
+    subscribeConsole,
   };
 }

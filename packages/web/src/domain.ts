@@ -88,8 +88,8 @@ export type Turn =
 
 export type DiffLine = { kind: "add" | "del" | "ctx"; text: string };
 
-/** A console line. `in` is what the operator sent to the CLI, `out` is what it
- * printed back, `err` is stderr — the three states a terminal has. */
+/** A console line. Kept for any non-xterm readouts; the live console window
+ * streams through xterm rather than this shape. */
 export type ConsoleLine = { kind: "in" | "out" | "err"; text: string };
 
 export interface CapabilityDraft {

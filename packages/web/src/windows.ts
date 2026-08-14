@@ -17,6 +17,8 @@ export interface OpenWindow {
   x: number;
   y: number;
   w: number;
+  /** Body height when the kind is resizable (console). Absent = CSS default. */
+  h?: number;
   /** Stacking order. DOM order stays fixed so clicks survive a raise. */
   z: number;
   payload?: unknown;
@@ -24,10 +26,11 @@ export interface OpenWindow {
 
 /** Spawn positions are assigned, not computed — windows land where the design
  * puts them and the operator drags from there (design-system.md §5).
- * `w` is the frame width; content never sets its own, so nothing can overflow it. */
+ * `w` is the frame width; content never sets its own, so nothing can overflow it.
+ * `h` is optional body height for kinds the operator can resize. */
 export const WINDOW_SPEC: Record<
   WindowKind,
-  { title: string; x: number; y: number; w: number }
+  { title: string; x: number; y: number; w: number; h?: number }
 > = {
   // The overseer's own report. Narrower than the rest: its content is one
   // short padded line per step and nothing else, so a wide frame would be
@@ -50,9 +53,10 @@ export const WINDOW_SPEC: Record<
   capabilities: { title: "capabilities", x: 150, y: 250, w: 540 },
   capability: { title: "capability", x: 260, y: 210, w: 560 },
   context: { title: "context", x: 120, y: 300, w: 500 },
-  // Wider than the rest: it holds fixed-width terminal output, which is the one
-  // kind of content that cannot reflow to fit a narrower frame.
-  console: { title: "console", x: 200, y: 150, w: 720 },
+  // Mid-right: spawn position is computed in useWindows from the viewport so
+  // it sits on the right edge, vertically centred. Height is operator-
+  // resizable from the bottom-right grip.
+  console: { title: "console", x: 9999, y: 9999, w: 720, h: 480 },
   help: { title: "help", x: 380, y: 190, w: 560 },
   diff: { title: "diff", x: 700, y: 260, w: 580 },
 };

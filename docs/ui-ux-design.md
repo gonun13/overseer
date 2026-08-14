@@ -203,18 +203,24 @@ content. `w-editor` is an input and therefore uses the input ground (§7.1).
 ### 5.3 The console
 
 A raw terminal into the provider CLI, available only when signed in. Open it from the provider widget or with
-`console`. Slash commands, output, and errors appear verbatim.
+`console`. Slash commands, output, and errors appear verbatim via a PTY bridged over `/ws` into an xterm.js
+surface. Closing the window terminates the CLI process; the CLI exiting (`/exit`, `/quit`) closes the window.
 
-The console is a continuous stream on one stamp, so §7.1's input/output split does not apply:
+Credentials come from the same container `CLAUDE_CONFIG_DIR` volume as Overseer login. Before spawn, Overseer
+marks Claude's interactive onboarding complete (and trusts the active project) so the TUI does not re-run the
+theme picker / browser login that pipe-based `claude auth login` already finished.
+
+The console is a continuous stream on the window surface (`--fill-solid`) — dark in samaritan, light in
+machine — not stamp paper and not §7.1's input/output split. Frame chrome matches other windows (horizontal
+edges only).
 
 |                 | Treatment                                      |
 | --------------- | ---------------------------------------------- |
-| what you sent   | a `--ok` `$` sigil, text at full `--stamp-ink` |
-| what it printed | no sigil, text at `--stamp-dim`                |
-| stderr          | text in `--accent`                             |
+| stream          | xterm.js matching the Overseer theme           |
+| process lifecycle | one PTY per browser socket; close kills child |
+| auth            | shared container credentials; onboarding pre-seeded |
 
-The input is a separate bordered row below scrollback. `--ok` marks its sigil, focus border, and the
-`CONSOLE` footer label.
+Native Claude commands `/exit` and `/quit` end the process; Overseer does not rewrite a bare `exit`.
 
 ### 5.4 The decision — the one surface that blocks
 

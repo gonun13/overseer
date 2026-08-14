@@ -22,8 +22,17 @@ export default function App() {
   const [projectsOpen, setProjectsOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const wizard = useDiscovery();
-  const { windows, open, close, closeTop, closeAll, raise, move } =
-    useWindows();
+  const {
+    windows,
+    open,
+    close,
+    closeTop,
+    closeAll,
+    closeKind,
+    raise,
+    move,
+    resize,
+  } = useWindows();
 
   const selectTheme = wizard.selectTheme;
   const toggleTheme = useCallback(() => {
@@ -143,6 +152,11 @@ export default function App() {
             open={projectsOpen}
             onToggle={toggleProjects}
             onSelect={(project) => {
+              if (project.path !== shell.activeProject?.path) {
+                // Console PTY is bound to the cwd it opened in; closing is
+                // honest — a silent swap would strand the operator.
+                closeKind("console");
+              }
               wizard.selectProject(project.path);
               prompt.resetTurns();
             }}
@@ -214,12 +228,16 @@ export default function App() {
           projects={shell.projects}
           activeProject={shell.activeProject}
           provider={shell.provider}
+          theme={wizard.theme}
           openWindow={open}
           closeWindow={close}
           raiseWindow={raise}
           moveWindow={move}
+          resizeWindow={resize}
           openProjectSelector={openProjectSelector}
           openTranscript={prompt.loadTranscript}
+          send={wizard.send}
+          subscribeConsole={wizard.subscribeConsole}
         />
 
         <SettingsPanel

@@ -8,6 +8,7 @@ import {
 } from "@overseer/protocol";
 import { WebSocketServer, type WebSocket } from "ws";
 import { listAdapters } from "./adapters.js";
+import { consoleError, createConsoleSession } from "./console.js";
 import { runDiscovery } from "./discovery.js";
 import {
   cancelLogin,
@@ -157,6 +158,11 @@ export function attachWebSocketServer(httpServer: Server): {
       ws.ping();
     }, HEARTBEAT_MS);
     ws.on("close", () => clearInterval(heartbeat));
+
+    // One raw CLI console per socket. Torn down with the connection so a
+    // closed tab cannot leave a `claude` TUI running in the container.
+    const consoleSession = createConsoleSession(send);
+    ws.on("close", () => consoleSession.dispose());
 
     // Welcome needs returning + name before discovery runs, so load both here
     // rather than waiting for the pass. Theme comes from the same snapshot.
@@ -465,6 +471,30 @@ export function attachWebSocketServer(httpServer: Server): {
             // the *next* request from riding a pass that has finished.
             inFlight = undefined;
           }
+          return;
+        }
+        case "console.open": {
+          const result = await consoleSession.open(parsed.cols, parsed.rows);
+          if (!result.ok) send(consoleError("console.open", result.reason));
+          return;
+        }
+        case "console.input": {
+          const result = consoleSession.input(parsed.id, parsed.data);
+          if (!result.ok) send(consoleError("console.input", result.reason));
+          return;
+        }
+        case "console.resize": {
+          const result = consoleSession.resize(
+            parsed.id,
+            parsed.cols,
+            parsed.rows,
+          );
+          if (!result.ok) send(consoleError("console.resize", result.reason));
+          return;
+        }
+        case "console.close": {
+          const result = consoleSession.close(parsed.id);
+          if (!result.ok) send(consoleError("console.close", result.reason));
           return;
         }
       }

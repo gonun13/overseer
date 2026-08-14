@@ -44,3 +44,12 @@ export function ChevronIcon({ open }: { open: boolean }) {
     </svg>
   );
 }
+
+/** Bottom-right window resize grip — two short strokes, not a filled corner. */
+export function ResizeIcon() {
+  return (
+    <svg {...base} width={12} height={12}>
+      <path d="M6 14L14 6M10 14L14 10" />
+    </svg>
+  );
+}
