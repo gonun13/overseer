@@ -38,22 +38,22 @@ export type ClientMessage =
   | { type: "project.select"; path: string }
   /** Persist the operator's theme into internal memory. */
   | { type: "theme.select"; theme: OverseerTheme }
-  /** Attach an adapter from the picker. Auth is a separate later step. */
-  | { type: "adapter.connect"; id: string }
-  /** Start the adapter's login. Single-flight on the server: a second asker
+  /** Attach a provider from the picker. Auth is a separate later step. */
+  | { type: "provider.connect"; id: string }
+  /** Start the provider's login. Single-flight on the server: a second asker
    * joins the flow already running rather than spawning a second one, because
    * each spawn mints its own PKCE challenge and the operator would be holding
    * a code that only the other process can redeem. */
-  | { type: "auth.start"; adapterId: string }
+  | { type: "auth.start"; providerId: string }
   /** The operator's paste, `<code>#<state>`. Relayed to the CLI's stdin
    * verbatim — the server does not parse, split or decode it. */
   | { type: "auth.code"; code: string }
   /** Abandon the login in flight. Nothing to say if there isn't one. */
   | { type: "auth.cancel" }
   /** `claude auth logout`. Idempotent. */
-  | { type: "auth.signout"; adapterId: string }
+  | { type: "auth.signout"; providerId: string }
   /** Erase the overseer's memory — internal `.overseer` and the external
-   * `personality.json`. Adapter auth is not memory and is left alone. Only
+   * `personality.json`. Provider auth is not memory and is left alone. Only
    * sent after the operator answered the decision (ui-ux-design.md §5.2). */
   | { type: "memory.reset" };
 
@@ -110,9 +110,9 @@ export interface ThemeSelectedMessage {
   theme: OverseerTheme;
 }
 
-/** Ack that an adapter was attached (not necessarily authenticated). */
-export interface AdapterConnectedMessage {
-  type: "adapter.connected";
+/** Ack that a provider was attached (not necessarily authenticated). */
+export interface ProviderConnectedMessage {
+  type: "provider.connected";
   id: string;
 }
 
@@ -128,7 +128,7 @@ export interface AdapterConnectedMessage {
  */
 export interface AuthStateMessage {
   type: "auth.state";
-  adapterId: string;
+  providerId: string;
   phase: "idle" | LoginPhase;
   /**
    * Present from `awaiting-code` on. The operator clicks it in *their* browser,
@@ -145,7 +145,7 @@ export interface AuthStateMessage {
   /** True when the CLI is still at the prompt and another code may be pasted. */
   retryable?: boolean;
   /** Refreshed status once the flow settles — same shape discovery reports, so
-   * `DiscoveredAdapter.status` and this frame never diverge. */
+   * `DiscoveredProvider.status` and this frame never diverge. */
   status?: AdapterStatus;
 }
 
@@ -193,7 +193,7 @@ export type ServerMessage =
   | OperatorTonedMessage
   | ProjectSelectedMessage
   | ThemeSelectedMessage
-  | AdapterConnectedMessage
+  | ProviderConnectedMessage
   | AuthStateMessage
   | WorkspaceProjectsMessage
   | OverseerStepMessage
@@ -221,11 +221,11 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   if (type === "theme.select") {
     return THEMES.has((value as { theme?: unknown }).theme as string);
   }
-  if (type === "adapter.connect") {
+  if (type === "provider.connect") {
     return typeof (value as { id?: unknown }).id === "string";
   }
   if (type === "auth.start" || type === "auth.signout") {
-    return typeof (value as { adapterId?: unknown }).adapterId === "string";
+    return typeof (value as { providerId?: unknown }).providerId === "string";
   }
   if (type === "auth.code") {
     // Only that it is a string. The shape of a code is the CLI's business —

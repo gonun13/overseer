@@ -1,6 +1,6 @@
 # Design Doc: Overseer
 
-**What it is:** a single-page, fullscreen web console for driving CLI coding agents. Claude Code is the first adapter; the architecture assumes there will be others.
+**What it is:** a single-page, fullscreen web console for driving CLI coding agents. Claude Code is the first provider; the architecture assumes there will be others.
 
 **Shape:** one Docker container holds the agent CLI, its state, and the web server. The only bind mount is `./workspace`, which contains git projects and an import/export staging directory. Auth and application state live in container-owned volumes.
 
@@ -19,7 +19,16 @@ packages/
     claude-code/      spawns `claude`, normalizes stream-json → protocol
 ```
 
-**Frontend-first, adapter-agnostic.** `protocol/` is written to serve the UI, not to mirror any one CLI's output. Adapters translate into it.
+**Frontend-first, provider-agnostic.** `protocol/` is written to serve the UI, not to mirror any one CLI's output. Adapters translate provider-specific behavior into it.
+
+**Provider vs adapter.** Two words for the two sides of the same id string (`"claude-code"`):
+
+| Term         | Layer            | Where it appears                                                                                                              |
+| ------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
+| **provider** | operator/product | what the operator attaches, signs in and configures — the provider widget and window, `provider.connect`, `GET /api/providers` |
+| **adapter**  | internal runtime | the code that translates a CLI into `protocol/` — `AgentAdapter` (§1.1), `packages/adapters/`, the server's adapter registry   |
+
+One provider is attached at a time, and it is backed by exactly one adapter.
 
 ### 1.1 The adapter interface
 
@@ -120,7 +129,7 @@ Plain pipes work with CLI 2.1.226; no PTY is required. Login is single-flight be
 
 ### 2.1 Account usage
 
-The adapter widget shows subscription window utilization — Claude's short
+The provider widget shows subscription window utilization — Claude's short
 session window and the weekly cap — plus the CLI's own reset phrases.
 
 `getStatus()` asks `claude -p "/usage"` when the operator is signed in
@@ -157,7 +166,7 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Create session in a project                        | Sessions | pick a dir under `/workspace`; mint `--session-id`                 |
 | Resume session + history replay                    | Sessions | `--resume`; parse JSONL for backfill (§4)                         |
 | Session list with live status                      | Sessions | supervisor state + JSONL mtime                                    |
-| Plan utilization + estimated spend                 | Adapter  | `/usage` via getStatus; later `usage.limit` (§2.1) |
+| Plan utilization + estimated spend                 | Provider | `/usage` via getStatus; later `usage.limit` (§2.1) |
 | Subscription login                                 | System   | `claude auth login`, plain spawn, no PTY; URL out to the operator's own browser, pasted code in (§2) |
 | Theme switch                                       | System   | `data-theme` on `:root`; choice persisted in internal memory      |
 | Crash / exit / auth-failure surfacing              | Console  | classify stream errors, result subtype, signal, and exit code     |
@@ -209,7 +218,7 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Transcript export                 | Console      | markdown / JSON                                                     |
 | Command palette                   | global       | keyboard-first jump to any session, zone, or action                 |
 | Desktop notifications             | global       | on approval request or turn completion                              |
-| Additional CLI adapters           | —            | the reason for §1.1                                                 |
+| Additional providers              | —            | the reason for §1.1                                                 |
 
 ---
 
@@ -317,13 +326,13 @@ the tier already claimed by the current version.
 | Version   | Design-doc tier | Ship bar |
 | --------- | --------------- | -------- |
 | `0.0.x`   | —               | Scaffold only: repo layout, container, no behavioral spec live. |
-| `0.1.x`   | [overseer-behavior.md](overseer-behavior.md) | **Overseer shell** — wizard phases (§4), progressive furniture (§4), internal memory (§6.2), `overseer-personality` (§6.3), workspace discovery, adapter `getStatus()` surfacing. Wireframe windows may still use fixtures; the overseer path uses real server state. |
+| `0.1.x`   | [overseer-behavior.md](overseer-behavior.md) | **Overseer shell** — wizard phases (§4), progressive furniture (§4), internal memory (§6.2), `overseer-personality` (§6.3), workspace discovery, provider status surfacing via `getStatus()`. Wireframe windows may still use fixtures; the overseer path uses real server state. |
 | `0.2+`    | TBD             | Reserve the next MINOR for the next coherent pre-MVP tier once it is written into a design doc and listed under README [Status](../README.md#status). Do not invent a number in advance. |
 | `1.0.0`   | §3 **MVP**      | **Core loop** — every row in the MVP table (§3) works end-to-end for `claude-code`: spawn/resume sessions, stream transcript + tools, inline approval, model/mode controls, subscription login from the UI, usage surfacing, crash/auth failure handling. |
 | `1.x`     | §3 **Important**| Additive features from the Important tier. Each MINOR should map to a closed subset of that table (call it out in release notes). |
-| `2.x+`    | §3 **Nice to have** + later adapters | Major product expansion; breaking protocol or UX contract bumps MAJOR. |
+| `2.x+`    | §3 **Nice to have** + later providers | Major product expansion; breaking protocol or UX contract bumps MAJOR. |
 
-**Explicit non-goals for `0.1.x`:** §3 MVP (sessions, live console, approvals queue), §5 adapter-backed
+**Explicit non-goals for `0.1.x`:** §3 MVP (sessions, live console, approvals queue), §5 provider-backed
 querying in [overseer-behavior.md](overseer-behavior.md) ("planned, not built"), and credential-file
 auth checks instead of `claude auth status` — see README [Status](../README.md#status).
 

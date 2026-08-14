@@ -67,9 +67,9 @@ export interface Capability {
   problem?: string;
 }
 
-/** What the adapter widget reads out. Empty strings mean "not been told yet",
+/** What the provider widget reads out. Empty strings mean "not been told yet",
  * never a stand-in value. */
-export interface AdapterInfo {
+export interface ProviderInfo {
   name: string;
   version: string;
   authenticated: boolean;
@@ -105,7 +105,7 @@ export interface CapabilityDraft {
   instructions: string;
   model: string;
   tools: { name: string; enabled: boolean }[];
-  /** Where it lives on disk. The adapter's layout, not the web layer's guess —
+  /** Where it lives on disk. The provider's layout, not the web layer's guess —
    * `.claude/skills/…` is true of claude-code and of nothing else in general. */
   file: string;
 }

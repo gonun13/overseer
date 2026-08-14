@@ -1,19 +1,21 @@
 import { overseerVersionLabel } from "../../appVersion";
-import { WAdapterNote, WTitle } from "./bits";
+import { WProviderNote, WTitle } from "./bits";
 import { COMMANDS } from "../../commands";
-import type { AdapterInfo } from "../../domain";
+import type { ProviderInfo } from "../../domain";
 
-/** `adapter.name` is empty when none is attached — the about block reports that
+/** `provider.name` is empty when none is attached — the about block reports that
  * rather than naming the one it expects to see. */
-export function HelpWindow({ adapter }: { adapter: AdapterInfo }) {
+export function HelpWindow({ provider }: { provider: ProviderInfo }) {
   return (
     <div>
-      <WAdapterNote adapter={adapter} />
+      <WProviderNote provider={provider} />
       <WTitle>about</WTitle>
       <div className="w-pre">
         {[
           `${overseerVersionLabel()} · console for cli coding agents`,
-          adapter.name ? `adapter: ${adapter.name}` : "adapter: none attached",
+          provider.name
+            ? `provider: ${provider.name}`
+            : "provider: none attached",
         ].join("\n")}
       </div>
 

@@ -2,8 +2,8 @@
  * it is the prompt's control surface, not a nav menu (design-system.md §6).
  *
  * Types only. Which models, modes and subagents an instance actually offers is
- * a fact about that instance — it comes from the adapter and the project's
- * config, not from this file. Until the adapter can report them the values live
+ * a fact about that instance — it comes from the provider and the project's
+ * config, not from this file. Until the provider can report them the values live
  * with the rest of the design fixtures in data/mock.ts, so production ships an
  * empty control surface instead of inventing an option set. */
 
@@ -18,5 +18,5 @@ export interface PromptOption {
   danger?: string[];
 }
 
-/** Empty string means "the adapter has not told us yet" — never a stand-in value. */
+/** Empty string means "the provider has not told us yet" — never a stand-in value. */
 export type PromptSettings = Record<PromptOptionKey, string>;

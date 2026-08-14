@@ -1,7 +1,7 @@
 import { randomUUID } from "node:crypto";
 import type {
-  DiscoveredAdapter,
   DiscoveredProject,
+  DiscoveredProvider,
   DiscoveryEvent,
   DiscoveryOutcome,
   DiscoveryStepUpdate,
@@ -37,7 +37,7 @@ import {
  *
  * Furniture unlocks ride on each step's `done` frame (docs/overseer.md §4):
  * clock → personality project list → workspace scan → active project →
- * adapter → prompt/footer.
+ * provider → prompt/footer.
  *
  * Every run is written to internal memory (docs/overseer.md §6.2): one log per
  * run, one action-register entry per step, and a world snapshot at the end.
@@ -249,15 +249,15 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
     },
   );
 
-  // 5. Adapters — list what is registered and their auth status. Never
+  // 5. Providers — list what is registered and their auth status. Never
   // auto-attach: only restore a previously connected id if it is still here.
-  const adapters = await step<DiscoveredAdapter[]>(
-    "adapters",
-    "checking adapter auth",
+  const providers = await step<DiscoveredProvider[]>(
+    "providers",
+    "checking provider auth",
     async () => {
       const registered = listAdapters();
       const results = await Promise.all(
-        registered.map(async (adapter): Promise<DiscoveredAdapter> => {
+        registered.map(async (adapter): Promise<DiscoveredProvider> => {
           let status;
           try {
             status = await adapter.getStatus();
@@ -268,10 +268,10 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
                 error instanceof Error ? error.message : "status check failed",
             };
           }
-          // An adapter this instance was signed into and now is not has had a
+          // A provider this instance was signed into and now is not has had a
           // credential stop working — carried forward until a login or a
           // sign-out clears it, so a restart does not forget that it happened.
-          const before = previous?.adapters.find((a) => a.id === adapter.id);
+          const before = previous?.providers.find((p) => p.id === adapter.id);
           const expired =
             !status.authenticated &&
             (before?.authExpired === true ||
@@ -284,20 +284,20 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
         }),
       );
 
-      const remembered = previous?.attached_adapter;
+      const remembered = previous?.attached_provider;
       const attached =
         remembered !== undefined
-          ? results.find((a) => a.id === remembered)
+          ? results.find((p) => p.id === remembered)
           : undefined;
 
       // Registered alone is not success — the operator still needs to connect
       // (and sign in). Maps to [BLOCKED] so the operations line matches the
-      // "no adapter is attached" signal.
+      // "no provider is attached" signal.
       const outcome =
         attached?.status.authenticated === true ? "ok" : "blocked";
       const detail =
         results.length === 0
-          ? "no adapters registered"
+          ? "no providers registered"
           : attached === undefined
             ? `${results.length} registered · none attached`
             : attached.status.authenticated
@@ -308,32 +308,32 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
         value: results,
         outcome,
         detail,
-        adapters: results,
-        ...(attached !== undefined ? { attachedAdapterId: remembered } : {}),
-        reveal: ["adapterWidget"],
+        providers: results,
+        ...(attached !== undefined ? { attachedProviderId: remembered } : {}),
+        reveal: ["providerWidget"],
       };
     },
   );
 
-  const attachedAdapterId =
-    previous?.attached_adapter !== undefined &&
-    adapters.some((a) => a.id === previous.attached_adapter)
-      ? previous.attached_adapter
+  const attachedProviderId =
+    previous?.attached_provider !== undefined &&
+    providers.some((p) => p.id === previous.attached_provider)
+      ? previous.attached_provider
       : undefined;
 
   // 6. Prompt + footer — last beat. Footer always; prompt slot released so it
-  // can mount once an attached adapter is signed in (furniture still gates).
+  // can mount once an attached provider is signed in (furniture still gates).
   const promptReady =
-    attachedAdapterId !== undefined &&
-    adapters.some(
-      (a) => a.id === attachedAdapterId && a.status.authenticated,
+    attachedProviderId !== undefined &&
+    providers.some(
+      (p) => p.id === attachedProviderId && p.status.authenticated,
     );
   await step("prompt", "releasing the prompt", async () => ({
     value: promptReady,
     outcome: promptReady ? "ok" : "blocked",
     detail: promptReady
       ? "prompt ready"
-      : "held · connect an authenticated adapter",
+      : "held · connect an authenticated provider",
     reveal: ["footer", "prompt"],
   }));
 
@@ -342,11 +342,11 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
     runId,
     projects,
     untrackedFolders,
-    adapters,
+    providers,
     workspaceRoot: WORKSPACE_ROOT,
     returning,
     activeProjectPath,
-    ...(attachedAdapterId !== undefined ? { attachedAdapterId } : {}),
+    ...(attachedProviderId !== undefined ? { attachedProviderId } : {}),
     personality: personality.applied,
     ...(personality.rejected.length > 0
       ? { rejected: personality.rejected }
@@ -361,9 +361,9 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
       runCount: (previous?.runCount ?? 0) + 1,
       workspaceRoot: WORKSPACE_ROOT,
       projects,
-      adapters,
+      providers,
       last_active_project: activeProjectPath,
-      attached_adapter: attachedAdapterId,
+      attached_provider: attachedProviderId,
       ...(theme !== undefined ? { theme } : {}),
     }),
   ]);

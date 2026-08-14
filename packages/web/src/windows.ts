@@ -1,6 +1,6 @@
 export type WindowKind =
   | "overseer"
-  | "adapters"
+  | "providers"
   | "sessions"
   | "approvals"
   | "capabilities"
@@ -42,9 +42,9 @@ export const WINDOW_SPEC: Record<
   // clears both the clock (top 20, ~42 tall) and the centred active-project
   // readout (top 18, ~60 tall).
   overseer: { title: "overseer", x: 9999, y: 96, w: 460 },
-  // Bottom-right, above the adapter widget — spawn position is computed in
+  // Bottom-right, above the provider widget — spawn position is computed in
   // useWindows from the viewport so it clears the instrument on any height.
-  adapters: { title: "adapters", x: 9999, y: 9999, w: 420 },
+  providers: { title: "providers", x: 9999, y: 9999, w: 420 },
   sessions: { title: "sessions", x: 96, y: 168, w: 620 },
   approvals: { title: "approvals", x: 620, y: 148, w: 560 },
   capabilities: { title: "capabilities", x: 150, y: 250, w: 540 },

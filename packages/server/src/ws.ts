@@ -23,7 +23,7 @@ import {
   readSnapshot,
   recordAction,
   setActiveProjectPath,
-  setAttachedAdapter,
+  setAttachedProvider,
   setTheme,
 } from "./memory/internal.js";
 import {
@@ -277,35 +277,35 @@ export function attachWebSocketServer(httpServer: Server): {
           send({ type: "theme.selected", theme: parsed.theme });
           return;
         }
-        case "adapter.connect": {
+        case "provider.connect": {
           const known = listAdapters().some((a) => a.id === parsed.id);
           if (!known) {
             send({
               type: "error",
-              about: "adapter.connect",
+              about: "provider.connect",
               benign: true,
-              message: `unknown adapter: ${parsed.id}`,
+              message: `unknown provider: ${parsed.id}`,
             });
             return;
           }
-          const ok = await setAttachedAdapter(parsed.id);
+          const ok = await setAttachedProvider(parsed.id);
           if (!ok) {
             send({
               type: "error",
-              about: "adapter.connect",
+              about: "provider.connect",
               benign: true,
-              message: "adapter can only be attached after discovery",
+              message: "provider can only be attached after discovery",
             });
             return;
           }
-          send({ type: "adapter.connected", id: parsed.id });
+          send({ type: "provider.connected", id: parsed.id });
           return;
         }
         // Auth state always goes out on `broadcast`, never on `send`: a login
         // finished in one tab has to land in every tab. The only per-socket
         // frame is the replay a joiner gets, which the broker sends itself.
         case "auth.start": {
-          const result = startLogin(parsed.adapterId, broadcast, send);
+          const result = startLogin(parsed.providerId, broadcast, send);
           if (!result.ok) {
             send({
               type: "error",
@@ -344,7 +344,7 @@ export function attachWebSocketServer(httpServer: Server): {
           return;
         }
         case "auth.signout": {
-          const result = await runSignOut(parsed.adapterId, broadcast);
+          const result = await runSignOut(parsed.providerId, broadcast);
           if (!result.ok) {
             send({
               type: "error",

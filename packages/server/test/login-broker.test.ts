@@ -63,7 +63,7 @@ before(async () => {
     runCount: 1,
     workspaceRoot: "/workspace",
     projects: [],
-    adapters: [{ id: "claude-code", status: { authenticated: false } }],
+    providers: [{ id: "claude-code", status: { authenticated: false } }],
   });
 });
 

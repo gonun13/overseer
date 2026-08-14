@@ -8,7 +8,7 @@ import type { AdapterStatus } from "./adapter.js";
  */
 
 /**
- * How a step ended. Not a boolean: "checked the adapter, it is not signed in"
+ * How a step ended. Not a boolean: "checked the provider, it is not signed in"
  * is a step that ran correctly and found bad news, which is a different thing
  * from a step that threw — and the operator acts on them differently. Maps
  * one-to-one onto the `Activity` vocabulary the UI already has, so a step needs
@@ -39,11 +39,13 @@ export interface UntrackedFolder {
   name: string;
 }
 
-export interface DiscoveredAdapter {
+/** A provider the operator can attach, as discovery found it. `status` comes
+ * straight from the runtime adapter that backs the provider. */
+export interface DiscoveredProvider {
   id: string;
   status: AdapterStatus;
   /**
-   * True when this adapter was signed in on a previous run and now is not.
+   * True when this provider was signed in on a previous run and now is not.
    *
    * A credential that stopped working is a different event from one that was
    * never obtained, and the more urgent of the two: nothing the operator did
@@ -70,7 +72,7 @@ export type FurnitureReveal =
   | "clock"
   | "projectPanel"
   | "activeProject"
-  | "adapterWidget"
+  | "providerWidget"
   | "footer"
   | "prompt";
 
@@ -81,8 +83,8 @@ export interface DiscoveryStepUpdate {
   /** Direct children of the workspace that are not git projects. */
   untrackedFolders?: UntrackedFolder[];
   activeProjectPath?: string;
-  attachedAdapterId?: string;
-  adapters?: DiscoveredAdapter[];
+  attachedProviderId?: string;
+  providers?: DiscoveredProvider[];
   workspaceRoot?: string;
   /** Server wall clock (ISO). Refreshes the furniture clock so it matches the
    * "checking the time" step rather than the browser's local zone. */
@@ -110,7 +112,7 @@ export type DiscoveryEvent =
       runId: string;
       projects: DiscoveredProject[];
       untrackedFolders?: UntrackedFolder[];
-      adapters: DiscoveredAdapter[];
+      providers: DiscoveredProvider[];
       /** Where the scan ran. A deployment fact the frontend must be told. */
       workspaceRoot: string;
       /** True when this instance has run before — drives the wizard's
@@ -118,9 +120,9 @@ export type DiscoveryEvent =
       returning: boolean;
       /** Last active project path, resolved this pass (memory or default). */
       activeProjectPath: string;
-      /** Adapter the operator previously connected, if still registered.
+      /** Provider the operator previously connected, if still registered.
        * Omitted when none is attached — never defaults to a registered id. */
-      attachedAdapterId?: string;
+      attachedProviderId?: string;
       /** Accepted personality customization, already filtered through the
        * internal allowlist. Never the raw file contents. */
       personality?: AppliedPersonality;

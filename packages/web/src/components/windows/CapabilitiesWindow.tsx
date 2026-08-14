@@ -1,18 +1,18 @@
-import { WAdapterNote, WRow } from "./bits";
-import type { AdapterInfo, Capability } from "../../domain";
+import { WProviderNote, WRow } from "./bits";
+import type { Capability, ProviderInfo } from "../../domain";
 
 export function CapabilitiesWindow({
   capabilities,
-  adapter,
+  provider,
   onEdit,
 }: {
   capabilities: Capability[];
-  adapter: AdapterInfo;
+  provider: ProviderInfo;
   onEdit: (name: string) => void;
 }) {
   return (
     <div>
-      <WAdapterNote adapter={adapter} />
+      <WProviderNote provider={provider} />
       {capabilities.length === 0 && (
         <div className="w-empty">nothing configured</div>
       )}

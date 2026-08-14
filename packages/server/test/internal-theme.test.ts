@@ -46,7 +46,7 @@ describe("theme in internal memory", () => {
       runCount: 1,
       workspaceRoot: "/workspace",
       projects: [],
-      adapters: [],
+      providers: [],
     });
 
     const written = await setTheme("machine");
@@ -65,7 +65,7 @@ describe("theme in internal memory", () => {
       runCount: 2,
       workspaceRoot: "/workspace",
       projects: [],
-      adapters: [],
+      providers: [],
       theme: "samaritan",
     });
 

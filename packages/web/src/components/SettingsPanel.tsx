@@ -1,6 +1,6 @@
 import { useEffect } from "react";
 import type { OverseerTheme } from "@overseer/protocol";
-import type { AdapterInfo } from "../domain";
+import type { ProviderInfo } from "../domain";
 import { WInline, WTitle } from "./windows/bits";
 import { CloseIcon } from "./icons";
 import { StatusLight } from "./StatusLight";
@@ -14,7 +14,7 @@ import { StatusLight } from "./StatusLight";
 export function SettingsPanel({
   open,
   theme,
-  adapter,
+  provider,
   workspace,
   onClose,
   onSelectTheme,
@@ -25,7 +25,7 @@ export function SettingsPanel({
 }: {
   open: boolean;
   theme: OverseerTheme;
-  adapter: AdapterInfo;
+  provider: ProviderInfo;
   /** The container's mounts, which only the server knows; empty until it says. */
   workspace: { root: string };
   onClose: () => void;
@@ -79,27 +79,27 @@ export function SettingsPanel({
           value={
             <span className="w-inline-flex">
               <StatusLight
-                activity={adapter.authenticated ? "done" : "waiting"}
+                activity={provider.authenticated ? "done" : "waiting"}
               />
-              {adapter.authenticated ? "signed in" : "not signed in"}
+              {provider.authenticated ? "signed in" : "not signed in"}
             </span>
           }
         />
         <div className="btn-row">
           <button
             className="w-btn"
-            onClick={adapter.authenticated ? onSignOut : onStartLogin}
+            onClick={provider.authenticated ? onSignOut : onStartLogin}
           >
-            {adapter.authenticated ? "sign out" : "start login"}
+            {provider.authenticated ? "sign out" : "start login"}
           </button>
         </div>
 
         <WTitle>runtime</WTitle>
-        {adapter.name ? (
+        {provider.name ? (
           <>
-            <WInline label="adapter" value={adapter.name} />
-            <WInline label="cli version" value={adapter.version} />
-            {adapter.usage.map((window) => (
+            <WInline label="provider" value={provider.name} />
+            <WInline label="cli version" value={provider.version} />
+            {provider.usage.map((window) => (
               <WInline
                 key={window.id}
                 label={window.label}
@@ -110,12 +110,12 @@ export function SettingsPanel({
                 }
               />
             ))}
-            {adapter.spend ? (
-              <WInline label="spend this window" value={adapter.spend} />
+            {provider.spend ? (
+              <WInline label="spend this window" value={provider.spend} />
             ) : null}
           </>
         ) : (
-          <div className="w-empty">no adapter attached</div>
+          <div className="w-empty">no provider attached</div>
         )}
 
         <WTitle>workspace</WTitle>

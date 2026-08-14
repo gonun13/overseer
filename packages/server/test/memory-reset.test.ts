@@ -53,7 +53,7 @@ describe("reset overseer", () => {
       runCount: 3,
       workspaceRoot: "/workspace",
       projects: [],
-      adapters: [],
+      providers: [],
       theme: "machine",
     });
     await recordAction({
@@ -105,7 +105,7 @@ describe("reset overseer", () => {
       runCount: 1,
       workspaceRoot: "/workspace",
       projects: [],
-      adapters: [],
+      providers: [],
     });
 
     assert.equal((await readActions()).length, 1);

@@ -1,20 +1,20 @@
 import { useState } from "react";
-import type { DiscoveredAdapter } from "@overseer/protocol";
+import type { DiscoveredProvider } from "@overseer/protocol";
 import type { AuthFlow } from "../../state/wizard";
 import { WRow, WTitle } from "./bits";
 
 /**
  * Two steps in one window rather than two windows: pick which registered
- * adapter is attached, then sign it in.
+ * provider is attached, then sign it in.
  *
  * They are the same focus zone — "which agent runs my work" — and splitting
  * them would put the operator through two summonings for one decision
  * (design-system.md §6). The authenticate step takes over automatically when
- * the attached adapter can log in and has not, which is exactly when there is
+ * the attached provider can log in and has not, which is exactly when there is
  * nothing else in this window worth looking at.
  */
-export function AdaptersWindow({
-  adapters,
+export function ProvidersWindow({
+  providers,
   attachedId,
   auth,
   onConnect,
@@ -23,7 +23,7 @@ export function AdaptersWindow({
   onCancelLogin,
   onSignOut,
 }: {
-  adapters: DiscoveredAdapter[];
+  providers: DiscoveredProvider[];
   attachedId?: string;
   auth?: AuthFlow;
   onConnect: (id: string) => void;
@@ -32,26 +32,26 @@ export function AdaptersWindow({
   onCancelLogin: () => void;
   onSignOut: (id: string) => void;
 }) {
-  const [selected, setSelected] = useState(attachedId ?? adapters[0]?.id ?? "");
+  const [selected, setSelected] = useState(attachedId ?? providers[0]?.id ?? "");
 
-  if (adapters.length === 0) {
-    return <div className="w-empty">no adapters registered</div>;
+  if (providers.length === 0) {
+    return <div className="w-empty">no providers registered</div>;
   }
 
-  const attached = adapters.find((adapter) => adapter.id === attachedId);
+  const attached = providers.find((provider) => provider.id === attachedId);
   const flowing =
     auth !== undefined &&
-    auth.adapterId === attachedId &&
+    auth.providerId === attachedId &&
     auth.phase !== "idle" &&
     auth.phase !== "success";
 
   // The login surface owns the window whenever there is something to do here:
-  // an attached adapter that is not signed in, or a flow already running.
+  // an attached provider that is not signed in, or a flow already running.
   if (attached !== undefined && (flowing || !attached.status.authenticated)) {
     return (
       <LoginStep
-        adapter={attached}
-        auth={auth?.adapterId === attached.id ? auth : undefined}
+        provider={attached}
+        auth={auth?.providerId === attached.id ? auth : undefined}
         onStartLogin={() => onStartLogin(attached.id)}
         onSubmitCode={onSubmitCode}
         onCancelLogin={onCancelLogin}
@@ -63,21 +63,21 @@ export function AdaptersWindow({
 
   return (
     <div>
-      <WTitle>available adapters</WTitle>
-      {adapters.map((adapter) => {
-        const active = adapter.id === selected;
-        const isAttached = adapter.id === attachedId;
+      <WTitle>available providers</WTitle>
+      {providers.map((provider) => {
+        const active = provider.id === selected;
+        const isAttached = provider.id === attachedId;
         return (
           <WRow
-            key={adapter.id}
-            activity={adapter.status.authenticated ? "done" : "waiting"}
-            primary={adapter.id}
+            key={provider.id}
+            activity={provider.status.authenticated ? "done" : "waiting"}
+            primary={provider.id}
             secondary={
-              (adapter.status.authenticated ? "signed in" : "not signed in") +
+              (provider.status.authenticated ? "signed in" : "not signed in") +
               (isAttached ? " · attached" : "")
             }
             right={active ? "▪" : undefined}
-            onClick={() => setSelected(adapter.id)}
+            onClick={() => setSelected(provider.id)}
           />
         );
       })}
@@ -128,13 +128,13 @@ const PHASE_WORD: Record<AuthFlow["phase"], string> = {
  * channel.
  */
 function LoginStep({
-  adapter,
+  provider,
   auth,
   onStartLogin,
   onSubmitCode,
   onCancelLogin,
 }: {
-  adapter: DiscoveredAdapter;
+  provider: DiscoveredProvider;
   auth?: AuthFlow;
   onStartLogin: () => void;
   onSubmitCode: (code: string) => void;
@@ -168,7 +168,7 @@ function LoginStep({
 
   return (
     <div>
-      <WTitle>sign in · {adapter.id}</WTitle>
+      <WTitle>sign in · {provider.id}</WTitle>
       <WRow
         activity={
           phase === "failed"

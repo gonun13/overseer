@@ -1,5 +1,5 @@
 import type { AdapterUsageWindow } from "@overseer/protocol";
-import type { AdapterInfo } from "../domain";
+import type { ProviderInfo } from "../domain";
 import type { Activity } from "../status";
 import { StatusLight } from "./StatusLight";
 
@@ -9,29 +9,29 @@ import { StatusLight } from "./StatusLight";
  * A widget is not a window: it follows the theme instead of inverting it, and it
  * is bracketed at the corners rather than framed and tabbed, so it reads as an
  * instrument sitting on the field (design-system.md §6.2). The readout opens
- * the adapter picker; when an adapter is signed in, OPEN CONSOLE sits under it.
+ * the provider picker; when a provider is signed in, OPEN CONSOLE sits under it.
  *
- * Usage gauges stay hidden until the adapter has a real reading. A 0% fill
+ * Usage gauges stay hidden until the provider has a real reading. A 0% fill
  * that we invented would look like an empty plan; an omitted meter looks like
  * we have not been told yet.
  */
-export function AdapterWidget({
-  adapter,
-  onOpenAdapters,
+export function ProviderWidget({
+  provider,
+  onOpenProviders,
   onOpenConsole,
 }: {
-  adapter: AdapterInfo;
-  onOpenAdapters: () => void;
+  provider: ProviderInfo;
+  onOpenProviders: () => void;
   onOpenConsole: () => void;
 }) {
-  const activity: Activity = adapter.authenticated ? "done" : "waiting";
+  const activity: Activity = provider.authenticated ? "done" : "waiting";
   // No name means none attached. The instrument still sits on the field — it
   // is permanent furniture — but it reads out nothing, rather than an empty
   // version and a 0% gauge that look like measurements.
-  const attached = adapter.name !== "";
+  const attached = provider.name !== "";
   const windows =
-    attached && adapter.authenticated && adapter.usage.length > 0
-      ? adapter.usage
+    attached && provider.authenticated && provider.usage.length > 0
+      ? provider.usage
       : [];
 
   return (
@@ -39,11 +39,11 @@ export function AdapterWidget({
       <button
         type="button"
         className="widget-frame"
-        onClick={onOpenAdapters}
-        aria-label="choose adapter"
+        onClick={onOpenProviders}
+        aria-label="choose provider"
       >
         <span className="widget-head">
-          <span className="widget-kicker">adapter</span>
+          <span className="widget-kicker">provider</span>
           <StatusLight activity={activity} />
         </span>
 
@@ -54,14 +54,14 @@ export function AdapterWidget({
         ) : (
           <>
             <span className="widget-row">
-              <span className="widget-name">{adapter.name}</span>
-              {adapter.version && (
-                <span className="widget-dim">v{adapter.version}</span>
+              <span className="widget-name">{provider.name}</span>
+              {provider.version && (
+                <span className="widget-dim">v{provider.version}</span>
               )}
             </span>
             <span className="widget-row">
               <span className="widget-dim">
-                {adapter.authenticated ? "signed in" : "not signed in"}
+                {provider.authenticated ? "signed in" : "not signed in"}
               </span>
             </span>
 
@@ -74,13 +74,13 @@ export function AdapterWidget({
               </span>
             )}
 
-            {(adapter.spend || adapter.context) && (
+            {(provider.spend || provider.context) && (
               <span className="widget-row">
-                {adapter.spend && (
-                  <span className="widget-num">{adapter.spend}</span>
+                {provider.spend && (
+                  <span className="widget-num">{provider.spend}</span>
                 )}
-                {adapter.context && (
-                  <span className="widget-num">{adapter.context} ctx</span>
+                {provider.context && (
+                  <span className="widget-num">{provider.context} ctx</span>
                 )}
               </span>
             )}
@@ -88,7 +88,7 @@ export function AdapterWidget({
         )}
       </button>
 
-      {adapter.authenticated && (
+      {provider.authenticated && (
         <button
           type="button"
           className="widget-console"

@@ -1,7 +1,7 @@
 import { test, expect, type Locator, type Page } from "@playwright/test";
 import rootPkg from "../../../package.json" with { type: "json" };
 
-// Boot is asynchronous: discovery runs against the real adapters and paces
+// Boot is asynchronous: discovery runs against the real providers and paces
 // its reveal at roughly one line a second before the footer mounts with
 // "releasing the prompt" (packages/web/src/App.tsx `furniture.footer`).
 
@@ -68,7 +68,7 @@ test("boots to a settled state", async ({ page }) => {
   await passWizardOpening(page);
 
   // Footer mounts with "releasing the prompt" — settled discovery, whether or
-  // not an adapter is signed in (console only appears when one is).
+  // not a provider is signed in (console only appears when one is).
   await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
   // Discovery ran and reported a world: the operations window is summoned by
   // the machine and carries the steps of the pass that just happened.
@@ -92,18 +92,18 @@ test("shows the active project without its workspace path", async ({
   ).toBeVisible();
 });
 
-test("opens the adapters picker from the widget", async ({ page }) => {
+test("opens the providers picker from the widget", async ({ page }) => {
   await page.goto("/");
   await passWizardOpening(page);
 
-  const widget = page.getByRole("button", { name: /choose adapter/i });
+  const widget = page.getByRole("button", { name: /choose provider/i });
   await expect(widget).toBeVisible({ timeout: 45_000 });
   await widget.click();
-  await expect(page.getByLabel("close adapters")).toBeVisible();
+  await expect(page.getByLabel("close providers")).toBeVisible();
   await expect(page.getByRole("button", { name: /connect/i })).toBeVisible();
 });
 
-test("offers the console only when an adapter is signed in", async ({
+test("offers the console only when a provider is signed in", async ({
   page,
 }) => {
   await page.goto("/");
@@ -113,7 +113,7 @@ test("offers the console only when an adapter is signed in", async ({
   // credentials or it does not — so read which one the widget reports and
   // assert that branch, rather than skipping the test on the absence of a
   // button. A test that skips itself when the app is broken is not a test.
-  const widget = page.getByRole("button", { name: /choose adapter/i });
+  const widget = page.getByRole("button", { name: /choose provider/i });
   await expect(widget).toBeVisible({ timeout: 45_000 });
 
   const consoleBtn = page.getByRole("button", { name: /open console/i });

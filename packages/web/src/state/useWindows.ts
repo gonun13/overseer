@@ -34,10 +34,10 @@ export function useWindows() {
         // Clamp on spawn so a window never lands off-screen on a small viewport.
         const width = Math.min(spec.w, window.innerWidth - 64);
 
-        // Adapters opens from the instrument that summoned it: right-aligned
+        // Providers opens from the instrument that summoned it: right-aligned
         // with the bottom-right widget, sitting just above it rather than at a
         // fixed mid-field y (design-system.md §6.2).
-        if (kind === "adapters") {
+        if (kind === "providers") {
           const margin = 26;
           const widgetClearance = 210; // widget + optional console + gap
           const assumedHeight = 260;

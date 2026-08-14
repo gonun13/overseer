@@ -4,7 +4,7 @@ import type {
   LoginUpdate,
 } from "@overseer/protocol";
 import { getAdapter } from "./adapters.js";
-import { recordAction, setAdapterAuthenticated } from "./memory/internal.js";
+import { recordAction, setProviderAuthenticated } from "./memory/internal.js";
 
 /**
  * The login broker: at most **one** live login per process.
@@ -35,7 +35,7 @@ import { recordAction, setAdapterAuthenticated } from "./memory/internal.js";
 type Broadcast = (message: AuthStateMessage) => void;
 
 interface LiveLogin {
-  adapterId: string;
+  providerId: string;
   handle: LoginHandle;
   /** The last frame broadcast, kept verbatim so a joiner is replayed exactly
    * what everyone else already has. */
@@ -73,10 +73,10 @@ export function currentAuthState(): AuthStateMessage | undefined {
   return live?.last ?? lastSettled;
 }
 
-function toFrame(adapterId: string, update: LoginUpdate): AuthStateMessage {
+function toFrame(providerId: string, update: LoginUpdate): AuthStateMessage {
   return {
     type: "auth.state",
-    adapterId,
+    providerId,
     phase: update.phase,
     ...(update.verificationUrl !== undefined
       ? { verificationUrl: update.verificationUrl }
@@ -97,28 +97,28 @@ function toFrame(adapterId: string, update: LoginUpdate): AuthStateMessage {
  * has to land in every tab.
  */
 export function startLogin(
-  adapterId: string,
+  providerId: string,
   broadcast: Broadcast,
   replay: Broadcast,
 ): LoginResult {
   if (live !== undefined) {
-    if (live.adapterId !== adapterId) {
+    if (live.providerId !== providerId) {
       return {
         ok: false,
-        reason: `a login for ${live.adapterId} is already running`,
+        reason: `a login for ${live.providerId} is already running`,
       };
     }
     replay(live.last);
     return { ok: true };
   }
 
-  const adapter = getAdapter(adapterId);
+  const adapter = getAdapter(providerId);
   if (adapter === undefined)
-    return { ok: false, reason: `unknown adapter: ${adapterId}` };
+    return { ok: false, reason: `unknown provider: ${providerId}` };
   if (adapter.login === undefined || !adapter.capabilities.login) {
     return {
       ok: false,
-      reason: `${adapterId} cannot sign in from the console`,
+      reason: `${providerId} cannot sign in from the console`,
     };
   }
 
@@ -130,7 +130,7 @@ export function startLogin(
   // `broadcast` reaches, and sending it twice would double every opening frame.)
   let latest: AuthStateMessage = {
     type: "auth.state",
-    adapterId,
+    providerId,
     phase: "starting",
   };
 
@@ -148,7 +148,7 @@ export function startLogin(
   };
 
   const publish = (update: LoginUpdate) => {
-    latest = toFrame(adapterId, update);
+    latest = toFrame(providerId, update);
     if (live !== undefined) live.last = latest;
     if (update.phase === "success") lastSettled = latest;
     // The slot is freed on the terminal frame, not when the bookkeeping that
@@ -169,18 +169,18 @@ export function startLogin(
   const finished = handle.done
     .then(async (status) => {
       // The one fact worth keeping: whether this instance is signed in. It
-      // rides in the world snapshot the adapters already occupy, so nothing new
+      // rides in the world snapshot the providers already occupy, so nothing new
       // is invented — and it is what lets a *later* `authenticated: false` be
       // told apart from never having signed in at all.
-      await setAdapterAuthenticated(adapterId, status.authenticated);
+      await setProviderAuthenticated(providerId, status.authenticated);
       await recordAction({
         actor: "operator",
-        action: "adapter:login",
+        action: "provider:login",
         outcome: status.authenticated ? "ok" : "blocked",
         // Neither the URL nor the code. Only how it ended.
         detail: status.authenticated
-          ? adapterId
-          : `${adapterId} · not signed in`,
+          ? providerId
+          : `${providerId} · not signed in`,
       });
     })
     .catch((error: unknown) => {
@@ -191,7 +191,7 @@ export function startLogin(
     })
     .finally(release);
 
-  record = { adapterId, handle, last: latest, finished };
+  record = { providerId, handle, last: latest, finished };
   live = record;
 
   return { ok: true };
@@ -217,16 +217,16 @@ export function cancelLogin(): LoginResult {
  * signed in.
  */
 export async function signOut(
-  adapterId: string,
+  providerId: string,
   broadcast: Broadcast,
 ): Promise<LoginResult> {
-  const adapter = getAdapter(adapterId);
+  const adapter = getAdapter(providerId);
   if (adapter === undefined)
-    return { ok: false, reason: `unknown adapter: ${adapterId}` };
+    return { ok: false, reason: `unknown provider: ${providerId}` };
   if (adapter.login === undefined || !adapter.capabilities.login) {
     return {
       ok: false,
-      reason: `${adapterId} cannot sign out from the console`,
+      reason: `${providerId} cannot sign out from the console`,
     };
   }
 
@@ -240,7 +240,7 @@ export async function signOut(
   // leaving "login failed" on screen after a sign-out that worked. `done` never
   // rejects and the driver escalates to SIGKILL, so this cannot hang.
   const dying =
-    live !== undefined && live.adapterId === adapterId ? live : undefined;
+    live !== undefined && live.providerId === providerId ? live : undefined;
   if (dying !== undefined) {
     dying.handle.cancel();
     await dying.finished;
@@ -252,17 +252,17 @@ export async function signOut(
   // Deliberate, so it must not read as an expiry on the next boot: clear the
   // remembered "was signed in" rather than leaving it to look like a token
   // that died on its own.
-  await setAdapterAuthenticated(adapterId, status.authenticated);
+  await setProviderAuthenticated(providerId, status.authenticated);
   await recordAction({
     actor: "operator",
-    action: "adapter:signout",
+    action: "provider:signout",
     outcome: status.authenticated ? "failed" : "ok",
-    detail: adapterId,
+    detail: providerId,
   });
 
   const frame: AuthStateMessage = {
     type: "auth.state",
-    adapterId,
+    providerId,
     phase: "idle",
     status,
   };
