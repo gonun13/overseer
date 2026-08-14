@@ -27,5 +27,10 @@
   "devDependencies": {
     "prettier": "^3.4.2",
     "typescript": "^5.7.2"
+  },
+  "allowScripts": {
+    "node-pty": true,
+    "esbuild": true,
+    "@anthropic-ai/claude-code": true
   }
 }

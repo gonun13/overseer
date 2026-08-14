@@ -12,9 +12,9 @@ UI: [docs/ui-ux-design.md](docs/ui-ux-design.md) ·
 Behavior: [docs/overseer-behavior.md](docs/overseer-behavior.md) ·
 Versioning: [docs/architecture-design.md §8](docs/architecture-design.md#8-versioning)
 
-> **Early stage.** The UI shell and overseer wizard are live. Session spawning for the
-> `claude-code` provider is not implemented yet — there are no live agent sessions or
-> transcripts. See [Status](#status).
+> **Early stage.** The UI shell and overseer wizard are live. The raw OPEN CONSOLE PTY into
+> Claude is live when signed in. Stream-json agent session spawning for `claude-code` is not
+> implemented yet — there are no live agent transcripts. See [Status](#status).
 
 ## Requirements
 
@@ -96,7 +96,7 @@ packages/
   web/                React + Vite + Tailwind SPA
   server/             Node: WS + REST, static SPA host, adapter registry
   adapters/
-    claude-code/      Claude Code adapter (session spawning not implemented yet)
+    claude-code/      Claude Code adapter (raw PTY console live; stream-json sessions not yet)
   e2e/                Playwright acceptance tests (container-only)
 workspace/            host-shared dir — git projects live here, mounted into the container
 ```
@@ -114,7 +114,8 @@ workspace/            host-shared dir — git projects live here, mounted into t
 - **Sessions, approvals, diffs** — summoned as draggable windows, not fixed columns.
 - **Capabilities** — MCP servers, skills, and subagents, with an editor for instructions,
   model, and tool grants.
-- **Console** — raw escape hatch into the provider CLI (currently an echo stub; no PTY).
+- **Console** — raw PTY escape hatch into the provider CLI (xterm.js over `/ws`); distinct from
+  stream-json agent sessions.
 - **Prompt controls** — model, permission mode, subagent, and context, armed before the
   next turn.
 - **Two themes** — samaritan (default) and machine; choice is remembered in internal memory.
@@ -127,12 +128,14 @@ projects, checking provider auth via `getStatus()`, and reading `overseer-person
 then mounts furniture as capabilities resolve. Details:
 [docs/overseer-behavior.md](docs/overseer-behavior.md).
 
+Auth status comes from `claude auth status --json`. The raw OPEN CONSOLE path spawns an
+interactive `claude` PTY in the active project when a provider is signed in.
+
 Still missing:
 
-- `claude-code` process spawning ([architecture §1.2](docs/architecture-design.md))
-  — no live sessions or transcripts yet
-- Auth check reads the credentials file rather than validating a token
-- Console is an echo stub (no PTY)
+- `claude-code` stream-json session spawning ([architecture §1.2](docs/architecture-design.md))
+  — no live agent sessions or transcripts yet
+- Approvals queue and structured tool/diff windows backed by live session events
 
 ## Versioning
 

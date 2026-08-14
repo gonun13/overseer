@@ -12,7 +12,8 @@
     "typecheck": "tsc -p tsconfig.json --noEmit"
   },
   "dependencies": {
-    "@overseer/protocol": "*"
+    "@overseer/protocol": "*",
+    "node-pty": "^1.0.0"
   },
   "devDependencies": {
     "@types/node": "^24.13.3",

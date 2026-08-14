@@ -56,6 +56,8 @@ services:
       - PORT=3000
       - CLAUDE_CONFIG_DIR=/home/node/.claude
       - OVERSEER_INTERNAL_DIR=/app/.overseer
+      - DISABLE_AUTOUPDATER=1
+      - DISABLE_UPDATES=1
       - CHOKIDAR_USEPOLLING=${CHOKIDAR_USEPOLLING:-1}
     volumes:
       - .:/app

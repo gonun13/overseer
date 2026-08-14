@@ -121,6 +121,13 @@ test("offers the console only when a provider is signed in", async ({
     await expect(consoleBtn).toBeVisible();
     await consoleBtn.click();
     await expect(page.getByLabel("close console")).toBeVisible();
+    // Live PTY surface — xterm mounts as an application region. Do not type a
+    // model prompt here; only assert the terminal is present and dismissible.
+    await expect(page.getByLabel("provider console")).toBeVisible({
+      timeout: 15_000,
+    });
+    await page.getByLabel("close console").click();
+    await expect(page.getByLabel("close console")).toHaveCount(0);
     return;
   }
 

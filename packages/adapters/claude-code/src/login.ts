@@ -6,6 +6,7 @@ import type {
   LoginHandle,
   LoginUpdate,
 } from "@overseer/protocol";
+import { ensureInteractiveReady } from "./interactive-ready.js";
 import { withUsage } from "./usage.js";
 
 /**
@@ -364,6 +365,19 @@ export function startLogin(
                 ? "login cancelled"
                 : (failure ?? "login did not complete"),
             };
+        // Pipe-based login writes credentials but does not flip the interactive
+        // TUI's onboarding flag — without this, OPEN CONSOLE re-prompts for a
+        // browser login. Best-effort: a write failure must not fail the login.
+        if (status.authenticated) {
+          try {
+            await ensureInteractiveReady();
+          } catch (error) {
+            console.error(
+              "adapter-claude-code: could not mark interactive onboarding complete",
+              error,
+            );
+          }
+        }
         // `settled` before the notify, so a listener that re-enters cannot be
         // handed a second terminal frame; `notify` swallows its own throw.
         settled = true;

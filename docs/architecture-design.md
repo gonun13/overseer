@@ -262,7 +262,7 @@ One service: the Node server serves the built SPA and handles `/api/*` + `/ws` o
 - `/workspace/<project>/` — one git project per directory. Session creation picks one; it becomes the process `cwd`.
 - `/workspace/_overseer/` — import/export staging only.
 - `/app/.overseer/` — internal memory plus SQLite usage history, session index, and search index.
-- Image needs `git`, `ripgrep`, and a shell alongside Node; the CLI shells out to all three. The auth flow needs no PTY (§2), so the runtime stage needs no native-build toolchain. Run as non-root.
+- Image needs `git`, `ripgrep`, and a shell alongside Node; the CLI shells out to all three. Auth login uses plain pipes (§2). The raw OPEN CONSOLE escape hatch uses `node-pty` (native module), so image builds include a short-lived native toolchain for that dependency. Run as non-root.
 - The remaining shared-write risk is host-side git activity while an agent edits the same project. Show each session's branch and dirty state so conflicts are visible.
 
 ---
@@ -332,9 +332,11 @@ the tier already claimed by the current version.
 | `1.x`     | §3 **Important**| Additive features from the Important tier. Each MINOR should map to a closed subset of that table (call it out in release notes). |
 | `2.x+`    | §3 **Nice to have** + later providers | Major product expansion; breaking protocol or UX contract bumps MAJOR. |
 
-**Explicit non-goals for `0.1.x`:** §3 MVP (sessions, live console, approvals queue), §5 provider-backed
-querying in [overseer-behavior.md](overseer-behavior.md) ("planned, not built"), and credential-file
-auth checks instead of `claude auth status` — see README [Status](../README.md#status).
+**Explicit non-goals for `0.1.x`:** §3 MVP stream-json sessions / transcript / approvals queue,
+§5 provider-backed querying in [overseer-behavior.md](overseer-behavior.md) ("planned, not built"),
+and credential-file auth checks instead of `claude auth status` — see README
+[Status](../README.md#status). The raw OPEN CONSOLE PTY escape hatch (ui-ux-design.md §5.3) is
+separate from the MVP "Console" zone in §3 and may ship inside `0.1.x`.
 
 ### 8.3 Release checklist
 

@@ -55,7 +55,19 @@ export type ClientMessage =
   /** Erase the overseer's memory — internal `.overseer` and the external
    * `personality.json`. Provider auth is not memory and is left alone. Only
    * sent after the operator answered the decision (ui-ux-design.md §5.2). */
-  | { type: "memory.reset" };
+  | { type: "memory.reset" }
+  /**
+   * Open a raw PTY into the attached provider's interactive CLI, in the active
+   * project. One console per socket; a second open replaces the first.
+   * `cols`/`rows` are the initial terminal size.
+   */
+  | { type: "console.open"; cols: number; rows: number }
+  /** Keystrokes / paste from the browser terminal, opaque to Overseer. */
+  | { type: "console.input"; id: string; data: string }
+  /** Browser terminal resized — forwarded to the PTY. */
+  | { type: "console.resize"; id: string; cols: number; rows: number }
+  /** Operator dismissed the console window (or the tab is leaving). */
+  | { type: "console.close"; id: string };
 
 export interface ConnectedMessage {
   type: "connected";
@@ -186,6 +198,30 @@ export interface MemoryResetDoneMessage {
   type: "memory.reset.done";
 }
 
+/** PTY is up — subsequent input/resize/close must carry this `id`. */
+export interface ConsoleOpenedMessage {
+  type: "console.opened";
+  id: string;
+}
+
+/** Opaque PTY output chunk for the owning socket only. */
+export interface ConsoleOutputMessage {
+  type: "console.output";
+  id: string;
+  data: string;
+}
+
+/**
+ * The CLI process ended. Native `/exit` and `/quit` land here; the client
+ * closes the console window. `signal` is present when the process was killed.
+ */
+export interface ConsoleExitMessage {
+  type: "console.exit";
+  id: string;
+  exitCode: number;
+  signal?: number;
+}
+
 export type ServerMessage =
   | ConnectedMessage
   | ErrorMessage
@@ -198,7 +234,28 @@ export type ServerMessage =
   | WorkspaceProjectsMessage
   | OverseerStepMessage
   | MemoryResetDoneMessage
+  | ConsoleOpenedMessage
+  | ConsoleOutputMessage
+  | ConsoleExitMessage
   | DiscoveryEvent;
+
+/** Hard caps so a malformed frame cannot pin memory or a PTY. */
+export const CONSOLE_MAX_COLS = 500;
+export const CONSOLE_MAX_ROWS = 200;
+export const CONSOLE_MAX_INPUT_CHARS = 64_000;
+
+function isConsoleSize(cols: unknown, rows: unknown): boolean {
+  return (
+    typeof cols === "number" &&
+    typeof rows === "number" &&
+    Number.isInteger(cols) &&
+    Number.isInteger(rows) &&
+    cols >= 1 &&
+    rows >= 1 &&
+    cols <= CONSOLE_MAX_COLS &&
+    rows <= CONSOLE_MAX_ROWS
+  );
+}
 
 const TONES = new Set<string>(["neutral", "dry", "warm"]);
 const THEMES = new Set<string>(["samaritan", "machine"]);
@@ -236,5 +293,34 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   }
   if (type === "auth.cancel") return true;
   if (type === "memory.reset") return true;
+  if (type === "console.open") {
+    const msg = value as { cols?: unknown; rows?: unknown };
+    return isConsoleSize(msg.cols, msg.rows);
+  }
+  if (type === "console.input") {
+    const msg = value as { id?: unknown; data?: unknown };
+    return (
+      typeof msg.id === "string" &&
+      msg.id.length > 0 &&
+      msg.id.length <= 64 &&
+      typeof msg.data === "string" &&
+      msg.data.length <= CONSOLE_MAX_INPUT_CHARS
+    );
+  }
+  if (type === "console.resize") {
+    const msg = value as { id?: unknown; cols?: unknown; rows?: unknown };
+    return (
+      typeof msg.id === "string" &&
+      msg.id.length > 0 &&
+      msg.id.length <= 64 &&
+      isConsoleSize(msg.cols, msg.rows)
+    );
+  }
+  if (type === "console.close") {
+    const msg = value as { id?: unknown };
+    return (
+      typeof msg.id === "string" && msg.id.length > 0 && msg.id.length <= 64
+    );
+  }
   return false;
 }

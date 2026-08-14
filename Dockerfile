@@ -6,6 +6,11 @@ ARG NODE_IMAGE=node:24-trixie-slim
 FROM ${NODE_IMAGE} AS builder
 WORKDIR /app
 
+# node-pty needs a native toolchain during `npm ci` / build.
+RUN apt-get update && apt-get install -y --no-install-recommends \
+      python3 make g++ \
+    && rm -rf /var/lib/apt/lists/*
+
 COPY package.json package-lock.json ./
 COPY packages/protocol/package.json packages/protocol/package.json
 COPY packages/server/package.json packages/server/package.json
@@ -26,8 +31,9 @@ FROM ${NODE_IMAGE} AS dev
 
 # Same toolchain as runtime: the claude-code adapter shells out to git/ripgrep,
 # so a dev container has to be able to exercise the real spawn path.
+# python3/make/g++: node-pty (raw OPEN CONSOLE PTY) is a native module.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git ripgrep ca-certificates \
+      git ripgrep ca-certificates python3 make g++ \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g @anthropic-ai/claude-code@2.1.226 \
     && npm cache clean --force
@@ -51,6 +57,10 @@ ENV OVERSEER_INTERNAL_DIR=/app/.overseer
 # Read by bin/_in-container.sh — the only thing that distinguishes a sanctioned
 # run from someone typing `npm run dev` in a host terminal.
 ENV OVERSEER_IN_CONTAINER=1
+# Claude is pinned in the image and runs as non-root `node`; auto-update cannot
+# write the global npm prefix and would only noise the OPEN CONSOLE TUI.
+ENV DISABLE_AUTOUPDATER=1
+ENV DISABLE_UPDATES=1
 
 # node_modules is mounted as named volumes (compose overlays the bind mount of
 # the source tree). Docker seeds each volume from the image dir on first mount,
@@ -84,10 +94,11 @@ FROM ${NODE_IMAGE} AS runtime
 # git and ripgrep: the CLI shells out to both. Pinned CLI version: JSONL
 # session history is an undocumented format that drifts across releases
 # (design doc §4) — bump deliberately, not via floating `@latest`.
-# No native-build toolchain: `claude auth login` runs under plain pipes, so the
-# auth flow needs no PTY and therefore no node-pty (architecture-design.md §2).
+# python3/make/g++: node-pty for the raw OPEN CONSOLE escape hatch. Auth login
+# still uses plain pipes (architecture-design.md §2); the console is the only
+# PTY path. Build tools are removed after `npm ci` so the runtime image stays lean.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git ripgrep ca-certificates \
+      git ripgrep ca-certificates python3 make g++ \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g @anthropic-ai/claude-code@2.1.226 \
     && npm cache clean --force
@@ -100,7 +111,10 @@ COPY packages/server/package.json packages/server/package.json
 COPY packages/adapters/claude-code/package.json packages/adapters/claude-code/package.json
 RUN npm ci --omit=dev --workspace packages/server \
       --workspace packages/protocol \
-      --workspace packages/adapters/claude-code
+      --workspace packages/adapters/claude-code \
+    && apt-get purge -y python3 make g++ \
+    && apt-get autoremove -y \
+    && rm -rf /var/lib/apt/lists/*
 
 COPY --from=builder /app/packages/protocol/dist packages/protocol/dist
 COPY --from=builder /app/packages/server/dist packages/server/dist
@@ -112,6 +126,9 @@ ENV HOST=0.0.0.0
 ENV PORT=3000
 ENV CLAUDE_CONFIG_DIR=/home/node/.claude
 ENV OVERSEER_INTERNAL_DIR=/app/.overseer
+# Same as the dev stage: pinned CLI, non-root runtime, no in-container updates.
+ENV DISABLE_AUTOUPDATER=1
+ENV DISABLE_UPDATES=1
 
 # Docker seeds a fresh named volume from the image's dir on first mount,
 # ownership included — without this the node user can't write its own config,
