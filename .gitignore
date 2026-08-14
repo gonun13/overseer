@@ -20,3 +20,6 @@ packages/e2e/test-results/
 # Container-owned state that may appear at repo root during local dev.
 .overseer/
 .claude/
+
+# Keep provider instructions like CLAUDE.md or other provider-specific files on host away from repos.
+CLAUDE.md
