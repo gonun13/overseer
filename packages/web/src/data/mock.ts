@@ -1,12 +1,12 @@
 import type { PromptOption, PromptSettings } from "../prompt";
 import type {
-  AdapterInfo,
   Approval,
   Capability,
   CapabilityDraft,
   ConsoleLine,
   DiffLine,
   Project,
+  ProviderInfo,
   Session,
   Turn,
   WorkspaceInfo,
@@ -17,8 +17,8 @@ import type {
  *
  * Everything an instance would learn at runtime belongs here, not just the
  * obviously fake rows: the model and subagent lists, the prompt's starting
- * settings, the workspace paths and the adapter's own name are all facts about
- * a running instance, and a build that has never talked to an adapter knows
+ * settings, the workspace paths and the provider's own name are all facts about
+ * a running instance, and a build that has never talked to a provider knows
  * none of them. A plausible default is still invented data — it just lies more
  * convincingly — so the blank side of every pair below is genuinely empty.
  *
@@ -175,7 +175,7 @@ const wireframeCapabilities: Capability[] = [
   { id: "c5", activity: "idle", name: "tech-lead", kind: "subagent", tools: 0 },
 ];
 
-const wireframeAdapter: AdapterInfo = {
+const wireframeProvider: ProviderInfo = {
   name: "claude-code",
   version: "2.1.4",
   authenticated: false,
@@ -256,7 +256,7 @@ const blankCapabilityDraft: CapabilityDraft = {
 };
 
 /** What the prompt's control surface offers. Real instances read this from the
- * adapter (models, permission modes) and the project's `.claude/agents`, so a
+ * provider (models, permission modes) and the project's `.claude/agents`, so a
  * build cannot know it — note that the fixture's mode names don't even match
  * `PermissionMode` in @overseer/protocol, which is what inventing them costs. */
 const wireframePromptOptions: PromptOption[] = [
@@ -288,10 +288,10 @@ const blankPromptSettings: PromptSettings = { model: "", mode: "", agent: "" };
 const wireframeWorkspace: WorkspaceInfo = { root: "/workspace", staging: "/workspace/_overseer/import" };
 const blankWorkspace: WorkspaceInfo = { root: "", staging: "" };
 
-/** A real instance has no projects, no sessions and no adapter attached until
- * the session supervisor exists. Not even the adapter's name: the registry is
- * behind /api/adapters and the frontend has never asked. */
-const blankAdapter: AdapterInfo = {
+/** A real instance has no projects, no sessions and no provider attached until
+ * the session supervisor exists. Not even the provider's name: the registry is
+ * behind /api/providers and the frontend has never asked. */
+const blankProvider: ProviderInfo = {
   name: "",
   version: "",
   authenticated: false,
@@ -308,7 +308,7 @@ export const mockCapabilities = WIREFRAME ? wireframeCapabilities : [];
 export const mockContextFiles = WIREFRAME ? wireframeContextFiles : [];
 export const mockDiff = WIREFRAME ? wireframeDiff : [];
 export const mockConsole = WIREFRAME ? wireframeConsole : [];
-export const mockAdapter = WIREFRAME ? wireframeAdapter : blankAdapter;
+export const mockProvider = WIREFRAME ? wireframeProvider : blankProvider;
 export const mockPromptOptions = WIREFRAME ? wireframePromptOptions : [];
 export const mockPromptSettings = WIREFRAME
   ? wireframePromptSettings

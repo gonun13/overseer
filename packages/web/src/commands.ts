@@ -15,10 +15,10 @@ export interface Command {
 
 export const COMMANDS: Command[] = [
   {
-    pattern: /^adapters?$/i,
-    usage: "adapters",
-    help: "choose which adapter is attached",
-    action: { type: "open", kind: "adapters" },
+    pattern: /^providers?$/i,
+    usage: "providers",
+    help: "choose which provider is attached",
+    action: { type: "open", kind: "providers" },
   },
   {
     pattern: /^sessions?$/i,
@@ -53,7 +53,7 @@ export const COMMANDS: Command[] = [
   {
     pattern: /^(console|term|terminal|shell)$/i,
     usage: "console",
-    help: "raw terminal into the adapter cli",
+    help: "raw terminal into the provider cli",
     action: { type: "open", kind: "console" },
   },
   {

@@ -27,7 +27,7 @@ const snapshot: WorldSnapshot = {
     { name: "alpha", path: "/workspace/alpha", gitBranch: "main", dirty: false },
     { name: "overseer-personality", path: "/workspace/overseer-personality" },
   ],
-  adapters: [],
+  providers: [],
   last_active_project: "/workspace/alpha",
 };
 

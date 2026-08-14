@@ -17,7 +17,7 @@ Not a zone. The system's own voice — the one component that speaks about the m
 project. It is four things at once:
 
 - **Wizard** — moves a fresh instance from nothing to a working setup.
-- **Supervisor** — watches projects, sessions, capabilities and the adapter, and surfaces what changed.
+- **Supervisor** — watches projects, sessions, capabilities and the provider, and surfaces what changed.
   Project changes under `/workspace` stream from `packages/server/src/workspace-monitor.ts` without rerunning
   discovery.
 - **Automation trigger** — will start agents, scripts, and `claude` commands on the operator's behalf.
@@ -26,7 +26,7 @@ project. It is four things at once:
 
 ### What it is not
 
-- **Not chat.** Conversation happens in a project's adapter session; the overseer speaks only about state.
+- **Not chat.** Conversation happens in a project's provider session; the overseer speaks only about state.
 - **Not a dashboard.** Every signal is actionable
   ([UI anti-patterns](ui-ux-design.md#10-anti-patterns)).
 - **Not a log.** The screen shows derived conclusions; records stay in internal memory (§6).
@@ -98,7 +98,7 @@ One telegraphic line per step:
 
 ```
 scanning workspace...     [OK]
-checking adapter auth...  [FAILED]
+checking provider auth... [FAILED]
 reading personality...    [OK]
 ```
 
@@ -151,22 +151,22 @@ Once mounted, furniture stays until a confirmed reset takes it away (§6.5). It 
 | Clock + settings  | After the `checking the time` step.                                            |
 | Project panel     | After personality is read (and scaffolded first if it was absent).             |
 | Active project    | After the active project is resolved from internal memory (or defaults to `overseer-personality`). |
-| Adapter widget    | After adapter auth is checked — including reporting that none are attached.    |
+| Provider widget   | After provider auth is checked — including reporting that none are attached.   |
 | Footer            | With `releasing the prompt` (version line).                                    |
-| Prompt + controls | After `releasing the prompt`, when an attached adapter is authenticated.       |
-| Help link         | With the footer; it does not require adapter authentication.                    |
+| Prompt + controls | After `releasing the prompt`, when an attached provider is authenticated.      |
+| Help link         | With the footer; it does not require provider authentication.                   |
 
 Discovery step order: time → (create personality if missing) → read personality → scan workspace → select
-active project → check adapters → release the prompt.
+active project → check providers → release the prompt.
 
 Under reduced motion, animations become instant; phases and information remain
 ([motion](ui-ux-design.md#9-motion)).
 
 ---
 
-## 5. Adapter-backed querying (planned, not built)
+## 5. Provider-backed querying (planned, not built)
 
-Planned internal-system queries use an authenticated adapter but add no surface: progress goes to the
+Planned internal-system queries use an authenticated provider but add no surface: progress goes to the
 operations window, actionable results become signals, the headline reflects activity, and actions enter the
 register. A feature that needs a fourth surface belongs elsewhere.
 
@@ -266,7 +266,7 @@ nothing else in the field can be clicked or tabbed to.
 | `personality.json`                            | Yes    | The name and tone were given to this instance (§6.3).            |
 | The `overseer-personality` project around it  | No     | An ordinary git project with the operator's own history in it.   |
 | Workspace projects                            | No     | Never the overseer's to remove.                                  |
-| Adapter auth (`claude-home`)                  | No     | Sign-in is not memory. `./bin/reset` is what discards that.      |
+| Provider auth (`claude-home`)                 | No     | Sign-in is not memory. `./bin/reset` is what discards that.      |
 
 The order is `personality.json` → run logs → action register → snapshot (`erasing memory`). The snapshot
 goes last so the operations window ends on memory itself; the register is still cleared before that so the
@@ -298,7 +298,7 @@ becomes the headline, because a first-run boot would quietly contradict memory t
 | Discovery client              | `packages/web/src/state/useDiscovery.ts`         |
 | Reset decision                | `packages/web/src/components/DecisionWindow.tsx` |
 | Operations window             | `packages/web/src/components/windows/OverseerWindow.tsx` |
-| Adapter status + discovery events | `packages/protocol/src/adapter.ts`, `packages/protocol/src/discovery.ts` |
+| Adapter status + discovery events | `packages/protocol/src/adapter.ts` (runtime contract), `packages/protocol/src/discovery.ts` |
 | WS routing + discovery pass   | `packages/server/src/ws.ts`, `packages/server/src/discovery.ts` |
 | Workspace monitor (live projects) | `packages/server/src/workspace-monitor.ts` |
 | Internal memory               | `packages/server/src/memory/internal.ts`         |

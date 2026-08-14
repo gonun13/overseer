@@ -43,16 +43,16 @@ export interface DiscoveryController extends WizardState {
   selectProject: (path: string) => void;
   /** Persist the theme into internal memory. */
   selectTheme: (theme: OverseerTheme) => void;
-  /** Attach an adapter from the picker (auth is a separate later step). */
-  connectAdapter: (id: string) => void;
-  /** Start (or join) the adapter's login. The URL comes back over the socket. */
-  startLogin: (adapterId: string) => void;
-  /** Relay the operator's paste. Sent exactly as typed — see `AdaptersWindow`. */
+  /** Attach a provider from the picker (auth is a separate later step). */
+  connectProvider: (id: string) => void;
+  /** Start (or join) the provider's login. The URL comes back over the socket. */
+  startLogin: (providerId: string) => void;
+  /** Relay the operator's paste. Sent exactly as typed — see `ProvidersWindow`. */
   submitAuthCode: (code: string) => void;
   /** Abandon the login in flight. */
   cancelLogin: () => void;
   /** `claude auth logout` on the container's CLI. */
-  signOut: (adapterId: string) => void;
+  signOut: (providerId: string) => void;
   /** Put the reset decision up. Nothing is erased and nothing is sent. */
   askReset: () => void;
   /** Answer the decision with no. */
@@ -103,15 +103,15 @@ export function useDiscovery(): DiscoveryController {
         dispatch({ type: "theme.selected", theme: message.theme });
         return;
       }
-      if (message.type === "adapter.connected") {
-        dispatch({ type: "adapter.connected", id: message.id });
+      if (message.type === "provider.connected") {
+        dispatch({ type: "provider.connected", id: message.id });
         return;
       }
       if (message.type === "auth.state") {
         dispatch({
           type: "auth.state",
           state: {
-            adapterId: message.adapterId,
+            providerId: message.providerId,
             phase: message.phase,
             verificationUrl: message.verificationUrl,
             detail: message.detail,
@@ -240,22 +240,22 @@ export function useDiscovery(): DiscoveryController {
     [send],
   );
 
-  const connectAdapter = useCallback(
+  const connectProvider = useCallback(
     (id: string) => {
-      dispatch({ type: "adapter.connected", id });
-      const message: ClientMessage = { type: "adapter.connect", id };
+      dispatch({ type: "provider.connected", id });
+      const message: ClientMessage = { type: "provider.connect", id };
       send(message);
     },
     [send],
   );
 
   const startLogin = useCallback(
-    (adapterId: string) => {
+    (providerId: string) => {
       // Show `starting` on the click rather than on the first server frame.
       // The URL lands ~400ms after the CLI spawns, and a surface that stays
       // blank until then reads as a button that did nothing.
-      dispatch({ type: "auth.requested", adapterId });
-      const message: ClientMessage = { type: "auth.start", adapterId };
+      dispatch({ type: "auth.requested", providerId });
+      const message: ClientMessage = { type: "auth.start", providerId };
       send(message);
     },
     [send],
@@ -278,8 +278,8 @@ export function useDiscovery(): DiscoveryController {
   }, [send]);
 
   const signOut = useCallback(
-    (adapterId: string) => {
-      const message: ClientMessage = { type: "auth.signout", adapterId };
+    (providerId: string) => {
+      const message: ClientMessage = { type: "auth.signout", providerId };
       send(message);
     },
     [send],
@@ -315,7 +315,7 @@ export function useDiscovery(): DiscoveryController {
     submitOperatorTone,
     selectProject,
     selectTheme,
-    connectAdapter,
+    connectProvider,
     startLogin,
     submitAuthCode,
     cancelLogin,

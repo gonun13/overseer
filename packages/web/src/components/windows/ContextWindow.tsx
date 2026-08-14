@@ -1,19 +1,19 @@
-import { WAdapterNote, WRow, WTitle } from "./bits";
+import { WProviderNote, WRow, WTitle } from "./bits";
 import { mockContextFiles } from "../../data/mock";
-import type { AdapterInfo } from "../../domain";
+import type { ProviderInfo } from "../../domain";
 
 /** Summoned from prompt control 4. What extra material rides along with the next
  * prompt — the only prompt option that needs more than a value to express. */
 export function ContextWindow({
   projectName,
-  adapter,
+  provider,
 }: {
   projectName?: string;
-  adapter: AdapterInfo;
+  provider: ProviderInfo;
 }) {
   return (
     <div>
-      <WAdapterNote adapter={adapter} />
+      <WProviderNote provider={provider} />
       <WTitle>attached to the next prompt</WTitle>
       {mockContextFiles.length === 0 ? (
         <div className="w-empty">nothing attached</div>

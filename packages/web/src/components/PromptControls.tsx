@@ -28,7 +28,7 @@ export function PromptControls({
   onSelect,
   onOpenContext,
 }: {
-  /** Empty until an adapter reports what this instance can be set to; the
+  /** Empty until a provider reports what this instance can be set to; the
    * accordion then has nothing to show and only the context row remains. */
   options: PromptOption[];
   settings: PromptSettings;

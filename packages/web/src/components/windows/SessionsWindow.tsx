@@ -1,22 +1,22 @@
-import { WAdapterNote, WRow } from "./bits";
-import type { AdapterInfo, Project, Session } from "../../domain";
+import { WProviderNote, WRow } from "./bits";
+import type { Project, ProviderInfo, Session } from "../../domain";
 
 export function SessionsWindow({
   sessions,
   projects,
-  adapter,
+  provider,
   onOpenSession,
   onNewSession,
 }: {
   sessions: Session[];
   projects: Project[];
-  adapter: AdapterInfo;
+  provider: ProviderInfo;
   onOpenSession: (id: string) => void;
   onNewSession: () => void;
 }) {
   return (
     <div>
-      <WAdapterNote adapter={adapter} />
+      <WProviderNote provider={provider} />
       {sessions.length === 0 && <div className="w-empty">no sessions</div>}
       {sessions.map((s) => {
         const project = projects.find((p) => p.id === s.projectId);

@@ -14,7 +14,7 @@ export type Target =
   | { kind: "settings" }
   | { kind: "selector" }
   | { kind: "prompt" }
-  /** The login surface — opens the adapters window on its authenticate step
+  /** The login surface — opens the providers window on its authenticate step
    * *and* starts the flow, so following the signal is one click, not two. */
   | { kind: "login" }
   /** Full boot — used when `overseer-personality` must be restored by discovery. */
@@ -41,7 +41,7 @@ export interface WorldState {
   sessions: Session[];
   approvals: Approval[];
   capabilities: Capability[];
-  adapter: {
+  provider: {
     name: string;
     authenticated: boolean;
     usage: AdapterUsageWindow[];
@@ -69,7 +69,7 @@ export interface WorldState {
  */
 export function deriveSignals(world: WorldState): Signal[] {
   const signals: Signal[] = [];
-  const { activeProject, sessions, approvals, capabilities, adapter } = world;
+  const { activeProject, sessions, approvals, capabilities, provider } = world;
 
   // A customization the operator wrote that did not take effect. Reported, not
   // dropped: silently ignoring it leaves them believing it worked, which is
@@ -128,19 +128,19 @@ export function deriveSignals(world: WorldState): Signal[] {
     });
   }
 
-  // An unnamed adapter is one that has never reported in, which is a different
+  // An unnamed provider is one that has never reported in, which is a different
   // problem from a named one that is not signed in — and naming it anyway would
   // put a guess in the most prominent line on the screen.
-  if (!adapter.name) {
+  if (!provider.name) {
     signals.push({
-      id: "no-adapter",
+      id: "no-provider",
       activity: "waiting",
-      kicker: "adapter",
-      text: "No adapter is attached · sessions cannot start.",
-      target: { kind: "window", window: "adapters" },
+      kicker: "provider",
+      text: "No provider is attached · sessions cannot start.",
+      target: { kind: "window", window: "providers" },
     });
-  } else if (adapter.authExpired) {
-    // An adapter that *was* signed in and now is not did not lose its
+  } else if (provider.authExpired) {
+    // A provider that *was* signed in and now is not did not lose its
     // credential because of anything the operator did, and everything
     // downstream of it is about to start failing. Its own signal, ranked above
     // "you have not signed in yet", because it is news rather than a step not
@@ -148,16 +148,16 @@ export function deriveSignals(world: WorldState): Signal[] {
     signals.push({
       id: "auth-expired",
       activity: "attention",
-      kicker: "adapter",
-      text: `${adapter.name} was signed in and is not any more · its credential expired or was revoked. sign in again to keep working.`,
+      kicker: "provider",
+      text: `${provider.name} was signed in and is not any more · its credential expired or was revoked. sign in again to keep working.`,
       target: { kind: "login" },
     });
-  } else if (!adapter.authenticated) {
+  } else if (!provider.authenticated) {
     signals.push({
       id: "no-auth",
       activity: "waiting",
-      kicker: "adapter",
-      text: `${adapter.name} is not authenticated · sessions cannot start until you sign in.`,
+      kicker: "provider",
+      text: `${provider.name} is not authenticated · sessions cannot start until you sign in.`,
       target: { kind: "login" },
     });
   }
@@ -198,14 +198,14 @@ export function deriveSignals(world: WorldState): Signal[] {
     });
   }
 
-  const hottest = hottestUsage(adapter.usage);
+  const hottest = hottestUsage(provider.usage);
   if (hottest && hottest.used >= 0.8) {
     signals.push({
       id: "usage",
       activity: hottest.used >= 0.95 ? "attention" : "waiting",
       kicker: "usage",
       text: `${Math.round(hottest.used * 100)}% of the ${hottest.label} window is spent.`,
-      target: { kind: "window", window: "adapters" },
+      target: { kind: "window", window: "providers" },
     });
   }
 

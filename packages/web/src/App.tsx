@@ -1,11 +1,11 @@
 import { useCallback, useEffect, useState } from "react";
 import { ActiveProject } from "./components/ActiveProject";
-import { AdapterWidget } from "./components/AdapterWidget";
 import { Clock } from "./components/Clock";
 import { DecisionWindow } from "./components/DecisionWindow";
 import { OverseerSpace } from "./components/OverseerSpace";
 import { ProjectPanel } from "./components/ProjectPanel";
 import { PromptSessionChrome } from "./components/PromptSessionChrome";
+import { ProviderWidget } from "./components/ProviderWidget";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { WindowStackHost } from "./components/WindowStackHost";
 import { mockContextFiles, mockPromptOptions } from "./data/mock";
@@ -84,19 +84,19 @@ export default function App() {
     askReset();
   }, [askReset, closeSettings]);
 
-  // The login surface is the adapters window in its authenticate step, so this
+  // The login surface is the providers window in its authenticate step, so this
   // both summons it and starts the flow — the URL has to be on screen a beat
   // after the click, not after a second click the operator has to find.
   //
   // With nothing attached there is nothing to sign in, and the same window's
   // picker step is the honest place to land.
-  const attachedAdapterId = wizard.attachedAdapterId;
+  const attachedProviderId = wizard.attachedProviderId;
   const wizardStartLogin = wizard.startLogin;
   const startLogin = useCallback(() => {
     closeSettings();
-    open("adapters");
-    if (attachedAdapterId !== undefined) wizardStartLogin(attachedAdapterId);
-  }, [attachedAdapterId, closeSettings, open, wizardStartLogin]);
+    open("providers");
+    if (attachedProviderId !== undefined) wizardStartLogin(attachedProviderId);
+  }, [attachedProviderId, closeSettings, open, wizardStartLogin]);
 
   // The goodbye is a headline and nothing else — including the operations
   // window that just finished reporting the wipe.
@@ -190,10 +190,10 @@ export default function App() {
           contextCount={mockContextFiles.length}
           projectName={shell.activeProject?.name}
           rightInstrument={
-            shell.furniture.adapterWidget ? (
-              <AdapterWidget
-                adapter={shell.adapter}
-                onOpenAdapters={() => open("adapters")}
+            shell.furniture.providerWidget ? (
+              <ProviderWidget
+                provider={shell.provider}
+                onOpenProviders={() => open("providers")}
                 onOpenConsole={() => open("console")}
               />
             ) : undefined
@@ -213,7 +213,7 @@ export default function App() {
           wizard={wizard}
           projects={shell.projects}
           activeProject={shell.activeProject}
-          adapter={shell.adapter}
+          provider={shell.provider}
           openWindow={open}
           closeWindow={close}
           raiseWindow={raise}
@@ -225,7 +225,7 @@ export default function App() {
         <SettingsPanel
           open={settingsOpen}
           theme={wizard.theme}
-          adapter={shell.adapter}
+          provider={shell.provider}
           workspace={shell.workspace}
           onClose={closeSettings}
           onSelectTheme={selectTheme}
@@ -235,7 +235,7 @@ export default function App() {
           }}
           onStartLogin={startLogin}
           onSignOut={() => {
-            if (shell.adapter.name) wizard.signOut(shell.adapter.name);
+            if (shell.provider.name) wizard.signOut(shell.provider.name);
           }}
           onResetOverseer={startReset}
         />
@@ -254,7 +254,7 @@ export default function App() {
             snapshot, the action register, every run log and personality.
           </p>
           <p className="w-note">
-            projects are untouched and the adapter stays signed in. the page
+            projects are untouched and the provider stays signed in. the page
             reloads into a first run. &gt; there is no undo &lt;
           </p>
         </DecisionWindow>

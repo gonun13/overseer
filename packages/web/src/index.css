@@ -920,7 +920,7 @@ button {
   color: var(--mark-fill);
 }
 
-/* ---- bottom right: the adapter widget ------------------------------------
+/* ---- bottom right: the provider widget -----------------------------------
    Widgets stay on the field. They are bracketed at the corners rather than
    framed and tabbed, so they read as instruments sitting on the background and
    can never be mistaken for windows (design-system.md §6.2). */
@@ -1044,7 +1044,7 @@ button {
 }
 
 /* Same register as the old footer console link — a word you can click, with
-   CONSOLE in --ok. Only mounted when the adapter is signed in. */
+   CONSOLE in --ok. Only mounted when the provider is signed in. */
 .widget-console {
   margin: 0;
   padding: 0 2px;
@@ -1138,7 +1138,7 @@ button {
 }
 
 /* Capped so the expanded chat never covers the two bottom corners it depends on —
-   the prompt controls to its left and the adapter widget to its right.
+   the prompt controls to its left and the provider widget to its right.
    `gap` is what separates the two panels below: they are siblings, not one
    frame split in half, so the field shows between them. */
 .chat {
@@ -1750,7 +1750,7 @@ a.w-btn {
 }
 
 /* ---- console -------------------------------------------------------------
-   The raw adapter CLI. Deliberately *not* split into input-dark / output-light
+   The raw provider CLI. Deliberately *not* split into input-dark / output-light
    panels the way the chat is: a terminal is one continuous stream on one
    ground, and cutting it into per-line boxes stops it reading as a terminal
    (design-system.md §5.3). Sent lines are marked by an accent sigil and full

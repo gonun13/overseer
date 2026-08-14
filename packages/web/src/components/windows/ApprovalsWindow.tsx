@@ -1,19 +1,19 @@
 import { StatusLight } from "../StatusLight";
-import { WAdapterNote } from "./bits";
-import type { AdapterInfo, Approval } from "../../domain";
+import { WProviderNote } from "./bits";
+import type { Approval, ProviderInfo } from "../../domain";
 
 export function ApprovalsWindow({
   approvals,
-  adapter,
+  provider,
   onResolve,
 }: {
   approvals: Approval[];
-  adapter: AdapterInfo;
+  provider: ProviderInfo;
   onResolve: (id: string) => void;
 }) {
   return (
     <div>
-      <WAdapterNote adapter={adapter} />
+      <WProviderNote provider={provider} />
       {approvals.length === 0 && <div className="w-empty">queue empty</div>}
       {approvals.map((a) => (
         <div key={a.id} className="approval">

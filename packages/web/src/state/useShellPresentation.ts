@@ -1,5 +1,5 @@
 import { useEffect, useMemo } from "react";
-import type { AdapterInfo, Project } from "../domain";
+import type { Project, ProviderInfo } from "../domain";
 import type { WindowKind } from "../windows";
 import { deriveSignals, headlineFor, type Signal } from "./signals";
 import type { DiscoveryController } from "./useDiscovery";
@@ -37,9 +37,9 @@ export function useShellPresentation(
     projects.find((project) => project.path === wizard.activeProjectPath) ??
     (furniture.activeProject ? projects[0] : undefined);
 
-  const adapter: AdapterInfo = useMemo(() => {
-    const reported = wizard.adapters.find(
-      (candidate) => candidate.id === wizard.attachedAdapterId,
+  const provider: ProviderInfo = useMemo(() => {
+    const reported = wizard.providers.find(
+      (candidate) => candidate.id === wizard.attachedProviderId,
     );
     return {
       name: reported?.id ?? "",
@@ -50,7 +50,7 @@ export function useShellPresentation(
       spend: "",
       context: "",
     };
-  }, [wizard.adapters, wizard.attachedAdapterId]);
+  }, [wizard.providers, wizard.attachedProviderId]);
 
   const workspace = useMemo(
     () => ({ root: wizard.workspaceRoot ?? "" }),
@@ -65,7 +65,7 @@ export function useShellPresentation(
         sessions: [],
         approvals: [],
         capabilities: [],
-        adapter,
+        provider,
         busy,
         rejected: wizard.rejected,
         untrackedFolders: wizard.untrackedFolders,
@@ -76,7 +76,7 @@ export function useShellPresentation(
     [
       projects,
       activeProject,
-      adapter,
+      provider,
       busy,
       wizard.rejected,
       wizard.untrackedFolders,
@@ -132,7 +132,7 @@ export function useShellPresentation(
     furniture,
     projects,
     activeProject,
-    adapter,
+    provider,
     workspace,
     signals: furniture.signals ? signals : EMPTY_SIGNALS,
     headline,

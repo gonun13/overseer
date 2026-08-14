@@ -9,7 +9,7 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { DiscoveredAdapter, DiscoveredProject, OverseerTheme } from "@overseer/protocol";
+import type { DiscoveredProject, DiscoveredProvider, OverseerTheme } from "@overseer/protocol";
 
 /**
  * Internal memory — the overseer's own record of itself.
@@ -82,11 +82,11 @@ export interface WorldSnapshot {
   runCount: number;
   workspaceRoot: string;
   projects: DiscoveredProject[];
-  adapters: DiscoveredAdapter[];
+  providers: DiscoveredProvider[];
   /** Last project the operator (or discovery default) made active. */
   last_active_project?: string;
-  /** Adapter id the operator connected — never auto-picked. */
-  attached_adapter?: string;
+  /** Provider id the operator connected — never auto-picked. */
+  attached_provider?: string;
   /** Last theme the operator chose. Absent means samaritan (the default). */
   theme?: OverseerTheme;
 }
@@ -202,10 +202,10 @@ export async function readSnapshot(): Promise<WorldSnapshot | undefined> {
  *
  * Temp-file-plus-rename buys crash safety, not concurrency safety, and there
  * are five writers here: discovery, the workspace monitor's poll,
- * `setActiveProjectPath`, `setAttachedAdapter` and `setTheme`. Each is a read, an await,
+ * `setActiveProjectPath`, `setAttachedProvider` and `setTheme`. Each is a read, an await,
  * then a write, so two that interleave lose one of the two updates — the
- * monitor reads, the operator attaches an adapter, the monitor writes back its
- * stale `attached_adapter` and the connection silently reverts. Chaining on a
+ * monitor reads, the operator attaches a provider, the monitor writes back its
+ * stale `attached_provider` and the connection silently reverts. Chaining on a
  * single tail means each mutation sees the previous one's result.
  *
  * `then(fn, fn)` runs the next link whether or not the previous one settled:
@@ -350,9 +350,9 @@ export async function setActiveProjectPath(
       runCount: previous.runCount,
       workspaceRoot: previous.workspaceRoot,
       projects: previous.projects,
-      adapters: previous.adapters,
+      providers: previous.providers,
       last_active_project: projectPath,
-      attached_adapter: previous.attached_adapter,
+      attached_provider: previous.attached_provider,
       theme: previous.theme,
     };
   });
@@ -389,9 +389,9 @@ export async function setTheme(theme: OverseerTheme): Promise<MemoryWrite> {
     runCount: previous.runCount,
     workspaceRoot: previous.workspaceRoot,
     projects: previous.projects,
-    adapters: previous.adapters,
+    providers: previous.providers,
     last_active_project: previous.last_active_project,
-    attached_adapter: previous.attached_adapter,
+    attached_provider: previous.attached_provider,
     theme,
   }));
 
@@ -424,24 +424,24 @@ export function themeForSnapshot(
   return pending ?? previous?.theme;
 }
 
-/** Record which adapter the operator connected. Discovery must have run first. */
-export async function setAttachedAdapter(id: string): Promise<boolean> {
+/** Record which provider the operator connected. Discovery must have run first. */
+export async function setAttachedProvider(id: string): Promise<boolean> {
   const written = await updateSnapshot((previous) => ({
     runCount: previous.runCount,
     workspaceRoot: previous.workspaceRoot,
     projects: previous.projects,
-    adapters: previous.adapters,
+    providers: previous.providers,
     last_active_project: previous.last_active_project,
-    attached_adapter: id,
+    attached_provider: id,
     theme: previous.theme,
   }));
   if (!written) {
-    console.error("overseer: cannot attach an adapter before the first discovery pass");
+    console.error("overseer: cannot attach a provider before the first discovery pass");
     return false;
   }
   await recordAction({
     actor: "operator",
-    action: "adapter:connect",
+    action: "provider:connect",
     outcome: "ok",
     detail: id,
   });
@@ -449,13 +449,13 @@ export async function setAttachedAdapter(id: string): Promise<boolean> {
 }
 
 /**
- * Record an adapter's auth status in the world snapshot after a login or a
+ * Record a provider's auth status in the world snapshot after a login or a
  * sign-out, without waiting for the next discovery pass to observe it.
  *
  * This is the *only* thing a login persists. The CLI owns the credential and is
  * the source of truth for "am I signed in" — but the snapshot already carries
- * every adapter's last-known status, and one fact does need to survive a
- * restart: whether this instance was ever signed in. Without it, an adapter
+ * every provider's last-known status, and one fact does need to survive a
+ * restart: whether this instance was ever signed in. Without it, a provider
  * reading `authenticated: false` cannot be told apart from one that never
  * signed in at all, and the two want different words on the screen (an expired
  * token is more urgent than an unstarted login).
@@ -466,25 +466,25 @@ export async function setAttachedAdapter(id: string): Promise<boolean> {
  * No-ops before the first snapshot exists — there is nowhere to write yet, and
  * discovery will observe the real status on its way past.
  */
-export async function setAdapterAuthenticated(
+export async function setProviderAuthenticated(
   id: string,
   authenticated: boolean,
 ): Promise<boolean> {
   return updateSnapshot((previous) => {
-    if (!previous.adapters.some((adapter) => adapter.id === id)) return undefined;
+    if (!previous.providers.some((provider) => provider.id === id)) return undefined;
     return {
       runCount: previous.runCount,
       workspaceRoot: previous.workspaceRoot,
       projects: previous.projects,
-      adapters: previous.adapters.map((adapter) => {
-        if (adapter.id !== id) return adapter;
+      providers: previous.providers.map((provider) => {
+        if (provider.id !== id) return provider;
         // `authExpired` is dropped on both paths: a fresh login is not expired,
         // and a sign-out is a choice rather than an expiry.
-        const { authExpired: _dropped, ...rest } = adapter;
-        return { ...rest, status: { ...adapter.status, authenticated } };
+        const { authExpired: _dropped, ...rest } = provider;
+        return { ...rest, status: { ...provider.status, authenticated } };
       }),
       last_active_project: previous.last_active_project,
-      attached_adapter: previous.attached_adapter,
+      attached_provider: previous.attached_provider,
       theme: previous.theme,
     };
   });
@@ -501,10 +501,10 @@ export async function syncSnapshotProjects(
     runCount: previous.runCount,
     workspaceRoot: previous.workspaceRoot,
     projects,
-    adapters: previous.adapters,
+    providers: previous.providers,
     last_active_project:
       active !== undefined ? active.path : previous.last_active_project,
-    attached_adapter: previous.attached_adapter,
+    attached_provider: previous.attached_provider,
     theme: previous.theme,
   }));
 }

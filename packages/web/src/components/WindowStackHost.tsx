@@ -5,11 +5,10 @@ import {
   mockSessions,
   mockTranscript,
 } from "../data/mock";
-import type { AdapterInfo, Project, Turn } from "../domain";
+import type { Project, ProviderInfo, Turn } from "../domain";
 import type { DiscoveryController } from "../state/useDiscovery";
 import type { OpenWindow, WindowKind } from "../windows";
 import { Window } from "./Window";
-import { AdaptersWindow } from "./windows/AdaptersWindow";
 import { ApprovalsWindow } from "./windows/ApprovalsWindow";
 import { CapabilitiesWindow } from "./windows/CapabilitiesWindow";
 import { CapabilityWindow } from "./windows/CapabilityWindow";
@@ -18,6 +17,7 @@ import { ContextWindow } from "./windows/ContextWindow";
 import { DiffWindow } from "./windows/DiffWindow";
 import { HelpWindow } from "./windows/HelpWindow";
 import { OverseerWindow } from "./windows/OverseerWindow";
+import { ProvidersWindow } from "./windows/ProvidersWindow";
 import { SessionsWindow } from "./windows/SessionsWindow";
 
 type OpenWindowAction = (
@@ -31,7 +31,7 @@ interface WindowStackHostProps {
   wizard: DiscoveryController;
   projects: Project[];
   activeProject?: Project;
-  adapter: AdapterInfo;
+  provider: ProviderInfo;
   openWindow: OpenWindowAction;
   closeWindow: (id: string) => void;
   raiseWindow: (id: string) => void;
@@ -46,7 +46,7 @@ export function WindowStackHost({
   wizard,
   projects,
   activeProject,
-  adapter,
+  provider,
   openWindow,
   closeWindow,
   raiseWindow,
@@ -71,16 +71,16 @@ export function WindowStackHost({
       {windowState.kind === "overseer" && (
         <OverseerWindow steps={wizard.steps} />
       )}
-      {windowState.kind === "adapters" && (
-        <AdaptersWindow
-          adapters={wizard.adapters}
-          attachedId={wizard.attachedAdapterId}
+      {windowState.kind === "providers" && (
+        <ProvidersWindow
+          providers={wizard.providers}
+          attachedId={wizard.attachedProviderId}
           auth={wizard.auth}
           onConnect={(id) => {
-            // Stays open: connecting an unauthenticated adapter hands this
+            // Stays open: connecting an unauthenticated provider hands this
             // window straight to its login step, and closing it would put the
             // operator back at square one for the step they just unlocked.
-            wizard.connectAdapter(id);
+            wizard.connectProvider(id);
           }}
           onStartLogin={wizard.startLogin}
           onSubmitCode={wizard.submitAuthCode}
@@ -92,7 +92,7 @@ export function WindowStackHost({
         <SessionsWindow
           sessions={mockSessions}
           projects={projects}
-          adapter={adapter}
+          provider={provider}
           onOpenSession={() => {
             openTranscript(mockTranscript);
             closeWindow(windowState.id);
@@ -103,7 +103,7 @@ export function WindowStackHost({
       {windowState.kind === "approvals" && (
         <ApprovalsWindow
           approvals={approvals}
-          adapter={adapter}
+          provider={provider}
           onResolve={(id) =>
             setApprovals((current) =>
               current.filter((approval) => approval.id !== id),
@@ -114,7 +114,7 @@ export function WindowStackHost({
       {windowState.kind === "capabilities" && (
         <CapabilitiesWindow
           capabilities={mockCapabilities}
-          adapter={adapter}
+          provider={provider}
           onEdit={(name) => openWindow("capability", name, name)}
         />
       )}
@@ -124,13 +124,13 @@ export function WindowStackHost({
       {windowState.kind === "context" && (
         <ContextWindow
           projectName={activeProject?.name}
-          adapter={adapter}
+          provider={provider}
         />
       )}
       {windowState.kind === "console" && (
-        <ConsoleWindow adapter={adapter} />
+        <ConsoleWindow provider={provider} />
       )}
-      {windowState.kind === "help" && <HelpWindow adapter={adapter} />}
+      {windowState.kind === "help" && <HelpWindow provider={provider} />}
       {windowState.kind === "diff" && (
         <DiffWindow target={String(windowState.payload ?? "")} />
       )}

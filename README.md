@@ -1,6 +1,6 @@
 # Overseer
 
-A single-page web console for driving CLI coding agents. Claude Code is the first adapter.
+A single-page web console for driving CLI coding agents. Claude Code is the first provider.
 
 Built sandboxed, with the paranoid in mind: protect the host from runaway LLMs.
 Agents run in Docker, not on your desktop — they cannot wipe your home directory or
@@ -13,7 +13,7 @@ Behavior: [docs/overseer-behavior.md](docs/overseer-behavior.md) ·
 Versioning: [docs/architecture-design.md §8](docs/architecture-design.md#8-versioning)
 
 > **Early stage.** The UI shell and overseer wizard are live. Session spawning for the
-> `claude-code` adapter is not implemented yet — there are no live agent sessions or
+> `claude-code` provider is not implemented yet — there are no live agent sessions or
 > transcripts. See [Status](#status).
 
 ## Requirements
@@ -126,7 +126,7 @@ workspace/            host-shared dir — git projects live here, mounted into t
 - **Sessions, approvals, diffs** — summoned as draggable windows, not fixed columns.
 - **Capabilities** — MCP servers, skills, and subagents, with an editor for instructions,
   model, and tool grants.
-- **Console** — raw escape hatch into the adapter CLI (currently a mockup that echoes).
+- **Console** — raw escape hatch into the provider CLI (currently a mockup that echoes).
 - **Prompt controls** — model, permission mode, subagent, and context, armed before the
   next turn.
 - **Two themes** — samaritan (default) and machine; choice is remembered in internal memory.
@@ -135,7 +135,7 @@ workspace/            host-shared dir — git projects live here, mounted into t
 
 In place: Docker tooling, frontend shell, and the overseer wizard. A fresh instance boots
 headline-only and runs discovery over the WebSocket — scanning `/workspace` for git
-projects, checking adapter auth via `getStatus()`, and reading `overseer-personality` —
+projects, checking provider auth via `getStatus()`, and reading `overseer-personality` —
 then mounts furniture as capabilities resolve. Details:
 [docs/overseer-behavior.md](docs/overseer-behavior.md).
 

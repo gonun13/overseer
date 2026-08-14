@@ -33,7 +33,7 @@ The steady-state layout is:
 │                                          ↑ the overseer space                  │
 │                                                                                │
 │ │1 MODEL    opus-5    ▾                                    ┌            ┐      │
-│ │2 MODE     ask       ▾                                     ADAPTER   ●        │
+│ │2 MODE     ask       ▾                                     PROVIDER  ●        │
 │ │   ▪ ask                    ┌────────────────────────────┐ claude-code       │
 │ │     auto-accept            │ › message billing-service  │ usage ▓▓▓▓▓░ 78%  │
 │ │     plan                   └────────────────────────────┘                    │
@@ -51,10 +51,10 @@ The steady-state layout is:
 | centre        | **the overseer space** — headline plus ranked, clickable signals              |
 | bottom-left   | **prompt controls** — the numbered accordion                                  |
 | bottom-centre | **the prompt** — transcript and composer as sibling panels — and the footer   |
-| bottom-right  | **adapter widget** — adapter, auth, usage, spend                              |
+| bottom-right  | **provider widget** — provider, auth, usage, spend                            |
 
 Furniture appears progressively as its state becomes knowable; the prompt appears only after an authenticated
-adapter is attached. Widths are capped and centred. Windows stay within the viewport. Below 1024px is out of
+provider is attached. Widths are capped and centred. Windows stay within the viewport. Below 1024px is out of
 scope.
 
 ---
@@ -142,7 +142,7 @@ The centre region: a **derived, ranked answer** to what deserves attention.
   same space for questions and choices. Beneath it, a rule widens 30→150px while busy; a loading bar replaces
   the `▲` during boot.
 - **Signals** — `[light] KICKER  sentence.` rows, most urgent first. The kicker is the category (`APPROVAL`,
-  `ADAPTER`, `CAPABILITY`, `SESSION`, `USAGE`, `PROJECT`, `WORKSPACE`, `PERSONALITY`, or `STANDBY`);
+  `PROVIDER`, `CAPABILITY`, `SESSION`, `USAGE`, `PROJECT`, `WORKSPACE`, `PERSONALITY`, or `STANDBY`);
   the sentence states what happened and what it means.
 - **Every signal is actionable** and opens the relevant window, panel, selector, prompt, or recovery action.
 - Signals are derived on every render, never stored.
@@ -202,7 +202,7 @@ content. `w-editor` is an input and therefore uses the input ground (§7.1).
 
 ### 5.3 The console
 
-A raw terminal into the adapter CLI, available only when signed in. Open it from the adapter widget or with
+A raw terminal into the provider CLI, available only when signed in. Open it from the provider widget or with
 `console`. Slash commands, output, and errors appear verbatim.
 
 The console is a continuous stream on one stamp, so §7.1's input/output split does not apply:
@@ -264,8 +264,8 @@ options use void.
    bottom-anchored, so it grows upward. Values that arm something dangerous (`bypass`) render in `--accent`.
    Row 4 has no values — context needs more than a value, so it summons a window. These rows control **the
    next prompt**; this is the prompt's control surface, not navigation.
-5. **AdapterWidget** (bottom-right) — see §6.2. When signed in, `OPEN CONSOLE` with CONSOLE in `--ok` sits under it.
-6. **Prompt** (bottom-centre) — appears only after an authenticated adapter is attached.
+5. **ProviderWidget** (bottom-right) — see §6.2. When signed in, `OPEN CONSOLE` with CONSOLE in `--ok` sits under it.
+6. **Prompt** (bottom-centre) — appears only after an authenticated provider is attached.
 7. **Footer** — one line under the prompt: product, version, and `ask for HELP` with HELP in `--accent`.
 
 ### 6.1 Panels
@@ -318,7 +318,7 @@ The transcript uses `--page`. The collapsed prompt bar, expanded composer, and e
 
 - **No exec button.** `Enter` sends, `Shift`+`Enter` inserts a newline.
 - Expanded width is capped at `min(880px, max(520px, 100vw - 600px))` so the chat never covers the two bottom
-  corners it depends on — the prompt controls to its left, the adapter widget to its right.
+  corners it depends on — the prompt controls to its left, the provider widget to its right.
 - **The text is not uppercased.** This is prose going to a model and should look like prose while it is being
   written. Uppercase remains for labels and chrome only.
 - The composer grows with its content to 168px, then scrolls.

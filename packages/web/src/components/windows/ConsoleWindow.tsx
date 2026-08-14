@@ -1,10 +1,10 @@
 import { useEffect, useRef, useState } from "react";
-import { WAdapterNote } from "./bits";
+import { WProviderNote } from "./bits";
 import { mockConsole } from "../../data/mock";
-import type { AdapterInfo, ConsoleLine } from "../../domain";
+import type { ConsoleLine, ProviderInfo } from "../../domain";
 
 /**
- * A direct terminal into the adapter's CLI, for operators who already know it.
+ * A direct terminal into the provider's CLI, for operators who already know it.
  * Everything else in Overseer is a considered view of what the agent is doing;
  * this is the escape hatch that admits no view covers everything — you get the
  * raw process, its own slash commands, and its own errors, verbatim.
@@ -14,7 +14,7 @@ import type { AdapterInfo, ConsoleLine } from "../../domain";
  * continuous stream on one ground, and breaking it into per-line panels would
  * make it stop reading as a terminal (design-system.md §5.3).
  */
-export function ConsoleWindow({ adapter }: { adapter: AdapterInfo }) {
+export function ConsoleWindow({ provider }: { provider: ProviderInfo }) {
   const [lines, setLines] = useState<ConsoleLine[]>(mockConsole);
   const [value, setValue] = useState("");
   const end = useRef<HTMLDivElement>(null);
@@ -39,7 +39,7 @@ export function ConsoleWindow({ adapter }: { adapter: AdapterInfo }) {
 
   return (
     <div className="console">
-      <WAdapterNote adapter={adapter} />
+      <WProviderNote provider={provider} />
       <div className="console-out no-drag">
         {lines.map((line, i) => (
           <div key={i} className={`console-line ${line.kind}`}>
@@ -61,7 +61,7 @@ export function ConsoleWindow({ adapter }: { adapter: AdapterInfo }) {
           spellCheck={false}
           autoComplete="off"
           placeholder={
-            adapter.name ? `send to ${adapter.name}` : "no adapter attached"
+            provider.name ? `send to ${provider.name}` : "no provider attached"
           }
           onChange={(e) => setValue(e.target.value)}
           onKeyDown={(e) => {

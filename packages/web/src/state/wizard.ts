@@ -2,8 +2,8 @@ import type {
   AdapterStatus,
   AppliedPersonality,
   AuthStateMessage,
-  DiscoveredAdapter,
   DiscoveredProject,
+  DiscoveredProvider,
   DiscoveryEvent,
   DiscoveryOutcome,
   FurnitureReveal,
@@ -89,7 +89,7 @@ export type ResetStage =
 const TEARDOWN_ORDER: FurnitureReveal[] = [
   "prompt",
   "footer",
-  "adapterWidget",
+  "providerWidget",
   "activeProject",
   "projectPanel",
   "clock",
@@ -102,7 +102,7 @@ const TEARDOWN_ORDER: FurnitureReveal[] = [
  * would only be able to disagree.
  */
 export interface AuthFlow {
-  adapterId: string;
+  providerId: string;
   phase: AuthStateMessage["phase"];
   verificationUrl?: string;
   detail?: string;
@@ -118,12 +118,12 @@ export interface WizardState {
   projects: DiscoveredProject[];
   /** Workspace folders that are not git projects — drive signals. */
   untrackedFolders: UntrackedFolder[];
-  adapters: DiscoveredAdapter[];
-  /** Adapter the operator connected. Undefined until they pick one (or a
+  providers: DiscoveredProvider[];
+  /** Provider the operator connected. Undefined until they pick one (or a
    * prior attach is restored). Never defaults to the first registered id. */
-  attachedAdapterId?: string;
+  attachedProviderId?: string;
   /** The login flow, when one has been started or joined. Undefined means no
-   * login has happened this session — not that the adapter is signed out. */
+   * login has happened this session — not that the provider is signed out. */
   auth?: AuthFlow;
   /** Undefined until discovery reports it — the frontend never assumes a path. */
   workspaceRoot?: string;
@@ -171,7 +171,7 @@ const NO_REVEAL: Record<FurnitureReveal, boolean> = {
   clock: false,
   projectPanel: false,
   activeProject: false,
-  adapterWidget: false,
+  providerWidget: false,
   footer: false,
   prompt: false,
 };
@@ -181,7 +181,7 @@ export const INITIAL_WIZARD: WizardState = {
   steps: [],
   projects: [],
   untrackedFolders: [],
-  adapters: [],
+  providers: [],
   theme: "samaritan",
   revealed: { ...NO_REVEAL },
   personality: {},
@@ -257,13 +257,13 @@ export type WizardAction =
   | { type: "project.selected"; path: string }
   /** Operator picked a theme — keep wizard state in sync. */
   | { type: "theme.selected"; theme: OverseerTheme }
-  /** Operator connected an adapter from the picker. */
-  | { type: "adapter.connected"; id: string }
+  /** Operator connected a provider from the picker. */
+  | { type: "provider.connected"; id: string }
   /** Whole login state from the server, in one frame. */
   | { type: "auth.state"; state: AuthFlow }
   /** The operator asked to start a login — shows the surface as `starting`
    * before the server's first frame, so the click is never a dead beat. */
-  | { type: "auth.requested"; adapterId: string }
+  | { type: "auth.requested"; providerId: string }
   /** Live workspace scan — projects appeared or vanished under /workspace. */
   | {
       type: "workspace.projects";
@@ -387,33 +387,33 @@ export function wizardReducer(
     case "theme.selected":
       return { ...state, theme: action.theme };
 
-    case "adapter.connected":
-      return { ...state, attachedAdapterId: action.id };
+    case "provider.connected":
+      return { ...state, attachedProviderId: action.id };
 
     case "auth.requested":
       return {
         ...state,
-        auth: { adapterId: action.adapterId, phase: "starting" },
+        auth: { providerId: action.providerId, phase: "starting" },
       };
 
     case "auth.state": {
       const { state: auth } = action;
-      // A settled flow carries the re-checked status. Fold it into the adapter
+      // A settled flow carries the re-checked status. Fold it into the provider
       // list so the prompt gate, the widget and the signals all follow from
       // the same fact — otherwise the login says "success" while everything
       // around it still reads the status discovery saw at boot, and only a
       // page reload would agree.
-      const adapters =
+      const providers =
         auth.status === undefined
-          ? state.adapters
-          : state.adapters.map((adapter) => {
-              if (adapter.id !== auth.adapterId) return adapter;
-              const { authExpired: _cleared, ...rest } = adapter;
+          ? state.providers
+          : state.providers.map((provider) => {
+              if (provider.id !== auth.providerId) return provider;
+              const { authExpired: _cleared, ...rest } = provider;
               return auth.status!.authenticated
                 ? { ...rest, status: auth.status! }
-                : { ...adapter, status: auth.status! };
+                : { ...provider, status: auth.status! };
             });
-      return { ...state, auth, adapters };
+      return { ...state, auth, providers };
     }
 
     case "workspace.projects": {
@@ -531,7 +531,7 @@ export function wizardReducer(
  * Take away the first piece still standing, in teardown order.
  *
  * What is *revealed* and what is *mounted* are not the same thing — the prompt
- * slot can be released with no authenticated adapter to submit through — and a
+ * slot can be released with no authenticated provider to submit through — and a
  * step that unrevealed something the operator could not see would read as a
  * delete that cost nothing. Whatever is left when the steps run out goes with
  * `reset.done`.
@@ -609,15 +609,17 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
         ...(event.untrackedFolders !== undefined
           ? { untrackedFolders: event.untrackedFolders }
           : {}),
-        ...(event.adapters !== undefined ? { adapters: event.adapters } : {}),
+        ...(event.providers !== undefined
+          ? { providers: event.providers }
+          : {}),
         ...(event.workspaceRoot !== undefined
           ? { workspaceRoot: event.workspaceRoot }
           : {}),
         ...(event.activeProjectPath !== undefined
           ? { activeProjectPath: event.activeProjectPath }
           : {}),
-        ...(event.attachedAdapterId !== undefined
-          ? { attachedAdapterId: event.attachedAdapterId }
+        ...(event.attachedProviderId !== undefined
+          ? { attachedProviderId: event.attachedProviderId }
           : {}),
         ...(event.serverTime !== undefined
           ? { serverTime: event.serverTime }
@@ -643,11 +645,11 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
         phase: "settling",
         projects: event.projects,
         untrackedFolders: event.untrackedFolders ?? [],
-        adapters: event.adapters,
+        providers: event.providers,
         workspaceRoot: event.workspaceRoot,
         activeProjectPath: event.activeProjectPath,
         // Omitted means none attached — do not keep a stale id from a prior pass.
-        attachedAdapterId: event.attachedAdapterId,
+        attachedProviderId: event.attachedProviderId,
         returning: event.returning,
         personality: event.personality ?? state.personality,
         rejected: event.rejected ?? [],
@@ -668,7 +670,7 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
           clock: true,
           projectPanel: true,
           activeProject: true,
-          adapterWidget: true,
+          providerWidget: true,
           footer: true,
           prompt: true,
         },
@@ -678,7 +680,7 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
 
 /**
  * Which furniture is mounted. A piece appears when the capability it reports on
- * becomes *knowable*, not when it becomes *good*: an adapter widget reading
+ * becomes *knowable*, not when it becomes *good*: a provider widget reading
  * "none attached" is the honest answer and hiding it leaves the operator with
  * nowhere to look.
  *
@@ -689,7 +691,7 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
 export interface Furniture {
   projectPanel: boolean;
   activeProject: boolean;
-  adapterWidget: boolean;
+  providerWidget: boolean;
   clock: boolean;
   footer: boolean;
   prompt: boolean;
@@ -705,15 +707,15 @@ export function furnitureFor(state: WizardState): Furniture {
     clock: revealed.clock,
     projectPanel: revealed.projectPanel,
     activeProject: revealed.activeProject,
-    adapterWidget: revealed.adapterWidget,
+    providerWidget: revealed.providerWidget,
     footer: revealed.footer,
     // Prompt slot is released by the final discovery step; still needs an
-    // attached signed-in adapter — otherwise the composer has nowhere to send.
+    // attached signed-in provider — otherwise the composer has nowhere to send.
     prompt:
       revealed.prompt &&
-      state.adapters.some(
-        (a) =>
-          a.id === state.attachedAdapterId && a.status.authenticated,
+      state.providers.some(
+        (p) =>
+          p.id === state.attachedProviderId && p.status.authenticated,
       ),
     // Signals need an active project context to mean anything.
     signals: revealed.activeProject,

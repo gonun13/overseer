@@ -22,7 +22,7 @@ app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
 });
 
-app.get("/api/adapters", (_req, res) => {
+app.get("/api/providers", (_req, res) => {
   res.json(
     listAdapters().map(({ id, capabilities }) => ({ id, capabilities })),
   );
