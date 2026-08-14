@@ -2,14 +2,9 @@ import type { AdapterUsageWindow } from "@overseer/protocol";
 import type { Activity } from "./status";
 
 /**
- * The shapes the UI renders. Types only — no data, and in particular no
- * fixtures: `data/mock.ts` imports from here to describe its wireframe rows,
- * and so does everything that renders live server state.
- *
- * Split out of `data/mock.ts` because importing a type from the fixture module
- * meant every consumer of a shape also imported the fixtures' module graph. The
- * overseer's own path has to be provably free of canned data (#8), and "free of
- * it except for the types" is not a claim a grep can check.
+ * The shapes the UI renders. Types only — no data. Everything that renders
+ * live server state imports from here so the overseer path stays provably
+ * free of canned data.
  */
 
 export interface Project {

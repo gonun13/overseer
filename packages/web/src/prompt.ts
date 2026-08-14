@@ -3,9 +3,8 @@
  *
  * Types only. Which models, modes and subagents an instance actually offers is
  * a fact about that instance — it comes from the provider and the project's
- * config, not from this file. Until the provider can report them the values live
- * with the rest of the design fixtures in data/mock.ts, so production ships an
- * empty control surface instead of inventing an option set. */
+ * config, not from this file. Until the provider can report them the control
+ * surface stays empty instead of inventing an option set. */
 
 export type PromptOptionKey = "model" | "mode" | "agent";
 

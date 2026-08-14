@@ -1,11 +1,5 @@
 import { useState } from "react";
-import {
-  mockApprovals,
-  mockCapabilities,
-  mockSessions,
-  mockTranscript,
-} from "../data/mock";
-import type { Project, ProviderInfo, Turn } from "../domain";
+import type { Approval, Project, ProviderInfo, Turn } from "../domain";
 import type { DiscoveryController } from "../state/useDiscovery";
 import type { OpenWindow, WindowKind } from "../windows";
 import { Window } from "./Window";
@@ -54,7 +48,7 @@ export function WindowStackHost({
   openProjectSelector,
   openTranscript,
 }: WindowStackHostProps) {
-  const [approvals, setApprovals] = useState(mockApprovals);
+  const [approvals, setApprovals] = useState<Approval[]>([]);
 
   return windows.map((windowState) => (
     <Window
@@ -90,11 +84,11 @@ export function WindowStackHost({
       )}
       {windowState.kind === "sessions" && (
         <SessionsWindow
-          sessions={mockSessions}
+          sessions={[]}
           projects={projects}
           provider={provider}
           onOpenSession={() => {
-            openTranscript(mockTranscript);
+            openTranscript([]);
             closeWindow(windowState.id);
           }}
           onNewSession={openProjectSelector}
@@ -113,7 +107,7 @@ export function WindowStackHost({
       )}
       {windowState.kind === "capabilities" && (
         <CapabilitiesWindow
-          capabilities={mockCapabilities}
+          capabilities={[]}
           provider={provider}
           onEdit={(name) => openWindow("capability", name, name)}
         />

@@ -59,10 +59,8 @@ the source tree is bind-mounted and watched.
 
 | Command            | What it does                                                                 |
 | ------------------ | ---------------------------------------------------------------------------- |
-| `./bin/dev-start`  | Start the dev stack against real state (`-d` to detach, `--build` to rebuild) |
+| `./bin/dev-start`  | Start the dev stack (`-d` to detach, `--build` to rebuild) |
 | `./bin/dev-stop`   | Stop it; volumes survive                                                     |
-| `./bin/mock-start` | Dev stack with design fixtures instead of real state                         |
-| `./bin/mock-stop`  | Same as `./bin/dev-stop`                                                     |
 | `./bin/start`      | Build and run the production stack                                           |
 | `./bin/stop`       | Stop the production stack                                                    |
 | `./bin/logs [svc]` | Follow dev stack logs (`deps`, `server`, `web`)                              |
@@ -82,21 +80,11 @@ Install dependencies with `./bin/npm install --workspace packages/web <pkg>`, ne
 npm (that would write macOS binaries into a tree only ever read by Linux).
 `package-lock.json` is bind-mounted, so the change lands on the host for committing.
 
-### Wireframe fixtures
-
-Some windows still use static fixtures in `packages/web/src/data/mock.ts` (sessions,
-approvals, capability editor, context, console, diff). They load only when
-`VITE_OVERSEER_WIREFRAME=1`, which `./bin/mock-start` sets. Production and
-`./bin/dev-start` leave it unset, so fixtures do not ship.
-
-The overseer path (headline, signals, wizard, operations window) never reads those
-fixtures — it uses real server state or an explicit empty readout.
-
 ### Browser tooling (optional)
 
 A [Playwright MCP server](https://github.com/microsoft/playwright-mcp) is registered in
 `.mcp.json` for editor-side click-through against a running stack
-(`./bin/dev-start` or `./bin/mock-start`). Acceptance tests still run only via
+(`./bin/dev-start`). Acceptance tests still run only via
 `./bin/test-e2e`.
 
 ## Structure
@@ -126,7 +114,7 @@ workspace/            host-shared dir — git projects live here, mounted into t
 - **Sessions, approvals, diffs** — summoned as draggable windows, not fixed columns.
 - **Capabilities** — MCP servers, skills, and subagents, with an editor for instructions,
   model, and tool grants.
-- **Console** — raw escape hatch into the provider CLI (currently a mockup that echoes).
+- **Console** — raw escape hatch into the provider CLI (currently an echo stub; no PTY).
 - **Prompt controls** — model, permission mode, subagent, and context, armed before the
   next turn.
 - **Two themes** — samaritan (default) and machine; choice is remembered in internal memory.
@@ -144,7 +132,7 @@ Still missing:
 - `claude-code` process spawning ([architecture §1.2](docs/architecture-design.md))
   — no live sessions or transcripts yet
 - Auth check reads the credentials file rather than validating a token
-- Console is a mockup (echoes; no PTY)
+- Console is an echo stub (no PTY)
 
 ## Versioning
 

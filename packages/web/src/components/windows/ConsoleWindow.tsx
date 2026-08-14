@@ -1,6 +1,5 @@
 import { useEffect, useRef, useState } from "react";
 import { WProviderNote } from "./bits";
-import { mockConsole } from "../../data/mock";
 import type { ConsoleLine, ProviderInfo } from "../../domain";
 
 /**
@@ -15,7 +14,7 @@ import type { ConsoleLine, ProviderInfo } from "../../domain";
  * make it stop reading as a terminal (design-system.md §5.3).
  */
 export function ConsoleWindow({ provider }: { provider: ProviderInfo }) {
-  const [lines, setLines] = useState<ConsoleLine[]>(mockConsole);
+  const [lines, setLines] = useState<ConsoleLine[]>([]);
   const [value, setValue] = useState("");
   const end = useRef<HTMLDivElement>(null);
   const input = useRef<HTMLInputElement>(null);
@@ -31,7 +30,7 @@ export function ConsoleWindow({ provider }: { provider: ProviderInfo }) {
     setLines((current) => [
       ...current,
       { kind: "in", text: command },
-      { kind: "err", text: "not wired up · the console is a mockup for now" },
+      { kind: "err", text: "not wired up · no PTY yet" },
       { kind: "out", text: "" },
     ]);
     setValue("");

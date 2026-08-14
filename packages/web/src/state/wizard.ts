@@ -23,8 +23,7 @@ import type { OperationStep, Project } from "../domain";
  * stops being true.
  *
  * Everything here is derived from server events or the explicit absence of
- * them. Nothing is invented and nothing is a fixture: `data/mock.ts` is not
- * imported by this module or anything it pulls in (docs/overseer.md §4).
+ * them. Nothing is invented (docs/overseer.md §4).
  */
 
 /**

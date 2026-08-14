@@ -1,5 +1,4 @@
-import { WProviderNote, WRow, WTitle } from "./bits";
-import { mockContextFiles } from "../../data/mock";
+import { WProviderNote, WTitle } from "./bits";
 import type { ProviderInfo } from "../../domain";
 
 /** Summoned from prompt control 4. What extra material rides along with the next
@@ -15,19 +14,7 @@ export function ContextWindow({
     <div>
       <WProviderNote provider={provider} />
       <WTitle>attached to the next prompt</WTitle>
-      {mockContextFiles.length === 0 ? (
-        <div className="w-empty">nothing attached</div>
-      ) : (
-        mockContextFiles.map((f) => (
-          <WRow
-            key={f.path}
-            activity="done"
-            primary={f.path}
-            right={f.tokens}
-            actions={<button className="w-btn danger">detach</button>}
-          />
-        ))
-      )}
+      <div className="w-empty">nothing attached</div>
 
       <WTitle>from {projectName ?? "no project"}</WTitle>
       <div className="btn-row">

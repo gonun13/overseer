@@ -1,6 +1,16 @@
 import { useState } from "react";
 import { WInline, WTitle } from "./bits";
-import { mockCapabilityDraft } from "../../data/mock";
+import type { CapabilityDraft } from "../../domain";
+
+const BLANK_CAPABILITY_DRAFT: CapabilityDraft = {
+  name: "",
+  kind: "",
+  description: "",
+  instructions: "",
+  model: "",
+  tools: [],
+  file: "",
+};
 
 /**
  * Editing one skill or subagent. Summoned from a row's `edit` in the
@@ -12,7 +22,7 @@ import { mockCapabilityDraft } from "../../data/mock";
  * an input — dark ground, same material as the composer (§7.1).
  */
 export function CapabilityWindow({ name }: { name: string }) {
-  const draft = mockCapabilityDraft;
+  const draft = BLANK_CAPABILITY_DRAFT;
   const [instructions, setInstructions] = useState(draft.instructions);
   const [tools, setTools] = useState(draft.tools);
 

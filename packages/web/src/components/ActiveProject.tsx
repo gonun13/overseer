@@ -37,7 +37,7 @@ export function ActiveProject({
 
 /** Branch and dirtiness only — the workspace root is implied. Undefined means
  * git could not answer; never collapse that to "clean" or invent a branch. */
-export function gitMeta(project: Project): string {
+function gitMeta(project: Project): string {
   const branch = project.branch ?? "branch unknown";
   const status =
     project.dirty === true
