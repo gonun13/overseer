@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { chmod, mkdtemp, writeFile } from "node:fs/promises";
+import { chmod, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
@@ -140,19 +140,70 @@ exit 1
       version: "2.1.226",
     });
     assert.equal(signedOut.usage, undefined);
+    assert.equal(signedOut.usageState, undefined);
 
     const signedIn = await withUsage({
       authenticated: true,
       version: "2.1.226",
     });
     assert.equal(signedIn.usage?.length, 2);
+    assert.equal(signedIn.usageState, "ready");
   });
 
-  it("surfaces usage on getStatus when the CLI is signed in", async () => {
+  it("marks usage unavailable when the report is empty", async () => {
+    const previous = process.env.USAGE_FIXTURE;
+    const empty = path.join(binDir, "empty-usage.json");
+    await writeFile(empty, `${JSON.stringify({ type: "result", is_error: false, result: "nope" })}\n`, "utf8");
+    process.env.USAGE_FIXTURE = empty;
+    try {
+      const status = await withUsage({
+        authenticated: true,
+        version: "2.1.226",
+      });
+      assert.equal(status.usage, undefined);
+      assert.equal(status.usageState, "unavailable");
+    } finally {
+      process.env.USAGE_FIXTURE = previous;
+    }
+  });
+
+  it("getStatus returns pending usage when signed in; refreshUsage fills windows", async () => {
     const status = await claudeCodeAdapter.getStatus();
     assert.equal(status.authenticated, true);
     assert.equal(status.version, "2.1.226");
-    assert.equal(status.usage?.[0]?.used, 0.16);
-    assert.equal(status.usage?.[1]?.used, 0.11);
+    assert.equal(status.usageState, "pending");
+    assert.equal(status.usage, undefined);
+
+    const refreshed = await claudeCodeAdapter.refreshUsage!();
+    assert.equal(refreshed.usageState, "ready");
+    assert.equal(refreshed.usage?.[0]?.used, 0.16);
+    assert.equal(refreshed.usage?.[1]?.used, 0.11);
+  });
+
+  it("settles unavailable when the CLI ignores SIGTERM past the deadline", async () => {
+    const claude = path.join(binDir, "claude");
+    const previousClaude = await readFile(claude, "utf8");
+    await writeFile(
+      claude,
+      `#!/bin/sh
+trap '' TERM
+sleep 60
+`,
+      "utf8",
+    );
+    await chmod(claude, 0o755);
+    try {
+      const started = Date.now();
+      const status = await withUsage(
+        { authenticated: true, version: "2.1.226" },
+        { timeoutMs: 200, killGraceMs: 100 },
+      );
+      const elapsed = Date.now() - started;
+      assert.equal(status.usageState, "unavailable");
+      assert.ok(elapsed < 5_000, `hung for ${elapsed}ms`);
+    } finally {
+      await writeFile(claude, previousClaude, "utf8");
+      await chmod(claude, 0o755);
+    }
   });
 });

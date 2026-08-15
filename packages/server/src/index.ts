@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { attachWebSocketServer } from "./ws.js";
 import { listAdapters } from "./adapters.js";
+import { startUsageRefresh } from "./usage-refresh.js";
 import { startWorkspaceMonitor } from "./workspace-monitor.js";
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -46,6 +47,7 @@ if (process.env.NODE_ENV === "production") {
 
 const httpServer = createServer(app);
 const { broadcast } = attachWebSocketServer(httpServer);
+startUsageRefresh(broadcast);
 startWorkspaceMonitor(broadcast);
 
 httpServer.listen(port, host, () => {

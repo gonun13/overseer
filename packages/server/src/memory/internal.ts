@@ -9,7 +9,12 @@ import {
 } from "node:fs/promises";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
-import type { DiscoveredProject, DiscoveredProvider, OverseerTheme } from "@overseer/protocol";
+import type {
+  AdapterStatus,
+  DiscoveredProject,
+  DiscoveredProvider,
+  OverseerTheme,
+} from "@overseer/protocol";
 
 /**
  * Internal memory — the overseer's own record of itself.
@@ -483,6 +488,32 @@ export async function setProviderAuthenticated(
         const { authExpired: _dropped, ...rest } = provider;
         return { ...rest, status: { ...provider.status, authenticated } };
       }),
+      last_active_project: previous.last_active_project,
+      attached_provider: previous.attached_provider,
+      theme: previous.theme,
+    };
+  });
+}
+
+/**
+ * Replace a provider's full status in the world snapshot (usage refresh, etc.).
+ * No-ops before the first snapshot exists.
+ */
+export async function setProviderStatus(
+  id: string,
+  status: AdapterStatus,
+): Promise<boolean> {
+  return updateSnapshot((previous) => {
+    if (!previous.providers.some((provider) => provider.id === id)) {
+      return undefined;
+    }
+    return {
+      runCount: previous.runCount,
+      workspaceRoot: previous.workspaceRoot,
+      projects: previous.projects,
+      providers: previous.providers.map((provider) =>
+        provider.id === id ? { ...provider, status } : provider,
+      ),
       last_active_project: previous.last_active_project,
       attached_provider: previous.attached_provider,
       theme: previous.theme,

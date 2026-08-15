@@ -264,6 +264,7 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
           } catch (error) {
             status = {
               authenticated: false,
+              reachable: false,
               detail:
                 error instanceof Error ? error.message : "status check failed",
             };

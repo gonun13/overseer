@@ -7,7 +7,7 @@ import type {
   LoginUpdate,
 } from "@overseer/protocol";
 import { ensureInteractiveReady } from "./interactive-ready.js";
-import { withUsage } from "./usage.js";
+import { withPendingUsage } from "./usage.js";
 
 /**
  * Every point of contact with the `claude` CLI's *undocumented* surface lives
@@ -108,7 +108,11 @@ export async function readAuthStatus(): Promise<AdapterStatus> {
     // "2.1.226 (Claude Code)" — take the version, drop the parenthetical.
     version = stdout.trim().split(/\s+/)[0];
   } catch {
-    return { authenticated: false, detail: "claude CLI not found on PATH" };
+    return {
+      authenticated: false,
+      reachable: false,
+      detail: "claude CLI not found on PATH",
+    };
   }
 
   // `--json` is the current default; passed explicitly so a future default flip
@@ -126,6 +130,7 @@ export async function readAuthStatus(): Promise<AdapterStatus> {
     if (typeof stdout !== "string" || stdout.trim() === "") {
       return {
         authenticated: false,
+        reachable: false,
         version,
         detail: "claude auth status did not answer",
       };
@@ -139,6 +144,7 @@ export async function readAuthStatus(): Promise<AdapterStatus> {
   } catch {
     return {
       authenticated: false,
+      reachable: false,
       version,
       detail: "could not read claude auth status output",
     };
@@ -346,10 +352,13 @@ export function startLogin(
       void (async () => {
         let status: AdapterStatus;
         try {
-          status = await withUsage(await readAuthStatus());
+          // Auth only — `/usage` can hang when Anthropic's usage endpoint is
+          // down, and must not delay the success frame or the login slot.
+          status = withPendingUsage(await readAuthStatus());
         } catch (error) {
           status = {
             authenticated: false,
+            reachable: false,
             detail:
               error instanceof Error
                 ? `could not re-check auth status · ${error.message}`

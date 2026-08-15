@@ -5,6 +5,10 @@ import type {
 } from "@overseer/protocol";
 import { getAdapter } from "./adapters.js";
 import { recordAction, setProviderAuthenticated } from "./memory/internal.js";
+import {
+  cancelUsageRefresh,
+  scheduleUsageRefresh,
+} from "./usage-refresh.js";
 
 /**
  * The login broker: at most **one** live login per process.
@@ -182,6 +186,8 @@ export function startLogin(
           ? providerId
           : `${providerId} · not signed in`,
       });
+      if (status.authenticated) scheduleUsageRefresh(providerId);
+      else cancelUsageRefresh(providerId);
     })
     .catch((error: unknown) => {
       // The flow is already over and the operator has already been told how it
@@ -252,6 +258,7 @@ export async function signOut(
   // Deliberate, so it must not read as an expiry on the next boot: clear the
   // remembered "was signed in" rather than leaving it to look like a token
   // that died on its own.
+  cancelUsageRefresh(providerId);
   await setProviderAuthenticated(providerId, status.authenticated);
   await recordAction({
     actor: "operator",

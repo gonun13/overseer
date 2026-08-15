@@ -89,6 +89,20 @@ describe("readAuthStatus", () => {
     assert.equal(status.authenticated, false);
     assert.equal(status.version, "2.1.226");
     assert.equal(status.detail, "not logged in");
+    assert.notEqual(status.reachable, false);
+  });
+
+  it("marks the CLI unreachable when it is missing from PATH", async () => {
+    const previous = process.env.PATH;
+    process.env.PATH = "/nonexistent";
+    try {
+      const status = await readAuthStatus();
+      assert.equal(status.authenticated, false);
+      assert.equal(status.reachable, false);
+      assert.match(status.detail ?? "", /not found/i);
+    } finally {
+      process.env.PATH = previous;
+    }
   });
 });
 

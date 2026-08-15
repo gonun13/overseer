@@ -1,6 +1,12 @@
 import type { AdapterUsageWindow } from "@overseer/protocol";
 import type { ProviderInfo } from "../domain";
-import type { Activity } from "../status";
+import { useUsageRetrieveCountdown } from "../state/useUsageRetrieveCountdown";
+import {
+  providerAuthActivity,
+  providerAuthLabel,
+  providerUsageDisplay,
+  usageRetrieveLabel,
+} from "./usageDisplay";
 import { StatusLight } from "./StatusLight";
 
 /**
@@ -11,9 +17,12 @@ import { StatusLight } from "./StatusLight";
  * instrument sitting on the field (design-system.md §6.2). The readout opens
  * the provider picker; when a provider is signed in, OPEN CONSOLE sits under it.
  *
- * Usage gauges stay hidden until the provider has a real reading. A 0% fill
- * that we invented would look like an empty plan; an omitted meter looks like
- * we have not been told yet.
+ * Usage gauges stay hidden until the provider has a real reading. While a
+ * refresh is in flight the instrument counts down; after a miss it says usage is
+ * unavailable rather than leaving a blank that looks like "not asked yet".
+ *
+ * The light is auth + reachability: green signed in, red when the CLI is down,
+ * amber when it answered but is not signed in.
  */
 export function ProviderWidget({
   provider,
@@ -24,15 +33,14 @@ export function ProviderWidget({
   onOpenProviders: () => void;
   onOpenConsole: () => void;
 }) {
-  const activity: Activity = provider.authenticated ? "done" : "waiting";
-  // No name means none attached. The instrument still sits on the field — it
-  // is permanent furniture — but it reads out nothing, rather than an empty
-  // version and a 0% gauge that look like measurements.
+  const activity = providerAuthActivity(provider);
   const attached = provider.name !== "";
-  const windows =
-    attached && provider.authenticated && provider.usage.length > 0
-      ? provider.usage
-      : [];
+  const { state: usageState, windows } = providerUsageDisplay(provider);
+  const { secondsLeft, timedOut } = useUsageRetrieveCountdown(
+    usageState === "pending",
+  );
+  const showPending = usageState === "pending" && !timedOut;
+  const showUnavailable = usageState === "unavailable" || timedOut;
 
   return (
     <div className="widget settles-in">
@@ -60,17 +68,31 @@ export function ProviderWidget({
               )}
             </span>
             <span className="widget-row">
-              <span className="widget-dim">
-                {provider.authenticated ? "signed in" : "not signed in"}
-              </span>
+              <span className="widget-dim">{providerAuthLabel(provider)}</span>
             </span>
 
-            {windows.length > 0 && (
+            {usageState === "ready" && windows.length > 0 && (
               <span className="widget-usage">
                 <span className="widget-kicker">usage</span>
                 {windows.map((window) => (
                   <UsageMeter key={window.id} window={window} />
                 ))}
+              </span>
+            )}
+
+            {showPending && (
+              <span className="widget-row">
+                <span className="widget-dim">
+                  {usageRetrieveLabel(secondsLeft)}
+                </span>
+              </span>
+            )}
+
+            {showUnavailable && (
+              <span className="widget-row">
+                <span className="widget-dim">
+                  usage currently not available
+                </span>
               </span>
             )}
 

@@ -10,7 +10,7 @@ import type {
 } from "@overseer/protocol";
 import { openConsole } from "./console.js";
 import { readAuthStatus, signOut, startLogin } from "./login.js";
-import { withUsage } from "./usage.js";
+import { readUsageWindows, withPendingUsage } from "./usage.js";
 
 const capabilities: AdapterCapabilities = {
   streamingDeltas: true,
@@ -42,12 +42,23 @@ function notImplemented(): never {
  *
  * Auth is put to the CLI (`claude auth status`) rather than inferred from a
  * `.credentials.json` on disk. Usage is the CLI's own `/usage` report, asked
- * headlessly; a miss omits the windows rather than drawing a 0% gauge.
+ * on `refreshUsage` so a hung Anthropic usage endpoint cannot stall discovery
+ * or a login close. `getStatus` returns `usageState: "pending"` when signed in.
  *
- * Never throws — a failed check is a status, not an error.
+ * `refreshUsage` does **not** re-run `auth status` — that call can hang on the
+ * same outage, and the server already knows the operator is signed in when it
+ * schedules the refresh. Never throws — a failed check is a status, not an error.
  */
 async function getStatus(): Promise<AdapterStatus> {
-  return withUsage(await readAuthStatus());
+  return withPendingUsage(await readAuthStatus());
+}
+
+async function refreshUsage(): Promise<AdapterStatus> {
+  const usage = await readUsageWindows();
+  if (usage.length === 0) {
+    return { authenticated: true, usageState: "unavailable" };
+  }
+  return { authenticated: true, usage, usageState: "ready" };
 }
 
 export const claudeCodeAdapter: AgentAdapter = {
@@ -63,6 +74,7 @@ export const claudeCodeAdapter: AgentAdapter = {
     return [];
   },
   getStatus,
+  refreshUsage,
   login: {
     start: startLogin,
     signOut,

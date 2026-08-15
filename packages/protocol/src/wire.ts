@@ -129,6 +129,17 @@ export interface ProviderConnectedMessage {
 }
 
 /**
+ * Fresh provider status after a background usage refresh (or any later
+ * re-check that is not a login). Discovery and `auth.state` still carry status
+ * inline; this frame is for updates that arrive after furniture is up.
+ */
+export interface ProviderStatusMessage {
+  type: "provider.status";
+  id: string;
+  status: AdapterStatus;
+}
+
+/**
  * The whole state of the login flow in one frame.
  *
  * One state frame rather than a stream of deltas: a tab that connects (or asks)
@@ -230,6 +241,7 @@ export type ServerMessage =
   | ProjectSelectedMessage
   | ThemeSelectedMessage
   | ProviderConnectedMessage
+  | ProviderStatusMessage
   | AuthStateMessage
   | WorkspaceProjectsMessage
   | OverseerStepMessage

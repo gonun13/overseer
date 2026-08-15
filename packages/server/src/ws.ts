@@ -37,6 +37,7 @@ import {
   beginIntentionalPersonalityDelete,
   endIntentionalPersonalityDelete,
 } from "./personality-file-watcher.js";
+import { refreshPendingUsage } from "./usage-refresh.js";
 import { isInsideWorkspace } from "./workspace.js";
 
 /**
@@ -460,6 +461,9 @@ export function attachWebSocketServer(httpServer: Server): {
           inFlight = pass;
           try {
             await pass;
+            // Auth returned with `usageState: "pending"`; ask `/usage` now so
+            // the widget can leave "retrieving…" without blocking discovery.
+            refreshPendingUsage();
           } catch (error) {
             send({
               type: "error",

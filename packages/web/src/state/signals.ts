@@ -45,6 +45,9 @@ export interface WorldState {
     name: string;
     authenticated: boolean;
     usage: AdapterUsageWindow[];
+    /** False when the provider runtime could not be reached. */
+    reachable?: boolean;
+    detail?: string;
     /** True when this instance was signed in and now is not. */
     authExpired?: boolean;
   };
@@ -151,6 +154,16 @@ export function deriveSignals(world: WorldState): Signal[] {
       kicker: "provider",
       text: `${provider.name} was signed in and is not any more · its credential expired or was revoked. sign in again to keep working.`,
       target: { kind: "login" },
+    });
+  } else if (provider.reachable === false) {
+    signals.push({
+      id: "provider-unreachable",
+      activity: "attention",
+      kicker: "provider",
+      text: provider.detail
+        ? `${provider.name} is unreachable · ${provider.detail}.`
+        : `${provider.name} is unreachable · the provider runtime did not answer.`,
+      target: { kind: "window", window: "providers" },
     });
   } else if (!provider.authenticated) {
     signals.push({

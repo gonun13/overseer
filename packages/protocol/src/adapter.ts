@@ -86,6 +86,16 @@ export interface AdapterUsageWindow {
 }
 
 /**
+ * How the subscription-window read went. Only set when `authenticated` is true
+ * — signed-out statuses omit it, the same way they omit `usage`.
+ *
+ * Auth and usage fail separately: discovery must learn "signed in" without
+ * waiting on a hung `/usage`, so `getStatus` returns `pending` and a later
+ * `refreshUsage` moves to `ready` or `unavailable`.
+ */
+export type AdapterUsageState = "pending" | "ready" | "unavailable";
+
+/**
  * Whether this adapter could actually start a session right now. Asked before
  * any session exists — the wizard's auth-check step calls this, so it must not
  * assume a session, a project or a running process.
@@ -93,14 +103,22 @@ export interface AdapterUsageWindow {
  * `detail` is the operator-facing half: "not logged in" and "token expired" are
  * both `authenticated: false` and want different actions. Left undefined when
  * there is nothing to add beyond the flag.
+ *
+ * `reachable` is separate from auth: the CLI missing or not answering is not
+ * "please sign in", it is a red light. Omit or `true` when the runtime answered;
+ * `false` when it could not be contacted or its reply was unusable.
  */
 export interface AdapterStatus {
   authenticated: boolean;
   detail?: string;
+  /** False when the provider runtime could not be reached. Omit when it could. */
+  reachable?: boolean;
   /** The adapter's own version, when it can report one. Never guessed. */
   version?: string;
   /** Subscription windows, when the adapter has a real reading. */
   usage?: AdapterUsageWindow[];
+  /** Present when signed in. Omitted when signed out. */
+  usageState?: AdapterUsageState;
 }
 
 /**
@@ -204,8 +222,16 @@ export interface AgentAdapter {
   createSession(opts: SessionOpts): Promise<SessionHandle>;
   resumeSession(id: string): Promise<SessionHandle>;
   listSessions(): Promise<SessionMeta[]>;
-  /** Must resolve rather than throw: a failed check is a status, not an error. */
+  /**
+   * Auth (and version) only — must not wait on usage. When signed in, returns
+   * `usageState: "pending"` so the widget can say it is retrieving. Never throws.
+   */
   getStatus(): Promise<AdapterStatus>;
+  /**
+   * Re-ask subscription windows. Absent when the adapter has no usage report.
+   * Resolves to `usageState: "ready" | "unavailable"`; never throws.
+   */
+  refreshUsage?(): Promise<AdapterStatus>;
   /** Present only when `capabilities.login` is true. */
   login?: AdapterLogin;
   /**

@@ -1,6 +1,13 @@
 import { useEffect } from "react";
 import type { OverseerTheme } from "@overseer/protocol";
 import type { ProviderInfo } from "../domain";
+import { useUsageRetrieveCountdown } from "../state/useUsageRetrieveCountdown";
+import {
+  providerAuthActivity,
+  providerAuthLabel,
+  providerUsageDisplay,
+  usageRetrieveLabel,
+} from "./usageDisplay";
 import { WInline, WTitle } from "./windows/bits";
 import { CloseIcon } from "./icons";
 import { StatusLight } from "./StatusLight";
@@ -55,6 +62,13 @@ export function SettingsPanel({
     if (target !== theme) onSelectTheme(target);
   }
 
+  const { state: usageState } = providerUsageDisplay(provider);
+  const { secondsLeft, timedOut } = useUsageRetrieveCountdown(
+    usageState === "pending",
+  );
+  const showPending = usageState === "pending" && !timedOut;
+  const showUnavailable = usageState === "unavailable" || timedOut;
+
   return (
     // `inert` rather than `aria-hidden`: the panel is always mounted so it can
     // slide, and its buttons must not be tabbable while it is off-screen.
@@ -78,10 +92,8 @@ export function SettingsPanel({
           label="subscription"
           value={
             <span className="w-inline-flex">
-              <StatusLight
-                activity={provider.authenticated ? "done" : "waiting"}
-              />
-              {provider.authenticated ? "signed in" : "not signed in"}
+              <StatusLight activity={providerAuthActivity(provider)} />
+              {providerAuthLabel(provider)}
             </span>
           }
         />
@@ -110,6 +122,12 @@ export function SettingsPanel({
                 }
               />
             ))}
+            {showPending && (
+              <WInline label="usage" value={usageRetrieveLabel(secondsLeft)} />
+            )}
+            {showUnavailable && (
+              <WInline label="usage" value="currently not available" />
+            )}
             {provider.spend ? (
               <WInline label="spend this window" value={provider.spend} />
             ) : null}

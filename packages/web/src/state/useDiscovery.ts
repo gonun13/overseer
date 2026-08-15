@@ -127,6 +127,14 @@ export function useDiscovery(): DiscoveryController {
         dispatch({ type: "provider.connected", id: message.id });
         return;
       }
+      if (message.type === "provider.status") {
+        dispatch({
+          type: "provider.status",
+          id: message.id,
+          status: message.status,
+        });
+        return;
+      }
       if (message.type === "auth.state") {
         dispatch({
           type: "auth.state",

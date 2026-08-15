@@ -68,11 +68,17 @@ export interface ProviderInfo {
   name: string;
   version: string;
   authenticated: boolean;
+  /** False when the provider runtime could not be reached. */
+  reachable?: boolean;
+  /** Operator-facing status clause from the adapter, when it gave one. */
+  detail?: string;
   /** True when this instance was signed in on an earlier run and now is not —
    * an expired or revoked credential, not a login never started. */
   authExpired?: boolean;
   /** Subscription windows. Empty means "not been told yet", never a stand-in. */
   usage: AdapterUsageWindow[];
+  /** How the usage read went when signed in. */
+  usageState?: "pending" | "ready" | "unavailable";
   spend: string;
   context: string;
 }

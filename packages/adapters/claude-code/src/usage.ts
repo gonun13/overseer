@@ -1,6 +1,5 @@
-import { execFile } from "node:child_process";
+import { spawn } from "node:child_process";
 import { tmpdir } from "node:os";
-import { promisify } from "node:util";
 import type { AdapterStatus, AdapterUsageWindow } from "@overseer/protocol";
 
 /**
@@ -15,13 +14,20 @@ import type { AdapterStatus, AdapterUsageWindow } from "@overseer/protocol";
  * Asking costs nothing on that build (0 tokens, 0 turns, sub-second). Sessions
  * are not written (`--no-session-persistence`). Tools are disabled so a shape
  * change cannot start a real turn while we are only asking for a report.
+ *
+ * A hung Anthropic usage endpoint must not pin "retrieving usage…": we SIGTERM
+ * the process group at the deadline, escalate to SIGKILL, and resolve empty
+ * either way — even if the tree ignores signals. Node's `execFile({ timeout })`
+ * alone is not enough.
  */
 
 const CLI = "claude";
-const run = promisify(execFile);
 
-/** A hung `/usage` must not strand discovery or a login close. */
-const USAGE_TIMEOUT_MS = 20_000;
+/** Default wall clock for one `/usage` ask. Tests may pass a shorter value. */
+export const USAGE_TIMEOUT_MS = 20_000;
+
+/** How long SIGTERM gets before SIGKILL — same rationale as login.ts. */
+const KILL_GRACE_MS = 2_000;
 
 const ANSI = /\x1b\[[0-9;]*m/g;
 
@@ -70,23 +76,65 @@ export function parseUsageReport(text: string): AdapterUsageWindow[] {
  * Attach the CLI's `/usage` windows to an auth status. Never throws, and never
  * lets a usage miss flip `authenticated`: the two questions fail separately.
  *
- * Signed-out statuses do not carry usage, even if the caller passed some in.
+ * Signed-out statuses do not carry usage or `usageState`. Signed-in statuses
+ * land on `ready` with windows, or `unavailable` when the report is empty,
+ * times out, or cannot be parsed — never on a silent omission the widget would
+ * read as "not asked yet".
  */
-export async function withUsage(status: AdapterStatus): Promise<AdapterStatus> {
+export async function withUsage(
+  status: AdapterStatus,
+  options?: { timeoutMs?: number; killGraceMs?: number },
+): Promise<AdapterStatus> {
   if (!status.authenticated) {
-    if (status.usage === undefined) return status;
-    const { usage: _drop, ...rest } = status;
+    if (status.usage === undefined && status.usageState === undefined) {
+      return status;
+    }
+    const { usage: _drop, usageState: _dropState, ...rest } = status;
     return rest;
   }
-  const usage = await readUsageWindows();
-  if (usage.length === 0) return status;
-  return { ...status, usage };
+  const usage = await readUsageWindows(options);
+  if (usage.length === 0) {
+    const { usage: _drop, ...rest } = status;
+    return { ...rest, usageState: "unavailable" };
+  }
+  return { ...status, usage, usageState: "ready" };
 }
 
-export async function readUsageWindows(): Promise<AdapterUsageWindow[]> {
-  let stdout: string;
-  try {
-    const result = await run(
+/** Auth-only status for a signed-in operator: usage will be asked separately. */
+export function withPendingUsage(status: AdapterStatus): AdapterStatus {
+  if (!status.authenticated) {
+    if (status.usage === undefined && status.usageState === undefined) {
+      return status;
+    }
+    const { usage: _drop, usageState: _dropState, ...rest } = status;
+    return rest;
+  }
+  const { usage: _drop, ...rest } = status;
+  return { ...rest, usageState: "pending" };
+}
+
+export async function readUsageWindows(options?: {
+  timeoutMs?: number;
+  killGraceMs?: number;
+}): Promise<AdapterUsageWindow[]> {
+  const timeoutMs = options?.timeoutMs ?? USAGE_TIMEOUT_MS;
+  const killGraceMs = options?.killGraceMs ?? KILL_GRACE_MS;
+
+  const stdout = await runUsageCli(timeoutMs, killGraceMs);
+  const report = extractReport(stdout);
+  if (report === undefined) return [];
+  return parseUsageReport(report);
+}
+
+/**
+ * Spawn `claude -p /usage` and always settle within timeout+grace: on success
+ * with stdout, on timeout after killing the process group.
+ */
+function runUsageCli(timeoutMs: number, killGraceMs: number): Promise<string> {
+  return new Promise((resolve) => {
+    // Detached so the CLI and any children share a process group we can reap
+    // when Anthropic's usage endpoint never answers.
+    const child = spawn(
       CLI,
       [
         "-p",
@@ -97,18 +145,68 @@ export async function readUsageWindows(): Promise<AdapterUsageWindow[]> {
         "--tools",
         "",
       ],
-      { timeout: USAGE_TIMEOUT_MS, cwd: tmpdir() },
+      {
+        cwd: tmpdir(),
+        detached: true,
+        stdio: ["ignore", "pipe", "pipe"],
+      },
     );
-    stdout = result.stdout;
-  } catch (error) {
-    const captured = (error as { stdout?: unknown }).stdout;
-    if (typeof captured !== "string" || captured.trim() === "") return [];
-    stdout = captured;
-  }
 
-  const report = extractReport(stdout);
-  if (report === undefined) return [];
-  return parseUsageReport(report);
+    let stdout = "";
+    let settled = false;
+    let killTimer: ReturnType<typeof setTimeout> | undefined;
+
+    const finish = (out: string) => {
+      if (settled) return;
+      settled = true;
+      clearTimeout(deadline);
+      clearTimeout(absolute);
+      if (killTimer !== undefined) clearTimeout(killTimer);
+      resolve(out);
+    };
+
+    const signalTree = (signal: NodeJS.Signals) => {
+      const pid = child.pid;
+      if (pid === undefined) return;
+      try {
+        // Negative pid = whole process group (detached spawn).
+        process.kill(-pid, signal);
+      } catch {
+        try {
+          child.kill(signal);
+        } catch {
+          /* already gone */
+        }
+      }
+    };
+
+    const escalate = () => {
+      signalTree("SIGTERM");
+      if (killTimer !== undefined) return;
+      killTimer = setTimeout(() => {
+        signalTree("SIGKILL");
+        // Do not wait on close — a wedged tree must not pin usageState pending.
+        finish(stdout);
+      }, killGraceMs);
+    };
+
+    const deadline = setTimeout(escalate, timeoutMs);
+    // Absolute ceiling if even SIGKILL / close handling misbehaves.
+    const absolute = setTimeout(
+      () => finish(stdout),
+      timeoutMs + killGraceMs + 500,
+    );
+
+    child.stdout?.setEncoding("utf8");
+    child.stderr?.setEncoding("utf8");
+    child.stdout?.on("data", (chunk: string) => {
+      stdout += chunk;
+    });
+    // Drain stderr so a full pipe cannot stall the child.
+    child.stderr?.on("data", () => {});
+    child.on("error", () => finish(""));
+    child.on("close", () => finish(stdout));
+  });
 }
 
 function extractReport(stdout: string): string | undefined {

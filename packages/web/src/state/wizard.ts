@@ -258,6 +258,8 @@ export type WizardAction =
   | { type: "theme.selected"; theme: OverseerTheme }
   /** Operator connected a provider from the picker. */
   | { type: "provider.connected"; id: string }
+  /** Background usage (or other) status refresh for one provider. */
+  | { type: "provider.status"; id: string; status: AdapterStatus }
   /** Whole login state from the server, in one frame. */
   | { type: "auth.state"; state: AuthFlow }
   /** The operator asked to start a login — shows the surface as `starting`
@@ -388,6 +390,16 @@ export function wizardReducer(
 
     case "provider.connected":
       return { ...state, attachedProviderId: action.id };
+
+    case "provider.status":
+      return {
+        ...state,
+        providers: state.providers.map((provider) =>
+          provider.id === action.id
+            ? { ...provider, status: action.status }
+            : provider,
+        ),
+      };
 
     case "auth.requested":
       return {

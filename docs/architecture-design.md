@@ -132,8 +132,14 @@ Plain pipes work with CLI 2.1.226; no PTY is required. Login is single-flight be
 The provider widget shows subscription window utilization — Claude's short
 session window and the weekly cap — plus the CLI's own reset phrases.
 
-`getStatus()` asks `claude -p "/usage"` when the operator is signed in
-(`--output-format json --no-session-persistence`). Hide each gauge until a
+`getStatus()` reports auth only. When signed in it returns
+`usageState: "pending"` so discovery and login never wait on `/usage`. A
+background `refreshUsage()` asks `claude -p "/usage"` only (no second auth
+check — that can hang on the same outage), kills the process group on a
+deadline (SIGTERM then SIGKILL), and pushes `provider.status` with `ready`
+windows or `unavailable` after a miss/timeout. The widget reads
+"retrieving usage… Ns" then either gauges or "usage currently not available".
+Signed-in providers are rechecked every five minutes. Hide each gauge until a
 parse supplies a percentage. Never present local token estimates as plan
 consumption or billing data.
 
@@ -166,7 +172,7 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Create session in a project                        | Sessions | pick a dir under `/workspace`; mint `--session-id`                 |
 | Resume session + history replay                    | Sessions | `--resume`; parse JSONL for backfill (§4)                         |
 | Session list with live status                      | Sessions | supervisor state + JSONL mtime                                    |
-| Plan utilization + estimated spend                 | Provider | `/usage` via getStatus; later `usage.limit` (§2.1) |
+| Plan utilization + estimated spend                 | Provider | `/usage` via refreshUsage; later `usage.limit` (§2.1) |
 | Subscription login                                 | System   | `claude auth login`, plain spawn, no PTY; URL out to the operator's own browser, pasted code in (§2) |
 | Theme switch                                       | System   | `data-theme` on `:root`; choice persisted in internal memory      |
 | Crash / exit / auth-failure surfacing              | Console  | classify stream errors, result subtype, signal, and exit code     |

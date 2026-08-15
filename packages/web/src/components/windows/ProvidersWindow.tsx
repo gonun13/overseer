@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { DiscoveredProvider } from "@overseer/protocol";
 import type { AuthFlow } from "../../state/wizard";
+import { providerAuthActivity, providerAuthLabel } from "../usageDisplay";
 import { WRow, WTitle } from "./bits";
 
 /**
@@ -70,10 +71,10 @@ export function ProvidersWindow({
         return (
           <WRow
             key={provider.id}
-            activity={provider.status.authenticated ? "done" : "waiting"}
+            activity={providerAuthActivity(provider.status)}
             primary={provider.id}
             secondary={
-              (provider.status.authenticated ? "signed in" : "not signed in") +
+              providerAuthLabel(provider.status) +
               (isAttached ? " · attached" : "")
             }
             right={active ? "▪" : undefined}
