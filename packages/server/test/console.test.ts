@@ -100,7 +100,9 @@ function baseSnapshot(
         dirty: false,
       },
     ],
-    providers: [{ id: "claude-code", status: { authenticated: true } }],
+    providers: [
+      { id: "claude-code", status: { authenticated: true }, login: true },
+    ],
     last_active_project: "/workspace/demo",
     attached_provider: "claude-code",
     ...overrides,

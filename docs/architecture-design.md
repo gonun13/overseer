@@ -1,8 +1,8 @@
 # Design Doc: Overseer
 
-**What it is:** a single-page, fullscreen web console for driving CLI coding agents. Claude Code is the first provider; the architecture assumes there will be others.
+**What it is:** a single-page, fullscreen web console for driving CLI coding agents. Claude Code is the first fully wired provider; the catalog also lists stub providers whose CLIs ship in the image but whose adapters are not implemented yet. The architecture assumes more full adapters will follow.
 
-**Shape:** one Docker container holds the agent CLI, its state, and the web server. The only bind mount is `./workspace`, which contains git projects and an import/export staging directory. Auth and application state live in container-owned volumes.
+**Shape:** one Docker container holds the agent CLIs, their state, and the web server. The only bind mount is `./workspace`, which contains git projects and an import/export staging directory. Auth and application state live in container-owned volumes.
 
 **Aesthetic:** a surveillance console, not a chat app — dense, monospace, border-only chrome, one focus zone at a time. See [ui-ux-design.md](ui-ux-design.md).
 
@@ -15,13 +15,14 @@ packages/
   protocol/           shared TS types — the frontend/backend contract
   web/                React + Vite + Tailwind SPA
   server/             Node: WS + REST, session supervisor, adapter registry
+                      (also registers catalog stubs: codex, opencode, github-copilot)
   adapters/
     claude-code/      spawns `claude`, normalizes stream-json → protocol
 ```
 
-**Frontend-first, provider-agnostic.** `protocol/` is written to serve the UI, not to mirror any one CLI's output. Adapters translate provider-specific behavior into it.
+**Frontend-first, provider-agnostic.** `protocol/` is written to serve the UI, not to mirror any one CLI's output. Adapters translate provider-specific behavior into it. Catalog stubs live in the server registry (`stub-adapters.ts`) until they earn a real `packages/adapters/<id>/` package.
 
-**Provider vs adapter.** Two words for the two sides of the same id string (`"claude-code"`):
+**Provider vs adapter.** Two words for the two sides of the same id string (`"claude-code"`, `"codex"`, …):
 
 | Term         | Layer            | Where it appears                                                                                                              |
 | ------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -224,7 +225,7 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Transcript export                 | Console      | markdown / JSON                                                     |
 | Command palette                   | global       | keyboard-first jump to any session, zone, or action                 |
 | Desktop notifications             | global       | on approval request or turn completion                              |
-| Additional providers              | —            | the reason for §1.1                                                 |
+| Additional providers              | —            | catalog stubs (`codex`, `opencode`, `github-copilot`) land early; full adapter runtime still later |
 
 ---
 

@@ -280,6 +280,7 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
           return {
             id: adapter.id,
             status,
+            login: adapter.capabilities.login,
             ...(expired ? { authExpired: true as const } : {}),
           };
         }),

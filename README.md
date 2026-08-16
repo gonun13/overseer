@@ -1,6 +1,8 @@
 # Overseer
 
-A single-page web console for driving CLI coding agents. Claude Code is the first provider.
+A single-page web console for driving CLI coding agents. Claude Code is the first
+fully wired provider; `codex`, `opencode`, and `github-copilot` appear in the
+provider catalog (CLIs installed in the image; adapters not implemented yet).
 
 Built sandboxed, with the paranoid in mind: protect the host from runaway LLMs.
 Agents run in Docker, not on your desktop — they cannot wipe your home directory or
@@ -20,7 +22,7 @@ Versioning: [docs/architecture-design.md §8](docs/architecture-design.md#8-vers
 
 - [Docker](https://docs.docker.com/get-docker/) with Compose
 
-Nothing else. Node, npm, and the agent CLI all live inside the container.
+Nothing else. Node, npm, and the agent CLIs all live inside the container.
 
 ## This never runs on the host
 
@@ -95,6 +97,7 @@ packages/
   protocol/           shared TS types — the frontend/backend/adapter contract
   web/                React + Vite + Tailwind SPA
   server/             Node: WS + REST, static SPA host, adapter registry
+                      (catalog stubs: codex, opencode, github-copilot)
   adapters/
     claude-code/      Claude Code adapter (raw PTY console live; stream-json sessions not yet)
   e2e/                Playwright acceptance tests (container-only)
@@ -128,13 +131,17 @@ projects, checking provider auth via `getStatus()`, and reading `overseer-person
 then mounts furniture as capabilities resolve. Details:
 [docs/overseer-behavior.md](docs/overseer-behavior.md).
 
-Auth status comes from `claude auth status --json`. The raw OPEN CONSOLE path spawns an
-interactive `claude` PTY in the active project when a provider is signed in.
+Auth status for `claude-code` comes from `claude auth status --json`. The raw OPEN
+CONSOLE path spawns an interactive `claude` PTY in the active project when that
+provider is signed in. Catalog stubs (`codex`, `opencode`, `github-copilot`) list
+in the providers window and their CLIs ship in the image, but have no login,
+console, or session wiring yet.
 
 Still missing:
 
 - `claude-code` stream-json session spawning ([architecture §1.2](docs/architecture-design.md))
   — no live agent sessions or transcripts yet
+- Full adapters for catalog stubs (`codex`, `opencode`, `github-copilot`)
 - Approvals queue and structured tool/diff windows backed by live session events
 
 ## Versioning

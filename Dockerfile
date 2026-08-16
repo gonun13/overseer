@@ -32,10 +32,16 @@ FROM ${NODE_IMAGE} AS dev
 # Same toolchain as runtime: the claude-code adapter shells out to git/ripgrep,
 # so a dev container has to be able to exercise the real spawn path.
 # python3/make/g++: node-pty (raw OPEN CONSOLE PTY) is a native module.
+# curl: available for later script-based CLI installs (not used for Cursor yet).
+# Provider CLIs are pinned — bump deliberately, never via floating @latest.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git ripgrep ca-certificates python3 make g++ \
+      git ripgrep ca-certificates curl python3 make g++ \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install -g @anthropic-ai/claude-code@2.1.226 \
+    && npm install -g \
+         @anthropic-ai/claude-code@2.1.226 \
+         @openai/codex@0.147.0 \
+         opencode-ai@1.18.18 \
+         @github/copilot@1.0.80 \
     && npm cache clean --force
 
 WORKDIR /app
@@ -91,16 +97,21 @@ USER node
 # ---- runtime: production deps only + compiled output -----------------------
 FROM ${NODE_IMAGE} AS runtime
 
-# git and ripgrep: the CLI shells out to both. Pinned CLI version: JSONL
+# git and ripgrep: the CLI shells out to both. Pinned CLI versions: JSONL
 # session history is an undocumented format that drifts across releases
 # (design doc §4) — bump deliberately, not via floating `@latest`.
+# curl: available for later script-based CLI installs.
 # python3/make/g++: node-pty for the raw OPEN CONSOLE escape hatch. Auth login
 # still uses plain pipes (architecture-design.md §2); the console is the only
 # PTY path. Build tools are removed after `npm ci` so the runtime image stays lean.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git ripgrep ca-certificates python3 make g++ \
+      git ripgrep ca-certificates curl python3 make g++ \
     && rm -rf /var/lib/apt/lists/* \
-    && npm install -g @anthropic-ai/claude-code@2.1.226 \
+    && npm install -g \
+         @anthropic-ai/claude-code@2.1.226 \
+         @openai/codex@0.147.0 \
+         opencode-ai@1.18.18 \
+         @github/copilot@1.0.80 \
     && npm cache clean --force
 
 WORKDIR /app

@@ -45,6 +45,12 @@ export interface DiscoveredProvider {
   id: string;
   status: AdapterStatus;
   /**
+   * Mirrors `AdapterCapabilities.login`. When false the UI grows no login
+   * controls — catalog stubs and adapters that authenticate another way must
+   * not be handed a dead Claude-shaped sign-in surface.
+   */
+  login: boolean;
+  /**
    * True when this provider was signed in on a previous run and now is not.
    *
    * A credential that stopped working is a different event from one that was

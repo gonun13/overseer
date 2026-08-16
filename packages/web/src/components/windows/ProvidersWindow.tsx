@@ -47,8 +47,13 @@ export function ProvidersWindow({
     auth.phase !== "success";
 
   // The login surface owns the window whenever there is something to do here:
-  // an attached provider that is not signed in, or a flow already running.
-  if (attached !== undefined && (flowing || !attached.status.authenticated)) {
+  // an attached provider that can log in and is not signed in, or a flow
+  // already running. Catalog stubs (login: false) stay on the picker.
+  if (
+    attached !== undefined &&
+    attached.login &&
+    (flowing || !attached.status.authenticated)
+  ) {
     return (
       <LoginStep
         provider={attached}
@@ -187,8 +192,9 @@ function LoginStep({
       {!running && (
         <>
           <p className="w-note">
-            opens claude.com in your browser, on your machine. the container
-            never opens anything — you copy the code back into the field below.
+            opens a verification link in your browser, on your machine. the
+            container never opens anything — you copy the code back into the
+            field below.
           </p>
           <div className="btn-row">
             <button type="button" className="w-btn" onClick={onStartLogin}>
@@ -206,7 +212,7 @@ function LoginStep({
             <>
               <p className="w-note">
                 1 · open this on your machine and authorize. 2 · paste the code
-                claude.com shows you, exactly as given.
+                the site shows you, exactly as given.
               </p>
               <div className="btn-row">
                 {/* `noopener noreferrer`: this opens on the operator's machine
