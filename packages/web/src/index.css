@@ -166,6 +166,7 @@
 .window-frame,
 .panel,
 .projects-list,
+.sessions-list,
 .prompt-bar,
 .composer,
 .turn-operator {
@@ -335,7 +336,8 @@ button {
   max-width: 32vw;
 }
 
-.projects-head {
+.projects-head,
+.sessions-head {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -345,12 +347,14 @@ button {
   letter-spacing: 1px;
 }
 
-.projects-kicker {
+.projects-kicker,
+.sessions-kicker {
   font-size: 11px;
   color: var(--text-faint);
 }
 
-.projects-value {
+.projects-value,
+.sessions-value {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -373,7 +377,8 @@ button {
   color: var(--accent);
 }
 
-.projects-list {
+.projects-list,
+.sessions-list {
   max-height: 0;
   overflow: hidden;
   opacity: 0;
@@ -386,7 +391,8 @@ button {
 
 /* The horizontal-edges-only framing every surface uses, but only while open —
    collapsed, there is no surface there yet, just the field header above it. */
-.projects-list.open {
+.projects-list.open,
+.sessions-list.open {
   max-height: 44vh;
   overflow-y: auto;
   opacity: 1;
@@ -395,7 +401,8 @@ button {
   border-color: var(--edge) transparent;
 }
 
-.project-row {
+.project-row,
+.session-row {
   display: flex;
   align-items: center;
   gap: 9px;
@@ -405,21 +412,25 @@ button {
   font-size: 13px;
 }
 
-.project-row:hover {
+.project-row:hover,
+.session-row:hover {
   background: var(--ink-rule);
 }
 
-.project-row.current {
+.project-row.current,
+.session-row.current {
   border-left: 2px solid var(--mark-fill);
   padding-left: 7px;
 }
 
-.project-row-name {
+.project-row-name,
+.session-row-name {
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
 
-.project-row.current .project-row-name {
+.project-row.current .project-row-name,
+.session-row.current .session-row-name {
   color: var(--mark-fill);
 }
 
@@ -432,7 +443,8 @@ button {
   font-size: 12px;
 }
 
-.project-row-note {
+.project-row-note,
+.session-row-note {
   margin-left: auto;
   flex: none;
   color: var(--ink-faint);
@@ -795,6 +807,54 @@ button {
 
 .os-signal:hover .os-text {
   color: var(--text);
+}
+
+/* ---- bottom left: the sessions panel --------------------------------------
+   The project panel's two levels — field readout, surface list — mirrored for
+   the bottom of the field: bottom-anchored like the menu it stacks on, so the
+   list opens *upward* and the header stays put beneath it. That is why the head
+   carries its rule on top: the rule always sits between the header and the list,
+   whichever side the list is on.
+
+   `bottom` clears the menu below it, which is one context row while the prompt
+   options are empty. Both are bottom-anchored, so a menu that grows would need
+   this offset to grow with it (PromptControls). */
+/* Sized to the menu it stacks on, not to the project panel it imitates: the
+   expanded prompt terminal is capped to clear the bottom-left corner at exactly
+   the menu's width (`.chat`), and a wider panel here would sit under the dock
+   and swallow clicks on its own chevron. */
+.sessions {
+  position: absolute;
+  left: 26px;
+  bottom: 74px;
+  z-index: 40;
+  width: 260px;
+  max-width: 28vw;
+}
+
+.sessions-head {
+  border-bottom: none;
+  border-top: 1px solid var(--edge);
+}
+
+/* Inside the list, so it reads as the surface's own line rather than a note on
+   the field — the list is the only place a session can be started from. */
+.sessions-empty {
+  margin: 0;
+  padding: 8px 9px;
+  border-bottom: 1px solid var(--ink-rule);
+  color: var(--ink-faint);
+  font-size: 12px;
+}
+
+.session-new {
+  color: var(--ink-dim);
+  font-size: 12px;
+  border-bottom: none;
+}
+
+.session-new:hover {
+  color: var(--accent-fill);
 }
 
 /* ---- bottom left: prompt controls ----------------------------------------
@@ -1259,23 +1319,75 @@ button {
   border-color: var(--edge) transparent;
 }
 
-.composer textarea {
-  display: block;
-  width: 100%;
+/* The field scrolls once the text passes the cap; the mirror inside it is what
+   has the height, so the two never disagree about where a line ends. */
+.composer-field {
   max-height: 168px;
-  resize: none;
-  border: 0;
-  outline: 0;
-  background: transparent;
-  color: var(--ink);
+  overflow-y: auto;
+}
+
+.composer-stack {
+  position: relative;
+}
+
+/* The visible glyphs. The textarea is laid over this at exactly its size and
+   made transparent, so the blinking block below reads as the caret — the same
+   trick the first-run name ask uses (.os-name-mirror). */
+.composer-mirror,
+.composer textarea {
+  width: 100%;
   font: inherit;
   font-size: 14px;
   line-height: 1.6;
+  letter-spacing: inherit;
+}
+
+.composer-mirror {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  pointer-events: none;
+}
+
+.composer textarea {
+  position: absolute;
+  inset: 0;
+  display: block;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  resize: none;
+  border: 0;
+  outline: 0;
+  overflow: hidden;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
   user-select: text;
 }
 
 .composer textarea::placeholder {
   color: var(--ink-faint);
+}
+
+/* Typing is what the cursor is for, so it shows while the field has focus and
+   stands down when it does not — otherwise it would sit over the placeholder
+   of a field nobody is in. The placeholder yields for the same reason. */
+.composer textarea:focus::placeholder {
+  color: transparent;
+}
+
+.composer-cursor {
+  display: inline-block;
+  visibility: hidden;
+  width: 8px;
+  height: 1em;
+  vertical-align: text-bottom;
+  background: var(--ink);
+}
+
+.composer-field:focus-within .composer-cursor {
+  visibility: visible;
 }
 
 .composer-meta {
@@ -1309,6 +1421,79 @@ button {
 
 .footer-link:hover {
   color: var(--text);
+}
+
+/* ---- the chat window ------------------------------------------------------
+   One conversation, detached. The same two materials as the expanded prompt —
+   a page for what the model printed, a surface for what you type — inside an
+   ordinary window frame, so it drags, raises and closes like everything else.
+
+   The transcript is capped well under the window body's own max-height: the
+   body is what would scroll otherwise, and a composer that scrolls out of the
+   frame is not a chat window. */
+.chat-window {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+}
+
+.chat-window .transcript {
+  max-height: 240px;
+}
+
+/* A deliberate, scoped exception to the input-dark/output-light rule stated at
+   the top of this file. That rule tells the two materials apart by ground
+   colour, which works on the open field where the prompt terminal lives. A
+   session window is already a surface with a ground of its own, and a light
+   page floating inside it reads as a second window rather than as its output —
+   so here everything (transcript, stamps, echoed turns, composer) sits on the
+   window's own `--fill`/`--ink`, and the composer is marked out by an accent
+   outline instead of by contrast. The terminal's own `.chat` is untouched. */
+.chat-window .transcript-panel,
+.chat-window .turn-agent,
+.chat-window .turn-tool,
+.chat-window .turn-operator,
+.chat-window .composer {
+  background: transparent;
+  color: var(--ink);
+}
+
+.chat-window .transcript-panel {
+  border: 0;
+}
+
+.chat-window .turn-agent,
+.chat-window .turn-tool {
+  border-color: var(--ink-rule);
+}
+
+.chat-window .turn-label,
+.chat-window .turn-tool-target {
+  color: var(--ink-faint);
+}
+
+.chat-window .turn-tool {
+  color: var(--ink-dim);
+}
+
+/* The only outline in the window, so the input is still obvious with the
+   colour block gone. */
+.chat-window .composer {
+  border: 1px solid var(--accent-fill);
+}
+
+/* Shorter than the terminal's: the window body is what would have to scroll
+   otherwise, and a composer that scrolls out of its frame is not a chat
+   window. */
+.chat-window .composer-field {
+  max-height: 112px;
+}
+
+.chat-empty {
+  margin: 0;
+  padding: 12px;
+  color: var(--ink-faint);
+  font-size: 12px;
 }
 
 /* ---- window --------------------------------------------------------------

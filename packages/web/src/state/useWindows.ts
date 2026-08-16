@@ -92,6 +92,36 @@ export function useWindows() {
           ];
         }
 
+        // Chat: mid-bottom — centred on the field and low, so a conversation
+        // opens where the operator is already looking, but above the prompt
+        // terminal and the footer rather than on top of them.
+        if (kind === "chat") {
+          const assumedHeight = 330; // transcript cap + composer
+          const dockClearance = 140; // prompt terminal + footer
+          return [
+            ...current,
+            {
+              id: `${kind}-${++seq}`,
+              kind,
+              title: title ?? spec.title,
+              x: Math.max(
+                24,
+                Math.min(
+                  Math.round((window.innerWidth - width) / 2) + cascade,
+                  window.innerWidth - width - 24,
+                ),
+              ),
+              y: Math.max(
+                56,
+                window.innerHeight - assumedHeight - dockClearance + cascade,
+              ),
+              w: width,
+              z: ++zSeq,
+              payload,
+            },
+          ];
+        }
+
         return [
           ...current,
           {

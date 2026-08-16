@@ -1,10 +1,7 @@
 import { useCallback, useState } from "react";
 import { matchCommand } from "../commands";
 import type { Turn } from "../domain";
-import type { PromptOptionKey, PromptSettings } from "../prompt";
 import type { WindowKind } from "../windows";
-
-const BLANK_PROMPT_SETTINGS: PromptSettings = { model: "", mode: "", agent: "" };
 
 type OpenWindow = (
   kind: WindowKind,
@@ -20,7 +17,13 @@ interface PromptSessionActions {
   toggleTheme: () => void;
 }
 
-/** Owns the state and command routing for the shell's single prompt session. */
+/**
+ * Owns the state and command routing for the prompt terminal — the shell's own
+ * input. Slash commands dispatch UI actions; anything else is addressed to the
+ * overseer itself. Model conversations are not here: each has its own window
+ * and its own transcript (useChatSessions), and the bottom-left menu arms those
+ * conversations rather than this one — so no option state lives here either.
+ */
 export function usePromptSession({
   openWindow,
   closeAllWindows,
@@ -29,33 +32,12 @@ export function usePromptSession({
   toggleTheme,
 }: PromptSessionActions) {
   const [open, setOpen] = useState(false);
-  const [settings, setSettings] =
-    useState<PromptSettings>(BLANK_PROMPT_SETTINGS);
-  const [openControl, setOpenControl] = useState<PromptOptionKey | null>(null);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
 
   const expand = useCallback(() => setOpen(true), []);
   const collapse = useCallback(() => setOpen(false), []);
   const resetTurns = useCallback(() => setTurns([]), []);
-  const closeControl = useCallback(() => setOpenControl(null), []);
-
-  const toggleControl = useCallback((key: PromptOptionKey) => {
-    setOpenControl((current) => (current === key ? null : key));
-  }, []);
-
-  const selectControl = useCallback(
-    (key: PromptOptionKey, value: string) => {
-      setSettings((current) => ({ ...current, [key]: value }));
-      setOpenControl(null);
-    },
-    [],
-  );
-
-  const loadTranscript = useCallback((nextTurns: Turn[]) => {
-    setTurns(nextTurns);
-    setOpen(true);
-  }, []);
 
   const submit = useCallback(
     (input: string) => {
@@ -111,17 +93,11 @@ export function usePromptSession({
 
   return {
     open,
-    settings,
-    openControl,
     turns,
     busy,
     expand,
     collapse,
     resetTurns,
-    closeControl,
-    toggleControl,
-    selectControl,
-    loadTranscript,
     submit,
     inspectTurn,
   };

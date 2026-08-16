@@ -11,6 +11,9 @@ import { PromptControls } from "./PromptControls";
 
 interface PromptSessionChromeProps {
   promptVisible: boolean;
+  /** The menu arms the focused session, so it comes and goes with one rather
+   * than with the terminal it sits beside. */
+  controlsVisible: boolean;
   footerVisible: boolean;
   expanded: boolean;
   turns: Turn[];
@@ -19,10 +22,8 @@ interface PromptSessionChromeProps {
   options: PromptOption[];
   openControl: PromptOptionKey | null;
   contextCount: number;
-  projectName?: string;
   rightInstrument?: ReactNode;
   onExpand: () => void;
-  onCollapse: () => void;
   onSubmit: (input: string) => void;
   onInspect: (id: string) => void;
   onToggleControl: (key: PromptOptionKey) => void;
@@ -34,6 +35,7 @@ interface PromptSessionChromeProps {
 /** Bottom-of-field controls and session chrome for the application shell. */
 export function PromptSessionChrome({
   promptVisible,
+  controlsVisible,
   footerVisible,
   expanded,
   turns,
@@ -42,10 +44,8 @@ export function PromptSessionChrome({
   options,
   openControl,
   contextCount,
-  projectName,
   rightInstrument,
   onExpand,
-  onCollapse,
   onSubmit,
   onInspect,
   onToggleControl,
@@ -55,7 +55,7 @@ export function PromptSessionChrome({
 }: PromptSessionChromeProps) {
   return (
     <>
-      {promptVisible && (
+      {controlsVisible && (
         <PromptControls
           options={options}
           settings={settings}
@@ -76,9 +76,7 @@ export function PromptSessionChrome({
             turns={turns}
             busy={busy}
             settings={settings}
-            projectName={projectName}
             onExpand={onExpand}
-            onCollapse={onCollapse}
             onSubmit={onSubmit}
             onInspect={onInspect}
           />

@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useState } from "react";
+import { useCallback, useEffect, useMemo, useState } from "react";
 import { ActiveProject } from "./components/ActiveProject";
 import { Clock } from "./components/Clock";
 import { DecisionWindow } from "./components/DecisionWindow";
@@ -6,10 +6,13 @@ import { OverseerSpace } from "./components/OverseerSpace";
 import { ProjectPanel } from "./components/ProjectPanel";
 import { PromptSessionChrome } from "./components/PromptSessionChrome";
 import { ProviderWidget } from "./components/ProviderWidget";
+import { SessionPanel } from "./components/SessionPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { WindowStackHost } from "./components/WindowStackHost";
-import type { PromptOptionKey } from "./prompt";
+import type { Session } from "./domain";
+import { BLANK_PROMPT_SETTINGS, type PromptOptionKey } from "./prompt";
 import type { Signal } from "./state/signals";
+import { useChatSessions } from "./state/useChatSessions";
 import { useDiscovery } from "./state/useDiscovery";
 import { usePromptSession } from "./state/usePromptSession";
 import { useShellKeyboard } from "./state/useShellKeyboard";
@@ -20,6 +23,9 @@ const PROMPT_OPTION_KEYS: PromptOptionKey[] = [];
 
 export default function App() {
   const [projectsOpen, setProjectsOpen] = useState(true);
+  // Closed by default: the collapsed header already reports the session in
+  // hand, and the list is only needed when switching between several.
+  const [sessionsOpen, setSessionsOpen] = useState(false);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const wizard = useDiscovery();
   const {
@@ -49,6 +55,10 @@ export default function App() {
     () => setProjectsOpen((current) => !current),
     [],
   );
+  const toggleSessions = useCallback(
+    () => setSessionsOpen((current) => !current),
+    [],
+  );
 
   const prompt = usePromptSession({
     openWindow: open,
@@ -60,6 +70,61 @@ export default function App() {
   const openPrompt = prompt.expand;
   const shell = useShellPresentation(wizard, prompt.busy, open);
 
+  const {
+    sessions,
+    activeId: activeSessionId,
+    start: startSession,
+    focus: focusSession,
+    setSetting,
+    chatFor,
+    send: sendChat,
+  } = useChatSessions();
+
+  // The bottom-left menu arms a *session* — which model, which permission mode,
+  // which subagent the next turn runs as — so it reads and writes the focused
+  // conversation, and has nothing to say when there is not one. Only which
+  // section is open belongs to the menu itself.
+  const [openControl, setOpenControl] = useState<PromptOptionKey | null>(null);
+  const focusedChat =
+    activeSessionId === undefined ? undefined : chatFor(activeSessionId);
+
+  const closeControl = useCallback(() => setOpenControl(null), []);
+  const toggleControl = useCallback((key: PromptOptionKey) => {
+    setOpenControl((current) => (current === key ? null : key));
+  }, []);
+  const focusedSessionId = focusedChat?.session.id;
+  const selectControl = useCallback(
+    (key: PromptOptionKey, value: string) => {
+      if (focusedSessionId !== undefined)
+        setSetting(focusedSessionId, key, value);
+      setOpenControl(null);
+    },
+    [focusedSessionId, setSetting],
+  );
+
+  // Summoning a chat window that is already up raises it rather than stacking a
+  // duplicate — useWindows matches on kind and payload, and the payload is the
+  // session id. So one call covers both "open" and "focus".
+  const openChat = useCallback(
+    (session: Session) => {
+      focusSession(session.id);
+      open("chat", session.id, session.name);
+    },
+    [focusSession, open],
+  );
+
+  const activeProject = shell.activeProject;
+  const startChat = useCallback(() => {
+    openChat(startSession(activeProject));
+  }, [activeProject, openChat, startSession]);
+
+  // The panel is the active project's sessions; the sessions window is where
+  // every project's are listed together.
+  const projectSessions = useMemo(
+    () => sessions.filter((session) => session.projectId === activeProject?.id),
+    [sessions, activeProject?.id],
+  );
+
   const openContext = useCallback(() => open("context"), [open]);
   const openHelp = useCallback(() => open("help"), [open]);
 
@@ -69,14 +134,16 @@ export default function App() {
     blocked: deciding,
     settingsOpen,
     windowCount: windows.length,
-    openControl: prompt.openControl,
+    openControl,
     promptOpen: prompt.open,
     promptOptionKeys: PROMPT_OPTION_KEYS,
+    // The digits open menu sections, so they are only live when the menu is.
+    controlsAvailable: focusedChat !== undefined,
     closeSettings,
     closeTopWindow: closeTop,
-    closeControl: prompt.closeControl,
+    closeControl,
     closePrompt: prompt.collapse,
-    toggleControl: prompt.toggleControl,
+    toggleControl,
     openContext,
     openPrompt,
     toggleProjects,
@@ -192,17 +259,33 @@ export default function App() {
           onHeadlineReady={wizard.onHeadlineReady}
         />
 
+        {/* Gated with the prompt: both need an attached, signed-in provider,
+            and a session list you cannot start a session from is furniture
+            that does nothing. */}
+        {shell.furniture.prompt && (
+          <SessionPanel
+            sessions={projectSessions}
+            activeId={activeSessionId}
+            open={sessionsOpen}
+            onToggle={toggleSessions}
+            onSelect={openChat}
+            onNew={startChat}
+          />
+        )}
+
         <PromptSessionChrome
           promptVisible={shell.furniture.prompt}
+          // The menu is the focused session's, not the terminal's: it appears
+          // with the first session and goes when there is none to arm.
+          controlsVisible={shell.furniture.prompt && focusedChat !== undefined}
           footerVisible={shell.furniture.footer}
           expanded={prompt.open}
           turns={prompt.turns}
           busy={prompt.busy}
-          settings={prompt.settings}
+          settings={focusedChat?.settings ?? BLANK_PROMPT_SETTINGS}
           options={[]}
-          openControl={prompt.openControl}
+          openControl={openControl}
           contextCount={0}
-          projectName={shell.activeProject?.name}
           rightInstrument={
             shell.furniture.providerWidget ? (
               <ProviderWidget
@@ -213,11 +296,10 @@ export default function App() {
             ) : undefined
           }
           onExpand={openPrompt}
-          onCollapse={prompt.collapse}
           onSubmit={prompt.submit}
           onInspect={prompt.inspectTurn}
-          onToggleControl={prompt.toggleControl}
-          onSelectControl={prompt.selectControl}
+          onToggleControl={toggleControl}
+          onSelectControl={selectControl}
           onOpenContext={openContext}
           onOpenHelp={openHelp}
         />
@@ -229,13 +311,16 @@ export default function App() {
           activeProject={shell.activeProject}
           provider={shell.provider}
           theme={wizard.theme}
+          sessions={sessions}
           openWindow={open}
           closeWindow={close}
           raiseWindow={raise}
           moveWindow={move}
           resizeWindow={resize}
-          openProjectSelector={openProjectSelector}
-          openTranscript={prompt.loadTranscript}
+          openChat={openChat}
+          startChat={startChat}
+          chatFor={chatFor}
+          sendChat={sendChat}
           send={wizard.send}
           subscribeConsole={wizard.subscribeConsole}
         />

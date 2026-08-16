@@ -2,6 +2,7 @@ export type WindowKind =
   | "overseer"
   | "providers"
   | "sessions"
+  | "chat"
   | "approvals"
   | "capabilities"
   | "capability"
@@ -49,6 +50,11 @@ export const WINDOW_SPEC: Record<
   // useWindows from the viewport so it clears the instrument on any height.
   providers: { title: "providers", x: 9999, y: 9999, w: 420 },
   sessions: { title: "sessions", x: 96, y: 168, w: 620 },
+  // Mid-bottom: spawn position is computed in useWindows from the viewport so
+  // a conversation opens near the hand — over the middle of the field, clear of
+  // the prompt terminal that keeps the very bottom. The title is per-session,
+  // so this one is only the fallback for a window opened without one.
+  chat: { title: "session", x: 9999, y: 9999, w: 560 },
   approvals: { title: "approvals", x: 620, y: 148, w: 560 },
   capabilities: { title: "capabilities", x: 150, y: 250, w: 540 },
   capability: { title: "capability", x: 260, y: 210, w: 560 },
