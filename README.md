@@ -63,6 +63,7 @@ the source tree is bind-mounted and watched.
 | ------------------ | ---------------------------------------------------------------------------- |
 | `./bin/dev-start`  | Start the dev stack (`-d` to detach, `--build` to rebuild) |
 | `./bin/dev-stop`   | Stop it; volumes survive                                                     |
+| `./bin/rebuild`    | Force-rebuild images (`--prod` for production; flags pass to `compose build`) |
 | `./bin/start`      | Build and run the production stack                                           |
 | `./bin/stop`       | Stop the production stack                                                    |
 | `./bin/logs [svc]` | Follow dev stack logs (`deps`, `server`, `web`)                              |
