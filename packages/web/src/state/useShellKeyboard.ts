@@ -10,6 +10,9 @@ interface ShellKeyboardOptions {
   openControl: PromptOptionKey | null;
   promptOpen: boolean;
   promptOptionKeys: readonly PromptOptionKey[];
+  /** The menu arms the focused session; with none focused it is not on the
+   * field, and its digits must not act on something the operator cannot see. */
+  controlsAvailable: boolean;
   closeSettings: () => void;
   closeTopWindow: () => void;
   closeControl: () => void;
@@ -29,6 +32,7 @@ export function useShellKeyboard({
   openControl,
   promptOpen,
   promptOptionKeys,
+  controlsAvailable,
   closeSettings,
   closeTopWindow,
   closeControl,
@@ -56,6 +60,7 @@ export function useShellKeyboard({
 
       // Bare digits control the closed prompt; an open prompt owns every key.
       if (
+        controlsAvailable &&
         !event.metaKey &&
         !event.ctrlKey &&
         !event.altKey &&
@@ -96,6 +101,7 @@ export function useShellKeyboard({
     closePrompt,
     closeSettings,
     closeTopWindow,
+    controlsAvailable,
     openContext,
     openControl,
     openPrompt,

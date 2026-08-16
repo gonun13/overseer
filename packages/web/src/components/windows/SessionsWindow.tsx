@@ -25,7 +25,11 @@ export function SessionsWindow({
             key={s.id}
             activity={s.activity}
             primary={s.name}
-            secondary={`${project?.name ?? s.projectId} · ${s.branch} · ${s.model} · ${s.doing}`}
+            // Unset fields are omitted rather than shown blank, so the line
+            // never reads as " · · " with the values rubbed out.
+            secondary={[project?.name, s.branch, s.model, s.doing]
+              .filter(Boolean)
+              .join(" · ")}
             right={s.cost}
             actions={
               <>

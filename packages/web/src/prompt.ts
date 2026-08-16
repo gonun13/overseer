@@ -19,3 +19,10 @@ export interface PromptOption {
 
 /** Empty string means "the provider has not told us yet" — never a stand-in value. */
 export type PromptSettings = Record<PromptOptionKey, string>;
+
+/** What a session is armed with before the provider has reported anything. */
+export const BLANK_PROMPT_SETTINGS: PromptSettings = {
+  model: "",
+  mode: "",
+  agent: "",
+};
