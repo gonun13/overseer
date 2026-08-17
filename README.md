@@ -147,10 +147,10 @@ Still missing:
 
 ## Versioning
 
-Current release: **0.1.1** — the **overseer shell** milestone
-([overseer-behavior.md](docs/overseer-behavior.md)). **`1.0.0`** waits on the §3 MVP core loop
-([architecture-design.md §8](docs/architecture-design.md#8-versioning)).
-
-Bump rules, monorepo lockstep, release checklist, and the full milestone map live in
-[architecture-design.md §8](docs/architecture-design.md#8-versioning). The footer reads the root
-version from `package.json` automatically.
+The product version is the root `package.json` `version` field — currently the **overseer shell**
+milestone ([overseer-behavior.md](docs/overseer-behavior.md)). **`1.0.0`** waits on the §3 MVP core
+loop. Versions follow [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`): **MAJOR**
+when updates break compatibility, **MINOR** when features are added safely, **PATCH** when small
+bugs are fixed. Bump rules and the milestone map live in
+[architecture-design.md §8](docs/architecture-design.md#8-versioning). The footer reads that field
+automatically.

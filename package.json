@@ -1,7 +1,7 @@
 {
   "name": "overseer",
   "private": true,
-  "version": "0.1.3",
+  "version": "0.1.4",
   "description": "A single-page web console for driving CLI coding agents.",
   "type": "module",
   "workspaces": [

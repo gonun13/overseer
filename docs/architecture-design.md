@@ -299,11 +299,23 @@ In streaming-input mode, permission prompts arrive as `control_request` messages
 
 ## 8. Versioning
 
-**Current release:** `0.1.1`
+The product version lives in the root `package.json` `version` field. The footer and help window
+read it via `packages/web/src/appVersion.ts`
+([ui-ux-design.md §6](ui-ux-design.md#6-permanent-furniture)). Do not copy the number into docs or UI
+source.
 
-Versions follow [SemVer](https://semver.org/) (`MAJOR.MINOR.PATCH`). The number reflects **which
-design-doc milestone is shipped**, not commit count or PR volume. When in doubt, compare the running
-product against the doc sections below — not git history alone.
+Versions follow [Semantic Versioning (SemVer)](https://semver.org/) — `MAJOR.MINOR.PATCH` (for
+example `2.4.1`):
+
+| Component | When it changes |
+| --------- | --------------- |
+| **MAJOR** | updates that break old compatibility |
+| **MINOR** | new features added safely |
+| **PATCH** | small bugs or errors are fixed |
+
+The number reflects **which design-doc milestone is shipped**, not commit count or PR volume. When
+in doubt, compare the running product against the doc sections below — not git history alone. How
+those three components map onto Overseer's tiers is in §8.2 (pre-1.0) and §8.4 (after `1.0.0`).
 
 ### 8.1 Monorepo rule
 
@@ -319,10 +331,8 @@ The repo is private and unpublished. Every workspace package stays in **lockstep
 | `@overseer/adapter-claude-code` | adapter                       |
 | `@overseer/e2e`                 | Playwright suite              |
 
-On every release bump **all** of those `version` fields, sync the matching entries in
-`package-lock.json`, and tag `vX.Y.Z` on the merge commit to `main`. Do not hard-code a version in UI
-source — `packages/web/src/appVersion.ts` imports the root `package.json` version for the footer and
-help window ([ui-ux-design.md §6](ui-ux-design.md#6-permanent-furniture)).
+On every release bump **all** of those `version` fields and sync `package-lock.json` (`./bin/npm
+install`). Tag `vX.Y.Z` on the merge commit to `main`.
 
 ### 8.2 Milestone map
 
@@ -349,11 +359,10 @@ separate from the MVP "Console" zone in §3 and may ship inside `0.1.x`.
 
 1. Walk the milestone table: does the product meet the ship bar for the target version?
 2. Update README [Status](../README.md#status) if the "in place" / "still missing" lists changed.
-3. Bump the same version in root and every `@overseer/*` `package.json`; sync `package-lock.json`.
-   The footer and help window pick up the root version automatically — no separate UI edit.
-4. Set **Current release** at the top of this section and in README [Versioning](../README.md#versioning).
-5. Tag `vX.Y.Z` on the merge commit to `main` (annotated tag preferred).
-6. Mention the version in the PR or release notes when the bump is intentional — not as a drive-by in
+3. Bump the same version in root and every `@overseer/*` `package.json`; sync `package-lock.json`
+   (`./bin/npm install`). The footer and help window pick up the root version automatically.
+4. Tag `vX.Y.Z` on the merge commit to `main` (annotated tag preferred).
+5. Mention the version in the PR or release notes when the bump is intentional — not as a drive-by in
    unrelated work.
 
 ### 8.4 After `1.0.0`
