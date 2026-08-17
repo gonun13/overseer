@@ -1,0 +1,162 @@
+/* ---- bottom right: the provider widget -----------------------------------
+   Widgets stay on the field. They are bracketed at the corners rather than
+   framed and tabbed, so they read as instruments sitting on the background and
+   can never be mistaken for windows (design-system.md §6.2). */
+.widget {
+  position: absolute;
+  right: 26px;
+  bottom: 26px;
+  z-index: 30;
+  width: 252px;
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 8px;
+}
+
+.widget-frame {
+  --corner: 11px;
+  display: block;
+  width: 100%;
+  margin: 0;
+  padding: 10px 12px 12px;
+  border: 0;
+  text-align: left;
+  font: inherit;
+  color: inherit;
+  cursor: pointer;
+  background-color: var(--raise);
+  background-repeat: no-repeat;
+  background-image:
+    linear-gradient(var(--edge), var(--edge)),
+    linear-gradient(var(--edge), var(--edge)),
+    linear-gradient(var(--edge), var(--edge)),
+    linear-gradient(var(--edge), var(--edge)),
+    linear-gradient(var(--edge), var(--edge)),
+    linear-gradient(var(--edge), var(--edge)),
+    linear-gradient(var(--edge), var(--edge)),
+    linear-gradient(var(--edge), var(--edge));
+  background-size:
+    var(--corner) 1px,
+    1px var(--corner),
+    var(--corner) 1px,
+    1px var(--corner),
+    var(--corner) 1px,
+    1px var(--corner),
+    var(--corner) 1px,
+    1px var(--corner);
+  background-position:
+    left top,
+    left top,
+    right top,
+    right top,
+    left bottom,
+    left bottom,
+    right bottom,
+    right bottom;
+}
+
+/* The brackets are drawn from --edge, so re-pointing it lights the whole frame. */
+.widget:hover .widget-frame {
+  --edge: var(--accent);
+}
+
+.widget-head {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  margin-bottom: 8px;
+}
+
+.widget-kicker {
+  display: block;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.widget-usage {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.widget-meter {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.widget-meter .gauge {
+  margin-bottom: 0;
+}
+
+.widget-row {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+}
+
+.widget-name {
+  text-transform: uppercase;
+}
+
+.widget-dim {
+  color: var(--text-dim);
+  text-transform: uppercase;
+  font-size: 11px;
+}
+
+.widget-num {
+  margin-left: auto;
+  font-variant-numeric: tabular-nums;
+  font-size: 11px;
+}
+
+.widget-num + .widget-num {
+  margin-left: 0;
+}
+
+/* Same register as the old footer console link — a word you can click, with
+   CONSOLE in --ok. Only mounted when the provider is signed in. */
+.widget-console {
+  margin: 0;
+  padding: 0 2px;
+  border: 0;
+  background: transparent;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  text-align: left;
+  color: var(--text-dim);
+  cursor: pointer;
+}
+
+.widget-console:hover {
+  color: var(--text);
+}
+
+.widget-console-word {
+  color: var(--ok);
+}
+
+.gauge {
+  display: block;
+  width: 100%;
+  height: 4px;
+  margin-bottom: 6px;
+  background: var(--raise);
+  border: 1px solid var(--text-faint);
+}
+
+.gauge-fill {
+  display: block;
+  height: 100%;
+  transition: width 0.3s ease-out;
+}
+

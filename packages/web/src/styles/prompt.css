@@ -1,0 +1,435 @@
+/* ---- session controls (inside a chat window) ------------------------------
+   Four columns along the bottom of the composer: model, mode, agent, context.
+   Opening a column prints its options as a stamp *above* it so the bar does
+   not grow the window. */
+.session-controls {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  padding: 4px 0 0;
+  border-top: 1.5px solid var(--edge);
+}
+
+.session-ctl {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.session-ctl-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 4px 4px 4px 6px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--text-dim);
+}
+
+.session-ctl-head:hover,
+.session-ctl.open .session-ctl-head {
+  color: var(--text);
+}
+
+.session-ctl-key {
+  flex: none;
+  width: 14px;
+  text-align: center;
+  font-size: 10px;
+  color: var(--text-faint);
+}
+
+.session-ctl-head:hover .session-ctl-key,
+.session-ctl.open .session-ctl-key {
+  color: var(--accent);
+}
+
+.session-ctl-label {
+  flex: none;
+}
+
+.session-ctl-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text);
+}
+
+.session-ctl-value.danger {
+  color: var(--accent);
+}
+
+.session-ctl-chevron {
+  flex: none;
+  display: flex;
+  color: var(--text-faint);
+}
+
+/* The block that appears once a column opens — pressed on `--void`, not a tint
+   of the window. Anchored to the top of the column so it grows upward over the
+   composer rather than out of the frame. */
+.session-ctl-values {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  z-index: 2;
+  max-height: 0;
+  overflow: hidden;
+  opacity: 0;
+  background: var(--void);
+  transition:
+    max-height 0.22s ease-out,
+    opacity 0.14s linear;
+}
+
+.session-ctl.open .session-ctl-values {
+  max-height: 200px;
+  overflow-y: auto;
+  opacity: 1;
+  border: 1px solid var(--void-edge);
+}
+
+.session-ctl-option {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--void-dim);
+}
+
+/* Void's own raise — `--raise` follows the field and would vanish against
+   samaritan's near-black void (and the inverted light void in machine). */
+.session-ctl-option:hover {
+  background: var(--void-raise);
+  color: var(--void-ink);
+}
+
+.session-ctl-option.current {
+  color: var(--void-ink);
+}
+
+.session-ctl-option.danger {
+  color: var(--accent);
+}
+
+.session-ctl-mark {
+  flex: none;
+  width: 8px;
+  color: var(--mark-fill);
+}
+
+
+/* ---- bottom centre: the prompt -------------------------------------------
+   The prompt is a surface: it is where you act, so it inverts the field at both
+   sizes. What the agent prints into it arrives as stamps (design-system.md §7). */
+.dock {
+  position: absolute;
+  left: 50%;
+  bottom: 22px;
+  transform: translateX(-50%);
+  z-index: 60;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+}
+
+/* Ground and ink come from the input rule near the top of this file. */
+.prompt-bar {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  width: 640px;
+  max-width: 86vw;
+  height: 38px;
+  padding: 0 12px;
+  border-style: solid;
+  border-width: 2px 0.5px;
+  border-color: var(--edge) transparent;
+  cursor: text;
+}
+
+.prompt-bar:hover {
+  border-color: var(--accent) transparent;
+}
+
+.prompt-caret {
+  flex: none;
+  color: var(--accent-fill);
+  font-size: 16px;
+}
+
+[data-theme="machine"] .prompt-caret {
+  color: var(--mark-fill);
+}
+
+.prompt-placeholder {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  color: var(--ink-dim);
+}
+
+.prompt-field {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.prompt-stack {
+  position: relative;
+}
+
+.prompt-mirror {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.prompt-stack textarea {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  font: inherit;
+  font-size: 14px;
+  line-height: inherit;
+  outline: none;
+}
+
+.prompt-cursor {
+  flex: none;
+  display: inline-block;
+  width: 8px;
+  height: 17px;
+  vertical-align: text-bottom;
+  background: var(--ink);
+}
+
+/* Input. Now a panel in its own right rather than a strip inside the
+   transcript's frame, so it carries the same 2px horizontal edges every other
+   framed thing does. Ground and ink come from the input rule near the top. */
+.composer {
+  width: 100%;
+  padding: 10px 12px 9px;
+  border-style: solid;
+  border-width: 2px 0.5px;
+  border-color: var(--edge) transparent;
+}
+
+/* The field scrolls once the text passes the cap; the mirror inside it is what
+   has the height, so the two never disagree about where a line ends. */
+.composer-field {
+  max-height: 168px;
+  overflow-y: auto;
+}
+
+.composer-stack {
+  position: relative;
+}
+
+/* The visible glyphs. The textarea is laid over this at exactly its size and
+   made transparent, so the blinking block below reads as the caret — the same
+   trick the first-run name ask uses (.os-name-mirror). */
+.composer-mirror,
+.composer textarea {
+  width: 100%;
+  font: inherit;
+  font-size: 14px;
+  line-height: 1.6;
+  letter-spacing: inherit;
+}
+
+.composer-mirror {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  color: var(--ink);
+  pointer-events: none;
+}
+
+.composer textarea {
+  position: absolute;
+  inset: 0;
+  display: block;
+  height: 100%;
+  padding: 0;
+  margin: 0;
+  resize: none;
+  border: 0;
+  outline: 0;
+  overflow: hidden;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  user-select: text;
+}
+
+.composer textarea::placeholder {
+  color: var(--ink-faint);
+}
+
+/* Typing is what the cursor is for, so it shows while the field has focus and
+   stands down when it does not — otherwise it would sit over the placeholder
+   of a field nobody is in. The placeholder yields for the same reason. */
+.composer textarea:focus::placeholder {
+  color: transparent;
+}
+
+.composer-cursor {
+  display: inline-block;
+  visibility: hidden;
+  width: 8px;
+  height: 1em;
+  vertical-align: text-bottom;
+  background: var(--ink);
+}
+
+.composer-field:focus-within .composer-cursor {
+  visibility: visible;
+}
+
+.composer-meta {
+  display: flex;
+  justify-content: space-between;
+  gap: 16px;
+  margin-top: 8px;
+  font-size: 10px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--ink-faint);
+}
+
+.footer {
+  margin: 12px 0 0;
+  font-size: 11px;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  color: var(--text-dim);
+}
+
+/* Inline in the footer's sentence, so it takes the footer's type rather than
+   the button chrome `.w-btn` would give it — a word you can click, not a
+   control competing with the prompt above it. */
+.footer-link {
+  font: inherit;
+  letter-spacing: inherit;
+  text-transform: inherit;
+  color: inherit;
+}
+
+.footer-link:hover {
+  color: var(--text);
+}
+
+/* ---- the session window ---------------------------------------------------
+   One conversation, detached. Transcript fills whatever height the operator
+   has given the frame; composer and session controls stay pinned to the
+   bottom. Resizable from the bottom-right grip, same as the console. */
+.session-window {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
+}
+
+/* A deliberate, scoped exception to the input-dark/output-light rule stated at
+   the top of this file. That rule tells the two materials apart by ground
+   colour, which works on the open field where the prompt terminal lives. A
+   session window is already a surface with a ground of its own, and a light
+   page floating inside it reads as a second window rather than as its output —
+   so here everything (transcript, stamps, echoed turns, composer) sits on the
+   window's own `--fill`/`--ink`, and the composer is marked out by an accent
+   outline instead of by contrast. The terminal's own `.chat` is untouched. */
+.session-window .transcript-panel,
+.session-window .turn-agent,
+.session-window .turn-tool,
+.session-window .turn-operator,
+.session-window .composer {
+  background: transparent;
+  color: var(--ink);
+}
+
+.session-window .transcript-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
+  border: 0;
+}
+
+.session-window .transcript {
+  max-height: none;
+}
+
+.session-window .turn-agent,
+.session-window .turn-tool {
+  border-color: var(--ink-rule);
+}
+
+.session-window .turn-label,
+.session-window .turn-tool-target {
+  color: var(--ink-faint);
+}
+
+.session-window .turn-tool {
+  color: var(--ink-dim);
+}
+
+/* The only outline in the window, so the input is still obvious with the
+   colour block gone. */
+.session-window .composer {
+  flex: none;
+  border: 1px solid var(--accent-fill);
+}
+
+/* Shorter than the terminal's: the window body is what would have to scroll
+   otherwise, and a composer that scrolls out of its frame is not a chat
+   window. */
+.session-window .composer-field {
+  max-height: 112px;
+}
+
+.session-window .session-controls {
+  flex: none;
+  border-top-color: var(--ink-rule);
+}
+
+.session-window .session-ctl-head {
+  color: var(--ink-dim);
+}
+
+.session-window .session-ctl-head:hover,
+.session-window .session-ctl.open .session-ctl-head {
+  color: var(--ink);
+}
+
+.session-empty {
+  margin: 0;
+  padding: 12px;
+  color: var(--ink-faint);
+  font-size: 12px;
+}

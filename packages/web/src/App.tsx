@@ -229,8 +229,8 @@ export default function App() {
         case "selector":
           openProjectSelector();
           return;
-        case "prompt":
-          focusPrompt();
+        case "session":
+          startChat();
           return;
         case "login":
           startLogin();
@@ -240,7 +240,7 @@ export default function App() {
           return;
       }
     },
-    [focusPrompt, open, openProjectSelector, openSettings, startLogin],
+    [open, openProjectSelector, openSettings, startChat, startLogin],
   );
 
   return (

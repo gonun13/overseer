@@ -20,7 +20,7 @@ import type {
  *
  * Unlike the prompt terminal it does not split into the page/surface materials:
  * everything here sits on the window's own ground, and the composer is marked
- * out by an accent outline instead (see `.session-window` in index.css).
+ * out by an accent outline instead (see `.session-window` in prompt.css).
  *
  * The frame, the tab and the close are the ordinary Window primitive's; this is
  * only what goes inside it.

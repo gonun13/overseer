@@ -1,0 +1,561 @@
+/* ---- window --------------------------------------------------------------
+   A surface. The tab is a flow child, so its left edge is the frame's left edge
+   by construction. Borders on the horizontal edges only — that is what stops a
+   window reading as a card. */
+.window {
+  position: absolute;
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  z-index: 100;
+}
+
+.window.dragging {
+  opacity: 0.6;
+}
+
+.window-tab {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 6px 4px 7px;
+  font-size: 14px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  white-space: nowrap;
+  cursor: move;
+  clip-path: inset(0 100% 0 0);
+  transition: clip-path 0.2s linear;
+}
+
+.window-tab.revealed {
+  clip-path: inset(0 0 0 0);
+}
+
+.tab-close {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 16px;
+  height: 16px;
+  margin-left: 4px;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.tab-close:hover {
+  opacity: 1;
+  color: var(--accent);
+}
+
+.window-frame {
+  width: 100%;
+  padding: 10px 12px;
+  border-style: solid;
+  border-width: 2px 0.5px;
+  border-color: var(--edge) transparent;
+  background: var(--fill);
+  color: var(--ink);
+}
+
+/* Console keeps the usual horizontal-only window edges; body is flush so the
+   PTY fills the frame. Ground follows the surface (--fill-solid): dark in
+   samaritan, light in machine. Height comes from window state (resizable). */
+.window-console .window-frame {
+  position: relative;
+  padding: 0;
+  background: var(--fill-solid);
+}
+
+.window-console .window-body {
+  overflow: hidden;
+}
+
+.window-console .window-body.expanded {
+  /* Fallback before state height lands; inline style overrides when set. */
+  max-height: min(520px, 62vh);
+}
+
+/* Chat fills the body so the transcript can grow with the grip; composer and
+   controls stay at the bottom. Frame is relative so the grip sits on it. */
+.window-session .window-frame {
+  position: relative;
+}
+
+.window-session .window-body {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.window-session .window-body.expanded {
+  max-height: min(520px, 62vh);
+}
+
+/* Vertical scroll only: a window that scrolls sideways has failed to lay out. */
+.window-body {
+  max-height: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  transition: max-height 0.5s ease-out;
+}
+
+.window-body.expanded {
+  max-height: min(420px, 52vh);
+}
+
+.window-resize {
+  position: absolute;
+  right: 2px;
+  bottom: 2px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 18px;
+  height: 18px;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  /* Ink on fill, plus a fill halo so the strokes stay readable over
+     whatever the PTY last painted in the corner. */
+  color: var(--ink);
+  cursor: nwse-resize;
+  opacity: 0.88;
+  filter: drop-shadow(0 0 1.2px var(--fill-solid))
+    drop-shadow(0 0 1.2px var(--fill-solid));
+}
+
+.window-resize:hover,
+.window-resize:focus-visible {
+  opacity: 1;
+  outline: none;
+}
+
+/* ---- decision -------------------------------------------------------------
+   A window that blocks, which no other window does. It sits above the settings
+   panel because it outranks the machine's own controls: while it is up, the
+   only two things in the interface are its answers. The scrim is the field at
+   low opacity rather than a black wash — the operator can still see what they
+   are about to erase. */
+.decision-scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 300;
+  background: var(--scrim);
+  animation: settle-in 200ms ease-out both;
+}
+
+/* Above the headline, not over it: the overseer answers this in the headline
+   while the decision is up, so the two must be readable together. The bottom
+   edge sits clear of the vertical centre where the headline lives. */
+.decision {
+  position: absolute;
+  left: 50%;
+  bottom: calc(50% + 72px);
+  transform: translateX(-50%);
+  width: min(460px, calc(100vw - 48px));
+  max-height: calc(50% - 72px - 56px);
+  display: flex;
+  flex-direction: column;
+  /* Centred, where a window's tab is left-anchored — the tab is the tell. */
+  align-items: center;
+}
+
+.decision-tab {
+  cursor: default;
+  flex: none;
+}
+
+.decision .window-frame {
+  min-height: 0;
+  width: 100%;
+}
+
+.decision .window-body.expanded {
+  max-height: min(280px, calc(50vh - 140px));
+}
+
+/* Two large answers, centred as a pair but kept apart so a miss of one cannot
+   land on the other. */
+.decision-actions {
+  display: flex;
+  justify-content: center;
+  gap: 48px;
+  margin-top: 22px;
+}
+
+.decision-btn {
+  min-width: 120px;
+  justify-content: center;
+  padding: 12px 28px;
+  font-size: 14px;
+  letter-spacing: 1px;
+}
+
+.decision-btn:hover {
+  padding: 11px 27px;
+}
+
+.decision-btn.danger:hover {
+  padding: 12px 28px;
+}
+
+/* ---- surface content primitives ------------------------------------------ */
+.w-title {
+  display: inline-block;
+  padding: 3px 5px;
+  margin: 14px 0 8px;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.w-title:first-child {
+  margin-top: 0;
+}
+
+.w-data {
+  display: inline-block;
+  padding: 1px 5px;
+  font-variant-numeric: tabular-nums;
+  font-size: 12px;
+}
+
+.w-inline {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: 16px;
+  margin: 6px 0;
+  font-size: 12px;
+}
+
+.w-inline-label {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-dim);
+}
+
+.w-inline-value {
+  text-align: right;
+  overflow-wrap: anywhere;
+}
+
+.w-inline-flex {
+  display: inline-flex;
+  align-items: center;
+  gap: 7px;
+  text-transform: uppercase;
+}
+
+/* Wraps rather than scrolls sideways — the frame width is the contract. */
+.w-pre {
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font-size: 12px;
+  line-height: 1.55;
+  user-select: text;
+}
+
+.w-path {
+  margin-bottom: 8px;
+  font-size: 11px;
+  color: var(--ink-dim);
+  overflow-wrap: anywhere;
+}
+
+.w-empty {
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+  color: var(--ink-faint);
+}
+
+/* The operations window's step log. No rules between lines: this is one
+   continuous report, and a border per step would break it into a list of
+   unrelated rows. */
+.w-steps {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.w-step-line {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  line-height: 1.9;
+}
+
+.w-step-label {
+  flex: none;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: lowercase;
+}
+
+/* The dots do the padding, so labels of different lengths still line their
+   brackets up — the thing that makes a run of these scannable. Decorative and
+   aria-hidden: a screen reader gets "label" then "[ok]" with no filler. */
+.w-step-dots {
+  flex: 1;
+  min-width: 12px;
+  align-self: flex-end;
+  margin-bottom: 4px;
+  border-bottom: 1px dotted var(--ink-faint);
+}
+
+.w-step-status {
+  flex: none;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.w-step-detail {
+  display: block;
+  padding-left: 25px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+  overflow-wrap: anywhere;
+}
+
+.w-row {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 8px 0;
+  border-bottom: 1px solid var(--ink-rule);
+}
+
+.w-row.clickable:hover {
+  background: var(--ink-rule);
+}
+
+.w-row-main {
+  flex: 1;
+  min-width: 0;
+}
+
+.w-row-primary {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.w-row-secondary {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  color: var(--ink-dim);
+}
+
+.w-row-right {
+  flex: none;
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dim);
+}
+
+.w-row-actions {
+  display: flex;
+  flex: none;
+  gap: 4px;
+}
+
+.btn-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px;
+  margin-top: 10px;
+}
+
+/* Set inline, inside a w-inline value — no top margin to fight the row's own
+   vertical centring. */
+.btn-row.inline {
+  margin-top: 0;
+}
+
+/* Buttons are not stamps — a stamp is content, a button is a control, and the
+   two must never share a colour or an operator can't tell what's clickable.
+   A button is cut out of the surface: transparent, bordered and inked in the
+   surface's own ink, so it reads as part of the machine rather than something
+   printed onto it. Hover bolds the type and the border — it does not fill. */
+.w-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  padding: 3px 8px;
+  border: 1px solid var(--ink);
+  background: transparent;
+  color: var(--ink);
+  font-size: 11px;
+  font-weight: 400;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.w-btn:hover {
+  padding: 2px 7px;
+  border-width: 2px;
+  font-weight: 700;
+}
+
+.w-btn:disabled {
+  opacity: 0.4;
+  pointer-events: none;
+}
+
+/* The option already in effect, inside a row of otherwise-equal choices. This
+   is *not* a permanent hover weight — a resting button that stays filled is a
+   stamp again, the exact confusion the split is meant to prevent. Selection is
+   marked the same way a current value is marked in the session controls: a
+   small `--mark-fill` glyph, chrome otherwise untouched (ui-ux-design.md §6.3). */
+.w-btn-mark {
+  width: 8px;
+  flex: none;
+  color: var(--mark-fill);
+}
+
+.w-btn.danger {
+  color: var(--accent-fill);
+  border-color: var(--accent-fill);
+}
+
+/* Danger keeps the solid invert — the one case where hover fills. */
+.w-btn.danger:hover {
+  padding: 3px 8px;
+  border-width: 1px;
+  font-weight: 400;
+  background: var(--accent-fill);
+  color: var(--fill-solid);
+}
+
+/* A prose field inside a window — a skill's instructions, an agent's brief.
+   Input, so it takes the input ground the composer has (§7.1). */
+.w-editor {
+  display: block;
+  width: 100%;
+  min-height: 110px;
+  max-height: 240px;
+  resize: vertical;
+  padding: 9px 11px;
+  border: 1px solid var(--ink-rule);
+  background: var(--stamp);
+  color: var(--stamp-ink);
+  font: inherit;
+  font-size: 12px;
+  line-height: 1.6;
+  outline: 0;
+  user-select: text;
+}
+
+.w-editor:focus {
+  border-color: var(--accent-fill);
+}
+
+/* One-line field inside a window — the verification code paste. Same input
+   ground as `.w-editor` (§7.1); grows to fill its btn-row so the value stays
+   readable, since the operator has to be able to see that what they pasted is
+   what they copied. */
+.w-input {
+  flex: 1 1 180px;
+  min-width: 0;
+  padding: 3px 8px;
+  border: 1px solid var(--ink-rule);
+  background: var(--stamp);
+  color: var(--stamp-ink);
+  font: inherit;
+  font-size: 11px;
+  outline: 0;
+  user-select: text;
+}
+
+.w-input:focus {
+  border-color: var(--accent-fill);
+}
+
+/* An anchor doing a button's job — the verification link. Text-decoration is
+   the only thing `.w-btn` does not already neutralise. */
+a.w-btn {
+  text-decoration: none;
+}
+
+.w-note {
+  margin: 0 0 8px;
+  font-size: 11px;
+  line-height: 1.5;
+  color: var(--ink-dim);
+}
+
+/* ---- console -------------------------------------------------------------
+   Raw provider-CLI PTY (ui-ux-design.md §5.3). Continuous terminal ground that
+   matches the surface window — dark in samaritan, light in machine. xterm owns
+   the stream; Overseer only frames it. */
+.console {
+  display: flex;
+  flex-direction: column;
+  gap: 0;
+  height: 100%;
+  min-height: 0;
+  background: var(--fill-solid);
+  color: var(--ink);
+}
+
+.console .w-note {
+  margin: 10px 12px 0;
+}
+
+.console-term {
+  flex: 1;
+  min-height: 0;
+  padding: 8px 10px;
+  cursor: text;
+}
+
+.console-term .xterm {
+  height: 100%;
+}
+
+.console-term .xterm-viewport {
+  overflow-y: auto !important;
+}
+
+.console-term .xterm-screen {
+  user-select: text;
+}
+
+.approval {
+  margin-bottom: 18px;
+}
+
+.approval-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 12px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.approval-session {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--ink-dim);
+}
+
+.approval-body {
+  margin: 8px 0;
+  color: var(--accent-fill);
+}

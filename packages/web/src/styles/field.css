@@ -1,0 +1,356 @@
+/* ---- top centre: the active project -------------------------------------- */
+.active-project {
+  position: absolute;
+  left: 50%;
+  top: 18px;
+  transform: translateX(-50%);
+  z-index: 30;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 3px;
+  max-width: 40vw;
+  text-align: center;
+}
+
+.ap-kicker {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+.ap-name {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 19px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+.active-project.unset .ap-name {
+  color: var(--accent);
+}
+
+.ap-meta {
+  max-width: 100%;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  color: var(--text-dim);
+}
+
+/* ---- top right: clock and settings --------------------------------------- */
+.clock {
+  position: absolute;
+  right: 24px;
+  top: 20px;
+  z-index: 40;
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.clock-read {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  line-height: 1.15;
+}
+
+.clock-time {
+  font-size: 17px;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: 1px;
+}
+
+.clock-date {
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--text-faint);
+}
+
+/* A boxed icon — used where the glyph is small enough to need a hit target
+   drawn around it, as in the settings panel's close ✕. */
+.icon-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 26px;
+  height: 26px;
+  border: 1px solid var(--text-faint);
+  color: var(--text-dim);
+}
+
+.icon-btn:hover {
+  border-color: var(--edge);
+  color: var(--text);
+}
+
+/* The gear stands on its own: no box, just a bigger glyph. It sits beside the
+   clock, which is also unboxed, so a border would make it the only framed
+   thing in that corner. */
+.gear-btn {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--text-dim);
+}
+
+.gear-btn:hover {
+  color: var(--text);
+}
+
+/* ---- centre: the overseer space ------------------------------------------
+   Derived, ranked, and clickable. Not a log (design-system.md §4). */
+.overseer-space {
+  position: absolute;
+  inset-inline: 0;
+  top: 110px;
+  bottom: 180px;
+  z-index: 10;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 0 24px;
+}
+
+.os-headline {
+  margin: 0;
+  font-size: 34px;
+  font-weight: 700;
+  line-height: 1;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+}
+
+/* Goodbye hold — the line is the restart control until the unattended timer
+   fires. Cursor says so; no other chrome. */
+.os-headline-restart {
+  cursor: pointer;
+}
+
+/* First-run welcome ask: prompt-shaped — typed text, blinking block cursor,
+   rule + ▲ tracking under the caret. No native underline or caret. */
+.os-name-ask {
+  display: flex;
+  justify-content: center;
+  cursor: text;
+}
+
+.os-name-line {
+  display: flex;
+  align-items: baseline;
+  gap: 0.35em;
+}
+
+.os-name-field {
+  position: relative;
+  display: inline-flex;
+  align-items: baseline;
+}
+
+.os-name-type {
+  position: relative;
+  display: inline-block;
+  min-width: 1ch;
+}
+
+.os-name-mirror {
+  display: inline-block;
+  white-space: pre;
+  min-width: 1ch;
+}
+
+.os-name-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  font: inherit;
+  font-size: inherit;
+  font-weight: inherit;
+  letter-spacing: inherit;
+  line-height: inherit;
+  text-transform: uppercase;
+  outline: none;
+}
+
+/* Rule + ▲ sit under the caret and slide as the mirror grows. */
+.os-name-follow {
+  position: absolute;
+  top: calc(100% + 10px);
+  left: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  /* translateX(-50%) centres the column on the caret; nudge by half the
+     block cursor so we track its middle, not its left edge. */
+  margin-left: 2px;
+  pointer-events: none;
+  will-change: transform;
+}
+
+.os-name-rule {
+  display: block;
+  width: 30px;
+  height: 0;
+  border-top: 2px solid var(--text);
+}
+
+/* Only present while the rare typing pass is running (useOccasionalTyping). */
+.os-cursor {
+  display: inline-block;
+  width: 5px;
+  height: 0.8em;
+  margin-left: 3px;
+  background: var(--text);
+  vertical-align: -0.05em;
+}
+
+.os-rule {
+  margin: 10px 0 0;
+  border: 0;
+  border-top: 2px solid var(--text);
+  transition: width 0.3s ease-out;
+}
+
+.os-marker {
+  margin: 4px 0 0;
+  font-size: 20px;
+  line-height: 1;
+  color: var(--mark);
+}
+
+/* First-run tone pick: three words under the intro, field chrome not cards.
+   ▪ marks the current/default the same way settings marks the active theme. */
+.os-tone-pick {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 28px;
+  margin-top: 28px;
+}
+
+.os-tone-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  background: transparent;
+  color: var(--text-dim);
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  letter-spacing: 1px;
+  text-transform: uppercase;
+  cursor: pointer;
+}
+
+.os-tone-btn:hover,
+.os-tone-btn[aria-pressed="true"] {
+  color: var(--text);
+}
+
+.os-tone-mark {
+  display: inline-block;
+  width: 0.75em;
+  color: var(--mark);
+  text-align: center;
+}
+
+/* Boot only. Sits where the ▲ marker sits, so the headline block doesn't jump
+   when the wizard swaps one for the other. A segmented meter, not a sliding
+   stripe: blocky and monospace-flavoured like everything else here, and
+   monochrome — this is chrome, not a status light, so it doesn't reach for
+   --accent. */
+.loading-bar {
+  width: 160px;
+  height: 14px;
+  margin-top: 10px;
+  padding: 2px;
+  border: 2px solid var(--text);
+  box-sizing: border-box;
+}
+
+/* Fills once over the minimum boot beat, then holds full if boot is still
+   waiting on the socket. --boot-ms is set by LoadingBar from the same constant
+   that times that minimum. */
+.loading-bar-fill {
+  width: 0;
+  height: 100%;
+  background-image: repeating-linear-gradient(
+    90deg,
+    var(--text) 0,
+    var(--text) 7px,
+    transparent 7px,
+    transparent 10px
+  );
+  animation: load var(--boot-ms, 3000ms) linear forwards;
+}
+
+@keyframes load {
+  from {
+    width: 0;
+  }
+  to {
+    width: 100%;
+  }
+}
+
+.os-signals {
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  max-width: 720px;
+  margin-top: 28px;
+}
+
+.os-signal {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 7px 10px;
+  border-left: 1px solid transparent;
+}
+
+.os-signal:hover {
+  border-left-color: var(--accent);
+  background: var(--raise);
+}
+
+.os-kicker {
+  flex: none;
+  width: 92px;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  line-height: 1.5;
+  color: var(--text-faint);
+}
+
+.os-text {
+  min-width: 0;
+  font-size: 13px;
+  line-height: 1.5;
+  color: var(--text-dim);
+}
+
+.os-signal:hover .os-text {
+  color: var(--text);
+}
+

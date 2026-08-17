@@ -1,0 +1,110 @@
+/* Capped so the expanded prompt terminal never covers the provider widget on
+   the right. `gap` is what separates the two panels below: they are siblings,
+   not one frame split in half, so the field shows between them. */
+.chat {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 6px;
+  width: min(880px, max(520px, calc(100vw - 400px)));
+}
+
+/* Output. Its own panel, a sibling of the composer rather than a shared frame
+   wrapping both — the two are different materials (§7.1) and get to be styled
+   independently. Field-level: the operator reads prose here at length, and that
+   reads better as a page than as a lit panel. */
+.transcript-panel {
+  border-style: solid;
+  border-width: 2px 0.5px;
+  border-color: var(--edge) transparent;
+  background: var(--page);
+  color: var(--text);
+}
+
+.transcript {
+  max-height: 46vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  padding: 12px 12px 2px;
+  user-select: text;
+}
+
+/* What the agent produced is printed: a stamp laid on the surface. */
+.turn-agent {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border: 1px solid var(--stamp-edge);
+}
+
+/* Your prompt, echoed — input, so it keeps the dark ground the composer has;
+   ground and ink come from the input rule near the top of this file. The accent
+   lane rather than a uniform border is what separates it from a stamp
+   (design-system.md §7.2). */
+.turn-operator {
+  margin: 0 0 10px;
+  padding: 9px 12px;
+  border-left: 2px solid var(--accent-fill);
+}
+
+.turn-operator .turn-label {
+  color: var(--ink-faint);
+}
+
+.turn-label {
+  margin-bottom: 4px;
+  font-size: 10px;
+  letter-spacing: 1.5px;
+  text-transform: uppercase;
+  color: var(--stamp-faint);
+}
+
+.turn-text {
+  margin: 0;
+  font-size: 14px;
+  line-height: 1.65;
+  overflow-wrap: anywhere;
+}
+
+/* Terminal output: consecutive tool calls read as one continuous console
+   block, not separate chips with the dark chat surface showing between them
+   — a run shares its top and bottom border and never gaps internally. Spacing
+   after a run is given by whatever follows it, not by the tool row itself, so
+   the run's length doesn't matter. */
+.turn-tool {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  margin: 0;
+  padding: 6px 12px;
+  font-size: 13px;
+  color: var(--stamp-dim);
+  border: 1px solid var(--stamp-edge);
+}
+
+.turn-tool + .turn-tool {
+  border-top: none;
+}
+
+.turn-tool + :not(.turn-tool) {
+  margin-top: 10px;
+}
+
+.turn-tool:hover {
+  border-color: var(--accent);
+  color: var(--stamp-ink);
+}
+
+.turn-tool-name {
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.turn-tool-target {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--stamp-faint);
+}
+

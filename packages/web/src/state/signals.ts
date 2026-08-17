@@ -13,7 +13,9 @@ export type Target =
   | { kind: "window"; window: WindowKind; payload?: string }
   | { kind: "settings" }
   | { kind: "selector" }
-  | { kind: "prompt" }
+  /** Starts a conversation — same as + new session. Standby uses this so the
+   * click is the work, not a detour to the prompt or the sessions list. */
+  | { kind: "session" }
   /** The login surface — opens the providers window on its authenticate step
    * *and* starts the flow, so following the signal is one click, not two. */
   | { kind: "login" }
@@ -228,9 +230,9 @@ export function deriveSignals(world: WorldState): Signal[] {
       activity: "idle",
       kicker: "standby",
       text: activeProject
-        ? `Nothing is running in ${activeProject.name}. Type below to start a turn.`
+        ? `Nothing is running in ${activeProject.name}. Start new session.`
         : "Nothing is running.",
-      target: { kind: "prompt" },
+      target: { kind: "session" },
     });
   }
 
