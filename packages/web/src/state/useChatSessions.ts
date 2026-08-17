@@ -22,8 +22,8 @@ let seq = 0;
 /**
  * Owns every chat conversation the operator has open — one transcript per
  * session, never a shared one. This is the half of the old single prompt that
- * talks to models; the prompt terminal keeps the other half (commands, and the
- * overseer itself) and no state crosses between them.
+ * talks to models; the prompt terminal keeps slash commands, and forwards
+ * everything else into the active session here.
  *
  * Sessions are started by the operator and live here rather than coming down
  * from the server: this build has no session supervisor, and inventing a list

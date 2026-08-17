@@ -1,9 +1,9 @@
 import type { WindowKind } from "./windows";
 
 export interface Command {
-  /** Matched case-insensitively against the whole input. */
-  pattern: RegExp;
-  usage: string;
+  /** Canonical name, matched after a leading `/`. Shown in autocomplete. */
+  name: string;
+  aliases?: readonly string[];
   help: string;
   action:
     | { type: "open"; kind: WindowKind }
@@ -15,74 +15,100 @@ export interface Command {
 
 export const COMMANDS: Command[] = [
   {
-    pattern: /^providers?$/i,
-    usage: "providers",
+    name: "providers",
+    aliases: ["provider"],
     help: "choose which provider is attached",
     action: { type: "open", kind: "providers" },
   },
   {
-    pattern: /^sessions?$/i,
-    usage: "sessions",
+    name: "sessions",
+    aliases: ["session"],
     help: "list sessions",
     action: { type: "open", kind: "sessions" },
   },
   {
-    pattern: /^(projects?|switch)$/i,
-    usage: "projects",
+    name: "projects",
+    aliases: ["project", "switch"],
     help: "open the project selector",
     action: { type: "selector" },
   },
   {
-    pattern: /^approvals?$/i,
-    usage: "approvals",
+    name: "approvals",
+    aliases: ["approval"],
     help: "pending approval queue",
     action: { type: "open", kind: "approvals" },
   },
   {
-    pattern: /^(capabilities|mcp|skills)$/i,
-    usage: "capabilities",
+    name: "capabilities",
+    aliases: ["mcp", "skills"],
     help: "mcp servers, skills, subagents",
     action: { type: "open", kind: "capabilities" },
   },
   {
-    pattern: /^context$/i,
-    usage: "context",
-    help: "what rides along with the next turn",
-    action: { type: "open", kind: "context" },
-  },
-  {
-    pattern: /^(console|term|terminal|shell)$/i,
-    usage: "console",
+    name: "console",
+    aliases: ["term", "terminal", "shell"],
     help: "raw terminal into the provider cli",
     action: { type: "open", kind: "console" },
   },
   {
-    pattern: /^(system|settings)$/i,
-    usage: "settings",
+    name: "settings",
+    aliases: ["system"],
     help: "auth, runtime, workspace, theme",
     action: { type: "settings" },
   },
   {
-    pattern: /^help$/i,
-    usage: "help",
+    name: "help",
     help: "this window",
     action: { type: "open", kind: "help" },
   },
   {
-    pattern: /^(night|day|theme)$/i,
-    usage: "theme",
+    name: "theme",
+    aliases: ["night", "day"],
     help: "switch theme",
     action: { type: "theme" },
   },
   {
-    pattern: /^(clear|dismiss)$/i,
-    usage: "clear",
+    name: "clear",
+    aliases: ["dismiss"],
     help: "dismiss all windows",
     action: { type: "close-all" },
   },
 ];
 
-export function matchCommand(input: string): Command | undefined {
+function namesOf(command: Command): string[] {
+  return [command.name, ...(command.aliases ?? [])].map((name) =>
+    name.toLowerCase(),
+  );
+}
+
+/**
+ * The first token after a leading `/`, or `undefined` when this is not a
+ * command. `""` means the operator has typed `/` and nothing else yet.
+ */
+export function slashName(input: string): string | undefined {
   const trimmed = input.trim();
-  return COMMANDS.find((c) => c.pattern.test(trimmed));
+  if (!trimmed.startsWith("/")) return undefined;
+  return trimmed.slice(1).split(/\s+/, 1)[0] ?? "";
+}
+
+/** Exact name or alias match on the first token after `/`. */
+export function matchCommand(input: string): Command | undefined {
+  const name = slashName(input);
+  if (name === undefined || name === "") return undefined;
+  const needle = name.toLowerCase();
+  return COMMANDS.find((command) => namesOf(command).includes(needle));
+}
+
+/**
+ * Commands whose name or alias starts with the token after `/`. An empty
+ * token lists every command; input that is not a slash command lists none.
+ */
+export function suggestCommands(input: string): Command[] {
+  const name = slashName(input);
+  if (name === undefined) return [];
+  if (name === "") return COMMANDS;
+  const needle = name.toLowerCase();
+  return COMMANDS.filter((command) =>
+    namesOf(command).some((candidate) => candidate.startsWith(needle)),
+  );
 }

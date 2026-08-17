@@ -1,6 +1,5 @@
 import { useCallback, useState } from "react";
 import { matchCommand } from "../commands";
-import type { Turn } from "../domain";
 import type { WindowKind } from "../windows";
 
 type OpenWindow = (
@@ -18,10 +17,10 @@ interface PromptTerminalActions {
 }
 
 /**
- * Owns the state and command routing for the prompt terminal — the shell's own
- * input. Slash commands dispatch UI actions; anything else is addressed to the
- * overseer itself. Model conversations are not here: each has its own session
- * window (useChatSessions) — no session option state lives here.
+ * Owns focus and slash-command routing for the prompt terminal. A leading `/`
+ * dispatches a UI action; the caller sends anything else to the active
+ * project's session. Model transcripts live on those sessions
+ * (useChatSessions), not here.
  */
 export function usePromptSession({
   openWindow,
@@ -31,45 +30,40 @@ export function usePromptSession({
   toggleTheme,
 }: PromptTerminalActions) {
   const [focused, setFocused] = useState(false);
-  const [turns, setTurns] = useState<Turn[]>([]);
-  const [busy, setBusy] = useState(false);
 
   const focus = useCallback(() => setFocused(true), []);
   const blur = useCallback(() => setFocused(false), []);
-  const resetTurns = useCallback(() => setTurns([]), []);
 
+  /**
+   * Returns true when the input was a slash command — matched and dispatched,
+   * or unknown and ignored. False means the caller should send it as a session
+   * prompt.
+   */
   const submit = useCallback(
-    (input: string) => {
-      const command = matchCommand(input);
-      if (command) {
+    (input: string): boolean => {
+      if (slashInput(input)) {
+        const command = matchCommand(input);
+        if (!command) return true;
         switch (command.action.type) {
           case "open":
             openWindow(command.action.kind);
-            return;
+            return true;
           case "settings":
             openSettings();
-            return;
+            return true;
           case "selector":
             openProjectSelector();
-            return;
+            return true;
           case "theme":
             toggleTheme();
-            return;
+            return true;
           case "close-all":
             closeAllWindows();
-            return;
+            return true;
         }
+        return true;
       }
-
-      setTurns((current) => [
-        ...current,
-        { id: `u${current.length}`, kind: "user", text: input },
-      ]);
-      setBusy(true);
-      // Placeholder for the real stream; replaced when the WS event pipe lands.
-      setTimeout(() => {
-        setBusy(false);
-      }, 1200);
+      return false;
     },
     [
       closeAllWindows,
@@ -80,24 +74,14 @@ export function usePromptSession({
     ],
   );
 
-  const inspectTurn = useCallback(
-    (id: string) => {
-      const turn = turns.find((candidate) => candidate.id === id);
-      if (turn?.kind === "tool") {
-        openWindow("diff", turn.target, turn.tool);
-      }
-    },
-    [openWindow, turns],
-  );
-
   return {
     focused,
-    turns,
-    busy,
     focus,
     blur,
-    resetTurns,
     submit,
-    inspectTurn,
   };
+}
+
+function slashInput(input: string): boolean {
+  return input.trim().startsWith("/");
 }

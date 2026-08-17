@@ -329,8 +329,9 @@ The transcript uses `--page`. The collapsed prompt bar, expanded composer, and e
   written. Uppercase remains for labels and chrome only.
 - The composer grows with its content to 168px, then scrolls.
 - Beneath it, one meta line: the armed model · mode · agent, and the send hint or `TURN IN FLIGHT`.
-- Unrecognised input goes to the active project's session. Recognised verbs are defined in
+- A leading `/` starts a command; names autocomplete from
   `packages/web/src/commands.ts` and open the corresponding surface or action.
+  Anything else goes to the active project's session, starting one if none is active.
 
 ### 7.2 What you did vs what the agent did
 

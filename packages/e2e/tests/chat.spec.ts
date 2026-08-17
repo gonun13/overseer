@@ -2,9 +2,10 @@ import { test, expect } from "@playwright/test";
 import { passWizardOpening, SETTLED } from "./shell";
 
 /**
- * The split: the prompt terminal at the bottom of the field runs commands and
- * talks to the overseer, and every model conversation is its own window with
- * its own transcript, session controls and composer.
+ * The split: the prompt terminal at the bottom of the field runs slash
+ * commands and forwards everything else into a project session. Every model
+ * conversation is its own window with its own transcript, session controls and
+ * composer.
  *
  * The sessions panel and the windows it opens are gated on an attached,
  * signed-in provider — the same gate as the prompt (wizard.ts `furnitureFor`).
@@ -50,9 +51,9 @@ test("opens a chat window per session, separate from the prompt", async ({
   await expect(page.getByText("what is in this repo?")).toBeVisible();
 
   // The prompt terminal is a different input and did not take the turn: it is
-  // still on its own line, offering commands and the overseer.
+  // still on its own line, offering slash commands and session prompts.
   await expect(
-    page.getByText("run a command, or message the overseer"),
+    page.getByText("type / for a command, or message the session"),
   ).toBeVisible();
 
   // Re-selecting the session raises the window it already has rather than
@@ -80,12 +81,48 @@ test("the prompt terminal is a bare field, not a window", async ({ page }) => {
   if ((await bar.count()) === 0) return; // no provider: the prompt is not released
 
   await bar.click();
-  await expect(page.getByLabel("run a command, or message the overseer")).toBeFocused();
+  await expect(
+    page.getByLabel("type / for a command, or message the session"),
+  ).toBeFocused();
   await expect(bar).toHaveClass(/open/);
-  await expect(page.getByPlaceholder("Run a command, or ask the overseer.")).toHaveCount(
-    0,
-  );
+  await expect(
+    page.getByPlaceholder("Run a command, or ask the overseer."),
+  ).toHaveCount(0);
 
   await expect(page.getByLabel("collapse prompt")).toHaveCount(0);
   await expect(page.getByText(/shift\+enter for a newline/i)).toHaveCount(0);
+});
+
+/**
+ * `/` is the command prefix. Names autocomplete; Enter runs the highlighted
+ * command. Anything else is a session prompt — and starts a session when the
+ * project does not have one.
+ */
+test("slash commands autocomplete; other text goes to a session", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await passWizardOpening(page);
+  await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
+
+  const bar = page.locator(".prompt-bar");
+  if ((await bar.count()) === 0) return; // no provider: the prompt is not released
+
+  await bar.click();
+  const prompt = page.getByLabel(
+    "type / for a command, or message the session",
+  );
+  await prompt.fill("/he");
+  const helpOption = page.getByRole("option", { name: /\/help/i });
+  await expect(helpOption).toBeVisible();
+  await expect(page.getByRole("option", { name: /\/console/i })).toHaveCount(0);
+  await prompt.press("Enter");
+  await expect(page.getByLabel("close help")).toBeVisible();
+  await page.getByLabel("close help").click();
+
+  await bar.click();
+  await prompt.fill("what is in this repo?");
+  await prompt.press("Enter");
+  await expect(page.getByLabel("close session 1")).toBeVisible();
+  await expect(page.getByText("what is in this repo?")).toBeVisible();
 });

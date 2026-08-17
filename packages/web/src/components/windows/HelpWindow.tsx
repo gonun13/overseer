@@ -21,7 +21,7 @@ export function HelpWindow({ provider }: { provider: ProviderInfo }) {
 
       <WTitle>commands</WTitle>
       <div className="w-pre">
-        {COMMANDS.map((c) => `${c.usage.padEnd(20)}${c.help}`).join("\n")}
+        {COMMANDS.map((c) => `/${c.name.padEnd(19)}${c.help}`).join("\n")}
       </div>
 
       <WTitle>keys</WTitle>
@@ -32,6 +32,7 @@ export function HelpWindow({ provider }: { provider: ProviderInfo }) {
           "ctrl/cmd + k         open the prompt",
           "ctrl/cmd + p         collapse or expand projects",
           "ctrl/cmd + ,         open settings",
+          "/                    start a command; tab completes",
           "esc                  dismiss the topmost thing",
         ].join("\n")}
       </div>
@@ -39,7 +40,7 @@ export function HelpWindow({ provider }: { provider: ProviderInfo }) {
       <WTitle>anything else</WTitle>
       <div className="w-pre">
         {
-          "text that matches no command is sent to the\nactive project's session as a prompt."
+          "text that does not start with / is sent to the\nactive project's session, starting one if none is active."
         }
       </div>
     </div>

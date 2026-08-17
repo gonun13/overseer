@@ -1,9 +1,9 @@
 import { WProviderNote, WTitle } from "./bits";
 import type { ProviderInfo } from "../../domain";
 
-/** Summoned from a session's context control or the `context` command. What
- * extra material rides along with the next turn — the only session option that
- * needs more than a value to express. */
+/** Summoned from a session's context control. What extra material rides along
+ * with the next turn — the only session option that needs more than a value to
+ * express. */
 export function ContextWindow({
   projectName,
   provider,

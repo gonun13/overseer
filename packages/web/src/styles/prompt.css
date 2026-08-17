@@ -144,6 +144,7 @@
 
 /* Ground and ink come from the input rule near the top of this file. */
 .prompt-bar {
+  position: relative;
   display: flex;
   align-items: center;
   gap: 10px;
@@ -151,10 +152,66 @@
   max-width: 86vw;
   height: 38px;
   padding: 0 12px;
+  overflow: visible;
   border-style: solid;
   border-width: 2px 0.5px;
   border-color: var(--edge) transparent;
   cursor: text;
+}
+
+/* Void list, same material as an opened session-control column. Grows up so
+   the bar stays put and the field behind it is what gets covered. */
+.prompt-suggest {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  z-index: 2;
+  max-height: 240px;
+  overflow-y: auto;
+  background: var(--void);
+  border: 1px solid var(--void-edge);
+}
+
+.prompt-suggest-item {
+  display: flex;
+  align-items: baseline;
+  gap: 16px;
+  width: 100%;
+  padding: 5px 12px;
+  font-size: 12px;
+  letter-spacing: 0.5px;
+  color: var(--void-dim);
+  text-align: left;
+}
+
+.prompt-suggest-item:hover,
+.prompt-suggest-item.current {
+  background: var(--void-raise);
+  color: var(--void-ink);
+}
+
+.prompt-suggest-name {
+  flex: none;
+  min-width: 8.5em;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.prompt-suggest-help {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: none;
+  letter-spacing: 0;
+  color: var(--void-faint);
+}
+
+.prompt-suggest-item.current .prompt-suggest-help,
+.prompt-suggest-item:hover .prompt-suggest-help {
+  color: var(--void-dim);
 }
 
 .prompt-bar:hover {

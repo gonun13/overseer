@@ -15,8 +15,8 @@ import type {
  * open, dragged, resized and closed independently.
  *
  * Model, mode, agent and context live here — they arm the *next* turn of this
- * session, not the prompt terminal. The terminal can still reach them through
- * keys and commands, but the bar is part of the window.
+ * session, not the prompt terminal. Digits 1–4 still reach them when the
+ * terminal is unfocused.
  *
  * Unlike the prompt terminal it does not split into the page/surface materials:
  * everything here sits on the window's own ground, and the composer is marked

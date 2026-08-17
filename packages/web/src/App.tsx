@@ -70,7 +70,7 @@ export default function App() {
     toggleTheme,
   });
   const focusPrompt = prompt.focus;
-  const shell = useShellPresentation(wizard, prompt.busy, open);
+  const submitCommand = prompt.submit;
 
   const {
     sessions,
@@ -81,9 +81,13 @@ export default function App() {
     chatFor,
     send: sendChat,
   } = useChatSessions();
+  const sessionBusy = sessions.some(
+    (session) => session.activity === "working",
+  );
+  const shell = useShellPresentation(wizard, sessionBusy, open);
 
-  // Which accordion section is open in each session window. Keys and commands
-  // on the prompt terminal target the focused session's controls.
+  // Which accordion section is open in each session window. Digits on the
+  // prompt terminal target the focused session's controls.
   const [openSessionControls, setOpenSessionControls] = useState<
     Partial<Record<string, SessionOptionKey>>
   >({});
@@ -154,6 +158,31 @@ export default function App() {
   const projectSessions = useMemo(
     () => sessions.filter((session) => session.projectId === activeProject?.id),
     [sessions, activeProject?.id],
+  );
+  const projectActive =
+    projectSessions.find((session) => session.id === activeSessionId) ??
+    projectSessions.at(-1);
+
+  const submitPrompt = useCallback(
+    (input: string) => {
+      if (submitCommand(input)) return;
+      if (projectActive) {
+        sendChat(projectActive.id, input);
+        openChat(projectActive);
+        return;
+      }
+      const session = startSession(activeProject);
+      sendChat(session.id, input);
+      openChat(session);
+    },
+    [
+      activeProject,
+      openChat,
+      projectActive,
+      sendChat,
+      startSession,
+      submitCommand,
+    ],
   );
 
   const openSessionContext = useCallback(
@@ -260,9 +289,12 @@ export default function App() {
                 // Console PTY is bound to the cwd it opened in; closing is
                 // honest — a silent swap would strand the operator.
                 closeKind("console");
+                const last = [...sessions]
+                  .reverse()
+                  .find((session) => session.projectId === project.id);
+                if (last) focusSession(last.id);
               }
               wizard.selectProject(project.path);
-              prompt.resetTurns();
             }}
           />
         )}
@@ -279,7 +311,7 @@ export default function App() {
         <OverseerSpace
           signals={shell.signals}
           headline={shell.headline}
-          busy={prompt.busy}
+          busy={sessionBusy}
           loading={shell.loading}
           typingChance={shell.typingChance}
           holdCaret={shell.holdCaret}
@@ -302,7 +334,7 @@ export default function App() {
         {shell.furniture.prompt && (
           <SessionPanel
             sessions={projectSessions}
-            activeId={activeSessionId}
+            activeId={projectActive?.id}
             open={sessionsOpen}
             onToggle={toggleSessions}
             onSelect={openChat}
@@ -325,7 +357,7 @@ export default function App() {
           }
           onPromptFocus={focusPrompt}
           onPromptBlur={prompt.blur}
-          onPromptSubmit={prompt.submit}
+          onPromptSubmit={submitPrompt}
           onOpenHelp={openHelp}
         />
 
