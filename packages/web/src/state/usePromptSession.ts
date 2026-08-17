@@ -9,7 +9,7 @@ type OpenWindow = (
   title?: string,
 ) => void;
 
-interface PromptSessionActions {
+interface PromptTerminalActions {
   openWindow: OpenWindow;
   closeAllWindows: () => void;
   openSettings: () => void;
@@ -20,9 +20,8 @@ interface PromptSessionActions {
 /**
  * Owns the state and command routing for the prompt terminal — the shell's own
  * input. Slash commands dispatch UI actions; anything else is addressed to the
- * overseer itself. Model conversations are not here: each has its own window
- * and its own transcript (useChatSessions), and the bottom-left menu arms those
- * conversations rather than this one — so no option state lives here either.
+ * overseer itself. Model conversations are not here: each has its own session
+ * window (useChatSessions) — no session option state lives here.
  */
 export function usePromptSession({
   openWindow,
@@ -30,13 +29,13 @@ export function usePromptSession({
   openSettings,
   openProjectSelector,
   toggleTheme,
-}: PromptSessionActions) {
-  const [open, setOpen] = useState(false);
+}: PromptTerminalActions) {
+  const [focused, setFocused] = useState(false);
   const [turns, setTurns] = useState<Turn[]>([]);
   const [busy, setBusy] = useState(false);
 
-  const expand = useCallback(() => setOpen(true), []);
-  const collapse = useCallback(() => setOpen(false), []);
+  const focus = useCallback(() => setFocused(true), []);
+  const blur = useCallback(() => setFocused(false), []);
   const resetTurns = useCallback(() => setTurns([]), []);
 
   const submit = useCallback(
@@ -92,11 +91,11 @@ export function usePromptSession({
   );
 
   return {
-    open,
+    focused,
     turns,
     busy,
-    expand,
-    collapse,
+    focus,
+    blur,
     resetTurns,
     submit,
     inspectTurn,

@@ -1,10 +1,10 @@
 import { useCallback, useMemo, useState } from "react";
 import type { Project, Session, Turn } from "../domain";
 import {
-  BLANK_PROMPT_SETTINGS,
-  type PromptOptionKey,
-  type PromptSettings,
-} from "../prompt";
+  BLANK_SESSION_SETTINGS,
+  type SessionOptionKey,
+  type SessionSettings,
+} from "../session";
 
 /** One conversation: the metadata every session list renders, the transcript
  * its own window renders, and what it is armed with. */
@@ -12,9 +12,9 @@ export interface Chat {
   session: Session;
   turns: Turn[];
   /** Which model, permission mode and subagent the *next* turn of this
-   * conversation runs as — the bottom-left menu writes here. Per session, not
-   * per app: arming one conversation must not arm the others. */
-  settings: PromptSettings;
+   * conversation runs as — the session window's controls write here. Per
+   * session, not per app: arming one conversation must not arm the others. */
+  settings: SessionSettings;
 }
 
 let seq = 0;
@@ -55,7 +55,7 @@ export function useChatSessions() {
     };
     setChats((current) => [
       ...current,
-      { session, turns: [], settings: BLANK_PROMPT_SETTINGS },
+      { session, turns: [], settings: BLANK_SESSION_SETTINGS },
     ]);
     setActiveId(session.id);
     return session;
@@ -64,10 +64,10 @@ export function useChatSessions() {
   const focus = useCallback((id: string) => setActiveId(id), []);
 
   /** Arms one option on one conversation. The model is also written back onto
-   * the session so the row in a list and the menu can never disagree about
+   * the session so the row in a list and the controls can never disagree about
    * what this conversation is running as. */
-  const setSetting = useCallback(
-    (id: string, key: PromptOptionKey, value: string) => {
+  const setSessionSetting = useCallback(
+    (id: string, key: SessionOptionKey, value: string) => {
       setChats((current) =>
         current.map((chat) =>
           chat.session.id === id
@@ -119,5 +119,13 @@ export function useChatSessions() {
     }, 1200);
   }, []);
 
-  return { sessions, activeId, start, focus, setSetting, chatFor, send };
+  return {
+    sessions,
+    activeId,
+    start,
+    focus,
+    setSessionSetting,
+    chatFor,
+    send,
+  };
 }

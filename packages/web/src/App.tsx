@@ -4,13 +4,17 @@ import { Clock } from "./components/Clock";
 import { DecisionWindow } from "./components/DecisionWindow";
 import { OverseerSpace } from "./components/OverseerSpace";
 import { ProjectPanel } from "./components/ProjectPanel";
-import { PromptSessionChrome } from "./components/PromptSessionChrome";
+import { PromptChrome } from "./components/PromptChrome";
 import { ProviderWidget } from "./components/ProviderWidget";
 import { SessionPanel } from "./components/SessionPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { WindowStackHost } from "./components/WindowStackHost";
 import type { Session } from "./domain";
-import { BLANK_PROMPT_SETTINGS, type PromptOptionKey } from "./prompt";
+import {
+  SESSION_CONTROL_KEYS,
+  SESSION_CONTROL_OPTIONS,
+  type SessionOptionKey,
+} from "./session";
 import type { Signal } from "./state/signals";
 import { useChatSessions } from "./state/useChatSessions";
 import { useDiscovery } from "./state/useDiscovery";
@@ -18,8 +22,6 @@ import { usePromptSession } from "./state/usePromptSession";
 import { useShellKeyboard } from "./state/useShellKeyboard";
 import { useShellPresentation } from "./state/useShellPresentation";
 import { useWindows } from "./state/useWindows";
-
-const PROMPT_OPTION_KEYS: PromptOptionKey[] = [];
 
 export default function App() {
   const [projectsOpen, setProjectsOpen] = useState(true);
@@ -67,7 +69,7 @@ export default function App() {
     openProjectSelector,
     toggleTheme,
   });
-  const openPrompt = prompt.expand;
+  const focusPrompt = prompt.focus;
   const shell = useShellPresentation(wizard, prompt.busy, open);
 
   const {
@@ -75,36 +77,65 @@ export default function App() {
     activeId: activeSessionId,
     start: startSession,
     focus: focusSession,
-    setSetting,
+    setSessionSetting,
     chatFor,
     send: sendChat,
   } = useChatSessions();
 
-  // The bottom-left menu arms a *session* — which model, which permission mode,
-  // which subagent the next turn runs as — so it reads and writes the focused
-  // conversation, and has nothing to say when there is not one. Only which
-  // section is open belongs to the menu itself.
-  const [openControl, setOpenControl] = useState<PromptOptionKey | null>(null);
+  // Which accordion section is open in each session window. Keys and commands
+  // on the prompt terminal target the focused session's controls.
+  const [openSessionControls, setOpenSessionControls] = useState<
+    Partial<Record<string, SessionOptionKey>>
+  >({});
   const focusedChat =
     activeSessionId === undefined ? undefined : chatFor(activeSessionId);
+  const activeOpenSessionControl =
+    activeSessionId === undefined
+      ? null
+      : (openSessionControls[activeSessionId] ?? null);
 
-  const closeControl = useCallback(() => setOpenControl(null), []);
-  const toggleControl = useCallback((key: PromptOptionKey) => {
-    setOpenControl((current) => (current === key ? null : key));
-  }, []);
-  const focusedSessionId = focusedChat?.session.id;
-  const selectControl = useCallback(
-    (key: PromptOptionKey, value: string) => {
-      if (focusedSessionId !== undefined)
-        setSetting(focusedSessionId, key, value);
-      setOpenControl(null);
+  const closeSessionControl = useCallback(() => {
+    if (activeSessionId === undefined) return;
+    setOpenSessionControls((current) => {
+      const next = { ...current };
+      delete next[activeSessionId];
+      return next;
+    });
+  }, [activeSessionId]);
+
+  const toggleSessionControl = useCallback(
+    (sessionId: string, key: SessionOptionKey) => {
+      setOpenSessionControls((current) => ({
+        ...current,
+        [sessionId]: current[sessionId] === key ? undefined : key,
+      }));
     },
-    [focusedSessionId, setSetting],
+    [],
   );
 
-  // Summoning a chat window that is already up raises it rather than stacking a
-  // duplicate — useWindows matches on kind and payload, and the payload is the
-  // session id. So one call covers both "open" and "focus".
+  const selectSessionControl = useCallback(
+    (sessionId: string, key: SessionOptionKey, value: string) => {
+      setSessionSetting(sessionId, key, value);
+      setOpenSessionControls((current) => {
+        const next = { ...current };
+        delete next[sessionId];
+        return next;
+      });
+    },
+    [setSessionSetting],
+  );
+
+  const toggleActiveSessionControl = useCallback(
+    (key: SessionOptionKey) => {
+      if (activeSessionId !== undefined)
+        toggleSessionControl(activeSessionId, key);
+    },
+    [activeSessionId, toggleSessionControl],
+  );
+
+  // Summoning a session window that is already up raises it rather than
+  // stacking a duplicate — useWindows matches on kind and payload, and the
+  // payload is the session id. So one call covers both "open" and "focus".
   const openChat = useCallback(
     (session: Session) => {
       focusSession(session.id);
@@ -125,7 +156,14 @@ export default function App() {
     [sessions, activeProject?.id],
   );
 
-  const openContext = useCallback(() => open("context"), [open]);
+  const openSessionContext = useCallback(
+    (sessionId?: string) => {
+      const id = sessionId ?? activeSessionId;
+      open("context", id);
+    },
+    [activeSessionId, open],
+  );
+
   const openHelp = useCallback(() => open("help"), [open]);
 
   const deciding = wizard.reset === "confirm";
@@ -134,18 +172,17 @@ export default function App() {
     blocked: deciding,
     settingsOpen,
     windowCount: windows.length,
-    openControl,
-    promptOpen: prompt.open,
-    promptOptionKeys: PROMPT_OPTION_KEYS,
-    // The digits open menu sections, so they are only live when the menu is.
-    controlsAvailable: focusedChat !== undefined,
+    openSessionControl: activeOpenSessionControl,
+    promptFocused: prompt.focused,
+    sessionOptionKeys: SESSION_CONTROL_KEYS,
+    sessionControlsAvailable: focusedChat !== undefined,
     closeSettings,
     closeTopWindow: closeTop,
-    closeControl,
-    closePrompt: prompt.collapse,
-    toggleControl,
-    openContext,
-    openPrompt,
+    closeSessionControl,
+    blurPrompt: prompt.blur,
+    toggleSessionControl: toggleActiveSessionControl,
+    openSessionContext: () => openSessionContext(),
+    focusPrompt,
     toggleProjects,
     toggleSettings,
   });
@@ -193,7 +230,7 @@ export default function App() {
           openProjectSelector();
           return;
         case "prompt":
-          openPrompt();
+          focusPrompt();
           return;
         case "login":
           startLogin();
@@ -203,7 +240,7 @@ export default function App() {
           return;
       }
     },
-    [open, openProjectSelector, openPrompt, openSettings, startLogin],
+    [focusPrompt, open, openProjectSelector, openSettings, startLogin],
   );
 
   return (
@@ -273,19 +310,10 @@ export default function App() {
           />
         )}
 
-        <PromptSessionChrome
+        <PromptChrome
           promptVisible={shell.furniture.prompt}
-          // The menu is the focused session's, not the terminal's: it appears
-          // with the first session and goes when there is none to arm.
-          controlsVisible={shell.furniture.prompt && focusedChat !== undefined}
           footerVisible={shell.furniture.footer}
-          expanded={prompt.open}
-          turns={prompt.turns}
-          busy={prompt.busy}
-          settings={focusedChat?.settings ?? BLANK_PROMPT_SETTINGS}
-          options={[]}
-          openControl={openControl}
-          contextCount={0}
+          promptFocused={prompt.focused}
           rightInstrument={
             shell.furniture.providerWidget ? (
               <ProviderWidget
@@ -295,12 +323,9 @@ export default function App() {
               />
             ) : undefined
           }
-          onExpand={openPrompt}
-          onSubmit={prompt.submit}
-          onInspect={prompt.inspectTurn}
-          onToggleControl={toggleControl}
-          onSelectControl={selectControl}
-          onOpenContext={openContext}
+          onPromptFocus={focusPrompt}
+          onPromptBlur={prompt.blur}
+          onPromptSubmit={prompt.submit}
           onOpenHelp={openHelp}
         />
 
@@ -321,6 +346,11 @@ export default function App() {
           startChat={startChat}
           chatFor={chatFor}
           sendChat={sendChat}
+          sessionOptions={SESSION_CONTROL_OPTIONS}
+          openSessionControls={openSessionControls}
+          onToggleSessionControl={toggleSessionControl}
+          onSelectSessionControl={selectSessionControl}
+          onOpenSessionContext={openSessionContext}
           send={wizard.send}
           subscribeConsole={wizard.subscribeConsole}
         />

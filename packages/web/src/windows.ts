@@ -18,7 +18,7 @@ export interface OpenWindow {
   x: number;
   y: number;
   w: number;
-  /** Body height when the kind is resizable (console). Absent = CSS default. */
+  /** Body height when the kind is resizable (console, chat). Absent = CSS default. */
   h?: number;
   /** Stacking order. DOM order stays fixed so clicks survive a raise. */
   z: number;
@@ -52,9 +52,10 @@ export const WINDOW_SPEC: Record<
   sessions: { title: "sessions", x: 96, y: 168, w: 620 },
   // Mid-bottom: spawn position is computed in useWindows from the viewport so
   // a conversation opens near the hand — over the middle of the field, clear of
-  // the prompt terminal that keeps the very bottom. The title is per-session,
-  // so this one is only the fallback for a window opened without one.
-  chat: { title: "session", x: 9999, y: 9999, w: 560 },
+  // the prompt terminal that keeps the very bottom. Height is operator-
+  // resizable from the bottom-right grip. The title is per-session, so this
+  // one is only the fallback for a window opened without one.
+  chat: { title: "session", x: 9999, y: 9999, w: 560, h: 420 },
   approvals: { title: "approvals", x: 620, y: 148, w: 560 },
   capabilities: { title: "capabilities", x: 150, y: 250, w: 540 },
   capability: { title: "capability", x: 260, y: 210, w: 560 },

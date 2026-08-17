@@ -1,8 +1,9 @@
 import { WProviderNote, WTitle } from "./bits";
 import type { ProviderInfo } from "../../domain";
 
-/** Summoned from prompt control 4. What extra material rides along with the next
- * prompt — the only prompt option that needs more than a value to express. */
+/** Summoned from a session's context control or the `context` command. What
+ * extra material rides along with the next turn — the only session option that
+ * needs more than a value to express. */
 export function ContextWindow({
   projectName,
   provider,
@@ -13,7 +14,7 @@ export function ContextWindow({
   return (
     <div>
       <WProviderNote provider={provider} />
-      <WTitle>attached to the next prompt</WTitle>
+      <WTitle>attached to the next turn</WTitle>
       <div className="w-empty">nothing attached</div>
 
       <WTitle>from {projectName ?? "no project"}</WTitle>

@@ -2,7 +2,7 @@ import { useEffect, useRef } from "react";
 import type { Turn } from "../domain";
 
 /**
- * Lives inside the expanded prompt, never on the bare field.
+ * Lives inside a session window or the prompt terminal when it shows history.
  *
  * The distinction that matters here is **who did it**. What the agent produced
  * is printed: a stamp laid on the surface, the same material as tabs, chips and

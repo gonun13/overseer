@@ -5,6 +5,7 @@ import type {
   ServerMessage,
 } from "@overseer/protocol";
 import type { Approval, Project, ProviderInfo, Session } from "../domain";
+import type { SessionOption, SessionOptionKey } from "../session";
 import type { Chat } from "../state/useChatSessions";
 import type { DiscoveryController } from "../state/useDiscovery";
 import type { OpenWindow, WindowKind } from "../windows";
@@ -12,13 +13,13 @@ import { Window } from "./Window";
 import { ApprovalsWindow } from "./windows/ApprovalsWindow";
 import { CapabilitiesWindow } from "./windows/CapabilitiesWindow";
 import { CapabilityWindow } from "./windows/CapabilityWindow";
-import { ChatWindow } from "./windows/ChatWindow";
 import { ConsoleWindow } from "./windows/ConsoleWindow";
 import { ContextWindow } from "./windows/ContextWindow";
 import { DiffWindow } from "./windows/DiffWindow";
 import { HelpWindow } from "./windows/HelpWindow";
 import { OverseerWindow } from "./windows/OverseerWindow";
 import { ProvidersWindow } from "./windows/ProvidersWindow";
+import { SessionWindow } from "./windows/SessionWindow";
 import { SessionsWindow } from "./windows/SessionsWindow";
 
 type OpenWindowAction = (
@@ -44,6 +45,15 @@ interface WindowStackHostProps {
   startChat: () => void;
   chatFor: (id: string) => Chat | undefined;
   sendChat: (id: string, input: string) => void;
+  sessionOptions: SessionOption[];
+  openSessionControls: Partial<Record<string, SessionOptionKey>>;
+  onToggleSessionControl: (sessionId: string, key: SessionOptionKey) => void;
+  onSelectSessionControl: (
+    sessionId: string,
+    key: SessionOptionKey,
+    value: string,
+  ) => void;
+  onOpenSessionContext: (sessionId: string) => void;
   send: (message: ClientMessage) => void;
   subscribeConsole: (listener: (message: ServerMessage) => void) => () => void;
 }
@@ -66,13 +76,18 @@ export function WindowStackHost({
   startChat,
   chatFor,
   sendChat,
+  sessionOptions,
+  openSessionControls,
+  onToggleSessionControl,
+  onSelectSessionControl,
+  onOpenSessionContext,
   send,
   subscribeConsole,
 }: WindowStackHostProps) {
   const [approvals, setApprovals] = useState<Approval[]>([]);
 
   return windows.map((windowState) => {
-    // A chat window's payload is the session id it belongs to; everything it
+    // A session window's payload is the session id it belongs to; everything it
     // renders is read back from the conversation store, never held in the frame.
     const chat =
       windowState.kind === "chat"
@@ -88,12 +103,18 @@ export function WindowStackHost({
         z={windowState.z}
         width={windowState.w}
         height={windowState.h}
-        variant={windowState.kind === "console" ? "console" : undefined}
+        variant={
+          windowState.kind === "console"
+            ? "console"
+            : windowState.kind === "chat"
+              ? "session"
+              : undefined
+        }
         onClose={() => closeWindow(windowState.id)}
         onRaise={() => raiseWindow(windowState.id)}
         onMove={(x, y) => moveWindow(windowState.id, x, y)}
         onResize={
-          windowState.kind === "console"
+          windowState.h !== undefined
             ? (w, h) => resizeWindow(windowState.id, w, h)
             : undefined
         }
@@ -131,9 +152,20 @@ export function WindowStackHost({
           />
         )}
         {chat && (
-          <ChatWindow
+          <SessionWindow
             turns={chat.turns}
             busy={chat.session.activity === "working"}
+            settings={chat.settings}
+            options={sessionOptions}
+            openSessionControl={openSessionControls[chat.session.id] ?? null}
+            contextCount={0}
+            onToggleSessionControl={(key) =>
+              onToggleSessionControl(chat.session.id, key)
+            }
+            onSelectSessionControl={(key, value) =>
+              onSelectSessionControl(chat.session.id, key, value)
+            }
+            onOpenSessionContext={() => onOpenSessionContext(chat.session.id)}
             onSubmit={(input) => sendChat(chat.session.id, input)}
             onInspect={(turnId) => {
               const turn = chat.turns.find(

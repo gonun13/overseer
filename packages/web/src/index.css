@@ -10,7 +10,7 @@
 
      field    ground, the overseer space, the active project, widgets, and
               readouts in general — including the project panel's collapsed
-              header and the prompt controls' rows, both of which are read
+              header and the session controls' rows, both of which are read
               before they are acted on. Samaritan: light.
      surface  what you act in — windows, the chat, panels, and the project list
               once it opens. Samaritan: dark.
@@ -224,7 +224,7 @@
 /* The two things that operate the machine rather than show its content, so
    they sit on `--void` instead of stamp or surface (ui-ux-design.md §2). */
 .window-tab,
-.ctl-values {
+.session-ctl-values {
   --light-ok: var(--ok);
   --light-warn: var(--warn);
   --light-accent: var(--accent);
@@ -811,22 +811,14 @@ button {
 
 /* ---- bottom left: the sessions panel --------------------------------------
    The project panel's two levels — field readout, surface list — mirrored for
-   the bottom of the field: bottom-anchored like the menu it stacks on, so the
-   list opens *upward* and the header stays put beneath it. That is why the head
-   carries its rule on top: the rule always sits between the header and the list,
-   whichever side the list is on.
-
-   `bottom` clears the menu below it, which is one context row while the prompt
-   options are empty. Both are bottom-anchored, so a menu that grows would need
-   this offset to grow with it (PromptControls). */
-/* Sized to the menu it stacks on, not to the project panel it imitates: the
-   expanded prompt terminal is capped to clear the bottom-left corner at exactly
-   the menu's width (`.chat`), and a wider panel here would sit under the dock
-   and swallow clicks on its own chevron. */
+   the bottom of the field: bottom-anchored so the list opens *upward* and the
+   header stays put beneath it. That is why the head carries its rule on top:
+   the rule always sits between the header and the list, whichever side the
+   list is on. */
 .sessions {
   position: absolute;
   left: 26px;
-  bottom: 74px;
+  bottom: 26px;
   z-index: 40;
   width: 260px;
   max-width: 28vw;
@@ -857,41 +849,42 @@ button {
   color: var(--accent-fill);
 }
 
-/* ---- bottom left: prompt controls ----------------------------------------
-   Split like the project panel. The rows are a menu — you read them to see
-   what's armed — so they stay on the **field** and blend with the background.
-   Opening one prints its options as a **stamp** below it: that is the part you
-   act on. An accordion, one section open at a time, anchored at the bottom so
-   it grows upward. Bare digits open a section while the prompt is closed. */
-.controls {
-  position: absolute;
-  left: 26px;
-  bottom: 26px;
-  z-index: 30;
-  width: 260px;
-  max-width: 28vw;
-  padding: 3px 0;
-  border-left: 1.5px solid var(--edge);
+/* ---- session controls (inside a chat window) ------------------------------
+   Four columns along the bottom of the composer: model, mode, agent, context.
+   Opening a column prints its options as a stamp *above* it so the bar does
+   not grow the window. */
+.session-controls {
+  display: flex;
+  align-items: stretch;
+  width: 100%;
+  padding: 4px 0 0;
+  border-top: 1.5px solid var(--edge);
 }
 
-.ctl-head {
+.session-ctl {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.session-ctl-head {
   display: flex;
   align-items: center;
-  gap: 9px;
+  gap: 6px;
   width: 100%;
-  padding: 4px 6px 4px 8px;
+  padding: 4px 4px 4px 6px;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 1px;
   color: var(--text-dim);
 }
 
-.ctl-head:hover,
-.ctl.open .ctl-head {
+.session-ctl-head:hover,
+.session-ctl.open .session-ctl-head {
   color: var(--text);
 }
 
-.ctl-key {
+.session-ctl-key {
   flex: none;
   width: 14px;
   text-align: center;
@@ -899,17 +892,16 @@ button {
   color: var(--text-faint);
 }
 
-.ctl-head:hover .ctl-key,
-.ctl.open .ctl-key {
+.session-ctl-head:hover .session-ctl-key,
+.session-ctl.open .session-ctl-key {
   color: var(--accent);
 }
 
-.ctl-label {
+.session-ctl-label {
   flex: none;
-  width: 62px;
 }
 
-.ctl-value {
+.session-ctl-value {
   flex: 1;
   min-width: 0;
   overflow: hidden;
@@ -918,41 +910,47 @@ button {
   color: var(--text);
 }
 
-.ctl-value.danger {
+.session-ctl-value.danger {
   color: var(--accent);
 }
 
-.ctl-chevron {
+.session-ctl-chevron {
   flex: none;
   display: flex;
   color: var(--text-faint);
 }
 
-/* The block that appears once a row opens — pressed onto the field on `--void`,
-   not a tint of it. Background and ink come from the void selector above
-   (`.ctl-values`); the edge is gated to `.open` so it doesn't leave a sliver
-   under a collapsed row. */
-.ctl-values {
+/* The block that appears once a column opens — pressed on `--void`, not a tint
+   of the window. Anchored to the top of the column so it grows upward over the
+   composer rather than out of the frame. */
+.session-ctl-values {
+  position: absolute;
+  left: 0;
+  right: 0;
+  bottom: 100%;
+  z-index: 2;
   max-height: 0;
   overflow: hidden;
   opacity: 0;
+  background: var(--void);
   transition:
     max-height 0.22s ease-out,
     opacity 0.14s linear;
 }
 
-.ctl.open .ctl-values {
+.session-ctl.open .session-ctl-values {
   max-height: 200px;
+  overflow-y: auto;
   opacity: 1;
   border: 1px solid var(--void-edge);
 }
 
-.ctl-option {
+.session-ctl-option {
   display: flex;
   align-items: center;
   gap: 8px;
   width: 100%;
-  padding: 4px 8px 4px 31px;
+  padding: 4px 8px;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
@@ -961,20 +959,20 @@ button {
 
 /* Void's own raise — `--raise` follows the field and would vanish against
    samaritan's near-black void (and the inverted light void in machine). */
-.ctl-option:hover {
+.session-ctl-option:hover {
   background: var(--void-raise);
   color: var(--void-ink);
 }
 
-.ctl-option.current {
+.session-ctl-option.current {
   color: var(--void-ink);
 }
 
-.ctl-option.danger {
+.session-ctl-option.danger {
   color: var(--accent);
 }
 
-.ctl-mark {
+.session-ctl-mark {
   flex: none;
   width: 8px;
   color: var(--mark-fill);
@@ -1176,8 +1174,13 @@ button {
 }
 
 .prompt-caret {
+  flex: none;
   color: var(--accent-fill);
   font-size: 16px;
+}
+
+[data-theme="machine"] .prompt-caret {
+  color: var(--mark-fill);
 }
 
 .prompt-placeholder {
@@ -1190,23 +1193,63 @@ button {
   color: var(--ink-dim);
 }
 
+.prompt-field {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+}
+
+.prompt-stack {
+  position: relative;
+}
+
+.prompt-mirror {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  font-size: 14px;
+  color: var(--ink);
+}
+
+.prompt-stack textarea {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  margin: 0;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  resize: none;
+  overflow: hidden;
+  background: transparent;
+  color: transparent;
+  caret-color: transparent;
+  font: inherit;
+  font-size: 14px;
+  line-height: inherit;
+  outline: none;
+}
+
 .prompt-cursor {
   flex: none;
+  display: inline-block;
   width: 8px;
   height: 17px;
+  vertical-align: text-bottom;
   background: var(--ink);
 }
 
-/* Capped so the expanded chat never covers the two bottom corners it depends on —
-   the prompt controls to its left and the provider widget to its right.
-   `gap` is what separates the two panels below: they are siblings, not one
-   frame split in half, so the field shows between them. */
+/* Capped so the expanded prompt terminal never covers the provider widget on
+   the right. `gap` is what separates the two panels below: they are siblings,
+   not one frame split in half, so the field shows between them. */
 .chat {
   display: flex;
   flex-direction: column;
   align-items: stretch;
   gap: 6px;
-  width: min(880px, max(520px, calc(100vw - 600px)));
+  width: min(880px, max(520px, calc(100vw - 400px)));
 }
 
 /* Output. Its own panel, a sibling of the composer rather than a shared frame
@@ -1423,22 +1466,17 @@ button {
   color: var(--text);
 }
 
-/* ---- the chat window ------------------------------------------------------
-   One conversation, detached. The same two materials as the expanded prompt —
-   a page for what the model printed, a surface for what you type — inside an
-   ordinary window frame, so it drags, raises and closes like everything else.
-
-   The transcript is capped well under the window body's own max-height: the
-   body is what would scroll otherwise, and a composer that scrolls out of the
-   frame is not a chat window. */
-.chat-window {
+/* ---- the session window ---------------------------------------------------
+   One conversation, detached. Transcript fills whatever height the operator
+   has given the frame; composer and session controls stay pinned to the
+   bottom. Resizable from the bottom-right grip, same as the console. */
+.session-window {
   display: flex;
   flex-direction: column;
   gap: 6px;
-}
-
-.chat-window .transcript {
-  max-height: 240px;
+  flex: 1;
+  min-height: 0;
+  height: 100%;
 }
 
 /* A deliberate, scoped exception to the input-dark/output-light rule stated at
@@ -1449,47 +1487,69 @@ button {
    so here everything (transcript, stamps, echoed turns, composer) sits on the
    window's own `--fill`/`--ink`, and the composer is marked out by an accent
    outline instead of by contrast. The terminal's own `.chat` is untouched. */
-.chat-window .transcript-panel,
-.chat-window .turn-agent,
-.chat-window .turn-tool,
-.chat-window .turn-operator,
-.chat-window .composer {
+.session-window .transcript-panel,
+.session-window .turn-agent,
+.session-window .turn-tool,
+.session-window .turn-operator,
+.session-window .composer {
   background: transparent;
   color: var(--ink);
 }
 
-.chat-window .transcript-panel {
+.session-window .transcript-panel {
+  flex: 1;
+  min-height: 0;
+  overflow: auto;
   border: 0;
 }
 
-.chat-window .turn-agent,
-.chat-window .turn-tool {
+.session-window .transcript {
+  max-height: none;
+}
+
+.session-window .turn-agent,
+.session-window .turn-tool {
   border-color: var(--ink-rule);
 }
 
-.chat-window .turn-label,
-.chat-window .turn-tool-target {
+.session-window .turn-label,
+.session-window .turn-tool-target {
   color: var(--ink-faint);
 }
 
-.chat-window .turn-tool {
+.session-window .turn-tool {
   color: var(--ink-dim);
 }
 
 /* The only outline in the window, so the input is still obvious with the
    colour block gone. */
-.chat-window .composer {
+.session-window .composer {
+  flex: none;
   border: 1px solid var(--accent-fill);
 }
 
 /* Shorter than the terminal's: the window body is what would have to scroll
    otherwise, and a composer that scrolls out of its frame is not a chat
    window. */
-.chat-window .composer-field {
+.session-window .composer-field {
   max-height: 112px;
 }
 
-.chat-empty {
+.session-window .session-controls {
+  flex: none;
+  border-top-color: var(--ink-rule);
+}
+
+.session-window .session-ctl-head {
+  color: var(--ink-dim);
+}
+
+.session-window .session-ctl-head:hover,
+.session-window .session-ctl.open .session-ctl-head {
+  color: var(--ink);
+}
+
+.session-empty {
   margin: 0;
   padding: 12px;
   color: var(--ink-faint);
@@ -1571,6 +1631,22 @@ button {
 
 .window-console .window-body.expanded {
   /* Fallback before state height lands; inline style overrides when set. */
+  max-height: min(520px, 62vh);
+}
+
+/* Chat fills the body so the transcript can grow with the grip; composer and
+   controls stay at the bottom. Frame is relative so the grip sits on it. */
+.window-session .window-frame {
+  position: relative;
+}
+
+.window-session .window-body {
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+}
+
+.window-session .window-body.expanded {
   max-height: min(520px, 62vh);
 }
 
@@ -1900,7 +1976,7 @@ button {
 /* The option already in effect, inside a row of otherwise-equal choices. This
    is *not* a permanent hover weight — a resting button that stays filled is a
    stamp again, the exact confusion the split is meant to prevent. Selection is
-   marked the same way a current value is marked in the prompt controls: a
+   marked the same way a current value is marked in the session controls: a
    small `--mark-fill` glyph, chrome otherwise untouched (ui-ux-design.md §6.3). */
 .w-btn-mark {
   width: 8px;
@@ -2163,7 +2239,7 @@ a.w-btn {
   .window-tab,
   .window-body,
   .projects-list,
-  .ctl-values,
+  .session-ctl-values,
   .panel,
   .os-rule,
   .gauge-fill {

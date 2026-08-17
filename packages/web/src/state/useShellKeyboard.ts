@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import type { PromptOptionKey } from "../prompt";
+import type { SessionOptionKey } from "../session";
 
 interface ShellKeyboardOptions {
   /** A decision is up. Every command is off, including Escape: the decision is
@@ -7,19 +7,21 @@ interface ShellKeyboardOptions {
   blocked: boolean;
   settingsOpen: boolean;
   windowCount: number;
-  openControl: PromptOptionKey | null;
-  promptOpen: boolean;
-  promptOptionKeys: readonly PromptOptionKey[];
-  /** The menu arms the focused session; with none focused it is not on the
-   * field, and its digits must not act on something the operator cannot see. */
-  controlsAvailable: boolean;
+  openSessionControl: SessionOptionKey | null;
+  /** Whether the prompt bar is focused; session-control digits stand down while
+   * it is. */
+  promptFocused: boolean;
+  sessionOptionKeys: readonly SessionOptionKey[];
+  /** The focused session's controls; digits on the prompt terminal target these
+   * when a session is active and the terminal is unfocused. */
+  sessionControlsAvailable: boolean;
   closeSettings: () => void;
   closeTopWindow: () => void;
-  closeControl: () => void;
-  closePrompt: () => void;
-  toggleControl: (key: PromptOptionKey) => void;
-  openContext: () => void;
-  openPrompt: () => void;
+  closeSessionControl: () => void;
+  blurPrompt: () => void;
+  toggleSessionControl: (key: SessionOptionKey) => void;
+  openSessionContext: () => void;
+  focusPrompt: () => void;
   toggleProjects: () => void;
   toggleSettings: () => void;
 }
@@ -29,17 +31,17 @@ export function useShellKeyboard({
   blocked,
   settingsOpen,
   windowCount,
-  openControl,
-  promptOpen,
-  promptOptionKeys,
-  controlsAvailable,
+  openSessionControl,
+  promptFocused,
+  sessionOptionKeys,
+  sessionControlsAvailable,
   closeSettings,
   closeTopWindow,
-  closeControl,
-  closePrompt,
-  toggleControl,
-  openContext,
-  openPrompt,
+  closeSessionControl,
+  blurPrompt,
+  toggleSessionControl,
+  openSessionContext,
+  focusPrompt,
   toggleProjects,
   toggleSettings,
 }: ShellKeyboardOptions) {
@@ -50,32 +52,33 @@ export function useShellKeyboard({
       if (event.key === "Escape") {
         if (settingsOpen) closeSettings();
         else if (windowCount > 0) closeTopWindow();
-        else if (openControl) closeControl();
-        else closePrompt();
+        else if (openSessionControl) closeSessionControl();
+        else blurPrompt();
         return;
       }
 
       const target = event.target as HTMLElement | null;
       const typing = !!target?.closest("input, textarea");
 
-      // Bare digits control the closed prompt; an open prompt owns every key.
+      // Bare digits open session controls on the focused session when the
+      // prompt terminal is not focused.
       if (
-        controlsAvailable &&
+        sessionControlsAvailable &&
         !event.metaKey &&
         !event.ctrlKey &&
         !event.altKey &&
-        !promptOpen &&
+        !promptFocused &&
         !typing
       ) {
         const index = Number(event.key);
-        if (index >= 1 && index <= promptOptionKeys.length) {
+        if (index >= 1 && index <= sessionOptionKeys.length) {
           event.preventDefault();
-          toggleControl(promptOptionKeys[index - 1]);
+          toggleSessionControl(sessionOptionKeys[index - 1]);
           return;
         }
-        if (index === promptOptionKeys.length + 1) {
+        if (index === sessionOptionKeys.length + 1) {
           event.preventDefault();
-          openContext();
+          openSessionContext();
           return;
         }
       }
@@ -83,7 +86,7 @@ export function useShellKeyboard({
       if (!(event.metaKey || event.ctrlKey)) return;
       if (event.key === "k") {
         event.preventDefault();
-        openPrompt();
+        focusPrompt();
       } else if (event.key === "p") {
         event.preventDefault();
         toggleProjects();
@@ -97,19 +100,19 @@ export function useShellKeyboard({
     return () => window.removeEventListener("keydown", onKeyDown);
   }, [
     blocked,
-    closeControl,
-    closePrompt,
+    blurPrompt,
+    closeSessionControl,
     closeSettings,
     closeTopWindow,
-    controlsAvailable,
-    openContext,
-    openControl,
-    openPrompt,
-    promptOpen,
-    promptOptionKeys,
+    focusPrompt,
+    openSessionContext,
+    openSessionControl,
+    promptFocused,
+    sessionControlsAvailable,
+    sessionOptionKeys,
     settingsOpen,
-    toggleControl,
     toggleProjects,
+    toggleSessionControl,
     toggleSettings,
     windowCount,
   ]);

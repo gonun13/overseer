@@ -96,7 +96,8 @@ export function useWindows() {
         // opens where the operator is already looking, but above the prompt
         // terminal and the footer rather than on top of them.
         if (kind === "chat") {
-          const assumedHeight = 330; // transcript cap + composer
+          const bodyH = height ?? 420;
+          const chrome = 36; // tab above the body
           const dockClearance = 140; // prompt terminal + footer
           return [
             ...current,
@@ -113,9 +114,10 @@ export function useWindows() {
               ),
               y: Math.max(
                 56,
-                window.innerHeight - assumedHeight - dockClearance + cascade,
+                window.innerHeight - bodyH - chrome - dockClearance + cascade,
               ),
               w: width,
+              h: bodyH,
               z: ++zSeq,
               payload,
             },

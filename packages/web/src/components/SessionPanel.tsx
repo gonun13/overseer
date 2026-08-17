@@ -3,11 +3,10 @@ import { ChevronIcon } from "./icons";
 import type { Session } from "../domain";
 
 /**
- * Bottom-left, above the menu. The project panel's two levels, mirrored: the
- * collapsed header is a readout so it stays on the field, the list is what you
- * click into to act so it is a surface. Bottom-anchored like the menu it stacks
- * on, which is why the list opens *upward* and the header sits beneath it —
- * the header stays put while the list grows (ui-ux-design.md §6).
+ * Bottom-left. The project panel's two levels, mirrored: the collapsed header is
+ * a readout so it stays on the field, the list is what you click into to act so
+ * it is a surface. Bottom-anchored so the list opens *upward* and the header
+ * sits beneath it — the header stays put while the list grows (ui-ux-design.md §6).
  *
  * Selecting never closes it: like the project panel this is a status list
  * first, and the lights are how sessions in flight are seen at all.

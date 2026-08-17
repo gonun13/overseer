@@ -27,8 +27,8 @@ export function HelpWindow({ provider }: { provider: ProviderInfo }) {
       <WTitle>keys</WTitle>
       <div className="w-pre">
         {[
-          "1 .. 4               open a prompt control",
-          "                     (while the prompt is closed)",
+          "1 .. 4               open a session control",
+          "                     (focused session, prompt unfocused)",
           "ctrl/cmd + k         open the prompt",
           "ctrl/cmd + p         collapse or expand projects",
           "ctrl/cmd + ,         open settings",

@@ -30,8 +30,9 @@ export function Window({
   width: number;
   /** Body height when resizable. Absent = CSS max-height default. */
   height?: number;
-  /** `console` fills flush and may expose a resize grip. */
-  variant?: "console";
+  /** `console` fills flush; `session` fills the body so the transcript can grow.
+   * Either may expose a resize grip when `onResize` is set. */
+  variant?: "console" | "session";
   onClose: () => void;
   onRaise: () => void;
   onMove: (x: number, y: number) => void;
@@ -132,7 +133,7 @@ export function Window({
 
   return (
     <div
-      className={`window ${variant === "console" ? "window-console" : ""} ${dragging || resizing ? "dragging" : ""}`}
+      className={`window ${variant ? `window-${variant}` : ""} ${dragging || resizing ? "dragging" : ""}`}
       style={{ left: x, top: y, width, zIndex: z }}
       onPointerDown={(e) => {
         onRaise();

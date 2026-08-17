@@ -47,7 +47,7 @@ export const COMMANDS: Command[] = [
   {
     pattern: /^context$/i,
     usage: "context",
-    help: "what rides along with the prompt",
+    help: "what rides along with the next turn",
     action: { type: "open", kind: "context" },
   },
   {
