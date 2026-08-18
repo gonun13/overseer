@@ -68,12 +68,19 @@ export interface DiscoveryController extends WizardState {
   subscribeConsole: (
     listener: (message: ServerMessage) => void,
   ) => () => void;
+  /** Subscribe to session.* (and session-related error) frames. */
+  subscribeSession: (
+    listener: (message: ServerMessage) => void,
+  ) => () => void;
 }
 
 export function useDiscovery(): DiscoveryController {
   const [state, dispatch] = useReducer(wizardReducer, INITIAL_WIZARD);
   const { phase, connected } = state;
   const consoleListeners = useRef(
+    new Set<(message: ServerMessage) => void>(),
+  );
+  const sessionListeners = useRef(
     new Set<(message: ServerMessage) => void>(),
   );
 
@@ -95,6 +102,16 @@ export function useDiscovery(): DiscoveryController {
         for (const listener of consoleListeners.current) listener(message);
         // Console errors are benign refusals (not signed in, stale id) — they
         // must not tear the wizard down the way a lost socket would.
+        return;
+      }
+      if (
+        message.type === "session.list" ||
+        message.type === "session.history" ||
+        message.type === "session.event" ||
+        message.type === "session.meta" ||
+        (message.type === "error" && message.about?.startsWith("session."))
+      ) {
+        for (const listener of sessionListeners.current) listener(message);
         return;
       }
       if (message.type === "connected") {
@@ -336,6 +353,16 @@ export function useDiscovery(): DiscoveryController {
     [],
   );
 
+  const subscribeSession = useCallback(
+    (listener: (message: ServerMessage) => void) => {
+      sessionListeners.current.add(listener);
+      return () => {
+        sessionListeners.current.delete(listener);
+      };
+    },
+    [],
+  );
+
   // Welcome already required a live socket, so discovery always starts with
   // one — and only after name, tone and the greet presentation have finished.
   // Re-check readyState in case the connection dropped between phases.
@@ -364,5 +391,6 @@ export function useDiscovery(): DiscoveryController {
     onHeadlineReady,
     send,
     subscribeConsole,
+    subscribeSession,
   };
 }

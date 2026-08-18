@@ -1,4 +1,5 @@
 import { WProviderNote, WRow } from "./bits";
+import { TrashIcon } from "../icons";
 import type { Project, ProviderInfo, Session } from "../../domain";
 
 export function SessionsWindow({
@@ -7,12 +8,14 @@ export function SessionsWindow({
   provider,
   onOpenSession,
   onNewSession,
+  onDeleteSession,
 }: {
   sessions: Session[];
   projects: Project[];
   provider: ProviderInfo;
   onOpenSession: (id: string) => void;
   onNewSession: () => void;
+  onDeleteSession: (id: string) => void;
 }) {
   return (
     <div>
@@ -37,7 +40,14 @@ export function SessionsWindow({
                   open
                 </button>
                 <button className="w-btn">fork</button>
-                <button className="w-btn danger">stop</button>
+                <button
+                  className="w-btn danger"
+                  onClick={() => onDeleteSession(s.id)}
+                  aria-label={`delete ${s.name}`}
+                >
+                  <TrashIcon />
+                  delete
+                </button>
               </>
             }
           />

@@ -1,0 +1,464 @@
+import type {
+  AgentAdapter,
+  AgentEvent,
+  PermissionMode,
+  SessionHandle,
+  SessionMeta,
+  ServerMessage,
+} from "@overseer/protocol";
+import {
+  deleteSession,
+  listProjectSessions,
+  lookupSessionTitle,
+  mintSessionId,
+  openSession,
+  readSessionHistory,
+} from "@overseer/adapter-claude-code";
+import { getAdapter } from "./adapters.js";
+import {
+  readSnapshot,
+  recordAction,
+  type WorldSnapshot,
+} from "./memory/internal.js";
+import { isInsideWorkspace } from "./workspace.js";
+
+type Broadcast = (message: ServerMessage) => void;
+
+interface LiveSession {
+  handle: SessionHandle;
+  meta: SessionMeta;
+  pump: Promise<void>;
+  lastActivityAt: number;
+}
+
+/** Idle sessions are reaped and resumed with `--resume` on the next message. */
+const IDLE_REAP_MS = 15 * 60_000;
+
+export type SessionResult = { ok: true } | { ok: false; reason: string };
+
+export interface SessionSupervisorDeps {
+  readSnapshot?: () => Promise<WorldSnapshot | undefined>;
+  getAdapter?: (id: string) => AgentAdapter | undefined;
+  isInsideWorkspace?: (path: string) => Promise<boolean>;
+  recordAction?: typeof recordAction;
+  /** Override the idle window — tests use a few milliseconds. */
+  idleReapMs?: number;
+  listProjectSessions?: typeof listProjectSessions;
+  readSessionHistory?: typeof readSessionHistory;
+  openSession?: typeof openSession;
+  mintSessionId?: typeof mintSessionId;
+  lookupSessionTitle?: typeof lookupSessionTitle;
+  deleteSession?: typeof deleteSession;
+}
+
+export function createSessionSupervisor(
+  broadcast: Broadcast,
+  deps: SessionSupervisorDeps = {},
+) {
+  const readSnapshotFn = deps.readSnapshot ?? readSnapshot;
+  const getAdapterFn = deps.getAdapter ?? getAdapter;
+  const isInsideWorkspaceFn = deps.isInsideWorkspace ?? isInsideWorkspace;
+  const recordActionFn = deps.recordAction ?? recordAction;
+  const listProjectSessionsFn =
+    deps.listProjectSessions ?? listProjectSessions;
+  const readSessionHistoryFn =
+    deps.readSessionHistory ?? readSessionHistory;
+  const openSessionFn = deps.openSession ?? openSession;
+  const mintSessionIdFn = deps.mintSessionId ?? mintSessionId;
+  const lookupSessionTitleFn =
+    deps.lookupSessionTitle ?? lookupSessionTitle;
+  const deleteSessionFn = deps.deleteSession ?? deleteSession;
+
+  const idleReapMs = deps.idleReapMs ?? IDLE_REAP_MS;
+
+  const live = new Map<string, LiveSession>();
+  const opening = new Map<string, Promise<SessionResult>>();
+  const seenPermissions = new Set<string>();
+
+  function pushList(sessions: SessionMeta[]): void {
+    broadcast({ type: "session.list", sessions });
+  }
+
+  function pushMeta(meta: SessionMeta): void {
+    broadcast({ type: "session.meta", session: meta });
+  }
+
+  function pushEvent(event: AgentEvent): void {
+    broadcast({ type: "session.event", event });
+  }
+
+  let reaper: ReturnType<typeof setInterval> | undefined;
+
+  function touch(sessionId: string): void {
+    const entry = live.get(sessionId);
+    if (entry !== undefined) entry.lastActivityAt = Date.now();
+  }
+
+  /** Drop the child process but keep the session resumable from its JSONL. */
+  async function reapIdle(): Promise<void> {
+    const now = Date.now();
+    for (const [id, entry] of [...live]) {
+      if (now - entry.lastActivityAt < idleReapMs) continue;
+      live.delete(id);
+      await entry.handle.close();
+      entry.meta.status = "dormant";
+      pushMeta({ ...entry.meta });
+      const sessions = await mergeList(entry.meta.projectDir);
+      pushList(sessions);
+    }
+    if (live.size === 0 && reaper !== undefined) {
+      clearInterval(reaper);
+      reaper = undefined;
+    }
+  }
+
+  function startReaper(): void {
+    if (reaper !== undefined) return;
+    reaper = setInterval(() => {
+      void reapIdle();
+    }, Math.min(60_000, idleReapMs));
+    reaper.unref?.();
+  }
+
+  function track(sessionId: string, entry: LiveSession): void {
+    live.set(sessionId, entry);
+    startReaper();
+  }
+
+  async function adapterContext(): Promise<
+    | { ok: true; adapter: AgentAdapter; projectPath: string }
+    | { ok: false; reason: string }
+  > {
+    const snapshot = await readSnapshotFn();
+    const providerId = snapshot?.attached_provider;
+    if (providerId === undefined) {
+      return { ok: false, reason: "no provider attached" };
+    }
+    const projectPath = snapshot?.last_active_project;
+    if (projectPath === undefined) {
+      return { ok: false, reason: "no active project" };
+    }
+    if (!(await isInsideWorkspaceFn(projectPath))) {
+      return {
+        ok: false,
+        reason: "active project is not inside the workspace",
+      };
+    }
+    const adapter = getAdapterFn(providerId);
+    if (adapter === undefined) {
+      return { ok: false, reason: `unknown provider: ${providerId}` };
+    }
+    let status;
+    try {
+      status = await adapter.getStatus();
+    } catch (error) {
+      return {
+        ok: false,
+        reason:
+          error instanceof Error
+            ? error.message
+            : "could not read provider status",
+      };
+    }
+    if (!status.authenticated) {
+      return { ok: false, reason: "provider is not signed in" };
+    }
+    return { ok: true, adapter, projectPath };
+  }
+
+  async function mergeList(projectPath: string): Promise<SessionMeta[]> {
+    const dormant = await listProjectSessionsFn(projectPath);
+    const byId = new Map(dormant.map((s) => [s.id, s]));
+    for (const [id, entry] of live) {
+      if (entry.meta.projectDir !== projectPath) continue;
+      byId.set(id, { ...entry.meta, status: "live" });
+    }
+    return [...byId.values()].sort(
+      (a, b) =>
+        new Date(b.lastActiveAt).getTime() -
+        new Date(a.lastActiveAt).getTime(),
+    );
+  }
+
+  function startPump(sessionId: string, handle: SessionHandle, meta: SessionMeta) {
+    const pump = (async () => {
+      try {
+        for await (const event of handle.events) {
+          touch(sessionId);
+          if (event.type === "session.init") {
+            meta.model = event.model;
+            meta.lastActiveAt = event.timestamp;
+            pushMeta({ ...meta });
+          }
+          if (event.type === "turn.end") {
+            // An interrupted turn reports a zeroed result — keep the running
+            // total rather than resetting the session's cost to nothing.
+            if (event.totalCostUsd > 0) meta.totalCostUsd = event.totalCostUsd;
+            meta.lastActiveAt = event.timestamp;
+            const title = await lookupSessionTitleFn(
+              meta.projectDir,
+              sessionId,
+            );
+            if (title !== undefined) meta.name = title;
+            pushMeta({ ...meta });
+          }
+          if (event.type === "permission.request") {
+            if (seenPermissions.has(event.requestId)) continue;
+            seenPermissions.add(event.requestId);
+            // MVP: auto-deny with visible error so the turn can continue.
+            handle.resolvePermission(event.requestId, {
+              decision: "deny",
+              feedback: "Overseer approvals queue is not wired yet",
+            });
+            pushEvent({
+              type: "error",
+              sessionId,
+              timestamp: new Date().toISOString(),
+              message: `permission denied (pending UI): ${event.toolName}`,
+              recoverable: true,
+            });
+            continue;
+          }
+          if (event.type === "exit") {
+            live.delete(sessionId);
+            meta.status = "closed";
+            pushMeta({ ...meta });
+            const projectPath = meta.projectDir;
+            void mergeList(projectPath).then(pushList);
+          }
+          pushEvent(event);
+        }
+      } catch {
+        live.delete(sessionId);
+      }
+    })();
+    return pump;
+  }
+
+  async function resumeLiveSession(sessionId: string): Promise<SessionResult> {
+    const ctx = await adapterContext();
+    if (!ctx.ok) return ctx;
+
+    const existing = live.get(sessionId);
+    if (existing !== undefined) return { ok: true };
+
+    const turns = await readSessionHistoryFn(ctx.projectPath, sessionId);
+    broadcast({ type: "session.history", sessionId, turns });
+
+    let handle: SessionHandle;
+    try {
+      handle = await ctx.adapter.resumeSession(sessionId);
+    } catch (error) {
+      return {
+        ok: false,
+        reason:
+          error instanceof Error ? error.message : "could not resume session",
+      };
+    }
+
+    const dormant = await listProjectSessionsFn(ctx.projectPath);
+    const found = dormant.find((s) => s.id === sessionId);
+    const meta: SessionMeta = found ?? {
+      id: sessionId,
+      adapterId: ctx.adapter.id,
+      projectDir: ctx.projectPath,
+      model: "",
+      permissionMode: "default",
+      status: "live",
+      createdAt: new Date().toISOString(),
+      lastActiveAt: new Date().toISOString(),
+      totalCostUsd: 0,
+    };
+    meta.status = "live";
+
+    const pump = startPump(sessionId, handle, meta);
+    track(sessionId, { handle, meta, pump, lastActivityAt: Date.now() });
+    pushMeta(meta);
+    return { ok: true };
+  }
+
+  async function ensureOpen(sessionId: string): Promise<SessionResult> {
+    const existing = live.get(sessionId);
+    if (existing !== undefined) return { ok: true };
+
+    const inflight = opening.get(sessionId);
+    if (inflight !== undefined) return inflight;
+
+    const promise = resumeLiveSession(sessionId);
+    opening.set(sessionId, promise);
+    try {
+      return await promise;
+    } finally {
+      opening.delete(sessionId);
+    }
+  }
+
+  return {
+    async list(): Promise<SessionResult> {
+      const ctx = await adapterContext();
+      if (!ctx.ok) return ctx;
+      const sessions = await mergeList(ctx.projectPath);
+      pushList(sessions);
+      return { ok: true };
+    },
+
+    async create(opts: {
+      model?: string;
+      permissionMode?: PermissionMode;
+      name?: string;
+    }): Promise<SessionResult & { sessionId?: string }> {
+      const ctx = await adapterContext();
+      if (!ctx.ok) return ctx;
+
+      const sessionId = mintSessionIdFn();
+
+      let handle: SessionHandle;
+      try {
+        handle = await openSessionFn(sessionId, {
+          projectDir: ctx.projectPath,
+          model: opts.model,
+          permissionMode: opts.permissionMode,
+          ...(opts.name !== undefined ? { name: opts.name } : {}),
+        });
+      } catch (error) {
+        return {
+          ok: false,
+          reason:
+            error instanceof Error
+              ? error.message
+              : "could not start session",
+        };
+      }
+
+      const meta: SessionMeta = {
+        id: sessionId,
+        adapterId: ctx.adapter.id,
+        name: opts.name,
+        projectDir: ctx.projectPath,
+        model: opts.model ?? "",
+        permissionMode: opts.permissionMode ?? "default",
+        status: "live",
+        createdAt: new Date().toISOString(),
+        lastActiveAt: new Date().toISOString(),
+        totalCostUsd: 0,
+      };
+
+      const pump = startPump(sessionId, handle, meta);
+      track(sessionId, { handle, meta, pump, lastActivityAt: Date.now() });
+
+      pushMeta(meta);
+      const sessions = await mergeList(ctx.projectPath);
+      pushList(sessions);
+
+      void recordActionFn({
+        actor: "operator",
+        action: "session:create",
+        outcome: "ok",
+        detail: `${ctx.adapter.id} · ${sessionId}`,
+      });
+
+      return { ok: true, sessionId };
+    },
+
+    async open(sessionId: string): Promise<SessionResult> {
+      // `ensureOpen` is a no-op once the process is already live, so a second
+      // tab — or the same tab after a reconnect — asking to open a session
+      // that never got reaped would otherwise never receive its transcript.
+      // Reading it fresh here, on every explicit open, is what makes opening
+      // a session idempotent instead of "works once per process lifetime".
+      const ctx = await adapterContext();
+      if (ctx.ok) {
+        const turns = await readSessionHistoryFn(ctx.projectPath, sessionId);
+        broadcast({ type: "session.history", sessionId, turns });
+      }
+      return ensureOpen(sessionId);
+    },
+
+    async send(sessionId: string, text: string): Promise<SessionResult> {
+      let entry = live.get(sessionId);
+      if (entry === undefined) {
+        const opened = await ensureOpen(sessionId);
+        if (!opened.ok) return opened;
+        entry = live.get(sessionId);
+      }
+      if (entry === undefined) {
+        return { ok: false, reason: "session could not be opened" };
+      }
+      entry.handle.send({
+        role: "user",
+        content: [{ type: "text", text }],
+      });
+      entry.meta.lastActiveAt = new Date().toISOString();
+      touch(sessionId);
+      return { ok: true };
+    },
+
+    interrupt(sessionId: string): SessionResult {
+      const entry = live.get(sessionId);
+      if (entry === undefined) {
+        return { ok: false, reason: "session is not live" };
+      }
+      entry.handle.interrupt();
+      return { ok: true };
+    },
+
+    async close(sessionId: string): Promise<SessionResult> {
+      const entry = live.get(sessionId);
+      if (entry === undefined) return { ok: true };
+      live.delete(sessionId);
+      await entry.handle.close();
+      entry.meta.status = "closed";
+      pushMeta(entry.meta);
+      const sessions = await mergeList(entry.meta.projectDir);
+      pushList(sessions);
+      return { ok: true };
+    },
+
+    /** Stop the process if one is running, then permanently remove the
+     * session's transcript — unlike `close`, this does not leave a dormant
+     * session behind to resume later. */
+    async delete(sessionId: string): Promise<SessionResult> {
+      const ctx = await adapterContext();
+      if (!ctx.ok) return ctx;
+
+      const entry = live.get(sessionId);
+      if (entry !== undefined) {
+        live.delete(sessionId);
+        await entry.handle.close();
+      }
+
+      try {
+        await deleteSessionFn(ctx.projectPath, sessionId);
+      } catch (error) {
+        return {
+          ok: false,
+          reason:
+            error instanceof Error
+              ? error.message
+              : "could not delete session",
+        };
+      }
+
+      const sessions = await mergeList(ctx.projectPath);
+      pushList(sessions);
+
+      void recordActionFn({
+        actor: "operator",
+        action: "session:delete",
+        outcome: "ok",
+        detail: `${ctx.adapter.id} · ${sessionId}`,
+      });
+
+      return { ok: true };
+    },
+  };
+}
+
+export function sessionError(about: string, reason: string): ServerMessage {
+  return {
+    type: "error",
+    about,
+    benign: true,
+    message: reason,
+  };
+}

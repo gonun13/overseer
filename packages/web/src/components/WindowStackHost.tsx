@@ -45,6 +45,7 @@ interface WindowStackHostProps {
   startChat: () => void;
   chatFor: (id: string) => Chat | undefined;
   sendChat: (id: string, input: string) => void;
+  onDeleteSession: (id: string) => void;
   sessionOptions: SessionOption[];
   openSessionControls: Partial<Record<string, SessionOptionKey>>;
   onToggleSessionControl: (sessionId: string, key: SessionOptionKey) => void;
@@ -76,6 +77,7 @@ export function WindowStackHost({
   startChat,
   chatFor,
   sendChat,
+  onDeleteSession,
   sessionOptions,
   openSessionControls,
   onToggleSessionControl,
@@ -149,6 +151,7 @@ export function WindowStackHost({
               if (chat) openChat(chat.session);
             }}
             onNewSession={startChat}
+            onDeleteSession={onDeleteSession}
           />
         )}
         {chat && (

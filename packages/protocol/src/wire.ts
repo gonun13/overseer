@@ -1,4 +1,6 @@
-import type { AdapterStatus, LoginPhase } from "./adapter.js";
+import type { AdapterStatus, LoginPhase, PermissionMode, SessionMeta } from "./adapter.js";
+import type { AgentEvent } from "./events.js";
+import type { TurnWire } from "./transcript.js";
 import type {
   AppliedPersonality,
   DiscoveredProject,
@@ -67,7 +69,26 @@ export type ClientMessage =
   /** Browser terminal resized — forwarded to the PTY. */
   | { type: "console.resize"; id: string; cols: number; rows: number }
   /** Operator dismissed the console window (or the tab is leaving). */
-  | { type: "console.close"; id: string };
+  | { type: "console.close"; id: string }
+  /** List sessions for the active project. */
+  | { type: "session.list" }
+  /** Start a new stream-json session in the active project. */
+  | {
+      type: "session.create";
+      model?: string;
+      permissionMode?: PermissionMode;
+      name?: string;
+    }
+  /** Subscribe to a session, backfill history, resume if dormant. */
+  | { type: "session.open"; sessionId: string }
+  /** Send a user turn to a live session. */
+  | { type: "session.send"; sessionId: string; text: string }
+  /** Interrupt the in-flight turn. */
+  | { type: "session.interrupt"; sessionId: string }
+  /** Close a live session process. */
+  | { type: "session.close"; sessionId: string }
+  /** Stop the process if running and permanently delete the session's transcript. */
+  | { type: "session.delete"; sessionId: string };
 
 export interface ConnectedMessage {
   type: "connected";
@@ -233,6 +254,31 @@ export interface ConsoleExitMessage {
   signal?: number;
 }
 
+/** Sessions for the active project — broadcast to all tabs. */
+export interface SessionListMessage {
+  type: "session.list";
+  sessions: SessionMeta[];
+}
+
+/** JSONL backfill before live streaming begins. */
+export interface SessionHistoryMessage {
+  type: "session.history";
+  sessionId: string;
+  turns: TurnWire[];
+}
+
+/** One normalized adapter event from a live session. */
+export interface SessionEventMessage {
+  type: "session.event";
+  event: AgentEvent;
+}
+
+/** Session metadata changed (status, cost, name). */
+export interface SessionMetaMessage {
+  type: "session.meta";
+  session: SessionMeta;
+}
+
 export type ServerMessage =
   | ConnectedMessage
   | ErrorMessage
@@ -249,12 +295,26 @@ export type ServerMessage =
   | ConsoleOpenedMessage
   | ConsoleOutputMessage
   | ConsoleExitMessage
+  | SessionListMessage
+  | SessionHistoryMessage
+  | SessionEventMessage
+  | SessionMetaMessage
   | DiscoveryEvent;
 
 /** Hard caps so a malformed frame cannot pin memory or a PTY. */
 export const CONSOLE_MAX_COLS = 500;
 export const CONSOLE_MAX_ROWS = 200;
 export const CONSOLE_MAX_INPUT_CHARS = 64_000;
+export const SESSION_MAX_ID_CHARS = 64;
+export const SESSION_MAX_TEXT_CHARS = 64_000;
+export const SESSION_MAX_NAME_CHARS = 256;
+
+const PERMISSION_MODES = new Set<string>([
+  "default",
+  "acceptEdits",
+  "plan",
+  "bypassPermissions",
+]);
 
 function isConsoleSize(cols: unknown, rows: unknown): boolean {
   return (
@@ -334,5 +394,54 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       typeof msg.id === "string" && msg.id.length > 0 && msg.id.length <= 64
     );
   }
+  if (type === "session.list") return true;
+  if (type === "session.create") {
+    const msg = value as {
+      model?: unknown;
+      permissionMode?: unknown;
+      name?: unknown;
+    };
+    if (msg.model !== undefined && typeof msg.model !== "string") return false;
+    if (
+      msg.permissionMode !== undefined &&
+      !PERMISSION_MODES.has(msg.permissionMode as string)
+    ) {
+      return false;
+    }
+    if (msg.name !== undefined) {
+      return (
+        typeof msg.name === "string" &&
+        msg.name.length > 0 &&
+        msg.name.length <= SESSION_MAX_NAME_CHARS
+      );
+    }
+    return true;
+  }
+  if (
+    type === "session.open" ||
+    type === "session.interrupt" ||
+    type === "session.close" ||
+    type === "session.delete"
+  ) {
+    const msg = value as { sessionId?: unknown };
+    return isSessionId(msg.sessionId);
+  }
+  if (type === "session.send") {
+    const msg = value as { sessionId?: unknown; text?: unknown };
+    return (
+      isSessionId(msg.sessionId) &&
+      typeof msg.text === "string" &&
+      msg.text.length > 0 &&
+      msg.text.length <= SESSION_MAX_TEXT_CHARS
+    );
+  }
   return false;
+}
+
+function isSessionId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= SESSION_MAX_ID_CHARS
+  );
 }

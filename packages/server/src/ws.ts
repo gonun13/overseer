@@ -18,6 +18,10 @@ import {
   submitCode,
 } from "./login.js";
 import {
+  createSessionSupervisor,
+  sessionError,
+} from "./session-supervisor.js";
+import {
   clearActionRegister,
   clearRunLogs,
   clearSnapshot,
@@ -123,6 +127,8 @@ export function attachWebSocketServer(httpServer: Server): {
     }
   };
 
+  const sessionSupervisor = createSessionSupervisor(broadcast);
+
   httpServer.on("upgrade", (req: IncomingMessage, socket, head) => {
     if (
       req.url !== "/ws" ||
@@ -186,6 +192,7 @@ export function attachWebSocketServer(httpServer: Server): {
       // only holds for a tab that happens to click the button again.
       const auth = currentAuthState();
       if (auth !== undefined) send(auth);
+      void sessionSupervisor.list();
     })();
 
     ws.on("message", async (raw) => {
@@ -268,6 +275,7 @@ export function attachWebSocketServer(httpServer: Server): {
             return;
           }
           send({ type: "project.selected", path: parsed.path });
+          void sessionSupervisor.list();
           return;
         }
         case "theme.select": {
@@ -306,6 +314,7 @@ export function attachWebSocketServer(httpServer: Server): {
             return;
           }
           send({ type: "provider.connected", id: parsed.id });
+          void sessionSupervisor.list();
           return;
         }
         // Auth state always goes out on `broadcast`, never on `send`: a login
@@ -499,6 +508,47 @@ export function attachWebSocketServer(httpServer: Server): {
         case "console.close": {
           const result = consoleSession.close(parsed.id);
           if (!result.ok) send(consoleError("console.close", result.reason));
+          return;
+        }
+        case "session.list": {
+          const result = await sessionSupervisor.list();
+          if (!result.ok) send(sessionError("session.list", result.reason));
+          return;
+        }
+        case "session.create": {
+          const result = await sessionSupervisor.create({
+            model: parsed.model,
+            permissionMode: parsed.permissionMode,
+            name: parsed.name,
+          });
+          if (!result.ok) send(sessionError("session.create", result.reason));
+          return;
+        }
+        case "session.open": {
+          const result = await sessionSupervisor.open(parsed.sessionId);
+          if (!result.ok) send(sessionError("session.open", result.reason));
+          return;
+        }
+        case "session.send": {
+          const result = await sessionSupervisor.send(parsed.sessionId, parsed.text);
+          if (!result.ok) send(sessionError("session.send", result.reason));
+          return;
+        }
+        case "session.interrupt": {
+          const result = sessionSupervisor.interrupt(parsed.sessionId);
+          if (!result.ok) {
+            send(sessionError("session.interrupt", result.reason));
+          }
+          return;
+        }
+        case "session.close": {
+          const result = await sessionSupervisor.close(parsed.sessionId);
+          if (!result.ok) send(sessionError("session.close", result.reason));
+          return;
+        }
+        case "session.delete": {
+          const result = await sessionSupervisor.delete(parsed.sessionId);
+          if (!result.ok) send(sessionError("session.delete", result.reason));
           return;
         }
       }

@@ -181,6 +181,17 @@ export function useWindows() {
     );
   }, []);
 
+  const retitle = useCallback(
+    (kind: WindowKind, payload: unknown, title: string) => {
+      setWindows((current) =>
+        current.map((w) =>
+          w.kind === kind && w.payload === payload ? { ...w, title } : w,
+        ),
+      );
+    },
+    [],
+  );
+
   return {
     windows,
     open,
@@ -191,5 +202,6 @@ export function useWindows() {
     raise,
     move,
     resize,
+    retitle,
   };
 }

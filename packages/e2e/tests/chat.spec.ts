@@ -19,8 +19,12 @@ test("opens a chat window per session, separate from the prompt", async ({
   await passWizardOpening(page);
   await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
 
+  // Open or closed, either chevron is the signal that the panel is present at
+  // all — it defaults open, so "expand" alone would misread a signed-in
+  // operator as the no-provider branch.
   const expand = page.getByRole("button", { name: /expand session list/i });
-  if ((await expand.count()) === 0) {
+  const collapse = page.getByRole("button", { name: /collapse session list/i });
+  if ((await expand.count()) === 0 && (await collapse.count()) === 0) {
     // Nothing can start a session without a provider, so the panel is not
     // furniture that belongs on the field at all.
     await expect(page.getByText("+ new session")).toHaveCount(0);
@@ -30,18 +34,25 @@ test("opens a chat window per session, separate from the prompt", async ({
   // Session controls live in the chat window, not on the field.
   await expect(page.getByRole("button", { name: /context/i })).toHaveCount(0);
 
-  await expand.click();
+  if ((await expand.count()) > 0) await expand.click();
   await page.getByRole("button", { name: "+ new session" }).click();
 
-  const close = page.getByLabel("close session 1");
-  await expect(close).toBeVisible();
-  await expect(page.getByLabel("resize session 1")).toBeVisible();
+  // The window is titled from server session metadata — "new session" until
+  // Claude resolves the session's own title, which then replaces it. Locate
+  // the window by what it is rather than by what it is currently called.
+  const chat = page.locator(".window-session");
+  await expect(chat).toHaveCount(1);
+  await expect(chat.locator(".tab-close")).toBeVisible();
+  await expect(chat.locator(".window-resize")).toBeVisible();
 
-  const context = page.getByRole("button", { name: /context/i });
-  await expect(context).toHaveCount(1);
-  await expect(page.getByRole("button", { name: /model/i })).toHaveCount(1);
-  await expect(page.getByRole("button", { name: /mode/i })).toHaveCount(1);
-  await expect(page.getByRole("button", { name: /agent/i })).toHaveCount(1);
+  // A control's accessible name carries its current value ("1 model —"), so
+  // match the labels themselves: by substring, /mode/i also catches "model".
+  await expect(chat.locator(".session-ctl-label")).toHaveText([
+    "model",
+    "mode",
+    "agent",
+    "context",
+  ]);
 
   const composer = page.getByPlaceholder(
     "Ask, or describe the change you want.",
@@ -58,14 +69,13 @@ test("opens a chat window per session, separate from the prompt", async ({
 
   // Re-selecting the session raises the window it already has rather than
   // opening a second one.
-  await page
-    .getByRole("button", { name: /session 1/i })
-    .first()
-    .click();
-  await expect(close).toHaveCount(1);
+  // The active session's own row — the project may already carry sessions
+  // from earlier runs, and picking another one correctly opens its window.
+  await page.locator(".session-row.current").click();
+  await expect(chat).toHaveCount(1);
 
-  await close.click();
-  await expect(page.getByLabel("close session 1")).toHaveCount(0);
+  await chat.locator(".tab-close").click();
+  await expect(page.locator(".window-session")).toHaveCount(0);
 });
 
 /**
@@ -123,6 +133,133 @@ test("slash commands autocomplete; other text goes to a session", async ({
   await bar.click();
   await prompt.fill("what is in this repo?");
   await prompt.press("Enter");
-  await expect(page.getByLabel("close session 1")).toBeVisible();
+  await expect(page.locator(".window-session")).toHaveCount(1);
   await expect(page.getByText("what is in this repo?")).toBeVisible();
+});
+
+/**
+ * A session outlives the process behind it. Reopening one from the list
+ * resumes it from its JSONL transcript and it must go on answering — the path
+ * that breaks when the adapter cannot work out which project a dormant
+ * session belongs to, leaving the operator with a red light and no reply.
+ */
+test("resumes a session from the list and answers a new question", async ({
+  page,
+}) => {
+  test.setTimeout(180_000);
+  await page.goto("/");
+  await passWizardOpening(page);
+  await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
+
+  // The list defaults open, so only a genuinely absent panel (no provider)
+  // means "nothing to resume" — checking "expand" alone would misread the
+  // ordinary open-by-default state as that same case and skip the test.
+  const expand = page.getByRole("button", { name: /expand session list/i });
+  const collapse = page.getByRole("button", { name: /collapse session list/i });
+  if ((await expand.count()) === 0 && (await collapse.count()) === 0) return;
+  if ((await expand.count()) > 0) await expand.click();
+
+  const existing = page.locator(".session-row:not(.session-new)");
+  if ((await existing.count()) === 0) return; // no transcript to resume yet
+  await existing.first().click();
+
+  const chat = page.locator(".window-session");
+  await expect(chat).toHaveCount(1);
+
+  const composer = page.getByPlaceholder(
+    "Ask, or describe the change you want.",
+  );
+  await composer.fill("Reply with the single word: RESUMED");
+  await composer.press("Enter");
+
+  await expect(chat.locator(".turn-agent").last()).toContainText(/RESUMED/i, {
+    timeout: 120_000,
+  });
+});
+
+/**
+ * Deleting is not the same as closing: it stops whatever the session is doing
+ * and removes it for good, so it must not come back on the next session.list
+ * (nor from JSONL backfill after a reconnect — packages/server/src/session-supervisor.ts `delete`).
+ */
+test("deletes a session from the sessions list, stopping and removing it", async ({
+  page,
+}) => {
+  test.setTimeout(120_000);
+  await page.goto("/");
+  await passWizardOpening(page);
+  await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
+
+  const expand = page.getByRole("button", { name: /expand session list/i });
+  const collapse = page.getByRole("button", { name: /collapse session list/i });
+  if ((await expand.count()) === 0 && (await collapse.count()) === 0) return;
+  if ((await expand.count()) > 0) await expand.click();
+
+  await page.getByRole("button", { name: "+ new session" }).click();
+  await expect(page.locator(".window-session")).toHaveCount(1);
+
+  const composer = page.getByPlaceholder(
+    "Ask, or describe the change you want.",
+  );
+  await composer.fill("Write a 400 word essay about the history of bicycles.");
+  await composer.press("Enter");
+  await expect(page.locator(".turn-agent")).toHaveCount(1, { timeout: 30_000 });
+
+  const before = await page.locator(".session-row:not(.session-new)").count();
+
+  await page
+    .locator(".session-row.current")
+    .getByLabel(/delete/i)
+    .click();
+
+  // Stopped: the turn in flight does not go on to finish and the window
+  // showing it is gone, not just quietly orphaned.
+  await expect(page.locator(".window-session")).toHaveCount(0);
+  await expect(page.locator(".session-row:not(.session-new)")).toHaveCount(
+    before - 1,
+  );
+
+  // Removed for good: a fresh list request must not bring it back.
+  await page.reload();
+  await passWizardOpening(page);
+  await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
+  const collapseAfterReload = page.getByRole("button", {
+    name: /collapse session list/i,
+  });
+  if ((await collapseAfterReload.count()) === 0) {
+    await page
+      .getByRole("button", { name: /expand session list/i })
+      .click();
+  }
+  await expect(page.locator(".session-row:not(.session-new)")).toHaveCount(
+    before - 1,
+  );
+});
+
+/**
+ * The cross-project sessions window (`/sessions`) carries the same delete
+ * affordance as the per-project list.
+ */
+test("deletes a session from the sessions window", async ({ page }) => {
+  test.setTimeout(120_000);
+  await page.goto("/");
+  await passWizardOpening(page);
+  await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
+
+  const bar = page.locator(".prompt-bar");
+  if ((await bar.count()) === 0) return; // no provider: nothing to delete
+
+  await bar.click();
+  const prompt = page.getByLabel(
+    "type / for a command, or message the session",
+  );
+  await prompt.fill("/sessions");
+  await prompt.press("Enter");
+
+  const sessionsWindow = page.locator(".w-row");
+  const before = await sessionsWindow.count();
+  if (before === 0) return; // nothing to delete yet
+
+  await sessionsWindow.first().getByLabel(/delete/i).click();
+  await expect(page.locator(".w-row")).toHaveCount(before - 1);
 });
