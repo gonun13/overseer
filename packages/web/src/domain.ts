@@ -90,7 +90,14 @@ export interface WorkspaceInfo {
 
 export type Turn =
   | { id: string; kind: "user" | "agent"; text: string }
-  | { id: string; kind: "tool"; tool: string; target: string };
+  | {
+      id: string;
+      kind: "tool";
+      tool: string;
+      target: string;
+      /** Live tool calls only — backfilled history leaves this unset. */
+      status?: "running" | "ok" | "error";
+    };
 
 export type DiffLine = { kind: "add" | "del" | "ctx"; text: string };
 

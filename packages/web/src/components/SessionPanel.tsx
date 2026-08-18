@@ -1,5 +1,5 @@
 import { StatusLight } from "./StatusLight";
-import { ChevronIcon } from "./icons";
+import { ChevronIcon, TrashIcon } from "./icons";
 import type { Session } from "../domain";
 
 /**
@@ -18,6 +18,7 @@ export function SessionPanel({
   onToggle,
   onSelect,
   onNew,
+  onDelete,
 }: {
   sessions: Session[];
   activeId?: string;
@@ -25,6 +26,7 @@ export function SessionPanel({
   onToggle: () => void;
   onSelect: (session: Session) => void;
   onNew: () => void;
+  onDelete: (id: string) => void;
 }) {
   const active = sessions.find((session) => session.id === activeId);
 
@@ -36,17 +38,35 @@ export function SessionPanel({
         )}
 
         {sessions.map((session) => (
-          <button
+          <div
             key={session.id}
+            role="button"
+            tabIndex={0}
             className={`session-row ${session.id === activeId ? "current" : ""}`}
             onClick={() => onSelect(session)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect(session);
+              }
+            }}
           >
             <StatusLight activity={session.activity} />
             <span className="session-row-name">{session.name}</span>
             <span className="session-row-note">
               {session.branch || "branch unknown"}
             </span>
-          </button>
+            <button
+              className="session-row-delete"
+              aria-label={`delete ${session.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onDelete(session.id);
+              }}
+            >
+              <TrashIcon />
+            </button>
+          </div>
         ))}
 
         {/* Nothing else in the app can start one, so the affordance lives with

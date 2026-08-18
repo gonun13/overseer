@@ -53,3 +53,14 @@ export function ResizeIcon() {
     </svg>
   );
 }
+
+/** A trash can, drawn the way the other glyphs are: outline only, no fill. */
+export function TrashIcon() {
+  return (
+    <svg {...base} width={12} height={12}>
+      <path d="M3 4.5h10M6 4.5V3a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5" />
+      <path d="M4.5 4.5l.6 8.4a1 1 0 0 0 1 .9h3.8a1 1 0 0 0 1-.9l.6-8.4" />
+      <path d="M6.5 7v4M9.5 7v4" />
+    </svg>
+  );
+}

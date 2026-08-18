@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useMemo, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import { ActiveProject } from "./components/ActiveProject";
 import { Clock } from "./components/Clock";
 import { DecisionWindow } from "./components/DecisionWindow";
@@ -25,11 +25,12 @@ import { useWindows } from "./state/useWindows";
 
 export default function App() {
   const [projectsOpen, setProjectsOpen] = useState(true);
-  // Closed by default: the collapsed header already reports the session in
-  // hand, and the list is only needed when switching between several.
-  const [sessionsOpen, setSessionsOpen] = useState(false);
+  // Open by default: sessions are the point of the field once a provider is
+  // attached, not something the operator should have to find the chevron for.
+  const [sessionsOpen, setSessionsOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
   const wizard = useDiscovery();
+  const openChatRef = useRef<(session: Session) => void>(() => {});
   const {
     windows,
     open,
@@ -40,6 +41,7 @@ export default function App() {
     raise,
     move,
     resize,
+    retitle,
   } = useWindows();
 
   const selectTheme = wizard.selectTheme;
@@ -80,11 +82,16 @@ export default function App() {
     setSessionSetting,
     chatFor,
     send: sendChat,
-  } = useChatSessions();
+    deleteSession,
+  } = useChatSessions(
+    wizard.send,
+    wizard.subscribeSession,
+    (session) => openChatRef.current(session),
+  );
   const sessionBusy = sessions.some(
     (session) => session.activity === "working",
   );
-  const shell = useShellPresentation(wizard, sessionBusy, open);
+  const shell = useShellPresentation(wizard, sessionBusy, open, sessions);
 
   // Which accordion section is open in each session window. Digits on the
   // prompt terminal target the focused session's controls.
@@ -147,11 +154,30 @@ export default function App() {
     },
     [focusSession, open],
   );
+  openChatRef.current = openChat;
+
+  // Stopping and deleting is server-side (session-supervisor); the window
+  // showing it is purely local state, so it has to be dismissed here too or
+  // it would keep pointing at a session that no longer exists.
+  const onDeleteSession = useCallback(
+    (id: string) => {
+      const win = windows.find((w) => w.kind === "chat" && w.payload === id);
+      if (win) close(win.id);
+      deleteSession(id);
+    },
+    [windows, close, deleteSession],
+  );
+
+  useEffect(() => {
+    for (const session of sessions) {
+      retitle("chat", session.id, session.name);
+    }
+  }, [retitle, sessions]);
 
   const activeProject = shell.activeProject;
   const startChat = useCallback(() => {
-    openChat(startSession(activeProject));
-  }, [activeProject, openChat, startSession]);
+    startSession(activeProject);
+  }, [activeProject, startSession]);
 
   // The panel is the active project's sessions; the sessions window is where
   // every project's are listed together.
@@ -173,7 +199,6 @@ export default function App() {
       }
       const session = startSession(activeProject);
       sendChat(session.id, input);
-      openChat(session);
     },
     [
       activeProject,
@@ -339,6 +364,7 @@ export default function App() {
             onToggle={toggleSessions}
             onSelect={openChat}
             onNew={startChat}
+            onDelete={onDeleteSession}
           />
         )}
 
@@ -378,6 +404,7 @@ export default function App() {
           startChat={startChat}
           chatFor={chatFor}
           sendChat={sendChat}
+          onDeleteSession={onDeleteSession}
           sessionOptions={SESSION_CONTROL_OPTIONS}
           openSessionControls={openSessionControls}
           onToggleSessionControl={toggleSessionControl}

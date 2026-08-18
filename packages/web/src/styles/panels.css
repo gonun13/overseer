@@ -90,6 +90,13 @@
   font-size: 13px;
 }
 
+/* A div, not a button, so a real delete button can sit inside it without
+   nesting interactive elements — the button reset that gives `.project-row`
+   its pointer cursor for free does not apply here. */
+.session-row {
+  cursor: pointer;
+}
+
 .project-row:hover,
 .session-row:hover {
   background: var(--ink-rule);
@@ -129,6 +136,22 @@
   font-size: 10px;
   text-transform: uppercase;
   letter-spacing: 1px;
+}
+
+/* Trailing icon button, subtle at rest so the row still reads as the branch
+   note first — it only announces itself as destructive on hover. */
+.session-row-delete {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  color: var(--ink-faint);
+}
+
+.session-row-delete:hover {
+  color: var(--accent-fill);
 }
 
 /* ---- bottom left: the sessions panel --------------------------------------
