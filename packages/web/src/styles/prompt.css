@@ -7,7 +7,7 @@
   align-items: stretch;
   width: 100%;
   padding: 4px 0 0;
-  border-top: 1.5px solid var(--edge);
+  border-top: 1.5px solid var(--ink-rule);
 }
 
 .session-ctl {
@@ -25,12 +25,12 @@
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 1px;
-  color: var(--text-dim);
+  color: var(--ink-dim);
 }
 
 .session-ctl-head:hover,
 .session-ctl.open .session-ctl-head {
-  color: var(--text);
+  color: var(--ink);
 }
 
 .session-ctl-key {
@@ -38,35 +38,33 @@
   width: 14px;
   text-align: center;
   font-size: 10px;
-  color: var(--text-faint);
+  color: var(--ink-faint);
 }
 
 .session-ctl-head:hover .session-ctl-key,
 .session-ctl.open .session-ctl-key {
-  color: var(--accent);
+  color: var(--accent-fill);
 }
 
-.session-ctl-label {
-  flex: none;
-}
-
+/* No label span: the head prints the selected value, and the row is identified
+   by its digit and its position. The name lives on the button's aria-label. */
 .session-ctl-value {
   flex: 1;
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
-  color: var(--text);
+  color: var(--ink);
 }
 
 .session-ctl-value.danger {
-  color: var(--accent);
+  color: var(--accent-fill);
 }
 
 .session-ctl-chevron {
   flex: none;
   display: flex;
-  color: var(--text-faint);
+  color: var(--ink-faint);
 }
 
 /* The block that appears once a column opens — pressed on `--void`, not a tint
@@ -88,7 +86,7 @@
 }
 
 .session-ctl.open .session-ctl-values {
-  max-height: 200px;
+  max-height: 44vh;
   overflow-y: auto;
   opacity: 1;
   border: 1px solid var(--void-edge);
@@ -96,13 +94,39 @@
 
 .session-ctl-option {
   display: flex;
-  align-items: center;
+  align-items: baseline;
   gap: 8px;
   width: 100%;
   padding: 4px 8px;
   font-size: 12px;
   text-transform: uppercase;
   letter-spacing: 0.5px;
+  color: var(--void-dim);
+  text-align: left;
+}
+
+.session-ctl-option-text {
+  min-width: 0;
+  /* A column is ~a tenth of the window, and the provider's names are single
+     unbroken words (`bypassPermissions`) that would otherwise run out past the
+     panel edge rather than wrap. */
+  overflow-wrap: anywhere;
+}
+
+/* The provider's own description of the value. Prose, not chrome — so it keeps
+   its own case, the one place in this bar that is not uppercased. */
+.session-ctl-option-detail {
+  display: block;
+  margin-top: 1px;
+  font-size: 10px;
+  text-transform: none;
+  letter-spacing: 0;
+  line-height: 1.35;
+  color: var(--void-faint, var(--void-dim));
+}
+
+.session-ctl-option:hover .session-ctl-option-detail,
+.session-ctl-option.current .session-ctl-option-detail {
   color: var(--void-dim);
 }
 
@@ -118,7 +142,7 @@
 }
 
 .session-ctl-option.danger {
-  color: var(--accent);
+  color: var(--accent-fill);
 }
 
 .session-ctl-mark {

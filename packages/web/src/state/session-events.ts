@@ -1,6 +1,7 @@
 import type { AgentEvent, SessionMeta, TurnWire } from "@overseer/protocol";
 import type { Activity } from "../status";
 import type { Session, Turn } from "../domain";
+import type { SessionSettings } from "../session";
 
 const SESSION_NAME_MAX = 20;
 
@@ -35,6 +36,18 @@ export function metaToSession(
     cost:
       meta.totalCostUsd > 0 ? `$${meta.totalCostUsd.toFixed(4)}` : "",
     doing: meta.status === "live" ? "live" : "",
+  };
+}
+
+/**
+ * What a session is armed with, as the *server* reported it — not what the
+ * operator has picked. Absent fields stay absent: the control rows read "—"
+ * until the provider says, rather than showing a plausible default.
+ */
+export function settingsFromMeta(meta: SessionMeta): Partial<SessionSettings> {
+  return {
+    ...(meta.model !== "" ? { model: meta.model } : {}),
+    ...(meta.permissionMode !== undefined ? { mode: meta.permissionMode } : {}),
   };
 }
 

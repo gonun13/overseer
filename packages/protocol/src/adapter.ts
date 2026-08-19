@@ -18,8 +18,25 @@ export interface AdapterCapabilities {
   login: boolean;
 }
 
+/**
+ * The permission modes a provider CLI accepts. These are claude 2.1.226's own
+ * six choices, as it prints them when handed a bogus one:
+ *
+ *   error: option '--permission-mode <mode>' argument 'x' is invalid.
+ *   Allowed choices are acceptEdits, auto, bypassPermissions, manual, dontAsk, plan.
+ *
+ * The CLI also accepts an undocumented `default`, and reports `manual` back as
+ * `default`. That asymmetry is the adapter's to absorb (see
+ * `normalizePermissionMode` in the claude-code adapter) — it must not leak into
+ * the union, or the UI ends up offering the operator two words for one mode.
+ */
 export type PermissionMode =
-  "default" | "acceptEdits" | "plan" | "bypassPermissions";
+  | "acceptEdits"
+  | "auto"
+  | "bypassPermissions"
+  | "manual"
+  | "dontAsk"
+  | "plan";
 
 export type PermissionDecision =
   | { decision: "allow-once" }
@@ -31,8 +48,44 @@ export interface SessionOpts {
   model?: string;
   effort?: string;
   permissionMode?: PermissionMode;
+  /** Subagent to run the turn as. Empty or absent means the agent itself. */
+  agent?: string;
   resumeSessionId?: string;
   name?: string;
+}
+
+/**
+ * One entry in a session-control menu.
+ *
+ * `value` is what reaches the CLI; `label` and `detail` are the provider's own
+ * words for it. Nothing here is composed by Overseer — when a provider gives no
+ * display name, `label` repeats `value` rather than inventing prose.
+ */
+export interface ProviderOption {
+  value: string;
+  label: string;
+  detail?: string;
+  /** Arms something dangerous (`bypassPermissions`). Rendered in `--accent`. */
+  danger?: true;
+}
+
+/**
+ * What one provider offers a session, in one project. Agents are project-scoped
+ * (`<project>/.claude/agents/`), so this is asked per project directory rather
+ * than once per provider.
+ *
+ * Every list may be empty: an adapter that could not get an answer reports
+ * nothing rather than a guess, and the UI leaves that row's menu shut.
+ */
+export interface ProviderOptions {
+  models: ProviderOption[];
+  permissionModes: ProviderOption[];
+  agents: ProviderOption[];
+  /** The mode the CLI is configured to use when none is passed. */
+  defaultPermissionMode?: PermissionMode;
+  /** The model the CLI is configured to use when none is passed. Lets a control
+   * row read what the next turn will actually run on instead of a blank. */
+  defaultModel?: string;
 }
 
 export interface SessionMeta {
@@ -42,7 +95,11 @@ export interface SessionMeta {
   projectDir: string;
   gitBranch?: string;
   model: string;
-  permissionMode: PermissionMode;
+  /** Absent until the provider reports it on `session.init` — the same "not
+   * told yet" convention `model: ""` uses. Never filled with a plausible
+   * default: the CLI's own settings decide, and guessing here would show the
+   * operator a mode the session is not actually running under. */
+  permissionMode?: PermissionMode;
   status: "live" | "dormant" | "closed";
   createdAt: string;
   lastActiveAt: string;
@@ -232,6 +289,13 @@ export interface AgentAdapter {
    * Resolves to `usageState: "ready" | "unavailable"`; never throws.
    */
   refreshUsage?(): Promise<AdapterStatus>;
+  /**
+   * What this provider offers a session in one project — models, permission
+   * modes, subagents. Absent when the adapter cannot enumerate them, in which
+   * case the server refuses the request rather than filling the menus in with
+   * plausible-looking values. Never throws; empty lists are the failure shape.
+   */
+  listOptions?(opts: { projectDir: string }): Promise<ProviderOptions>;
   /** Present only when `capabilities.login` is true. */
   login?: AdapterLogin;
   /**

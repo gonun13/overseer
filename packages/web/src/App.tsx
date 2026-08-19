@@ -10,15 +10,12 @@ import { SessionPanel } from "./components/SessionPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { WindowStackHost } from "./components/WindowStackHost";
 import type { Session } from "./domain";
-import {
-  SESSION_CONTROL_KEYS,
-  SESSION_CONTROL_OPTIONS,
-  type SessionOptionKey,
-} from "./session";
+import { SESSION_CONTROL_KEYS, type SessionOptionKey } from "./session";
 import type { Signal } from "./state/signals";
 import { useChatSessions } from "./state/useChatSessions";
 import { useDiscovery } from "./state/useDiscovery";
 import { usePromptSession } from "./state/usePromptSession";
+import { useProviderOptions } from "./state/useProviderOptions";
 import { useShellKeyboard } from "./state/useShellKeyboard";
 import { useShellPresentation } from "./state/useShellPresentation";
 import { useWindows } from "./state/useWindows";
@@ -74,6 +71,27 @@ export default function App() {
   const focusPrompt = prompt.focus;
   const submitCommand = prompt.submit;
 
+  // Only a signed-in provider can be asked what it offers; a stub or a
+  // signed-out one would have the server refuse.
+  const optionsProviderId = useMemo(() => {
+    const attached = wizard.providers.find(
+      (candidate) => candidate.id === wizard.attachedProviderId,
+    );
+    return attached?.status.authenticated === true ? attached.id : undefined;
+  }, [wizard.providers, wizard.attachedProviderId]);
+
+  const {
+    options: sessionOptions,
+    armed: armedSession,
+    arm: armSession,
+    refresh: refreshSessionOptions,
+  } = useProviderOptions(
+    wizard.send,
+    wizard.subscribeSession,
+    optionsProviderId,
+    wizard.activeProjectPath,
+  );
+
   const {
     sessions,
     activeId: activeSessionId,
@@ -87,6 +105,7 @@ export default function App() {
     wizard.send,
     wizard.subscribeSession,
     (session) => openChatRef.current(session),
+    armedSession,
   );
   const sessionBusy = sessions.some(
     (session) => session.activity === "working",
@@ -98,6 +117,8 @@ export default function App() {
   const [openSessionControls, setOpenSessionControls] = useState<
     Partial<Record<string, SessionOptionKey>>
   >({});
+  const openSessionControlsRef = useRef(openSessionControls);
+  openSessionControlsRef.current = openSessionControls;
   const focusedChat =
     activeSessionId === undefined ? undefined : chatFor(activeSessionId);
   const activeOpenSessionControl =
@@ -116,24 +137,34 @@ export default function App() {
 
   const toggleSessionControl = useCallback(
     (sessionId: string, key: SessionOptionKey) => {
+      // Opening a row is the operator asking what is on offer, so take the
+      // chance to re-read it — their subagent files may have changed since.
+      // Read the current state here rather than inside the updater: a state
+      // updater has to stay pure, and it can run twice.
+      if (openSessionControlsRef.current[sessionId] !== key) {
+        refreshSessionOptions();
+      }
       setOpenSessionControls((current) => ({
         ...current,
         [sessionId]: current[sessionId] === key ? undefined : key,
       }));
     },
-    [],
+    [refreshSessionOptions],
   );
 
   const selectSessionControl = useCallback(
     (sessionId: string, key: SessionOptionKey, value: string) => {
       setSessionSetting(sessionId, key, value);
+      // The adapter has no runtime setter for model or mode, so a pick cannot
+      // retarget the session that is already running. It arms the next one.
+      armSession(key, value);
       setOpenSessionControls((current) => {
         const next = { ...current };
         delete next[sessionId];
         return next;
       });
     },
-    [setSessionSetting],
+    [setSessionSetting, armSession],
   );
 
   const toggleActiveSessionControl = useCallback(
@@ -405,7 +436,8 @@ export default function App() {
           chatFor={chatFor}
           sendChat={sendChat}
           onDeleteSession={onDeleteSession}
-          sessionOptions={SESSION_CONTROL_OPTIONS}
+          sessionOptions={sessionOptions}
+          armedSession={armedSession}
           openSessionControls={openSessionControls}
           onToggleSessionControl={toggleSessionControl}
           onSelectSessionControl={selectSessionControl}

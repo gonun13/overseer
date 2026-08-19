@@ -4,6 +4,7 @@ import type {
   AdapterStatus,
   ConsoleHandle,
   ConsoleOpts,
+  ProviderOptions,
   SessionHandle,
   SessionMeta,
   SessionOpts,
@@ -15,6 +16,7 @@ import {
   listSessionsForProject,
 } from "./jsonl.js";
 import { readAuthStatus, signOut, startLogin } from "./login.js";
+import { readProviderOptions } from "./options.js";
 import { createSessionHandle, mintSessionId, openSession } from "./session-handle.js";
 import { resolveSessionTitle } from "./session-titles.js";
 import { readUsageWindows, withPendingUsage } from "./usage.js";
@@ -71,6 +73,9 @@ export const claudeCodeAdapter: AgentAdapter = {
   },
   getStatus,
   refreshUsage,
+  listOptions(opts: { projectDir: string }): Promise<ProviderOptions> {
+    return readProviderOptions(opts);
+  },
   login: {
     start: startLogin,
     signOut,

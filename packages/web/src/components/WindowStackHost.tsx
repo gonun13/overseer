@@ -5,7 +5,11 @@ import type {
   ServerMessage,
 } from "@overseer/protocol";
 import type { Approval, Project, ProviderInfo, Session } from "../domain";
-import type { SessionOption, SessionOptionKey } from "../session";
+import type {
+  SessionOption,
+  SessionOptionKey,
+  SessionSettings,
+} from "../session";
 import type { Chat } from "../state/useChatSessions";
 import type { DiscoveryController } from "../state/useDiscovery";
 import type { OpenWindow, WindowKind } from "../windows";
@@ -47,6 +51,9 @@ interface WindowStackHostProps {
   sendChat: (id: string, input: string) => void;
   onDeleteSession: (id: string) => void;
   sessionOptions: SessionOption[];
+  /** Provider defaults plus the operator's picks — the fallback for a row a
+   * session has not reported on yet. */
+  armedSession: SessionSettings;
   openSessionControls: Partial<Record<string, SessionOptionKey>>;
   onToggleSessionControl: (sessionId: string, key: SessionOptionKey) => void;
   onSelectSessionControl: (
@@ -79,6 +86,7 @@ export function WindowStackHost({
   sendChat,
   onDeleteSession,
   sessionOptions,
+  armedSession,
   openSessionControls,
   onToggleSessionControl,
   onSelectSessionControl,
@@ -158,7 +166,14 @@ export function WindowStackHost({
           <SessionWindow
             turns={chat.turns}
             busy={chat.session.activity === "working"}
-            settings={chat.settings}
+            // A row this session has said nothing about falls back to what is
+            // armed, which is seeded from the provider's own defaults — so the
+            // head reads what the next turn will actually run on, never "—".
+            settings={{
+              model: chat.settings.model || armedSession.model,
+              mode: chat.settings.mode || armedSession.mode,
+              agent: chat.settings.agent || armedSession.agent,
+            }}
             options={sessionOptions}
             openSessionControl={openSessionControls[chat.session.id] ?? null}
             contextCount={0}

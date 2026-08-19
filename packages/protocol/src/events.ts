@@ -1,3 +1,5 @@
+import type { PermissionMode } from "./adapter.js";
+
 /** Normalized event union emitted by every adapter over `SessionHandle.events`. */
 export type AgentEvent =
   | SessionInitEvent
@@ -27,6 +29,11 @@ export interface SessionInitEvent extends BaseEvent {
   tools: string[];
   mcpServers: string[];
   slashCommands: string[];
+  /** What the process actually started under — not what we asked for. Absent
+   * when the provider did not say. */
+  permissionMode?: PermissionMode;
+  /** Subagents this session can call, as the provider named them. */
+  agents: string[];
 }
 
 export interface TextDeltaEvent extends BaseEvent {
