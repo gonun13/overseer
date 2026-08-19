@@ -10,6 +10,7 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { listAdapters } from "./adapters.js";
 import { consoleError, createConsoleSession } from "./console.js";
 import { runDiscovery } from "./discovery.js";
+import { createProviderOptions } from "./provider-options.js";
 import {
   cancelLogin,
   currentAuthState,
@@ -128,6 +129,7 @@ export function attachWebSocketServer(httpServer: Server): {
   };
 
   const sessionSupervisor = createSessionSupervisor(broadcast);
+  const providerOptions = createProviderOptions();
 
   httpServer.on("upgrade", (req: IncomingMessage, socket, head) => {
     if (
@@ -510,6 +512,28 @@ export function attachWebSocketServer(httpServer: Server): {
           if (!result.ok) send(consoleError("console.close", result.reason));
           return;
         }
+        case "provider.options": {
+          const result = await providerOptions.read();
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "provider.options",
+              benign: true,
+              message: result.reason,
+            });
+            return;
+          }
+          // Broadcast: what the provider offers is a fact about the instance,
+          // not about the socket that asked, and a second tab must not have to
+          // spawn the CLI again to learn it.
+          broadcast({
+            type: "provider.options",
+            providerId: result.providerId,
+            projectDir: result.projectDir,
+            options: result.options,
+          });
+          return;
+        }
         case "session.list": {
           const result = await sessionSupervisor.list();
           if (!result.ok) send(sessionError("session.list", result.reason));
@@ -519,6 +543,7 @@ export function attachWebSocketServer(httpServer: Server): {
           const result = await sessionSupervisor.create({
             model: parsed.model,
             permissionMode: parsed.permissionMode,
+            agent: parsed.agent,
             name: parsed.name,
           });
           if (!result.ok) send(sessionError("session.create", result.reason));

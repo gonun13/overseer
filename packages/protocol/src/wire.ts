@@ -1,4 +1,10 @@
-import type { AdapterStatus, LoginPhase, PermissionMode, SessionMeta } from "./adapter.js";
+import type {
+  AdapterStatus,
+  LoginPhase,
+  PermissionMode,
+  ProviderOptions,
+  SessionMeta,
+} from "./adapter.js";
 import type { AgentEvent } from "./events.js";
 import type { TurnWire } from "./transcript.js";
 import type {
@@ -42,6 +48,11 @@ export type ClientMessage =
   | { type: "theme.select"; theme: OverseerTheme }
   /** Attach a provider from the picker. Auth is a separate later step. */
   | { type: "provider.connect"; id: string }
+  /** Ask what the attached provider offers a session in the active project —
+   * models, permission modes, subagents. Explicit rather than pushed at
+   * connect time: the answer costs a subprocess, and only a client with the
+   * controls on screen needs it. */
+  | { type: "provider.options" }
   /** Start the provider's login. Single-flight on the server: a second asker
    * joins the flow already running rather than spawning a second one, because
    * each spawn mints its own PKCE challenge and the operator would be holding
@@ -77,6 +88,9 @@ export type ClientMessage =
       type: "session.create";
       model?: string;
       permissionMode?: PermissionMode;
+      /** Subagent to run turns as. Empty string means none — the operator
+       * chose the "none" row, which is not the same as never having chosen. */
+      agent?: string;
       name?: string;
     }
   /** Subscribe to a session, backfill history, resume if dormant. */
@@ -158,6 +172,24 @@ export interface ProviderStatusMessage {
   type: "provider.status";
   id: string;
   status: AdapterStatus;
+}
+
+/**
+ * What the attached provider offers a session, for one project.
+ *
+ * Broadcast rather than sent to the asking socket: the answer is a fact about
+ * the instance, not about who asked, and a second tab must not have to spawn
+ * the CLI again to learn it.
+ *
+ * `projectDir` is on the frame because the lists are project-scoped — a client
+ * that has already moved on to another project can tell this reply is stale
+ * instead of rendering another project's subagents.
+ */
+export interface ProviderOptionsMessage {
+  type: "provider.options";
+  providerId: string;
+  projectDir: string;
+  options: ProviderOptions;
 }
 
 /**
@@ -288,6 +320,7 @@ export type ServerMessage =
   | ThemeSelectedMessage
   | ProviderConnectedMessage
   | ProviderStatusMessage
+  | ProviderOptionsMessage
   | AuthStateMessage
   | WorkspaceProjectsMessage
   | OverseerStepMessage
@@ -309,12 +342,20 @@ export const SESSION_MAX_ID_CHARS = 64;
 export const SESSION_MAX_TEXT_CHARS = 64_000;
 export const SESSION_MAX_NAME_CHARS = 256;
 
+/** Mirrors `PermissionMode`. The CLI rejects anything else outright, and a
+ * rejected spawn reads to the operator as a broken session rather than a bad
+ * frame — so the socket refuses it here instead. */
 const PERMISSION_MODES = new Set<string>([
-  "default",
   "acceptEdits",
-  "plan",
+  "auto",
   "bypassPermissions",
+  "manual",
+  "dontAsk",
+  "plan",
 ]);
+
+/** A subagent name, as the provider reported it. Empty means "none". */
+export const SESSION_MAX_AGENT_CHARS = 128;
 
 function isConsoleSize(cols: unknown, rows: unknown): boolean {
   return (
@@ -353,6 +394,7 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   if (type === "provider.connect") {
     return typeof (value as { id?: unknown }).id === "string";
   }
+  if (type === "provider.options") return true;
   if (type === "auth.start" || type === "auth.signout") {
     return typeof (value as { providerId?: unknown }).providerId === "string";
   }
@@ -399,12 +441,22 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     const msg = value as {
       model?: unknown;
       permissionMode?: unknown;
+      agent?: unknown;
       name?: unknown;
     };
     if (msg.model !== undefined && typeof msg.model !== "string") return false;
     if (
       msg.permissionMode !== undefined &&
       !PERMISSION_MODES.has(msg.permissionMode as string)
+    ) {
+      return false;
+    }
+    // An empty agent is legal — it is the "none" row, and it must be
+    // distinguishable from the field never having been sent.
+    if (
+      msg.agent !== undefined &&
+      (typeof msg.agent !== "string" ||
+        msg.agent.length > SESSION_MAX_AGENT_CHARS)
     ) {
       return false;
     }

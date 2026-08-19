@@ -14,9 +14,9 @@ UI: [docs/ui-ux-design.md](docs/ui-ux-design.md) ·
 Behavior: [docs/overseer-behavior.md](docs/overseer-behavior.md) ·
 Versioning: [docs/architecture-design.md §8](docs/architecture-design.md#8-versioning)
 
-> **Early stage.** The UI shell and overseer wizard are live. The raw OPEN CONSOLE PTY into
-> Claude is live when signed in. Stream-json agent session spawning for `claude-code` is not
-> implemented yet — there are no live agent transcripts. See [Status](#status).
+> **Early stage.** The UI shell and overseer wizard are live, as are `claude-code`
+> stream-json sessions and the raw OPEN CONSOLE PTY. The approvals queue is not built yet —
+> permission requests are auto-denied. See [Status](#status).
 
 ## Requirements
 
@@ -138,12 +138,18 @@ provider is signed in. Catalog stubs (`codex`, `opencode`, `github-copilot`) lis
 in the providers window and their CLIs ship in the image, but have no login,
 console, or session wiring yet.
 
+`claude-code` stream-json sessions are live: sessions spawn, stream, resume from
+their transcript, and can be deleted. A session window's control rows list what the
+provider actually offers — models and subagents discovered from the CLI itself, plus
+its six permission modes ([architecture §1.1.1](docs/architecture-design.md)).
+
 Still missing:
 
-- `claude-code` stream-json session spawning ([architecture §1.2](docs/architecture-design.md))
-  — no live agent sessions or transcripts yet
 - Full adapters for catalog stubs (`codex`, `opencode`, `github-copilot`)
 - Approvals queue and structured tool/diff windows backed by live session events
+  (permission requests are auto-denied with a visible error for now)
+- Changing model, mode, or agent on a session already running — a pick arms the
+  next session, not the one in flight
 
 ## Versioning
 

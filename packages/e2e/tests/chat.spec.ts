@@ -45,14 +45,10 @@ test("opens a chat window per session, separate from the prompt", async ({
   await expect(chat.locator(".tab-close")).toBeVisible();
   await expect(chat.locator(".window-resize")).toBeVisible();
 
-  // A control's accessible name carries its current value ("1 model —"), so
-  // match the labels themselves: by substring, /mode/i also catches "model".
-  await expect(chat.locator(".session-ctl-label")).toHaveText([
-    "model",
-    "mode",
-    "agent",
-    "context",
-  ]);
+  // Heads print the selected value, so the row's name lives only on the
+  // accessible label — four rows, in the order the digit shortcuts assume.
+  await expect(chat.locator(".session-ctl-head")).toHaveCount(4);
+  await expect(chat.getByRole("button", { name: /^agent\b/ })).toHaveCount(1);
 
   const composer = page.getByPlaceholder(
     "Ask, or describe the change you want.",
@@ -76,6 +72,35 @@ test("opens a chat window per session, separate from the prompt", async ({
 
   await chat.locator(".tab-close").click();
   await expect(page.locator(".window-session")).toHaveCount(0);
+});
+
+/**
+ * Rows read the value in force, not their own name, and their lists come from
+ * the provider. Unit tests cover the parsing; this only checks the wiring
+ * reached the screen — the mode row, which needs no probe to fill in.
+ */
+test("session controls read the value in force", async ({ page }) => {
+  await page.goto("/");
+  await passWizardOpening(page);
+  await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
+
+  const expand = page.getByRole("button", { name: /expand session list/i });
+  if ((await expand.count()) > 0) await expand.click();
+  if ((await page.getByText("+ new session").count()) === 0) return;
+  await page.getByRole("button", { name: "+ new session" }).click();
+
+  const mode = page.locator(".window-session .session-ctl").nth(1);
+  await mode.locator(".session-ctl-head").click();
+  const options = mode.locator(".session-ctl-option");
+  await expect(options).toHaveCount(6);
+  await expect(options.filter({ hasText: "bypassPermissions" })).toHaveClass(
+    /danger/,
+  );
+
+  // Picking closes the section and leaves the pick on the head.
+  await options.filter({ hasText: "acceptEdits" }).first().click();
+  await expect(mode).not.toHaveClass(/open/);
+  await expect(mode.locator(".session-ctl-value")).toHaveText("acceptEdits");
 });
 
 /**

@@ -1,0 +1,123 @@
+{
+  "_comment": [
+    "Captured from claude 2.1.226 in the dev container, by writing one line to a",
+    "`claude -p --input-format stream-json --output-format stream-json --verbose`",
+    "child and reading the first line back:",
+    "  {\"type\":\"control_request\",\"request_id\":\"overseer_initialize\",\"request\":{\"subtype\":\"initialize\"}}",
+    "Trimmed for the repo: `commands` kept three of ~50 entries (this parse ignores",
+    "it), and `account` / `pid` replaced with stand-ins — the real reply carries the",
+    "operator's email address. `request_id` echoes whatever we sent."
+  ],
+  "type": "control_response",
+  "response": {
+    "subtype": "success",
+    "request_id": "overseer_initialize",
+    "response": {
+      "commands": [
+        {
+          "name": "model",
+          "description": "Set the AI model for Claude Code",
+          "argumentHint": "<model>"
+        },
+        {
+          "name": "agents",
+          "description": "(removed) Ask Claude to create/manage subagents, or edit .claude/agents/",
+          "argumentHint": ""
+        },
+        {
+          "name": "usage",
+          "description": "Show session cost, plan usage, and what's contributing to your limits",
+          "argumentHint": "",
+          "aliases": ["cost", "stats"]
+        }
+      ],
+      "agents": [
+        {
+          "name": "claude",
+          "description": "Catch-all for any task that doesn't fit a more specific agent. FleetView's default when no agent name is typed."
+        },
+        {
+          "name": "Explore",
+          "description": "Fast read-only search agent for locating code. Use it to find files by pattern (eg. \"src/components/**/*.tsx\"), grep for symbols or keywords (eg. \"API endpoints\"), or answer \"where is X defined / which files reference Y.\""
+        },
+        {
+          "name": "general-purpose",
+          "description": "General-purpose agent for researching complex questions, searching for code, and executing multi-step tasks."
+        },
+        {
+          "name": "Plan",
+          "description": "Software architect agent for designing implementation plans. Use this when you need to plan the implementation strategy for a task."
+        },
+        {
+          "name": "statusline-setup",
+          "description": "Use this agent to configure the user's Claude Code status line setting.",
+          "model": "sonnet"
+        }
+      ],
+      "output_style": "default",
+      "available_output_styles": ["default", "Proactive", "Explanatory", "Learning"],
+      "models": [
+        {
+          "value": "default",
+          "resolvedModel": "claude-sonnet-5",
+          "displayName": "Default (recommended)",
+          "description": "Sonnet 5 · Efficient for routine tasks",
+          "supportsEffort": true,
+          "supportedEffortLevels": ["low", "medium", "high", "xhigh", "max"],
+          "supportsAdaptiveThinking": true,
+          "supportsAutoMode": true
+        },
+        {
+          "value": "sonnet",
+          "resolvedModel": "claude-sonnet-5",
+          "displayName": "Sonnet",
+          "description": "Sonnet 5 · Efficient for routine tasks",
+          "supportsEffort": true,
+          "supportedEffortLevels": ["low", "medium", "high", "xhigh", "max"],
+          "supportsAdaptiveThinking": true,
+          "supportsAutoMode": true
+        },
+        {
+          "value": "claude-fable-5[1m]",
+          "resolvedModel": "claude-fable-5",
+          "displayName": "Fable",
+          "description": "Fable 5 · Most capable for your hardest and longest-running tasks · Requires usage credits",
+          "supportsEffort": true,
+          "supportedEffortLevels": ["low", "medium", "high", "xhigh", "max"],
+          "supportsAdaptiveThinking": true,
+          "supportsAutoMode": true
+        },
+        {
+          "value": "opus",
+          "resolvedModel": "claude-opus-5",
+          "displayName": "Opus",
+          "description": "Opus 5 · Best for everyday, complex tasks · ~2× usage vs Sonnet",
+          "supportsEffort": true,
+          "supportedEffortLevels": ["low", "medium", "high", "xhigh", "max"],
+          "supportsAdaptiveThinking": true,
+          "supportsFastMode": true,
+          "supportsAutoMode": true
+        },
+        {
+          "value": "haiku",
+          "resolvedModel": "claude-haiku-4-5-20251001",
+          "displayName": "Haiku",
+          "description": "Haiku 4.5 · Fastest for quick answers"
+        }
+      ],
+      "account": {
+        "email": "operator@example.com",
+        "organization": "operator@example.com's Organization",
+        "subscriptionType": "Claude Pro",
+        "apiProvider": "firstParty"
+      },
+      "pid": 1234,
+      "current_permission_mode": "auto",
+      "remote_control_auto_enable": false,
+      "remote_control_auto_on_by_default": false,
+      "ide_rc_auto_enable_gate": false,
+      "fast_mode_state": "off",
+      "fast_mode_disabled_reason": "sdk_opt_in_required"
+    }
+  }
+}

@@ -1,5 +1,10 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import type { ClientMessage, ServerMessage, SessionMeta } from "@overseer/protocol";
+import type {
+  ClientMessage,
+  PermissionMode,
+  ServerMessage,
+  SessionMeta,
+} from "@overseer/protocol";
 import type { Project, Session } from "../domain";
 import {
   BLANK_SESSION_SETTINGS,
@@ -10,6 +15,7 @@ import {
   appendUserTurn,
   applySessionEvent,
   metaToSession,
+  settingsFromMeta,
   turnWireToTurn,
 } from "./session-events";
 
@@ -30,6 +36,8 @@ export function useChatSessions(
   send: (message: ClientMessage) => void,
   subscribeSession: (listener: (message: ServerMessage) => void) => () => void,
   onSessionStarted?: (session: Session) => void,
+  /** What the operator has armed for the *next* session — see useProviderOptions. */
+  armed: SessionSettings = BLANK_SESSION_SETTINGS,
 ) {
   const [chats, setChats] = useState<Chat[]>([]);
   const [activeId, setActiveId] = useState<string>();
@@ -62,14 +70,20 @@ export function useChatSessions(
       if (existing) {
         return current.map((chat) =>
           chat.session.id === meta.id
-            ? { ...chat, session: { ...session, activity: chat.session.activity } }
+            ? {
+                ...chat,
+                session: { ...session, activity: chat.session.activity },
+                // Server truth wins over a stale local reading: this session is
+                // running what the provider says it is running.
+                settings: { ...chat.settings, ...settingsFromMeta(meta) },
+              }
             : chat,
         );
       }
       const chat: Chat = {
         session,
         turns: [],
-        settings: BLANK_SESSION_SETTINGS,
+        settings: { ...BLANK_SESSION_SETTINGS, ...settingsFromMeta(meta) },
       };
       let nextChat = chat;
       if (pendingCreate.current) {
@@ -103,12 +117,19 @@ export function useChatSessions(
               byId.set(meta.id, {
                 ...existing,
                 session: { ...session, activity: existing.session.activity },
+                settings: {
+                  ...existing.settings,
+                  ...settingsFromMeta(meta),
+                },
               });
             } else {
               byId.set(meta.id, {
                 session,
                 turns: [],
-                settings: BLANK_SESSION_SETTINGS,
+                settings: {
+                  ...BLANK_SESSION_SETTINGS,
+                  ...settingsFromMeta(meta),
+                },
               });
             }
           }
@@ -163,10 +184,23 @@ export function useChatSessions(
     });
   }, [subscribeSession, upsertMeta, resetSessionActivity]);
 
+  const armedRef = useRef(armed);
+  armedRef.current = armed;
+
   const start = useCallback(
     (_project?: Project): Session => {
       pendingCreate.current = true;
-      send({ type: "session.create" });
+      const next = armedRef.current;
+      send({
+        type: "session.create",
+        // Omit rather than send "" — an unset row means "let the CLI decide",
+        // which is not the same as asking for an empty model.
+        ...(next.model !== "" ? { model: next.model } : {}),
+        ...(next.mode !== ""
+          ? { permissionMode: next.mode as PermissionMode }
+          : {}),
+        ...(next.agent !== "" ? { agent: next.agent } : {}),
+      });
       // Placeholder until session.meta arrives — callers should prefer
       // onSessionStarted for opening the window.
       return {

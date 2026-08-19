@@ -187,6 +187,11 @@ export function createSessionSupervisor(
           touch(sessionId);
           if (event.type === "session.init") {
             meta.model = event.model;
+            // What the process actually started under, which is not always what
+            // we asked for — the CLI's own settings can win.
+            if (event.permissionMode !== undefined) {
+              meta.permissionMode = event.permissionMode;
+            }
             meta.lastActiveAt = event.timestamp;
             pushMeta({ ...meta });
           }
@@ -263,7 +268,6 @@ export function createSessionSupervisor(
       adapterId: ctx.adapter.id,
       projectDir: ctx.projectPath,
       model: "",
-      permissionMode: "default",
       status: "live",
       createdAt: new Date().toISOString(),
       lastActiveAt: new Date().toISOString(),
@@ -305,6 +309,7 @@ export function createSessionSupervisor(
     async create(opts: {
       model?: string;
       permissionMode?: PermissionMode;
+      agent?: string;
       name?: string;
     }): Promise<SessionResult & { sessionId?: string }> {
       const ctx = await adapterContext();
@@ -318,6 +323,7 @@ export function createSessionSupervisor(
           projectDir: ctx.projectPath,
           model: opts.model,
           permissionMode: opts.permissionMode,
+          ...(opts.agent !== undefined ? { agent: opts.agent } : {}),
           ...(opts.name !== undefined ? { name: opts.name } : {}),
         });
       } catch (error) {
@@ -336,7 +342,11 @@ export function createSessionSupervisor(
         name: opts.name,
         projectDir: ctx.projectPath,
         model: opts.model ?? "",
-        permissionMode: opts.permissionMode ?? "default",
+        // What we asked for, if anything. `session.init` replaces it with what
+        // the process actually started under.
+        ...(opts.permissionMode !== undefined
+          ? { permissionMode: opts.permissionMode }
+          : {}),
         status: "live",
         createdAt: new Date().toISOString(),
         lastActiveAt: new Date().toISOString(),

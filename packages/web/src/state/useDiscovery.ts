@@ -68,7 +68,7 @@ export interface DiscoveryController extends WizardState {
   subscribeConsole: (
     listener: (message: ServerMessage) => void,
   ) => () => void;
-  /** Subscribe to session.* (and session-related error) frames. */
+  /** Subscribe to session.*, provider.options, and their error frames. */
   subscribeSession: (
     listener: (message: ServerMessage) => void,
   ) => () => void;
@@ -109,7 +109,11 @@ export function useDiscovery(): DiscoveryController {
         message.type === "session.history" ||
         message.type === "session.event" ||
         message.type === "session.meta" ||
-        (message.type === "error" && message.about?.startsWith("session."))
+        // What the provider offers a session is a session-control concern, and
+        // its refusals are benign the same way the console's are.
+        message.type === "provider.options" ||
+        (message.type === "error" && message.about?.startsWith("session.")) ||
+        (message.type === "error" && message.about === "provider.options")
       ) {
         for (const listener of sessionListeners.current) listener(message);
         return;

@@ -1,12 +1,11 @@
 import { randomUUID } from "node:crypto";
 import { readdir, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
-import type { PermissionMode, SessionMeta, TurnWire } from "@overseer/protocol";
+import type { SessionMeta, TurnWire } from "@overseer/protocol";
 import { projectDirSlug } from "./project-slug.js";
 import { resolveSessionTitle } from "./session-titles.js";
 
 const ADAPTER_ID = "claude-code";
-const DEFAULT_PERMISSION_MODE: PermissionMode = "default";
 
 export function sessionJsonlPath(
   configDir: string,
@@ -158,7 +157,6 @@ async function readSessionMetaFromJsonl(
     projectDir: cwd,
     gitBranch,
     model: "",
-    permissionMode: DEFAULT_PERMISSION_MODE,
     status: "dormant",
     createdAt,
     lastActiveAt,

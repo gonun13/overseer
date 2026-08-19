@@ -1,4 +1,5 @@
 import { ChevronIcon } from "./icons";
+import { headLabel, labelForValue } from "../session";
 import type {
   SessionOption,
   SessionOptionKey,
@@ -37,22 +38,29 @@ export function SessionControls({
       {options.map((option, i) => {
         const open = openKey === option.key;
         const value = settings[option.key];
+        const current = option.values.find(
+          (candidate) => candidate.value === value,
+        );
         return (
           <div
             key={option.key}
             className={`session-ctl ${open ? "open" : ""}`}
           >
+            {/* The head prints what is *selected*, not what the row is called:
+                a row's identity is its digit and its place in the bar, and the
+                operator needs to read the armed value at a glance. The name
+                survives for screen readers on `aria-label`. */}
             <button
               className="session-ctl-head"
               onClick={() => onToggle(option.key)}
               aria-expanded={open}
+              aria-label={`${option.label} ${labelForValue(option, value) ?? "unset"}`}
             >
               <span className="session-ctl-key">{i + 1}</span>
-              <span className="session-ctl-label">{option.label}</span>
               <span
-                className={`session-ctl-value ${option.danger?.includes(value) ? "danger" : ""}`}
+                className={`session-ctl-value ${current?.danger ? "danger" : ""}`}
               >
-                {value || "—"}
+                {headLabel(option, value) ?? "—"}
               </span>
               <span className="session-ctl-chevron">
                 <ChevronIcon open={open} />
@@ -60,34 +68,54 @@ export function SessionControls({
             </button>
 
             {option.values.length > 0 && (
-              <div className="session-ctl-values">
-                {option.values.map((candidate) => (
-                  <button
-                    key={candidate}
-                    className={`session-ctl-option ${candidate === value ? "current" : ""} ${
-                      option.danger?.includes(candidate) ? "danger" : ""
-                    }`}
-                    onClick={() => onSelect(option.key, candidate)}
-                  >
-                    <span className="session-ctl-mark">
-                      {candidate === value ? "▪" : ""}
-                    </span>
-                    {candidate}
-                  </button>
-                ))}
+              <div className="session-ctl-values" role="listbox">
+                {option.values.map((candidate) => {
+                  const selected = candidate.value === value;
+                  return (
+                    <button
+                      key={candidate.value}
+                      role="option"
+                      aria-selected={selected}
+                      className={`session-ctl-option ${selected ? "current" : ""} ${
+                        candidate.danger ? "danger" : ""
+                      }`}
+                      onClick={() => onSelect(option.key, candidate.value)}
+                    >
+                      <span className="session-ctl-mark">
+                        {selected ? "▪" : ""}
+                      </span>
+                      <span className="session-ctl-option-text">
+                        {candidate.label}
+                        {candidate.detail !== undefined && (
+                          <span className="session-ctl-option-detail">
+                            {candidate.detail}
+                          </span>
+                        )}
+                      </span>
+                    </button>
+                  );
+                })}
               </div>
             )}
           </div>
         );
       })}
 
-      {/* Context is the one option that needs more than a value, so it opens a window. */}
+      {/* Context is the one option that needs more than a value, so it opens a
+          window — and the one row with no selection to print in place of its
+          name, so it keeps the name and hangs its count off it. */}
       <div className="session-ctl">
-        <button className="session-ctl-head" onClick={onOpenContext}>
+        <button
+          className="session-ctl-head"
+          onClick={onOpenContext}
+          aria-label={`context ${contextCount === 0 ? "empty" : `${contextCount} attached`}`}
+        >
           <span className="session-ctl-key">{options.length + 1}</span>
-          <span className="session-ctl-label">context</span>
+          {/* Empty is the resting state, so the word alone says it — a column
+              this narrow ellipsizes "context · empty" down to "context · …",
+              which spends the width saying nothing. */}
           <span className="session-ctl-value">
-            {contextCount === 0 ? "empty" : `${contextCount} attached`}
+            {contextCount === 0 ? "context" : `context · ${contextCount}`}
           </span>
           <span className="session-ctl-chevron">›</span>
         </button>

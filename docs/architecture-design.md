@@ -41,6 +41,10 @@ interface AgentAdapter {
   resumeSession(id: string): Promise<SessionHandle>;
   listSessions(): Promise<SessionMeta[]>;
   getStatus(): Promise<AdapterStatus>;
+  // What this provider offers a session, in one project. Optional: an adapter
+  // that cannot enumerate omits it and the server refuses the request rather
+  // than filling menus with values the CLI would reject.
+  listOptions?(opts: { projectDir: string }): Promise<ProviderOptions>;
 }
 
 interface SessionHandle {
@@ -54,6 +58,64 @@ interface SessionHandle {
   close(): Promise<void>;
 }
 ```
+
+The three runtime setters are still unbuilt: a session runs on what it spawned
+with, and a control-row pick arms the *next* session rather than retargeting the
+one in flight.
+
+### 1.1.1 Discovering what a provider offers
+
+`ProviderOptions` is
+`{ models, permissionModes, agents, defaultPermissionMode?, defaultModel? }`, each
+entry `{ value, label, detail?, danger? }` — `value` is what reaches the CLI, `label`
+and `detail` are the provider's own words. Every list may be empty; an adapter that
+could not get an answer reports nothing rather than a guess, and the UI leaves that
+row's menu shut.
+
+The two `default*` fields exist so a control row can read what the next turn will
+actually run on instead of a blank. They are not guesses about behaviour: the mode is
+the CLI's own `current_permission_mode`, and the model is the option the CLI itself
+labels "Default (recommended)", whose whole meaning is "whatever is configured".
+
+For `claude-code` the answer has two halves, because the CLI only knows one of them.
+
+**Models and the current permission mode** come from one `initialize` control request
+— 0 tokens, no session written, ~1.2s:
+
+```jsonc
+// stdin, to `claude -p --input-format stream-json --output-format stream-json --verbose`
+{"type":"control_request","request_id":"overseer_initialize","request":{"subtype":"initialize"}}
+```
+
+The reply carries `models[]` (with `displayName`, `description`, `supportsEffort`,
+`supportedEffortLevels`), `current_permission_mode`, `commands`, and
+`available_output_styles`.
+
+**Subagents** come off disk instead, from the two directories the operator writes to:
+
+```
+<project>/.claude/agents/*.md    this project
+$CLAUDE_CONFIG_DIR/agents/*.md   every project
+```
+
+`name` and `description` are read from each file's YAML frontmatter, falling back to
+the filename; project wins on a name collision, which is the CLI's own precedence.
+The list always leads with `none`.
+
+The reply's own `agents[]` is deliberately **not** used. It mixes the operator's
+subagents in with the CLI's built-in routing agents (`Explore`, `Plan`,
+`general-purpose`, `statusline-setup`, …) with nothing to tell them apart, and those
+built-ins are Claude's internal machinery, not a choice the operator made — offering
+them would put the CLI's plumbing in a menu beside the permission modes.
+
+**Permission modes** are in neither source: the only machine-readable enumeration is
+the CLI's own rejection message. They are a constant in the adapter, pinned to the
+same build as the `usage.ts` and `login.ts` parses.
+
+Nothing here is cached. Half the answer is files the operator can add or edit at any
+moment, so a cached list would go on offering agents they deleted; the ask is
+free and happens on human timescales (attaching a provider, changing project, opening
+a control row). The server single-flights it so two tabs cannot spawn two children.
 
 `AdapterCapabilities` contains `streamingDeltas`, `permissionPrompts`, `interrupt`, `subagents`, `mcp`, `skills`, `effortLevels`, `costReporting`, `checkpoints`, and `backgroundAgents`. The UI renders only supported controls.
 
@@ -281,7 +343,12 @@ One service: the Node server serves the built SPA and handles `/api/*` + `/ws` o
 - This is **remote code execution as a service**. Publish the host port on `127.0.0.1`. LAN access requires authentication.
 - Check `Origin` on WebSocket upgrades and mutating HTTP requests; otherwise another page can drive the local server.
 - The container holds a live subscription token in `claude-home`. Any RCE inside it exfiltrates that token — which is also the argument for not mounting the host's `~/.claude`.
-- `bypassPermissions` removes the last guard. Gate it behind an explicit server-side opt-in mirroring the CLI's own `--allow-dangerously-skip-permissions` gesture, and render it in `--danger` whenever active.
+- `bypassPermissions` removes the last guard. Gate it behind an explicit server-side opt-in mirroring the CLI's own `--allow-dangerously-skip-permissions` gesture, and render it in `--danger` whenever active. It is the one `permissionModes` entry carrying `danger`, so the control row already accents it; the server-side opt-in is still to build.
+
+The modes themselves are the CLI's own six — `acceptEdits`, `auto`, `bypassPermissions`,
+`manual`, `dontAsk`, `plan`. There is no `default` mode: the CLI accepts the word
+undocumented and reports `manual` back as `default`, which the adapter folds so the
+UI never offers two words for one mode.
 
 ### 6.1 Approval protocol
 

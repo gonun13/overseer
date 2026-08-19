@@ -52,14 +52,6 @@ export function SessionWindow({
 }) {
   const [value, setValue] = useState("");
 
-  const armed = [
-    settings.model,
-    settings.mode,
-    settings.agent === "default" ? "" : settings.agent,
-  ]
-    .filter(Boolean)
-    .join(" · ");
-
   function submit() {
     const trimmed = value.trim();
     if (!trimmed) return;
@@ -82,16 +74,12 @@ export function SessionWindow({
         placeholder="Ask, or describe the change you want."
         onChange={setValue}
         onSubmit={submit}
+        // No armed summary here: the control heads below already print what
+        // each row is set to, and saying it twice makes the operator check
+        // which one is authoritative.
         meta={
-          armed || busy ? (
-            <>
-              {armed && <span>{armed}</span>}
-              {busy ? (
-                <span>turn in flight</span>
-              ) : (
-                <span>enter to send · shift+enter for a newline</span>
-              )}
-            </>
+          busy ? (
+            <span>turn in flight</span>
           ) : (
             <span>enter to send · shift+enter for a newline</span>
           )

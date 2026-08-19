@@ -262,14 +262,39 @@ options use void.
    is unboxed and drawn larger than the other glyphs: the clock beside it has no frame either, so a
    border would make the gear the only boxed thing in that corner. A glyph big enough to hit does not
    need one. `.icon-btn` — the boxed variant — stays for small glyphs that do, like the panel's ✕.
-4. **PromptControls** (bottom-left) — an **accordion**, joined by a bracket rule: `1 MODEL`, `2 MODE`,
-   `3 AGENT`, `4 CONTEXT`. Closed, the rows are a menu on the **field**, blending with the background the same
+4. **PromptControls** (bottom-left) — an **accordion** of four rows, joined by a bracket rule.
+   **A closed row prints the value in force, not its own name** — `1 OPUS`, `2 ACCEPTEDITS`,
+   `3 REVIEWER` — because the row's identity is already carried by its digit and its fixed place in
+   the bar, and what the operator needs at a glance is what the next turn is armed with. The name
+   survives on the button's `aria-label`, so the rows stay addressable to a screen reader. Row 4 is the
+   exception: it has no selection to print, so it keeps its name and hangs its count off it
+   (`4 CONTEXT · EMPTY`).
+
+   A head never reads `—` once the provider has answered: a row the operator has not touched shows the
+   default that provider is actually sitting on (`1 DEFAULT`, `2 AUTO`, `3 NONE`), because a control
+   that says nothing tells the operator nothing about what the next turn will do. The head also drops a
+   trailing parenthetical — the CLI's `Default (recommended)` becomes `DEFAULT` — since four heads share
+   the composer's width and the annotation would crowd out the name; the menu keeps it in full.
+
+   Closed, the rows are a menu on the **field**, blending with the background the same
    as the clock. Opening one drops its values on **`--void`** beneath it — this is the machine's own menu, not
    a value the session produced, the same reasoning that keeps a window's tab off the stamp scale — current
    value marked `▪`; picking a value closes the section. One section open at a time. The block is
    bottom-anchored, so it grows upward. Values that arm something dangerous (`bypass`) render in `--accent`.
    Row 4 has no values — context needs more than a value, so it summons a window. These rows control **the
    next prompt**; this is the prompt's control surface, not navigation.
+
+   The values are the provider's, not ours: each entry prints the CLI's own name with its own
+   description beneath it in prose case — the one thing in this bar that is not uppercased, for the
+   same reason prompt text is not ([§7.1](#71-input-is-dark-output-is-light)). A row the provider has
+   not answered for stays shut and reads `—`; it never shows a plausible default.
+
+   Row 3 lists **the operator's own subagents** — the `.md` files they wrote into
+   `.claude/agents/` — and never the CLI's built-in routing agents, which are Claude's internal
+   machinery rather than a choice anyone made. It leads with `none`, which has to stay reachable
+   after another agent is picked, and an operator who has written none still gets a row that opens
+   and says so. A pick arms the *next* session — the CLI has no runtime setter for model or mode — so
+   a head can read what a live session is running while something else is armed for the next.
 5. **ProviderWidget** (bottom-right) — see §6.2. When signed in, `OPEN CONSOLE` with CONSOLE in `--ok` sits under it.
 6. **Prompt** (bottom-centre) — appears only after an authenticated provider is attached.
 7. **Footer** — one line under the prompt: product, version, and `ask for HELP` with HELP in `--accent`.
@@ -328,7 +353,9 @@ The transcript uses `--page`. The collapsed prompt bar, expanded composer, and e
 - **The text is not uppercased.** This is prose going to a model and should look like prose while it is being
   written. Uppercase remains for labels and chrome only.
 - The composer grows with its content to 168px, then scrolls.
-- Beneath it, one meta line: the armed model · mode · agent, and the send hint or `TURN IN FLIGHT`.
+- Beneath it, one meta line: the send hint, or `TURN IN FLIGHT`. **Not** the armed model · mode ·
+  agent — the control heads directly below already print exactly that, and stating it twice makes the
+  operator work out which of the two is authoritative.
 - A leading `/` starts a command; names autocomplete from
   `packages/web/src/commands.ts` and open the corresponding surface or action.
   Anything else goes to the active project's session, starting one if none is active.

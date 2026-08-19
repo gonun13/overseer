@@ -86,6 +86,11 @@ function buildArgs(sessionId: string, opts: SessionOpts): string[] {
     args.push("--permission-mode", opts.permissionMode);
   }
   if (opts.effort !== undefined) args.push("--effort", opts.effort);
+  // Empty means the operator picked the "none" row — that is a choice to pass
+  // no `--agent`, not a subagent named "".
+  if (opts.agent !== undefined && opts.agent !== "") {
+    args.push("--agent", opts.agent);
+  }
   if (opts.name !== undefined) args.push("-n", opts.name);
   return args;
 }

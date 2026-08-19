@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { AgentEvent } from "@overseer/protocol";
+import { normalizePermissionMode } from "./options.js";
 
 export interface NormalizeContext {
   sessionId: string;
@@ -230,6 +231,12 @@ function sessionInitFrom(
   const slashCommands = Array.isArray(obj.slash_commands)
     ? obj.slash_commands.filter((t): t is string => typeof t === "string")
     : [];
+  // Names only on this frame — the richer `{name, description}` shape comes from
+  // the `initialize` control request (options.ts), not from here.
+  const agents = Array.isArray(obj.agents)
+    ? obj.agents.filter((t): t is string => typeof t === "string")
+    : [];
+  const permissionMode = normalizePermissionMode(obj.permissionMode);
   return [
     {
       type: "session.init",
@@ -240,6 +247,8 @@ function sessionInitFrom(
       tools,
       mcpServers,
       slashCommands,
+      agents,
+      ...(permissionMode !== undefined ? { permissionMode } : {}),
     },
   ];
 }
