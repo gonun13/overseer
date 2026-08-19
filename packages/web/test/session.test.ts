@@ -92,6 +92,48 @@ describe("labelForValue", () => {
     // truthfully rather than blank.
     assert.equal(labelForValue(model!, "claude-sonnet-4"), "claude-sonnet-4");
   });
+
+  it("resolves a live session's resolved model id back to its catalog entry", () => {
+    // The menu's own value is "sonnet"; a running session reports the CLI's
+    // resolved id instead ("claude-sonnet-5") — that must not read as a raw,
+    // unrecognized string when the catalog knows exactly what it is.
+    const withResolved = sessionOptionsFrom({
+      ...REPORTED,
+      models: [
+        ...REPORTED.models,
+        { value: "sonnet", label: "Sonnet 5", resolvedModel: "claude-sonnet-5" },
+      ],
+    });
+    const [modelWithResolved] = withResolved;
+    assert.equal(
+      labelForValue(modelWithResolved!, "claude-sonnet-5"),
+      "Sonnet 5",
+    );
+  });
+
+  it("prefers the concrete model over 'default' when both resolve to the same id", () => {
+    // The account's default is whichever concrete model it currently resolves
+    // to, so "default" and, say, "sonnet" can share one `resolvedModel` — the
+    // real CLI reports exactly this. A turn run on "sonnet" must read "Sonnet
+    // 5", not "Default (recommended)", even though "default" appears first
+    // in the CLI's own list and would win a naive `.find`.
+    const withDefault = sessionOptionsFrom({
+      ...REPORTED,
+      models: [
+        {
+          value: "default",
+          label: "Default (recommended)",
+          resolvedModel: "claude-sonnet-5",
+        },
+        { value: "sonnet", label: "Sonnet 5", resolvedModel: "claude-sonnet-5" },
+      ],
+    });
+    const [modelWithDefault] = withDefault;
+    assert.equal(
+      labelForValue(modelWithDefault!, "claude-sonnet-5"),
+      "Sonnet 5",
+    );
+  });
 });
 
 describe("headLabel", () => {

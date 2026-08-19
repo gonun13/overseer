@@ -5,7 +5,7 @@ import { StatusLight } from "./StatusLight";
 import { useOccasionalTyping } from "../state/useOccasionalTyping";
 import { TONES } from "../state/wizard";
 import type { Signal } from "../state/signals";
-import type { Activity } from "../status";
+import { ACTIVITY_PULSES, type Activity } from "../status";
 
 /** Matches personality.ts / useDiscovery — keep the blank from offering more
  * than the server will store. */
@@ -35,7 +35,6 @@ const AFTER_NAME_MS = 2000;
 export function OverseerSpace({
   signals,
   headline,
-  busy,
   loading = false,
   typingChance,
   holdCaret = false,
@@ -49,7 +48,6 @@ export function OverseerSpace({
 }: {
   signals: Signal[];
   headline: { text: string; activity: Activity };
-  busy: boolean;
   /** Boot phase (minimum beat and any socket wait); nothing is known yet. */
   loading?: boolean;
   /** From `overseer-personality`, when the operator set one and it passed
@@ -73,6 +71,9 @@ export function OverseerSpace({
 }) {
   const asking = onSubmitName !== undefined;
   const pickingTone = onSubmitTone !== undefined;
+  // The rule widens for the overseer's own urgency, not a session's — a
+  // session working normally never touches this (docs/overseer.md §3).
+  const busy = ACTIVITY_PULSES[headline.activity];
   // Keep the typing hook mounted across ask → greet so "welcome, name" types
   // out instead of appearing in one frame (useOccasionalTyping skips mount).
   const { display, typing } = useOccasionalTyping(

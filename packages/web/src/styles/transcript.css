@@ -58,6 +58,46 @@
   color: var(--stamp-faint);
 }
 
+/* Which model answered — a fact about the reply, secondary to "this is the
+   agent". Inherits the label's own faint tone rather than a badge of its
+   own, since a session can switch models mid-conversation and every turn
+   carries its own. */
+.turn-label-model {
+  color: inherit;
+}
+
+/* The model's own reasoning ahead of a reply — secondary to it, so it never
+   competes with `.turn-agent` for weight: no border box of its own, just a
+   quiet header the operator can open. Collapses once superseded (see
+   Transcript's `isNewest`), same shape as `.turn-tool` folding to one line
+   once its result lands. */
+.turn-thinking {
+  margin: 0 0 10px;
+}
+
+.turn-thinking-head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--stamp-faint);
+}
+
+.turn-thinking-head:hover {
+  color: var(--stamp-dim);
+}
+
+.turn-thinking-head .turn-label {
+  margin-bottom: 0;
+}
+
+.turn-thinking-text {
+  margin-top: 4px;
+  padding-left: 16px;
+  font-style: italic;
+  color: var(--stamp-dim);
+  border-left: 1px solid var(--stamp-edge);
+}
+
 .turn-text {
   margin: 0;
   font-size: 14px;

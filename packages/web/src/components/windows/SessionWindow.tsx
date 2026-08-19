@@ -51,6 +51,7 @@ export function SessionWindow({
   onInspect: (id: string) => void;
 }) {
   const [value, setValue] = useState("");
+  const models = options.find((option) => option.key === "model")?.values ?? [];
 
   function submit() {
     const trimmed = value.trim();
@@ -65,7 +66,7 @@ export function SessionWindow({
         {turns.length === 0 ? (
           <p className="session-empty">nothing said yet</p>
         ) : (
-          <Transcript turns={turns} onInspect={onInspect} />
+          <Transcript turns={turns} models={models} onInspect={onInspect} />
         )}
       </div>
 

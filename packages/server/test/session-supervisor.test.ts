@@ -17,6 +17,7 @@ function fakeHandle(events: AgentEvent[]): SessionHandle {
     events: gen(),
     send: () => {},
     interrupt: () => {},
+    setModel: () => {},
     resolvePermission: () => {},
     close: async () => {},
   };
@@ -93,6 +94,98 @@ describe("session-supervisor", () => {
     assert.equal(result.ok, true);
     assert.ok(frames.some((f) => f.type === "session.meta"));
     assert.ok(frames.some((f) => f.type === "session.event"));
+  });
+
+  it("retargets a live session and folds the confirmed model into its meta", async () => {
+    const frames: ServerMessage[] = [];
+    const init: AgentEvent = {
+      type: "session.init",
+      sessionId: "new-id",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      model: "claude-sonnet-5",
+      cwd: "/workspace/demo",
+      tools: [],
+      mcpServers: [],
+      slashCommands: [],
+    };
+    let requestedModel: string | undefined;
+    const handle: SessionHandle = {
+      ...fakeHandle([init]),
+      setModel: (model) => {
+        requestedModel = model;
+      },
+    };
+    const supervisor = createSessionSupervisor((msg) => frames.push(msg), {
+      readSnapshot: async () => ({
+        attached_provider: "claude-code",
+        last_active_project: "/workspace/demo",
+      }),
+      isInsideWorkspace: async () => true,
+      getAdapter: () =>
+        ({
+          id: "claude-code",
+          getStatus: async () => ({ authenticated: true }),
+        }) as AgentAdapter,
+      mintSessionId: () => "new-id",
+      openSession: () => handle,
+      listProjectSessions: async () => [],
+      recordAction: async () => {},
+    });
+
+    await supervisor.create({});
+    const result = await supervisor.setModel("new-id", "haiku");
+
+    assert.equal(result.ok, true);
+    assert.equal(requestedModel, "haiku");
+  });
+
+  it("folds a confirmed session.model event into meta without waiting for another session.init", async () => {
+    // The running process never respawns on a runtime switch, so nothing
+    // re-fires session.init — session.model is the only signal meta.model
+    // ever gets that it changed.
+    const frames: ServerMessage[] = [];
+    const init: AgentEvent = {
+      type: "session.init",
+      sessionId: "new-id",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      model: "claude-sonnet-5",
+      cwd: "/workspace/demo",
+      tools: [],
+      mcpServers: [],
+      slashCommands: [],
+    };
+    const modelSwitch: AgentEvent = {
+      type: "session.model",
+      sessionId: "new-id",
+      timestamp: "2026-01-01T00:00:01.000Z",
+      model: "claude-haiku-4-5-20251001",
+    };
+    const supervisor = createSessionSupervisor((msg) => frames.push(msg), {
+      readSnapshot: async () => ({
+        attached_provider: "claude-code",
+        last_active_project: "/workspace/demo",
+      }),
+      isInsideWorkspace: async () => true,
+      getAdapter: () =>
+        ({
+          id: "claude-code",
+          getStatus: async () => ({ authenticated: true }),
+        }) as AgentAdapter,
+      mintSessionId: () => "new-id",
+      openSession: () => fakeHandle([init, modelSwitch]),
+      listProjectSessions: async () => [],
+      recordAction: async () => {},
+    });
+
+    await supervisor.create({});
+    // The pump drains the fake handle's events off a microtask queue.
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const metas = frames.filter(
+      (f): f is Extract<ServerMessage, { type: "session.meta" }> =>
+        f.type === "session.meta",
+    );
+    assert.equal(metas.at(-1)?.session.model, "claude-haiku-4-5-20251001");
   });
 
   it("send opens a dormant session before delivering the message", async () => {

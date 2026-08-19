@@ -3,6 +3,13 @@ import type { Activity } from "../status";
 import type { Session, Turn } from "../domain";
 import type { SessionSettings } from "../session";
 
+/** Matches `BLANK_SESSION_SETTINGS` in `../session` — duplicated rather than
+ * imported, because unlike the `type` import above, a value import forces
+ * node's plain ESM loader (not just tsc/Vite) to resolve `../session` at
+ * runtime, and it has no extension for the loader to find without a bundler's
+ * help — this file is unit-tested directly under `node --test`, not bundled. */
+const BLANK_SETTINGS: SessionSettings = { model: "", mode: "", agent: "" };
+
 const SESSION_NAME_MAX = 20;
 
 function truncateSessionName(name: string): string {
@@ -56,6 +63,54 @@ export interface ChatSlice {
   turns: Turn[];
 }
 
+/** One conversation: the metadata every session list renders, the transcript
+ * its own window renders, and what it is armed with. */
+export interface Chat {
+  session: Session;
+  turns: Turn[];
+  settings: SessionSettings;
+}
+
+/**
+ * Reconcile local chats against one `session.list` reply. The server scopes
+ * that reply to whichever project is active *right now*
+ * (session-supervisor's `mergeList`), so it says nothing about any other
+ * project's sessions — pruning against it wholesale used to wipe every other
+ * project's transcripts out of memory on every switch, which is why a
+ * session's output came back empty rather than not at all once the operator
+ * switched back. A chat already known keeps its turns and only refreshes its
+ * meta/settings from the server; a chat outside this reply's project scope
+ * is left completely untouched.
+ */
+export function reconcileSessionList(
+  current: Chat[],
+  sessions: SessionMeta[],
+): Chat[] {
+  const byId = new Map(current.map((c) => [c.session.id, c]));
+  for (const meta of sessions) {
+    const existing = byId.get(meta.id);
+    const session = metaToSession(meta, existing?.session.activity ?? "idle");
+    if (existing) {
+      byId.set(meta.id, {
+        ...existing,
+        session: { ...session, activity: existing.session.activity },
+        settings: { ...existing.settings, ...settingsFromMeta(meta) },
+      });
+    } else {
+      byId.set(meta.id, {
+        session,
+        turns: [],
+        settings: { ...BLANK_SETTINGS, ...settingsFromMeta(meta) },
+      });
+    }
+  }
+  const ids = new Set(sessions.map((s) => s.id));
+  const scopedProjectDirs = new Set(sessions.map((s) => s.projectDir));
+  return [...byId.values()].filter(
+    (c) => ids.has(c.session.id) || !scopedProjectDirs.has(c.session.projectId),
+  );
+}
+
 /** Apply one live AgentEvent to a chat slice. Returns updated slice. */
 export function applySessionEvent(
   chat: ChatSlice,
@@ -70,6 +125,11 @@ export function applySessionEvent(
         model: event.model,
         branch: session.branch || "",
       };
+      break;
+    case "session.model":
+      // A confirmed runtime switch — the same process, now armed differently
+      // for its next turn. Nothing else about the session changed.
+      session = { ...session, model: event.model };
       break;
     case "text.delta": {
       const last = turns.at(-1);
@@ -95,6 +155,31 @@ export function applySessionEvent(
     }
     case "thinking.delta":
       session = { ...session, activity: "working" };
+      // Claude can summarize or withhold reasoning entirely depending on
+      // account/model settings — an empty delta carries no text to show, so
+      // it must not open a turn that would sit there permanently blank.
+      if (event.text === "") break;
+      {
+        const last = turns.at(-1);
+        if (last?.kind === "thinking") {
+          turns = [
+            ...turns.slice(0, -1),
+            { ...last, text: last.text + event.text },
+          ];
+        } else {
+          // A thinking turn always precedes the reply it belongs to — once
+          // text starts (or a tool call opens), the *next* thinking delta
+          // (a later turn) opens a fresh bubble rather than resuming this one.
+          turns = [
+            ...turns,
+            {
+              id: `${event.sessionId}-th${turns.length}`,
+              kind: "thinking",
+              text: event.text,
+            },
+          ];
+        }
+      }
       break;
     case "tool.start":
       turns = [
@@ -131,6 +216,15 @@ export function applySessionEvent(
             ? `$${event.totalCostUsd.toFixed(4)}`
             : session.cost,
       };
+      // Stamp the reply that just finished with what actually produced it —
+      // the session's own `model` names what the *next* turn will run on,
+      // which is not always the same one after a runtime switch mid-session.
+      if (event.model !== undefined) {
+        const last = turns.at(-1);
+        if (last?.kind === "agent") {
+          turns = [...turns.slice(0, -1), { ...last, model: event.model }];
+        }
+      }
       break;
     case "error":
       session = { ...session, activity: "attention" };

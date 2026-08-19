@@ -53,7 +53,6 @@ export interface WorldState {
     /** True when this instance was signed in and now is not. */
     authExpired?: boolean;
   };
-  busy: boolean;
   /** Customizations in `overseer-personality` the overseer refused to apply.
    * Optional because a world that has not run discovery has not been told. */
   rejected?: RejectedCustomization[];
@@ -201,9 +200,14 @@ export function deriveSignals(world: WorldState): Signal[] {
     });
   }
 
+  // The overseer is an independent unit, not a narrator of every session — a
+  // session generating a reply is doing exactly what it is supposed to and
+  // earns no signal of its own (docs/overseer.md §3). Only a session that hit
+  // real trouble (a denied permission, a stream error — anything that landed
+  // it on `attention`) is something the operator did not already know to
+  // expect, so only that state is reported here.
   for (const session of sessions) {
-    if (session.activity === "idle" || session.activity === "attention")
-      continue;
+    if (session.activity !== "attention") continue;
     signals.push({
       id: `session-${session.id}`,
       activity: session.activity,
@@ -242,14 +246,13 @@ export function deriveSignals(world: WorldState): Signal[] {
 }
 
 /** The single word above the signal list. Driven by the most urgent signal, so
- * the headline and the list can never disagree. A signal may carry its own
- * headline word (personality rescue); otherwise the activity vocabulary. */
-export function headlineFor(
-  signals: Signal[],
-  busy: boolean,
-): { text: string; activity: Activity } {
+ * the headline and the list can never disagree — and by nothing else. A
+ * session working normally is not a reason for the overseer to say
+ * "working": the overseer is an independent unit, not a mirror of whatever a
+ * session happens to be doing (docs/overseer.md §3). A signal may carry its
+ * own headline word (personality rescue); otherwise the activity vocabulary. */
+export function headlineFor(signals: Signal[]): { text: string; activity: Activity } {
   const top = signals[0];
-  if (busy) return { text: ACTIVITY_HEADLINE.working, activity: "working" };
   const activity = top?.activity ?? "idle";
   return {
     text: top?.headline ?? ACTIVITY_HEADLINE[activity],

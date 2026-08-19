@@ -95,6 +95,7 @@ export function WindowStackHost({
   subscribeConsole,
 }: WindowStackHostProps) {
   const [approvals, setApprovals] = useState<Approval[]>([]);
+  const models = sessionOptions.find((o) => o.key === "model")?.values ?? [];
 
   return windows.map((windowState) => {
     // A session window's payload is the session id it belongs to; everything it
@@ -154,6 +155,7 @@ export function WindowStackHost({
             sessions={sessions}
             projects={projects}
             provider={provider}
+            models={models}
             onOpenSession={(id) => {
               const chat = chatFor(id);
               if (chat) openChat(chat.session);

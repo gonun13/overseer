@@ -195,6 +195,13 @@ export function createSessionSupervisor(
             meta.lastActiveAt = event.timestamp;
             pushMeta({ ...meta });
           }
+          if (event.type === "session.model") {
+            // A runtime `set_model` the CLI confirmed — the session is still
+            // the same process, just armed differently for its next turn.
+            meta.model = event.model;
+            meta.lastActiveAt = event.timestamp;
+            pushMeta({ ...meta });
+          }
           if (event.type === "turn.end") {
             // An interrupted turn reports a zeroed result — keep the running
             // total rather than resetting the session's cost to nothing.
@@ -409,6 +416,24 @@ export function createSessionSupervisor(
         return { ok: false, reason: "session is not live" };
       }
       entry.handle.interrupt();
+      return { ok: true };
+    },
+
+    /** Retarget an already-running session's next turn. Resumes a dormant
+     * session first, the same as `send` — the operator picking a model is not
+     * asking to lose the transcript that made them want the picker open. */
+    async setModel(sessionId: string, model: string): Promise<SessionResult> {
+      let entry = live.get(sessionId);
+      if (entry === undefined) {
+        const opened = await ensureOpen(sessionId);
+        if (!opened.ok) return opened;
+        entry = live.get(sessionId);
+      }
+      if (entry === undefined) {
+        return { ok: false, reason: "session could not be opened" };
+      }
+      entry.handle.setModel(model);
+      touch(sessionId);
       return { ok: true };
     },
 

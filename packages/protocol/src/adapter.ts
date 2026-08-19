@@ -67,6 +67,14 @@ export interface ProviderOption {
   detail?: string;
   /** Arms something dangerous (`bypassPermissions`). Rendered in `--accent`. */
   danger?: true;
+  /**
+   * For a model row only: the id the CLI actually reports once this model is
+   * running (`"sonnet"` resolves to `"claude-sonnet-5"`). A live session's
+   * `SessionMeta.model`/turn attribution carries that resolved id, not the
+   * menu's own `value` — matching against this is how the UI turns it back
+   * into the catalog entry instead of printing the raw id.
+   */
+  resolvedModel?: string;
 }
 
 /**
@@ -119,6 +127,10 @@ export interface SessionHandle {
   /** Queues if a turn is in flight. */
   send(msg: UserMessage): void;
   interrupt(): void;
+  /** Retarget the *next* turn of this already-running session — a control
+   * request on stdin, not a respawn. Success or failure comes back as a
+   * `session.model` or `error` event on `events`, asynchronously. */
+  setModel(model: string): void;
   resolvePermission(id: string, decision: PermissionDecision): void;
   close(): Promise<void>;
 }

@@ -1,9 +1,11 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { Chat } from "../src/state/session-events.ts";
 import {
   appendUserTurn,
   applySessionEvent,
   metaToSession,
+  reconcileSessionList,
 } from "../src/state/session-events.ts";
 
 describe("session-events", () => {
@@ -106,6 +108,76 @@ describe("session-events", () => {
     assert.equal(agents[1]?.kind === "agent" && agents[1].text, "second");
   });
 
+  it("builds a thinking turn from deltas, separate from the reply that follows", () => {
+    const base = {
+      session: metaToSession({
+        id: "s1",
+        adapterId: "claude-code",
+        projectDir: "/workspace/demo",
+        model: "",
+        permissionMode: "default" as const,
+        status: "live" as const,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        lastActiveAt: "2026-01-01T00:00:00.000Z",
+        totalCostUsd: 0,
+      }),
+      turns: [],
+    };
+    const thinking = (text: string) => ({
+      type: "thinking.delta" as const,
+      sessionId: "s1",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      text,
+    });
+    const text = (text: string) => ({
+      type: "text.delta" as const,
+      sessionId: "s1",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      text,
+    });
+
+    let chat = applySessionEvent(base, thinking("let me "));
+    chat = applySessionEvent(chat, thinking("work through this"));
+    chat = applySessionEvent(chat, text("42"));
+
+    assert.equal(chat.turns.length, 2);
+    const [reasoning, reply] = chat.turns;
+    assert.equal(reasoning?.kind, "thinking");
+    assert.equal(
+      reasoning?.kind === "thinking" && reasoning.text,
+      "let me work through this",
+    );
+    assert.equal(reply?.kind, "agent");
+    assert.equal(reply?.kind === "agent" && reply.text, "42");
+  });
+
+  it("opens no turn at all for an empty thinking delta — Claude can withhold reasoning entirely", () => {
+    const chat = applySessionEvent(
+      {
+        session: metaToSession({
+          id: "s1",
+          adapterId: "claude-code",
+          projectDir: "/workspace/demo",
+          model: "",
+          permissionMode: "default" as const,
+          status: "live" as const,
+          createdAt: "2026-01-01T00:00:00.000Z",
+          lastActiveAt: "2026-01-01T00:00:00.000Z",
+          totalCostUsd: 0,
+        }),
+        turns: [],
+      },
+      {
+        type: "thinking.delta",
+        sessionId: "s1",
+        timestamp: "2026-01-01T00:00:00.000Z",
+        text: "",
+      },
+    );
+    assert.equal(chat.turns.length, 0);
+    assert.equal(chat.session.activity, "working");
+  });
+
   it("closes a tool turn when its result lands", () => {
     const base = {
       session: metaToSession({
@@ -176,5 +248,100 @@ describe("session-events", () => {
     );
     const turn = chat.turns[0];
     assert.equal(turn?.kind === "tool" && turn.status, "error");
+  });
+});
+
+describe("reconcileSessionList", () => {
+  function chatFor(projectDir: string, id: string, turns: Chat["turns"] = []): Chat {
+    return {
+      session: metaToSession({
+        id,
+        adapterId: "claude-code",
+        projectDir,
+        model: "",
+        status: "live",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        lastActiveAt: "2026-01-01T00:00:00.000Z",
+        totalCostUsd: 0,
+      }),
+      turns,
+      settings: { model: "", mode: "", agent: "" },
+    };
+  }
+
+  it("leaves another project's chats untouched — session.list only speaks for the active project", () => {
+    // This is the project-switch bug: the server always scopes session.list
+    // to whichever project is active right now, so a reply for project B
+    // must not be read as "everything not in this list is gone" — that used
+    // to wipe project A's transcripts out of memory the moment the operator
+    // switched away, so switching back found them empty.
+    const projectA = chatFor("/workspace/a", "a1", [
+      { id: "a1-u0", kind: "user", text: "hello from A" },
+    ]);
+    const current = [projectA];
+
+    const next = reconcileSessionList(current, [
+      {
+        id: "b1",
+        adapterId: "claude-code",
+        projectDir: "/workspace/b",
+        model: "",
+        status: "live",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        lastActiveAt: "2026-01-01T00:00:00.000Z",
+        totalCostUsd: 0,
+      },
+    ]);
+
+    const survivedA = next.find((c) => c.session.id === "a1");
+    assert.ok(survivedA);
+    assert.deepEqual(survivedA.turns, projectA.turns);
+    assert.ok(next.some((c) => c.session.id === "b1"));
+  });
+
+  it("prunes a session that vanished from its own project's list", () => {
+    const gone = chatFor("/workspace/a", "a1");
+    const kept = chatFor("/workspace/a", "a2");
+
+    const next = reconcileSessionList([gone, kept], [
+      {
+        id: "a2",
+        adapterId: "claude-code",
+        projectDir: "/workspace/a",
+        model: "",
+        status: "live",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        lastActiveAt: "2026-01-01T00:00:00.000Z",
+        totalCostUsd: 0,
+      },
+    ]);
+
+    assert.equal(next.some((c) => c.session.id === "a1"), false);
+    assert.ok(next.some((c) => c.session.id === "a2"));
+  });
+
+  it("keeps existing turns when refreshing a known session's meta", () => {
+    const existing = chatFor("/workspace/a", "a1", [
+      { id: "a1-u0", kind: "user", text: "hi" },
+    ]);
+
+    const next = reconcileSessionList([existing], [
+      {
+        id: "a1",
+        adapterId: "claude-code",
+        projectDir: "/workspace/a",
+        name: "renamed",
+        model: "sonnet",
+        status: "live",
+        createdAt: "2026-01-01T00:00:00.000Z",
+        lastActiveAt: "2026-01-01T00:00:01.000Z",
+        totalCostUsd: 0.02,
+      },
+    ]);
+
+    const chat = next.find((c) => c.session.id === "a1");
+    assert.deepEqual(chat?.turns, existing.turns);
+    assert.equal(chat?.session.name, "renamed");
+    assert.equal(chat?.settings.model, "sonnet");
   });
 });

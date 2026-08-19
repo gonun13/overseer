@@ -35,6 +35,7 @@ export default function App() {
     closeTop,
     closeAll,
     closeKind,
+    closeWhere,
     raise,
     move,
     resize,
@@ -107,10 +108,7 @@ export default function App() {
     (session) => openChatRef.current(session),
     armedSession,
   );
-  const sessionBusy = sessions.some(
-    (session) => session.activity === "working",
-  );
-  const shell = useShellPresentation(wizard, sessionBusy, open, sessions);
+  const shell = useShellPresentation(wizard, open, sessions);
 
   // Which accordion section is open in each session window. Digits on the
   // prompt terminal target the focused session's controls.
@@ -154,9 +152,13 @@ export default function App() {
 
   const selectSessionControl = useCallback(
     (sessionId: string, key: SessionOptionKey, value: string) => {
+      // Model has a runtime setter (`set_model`) and `setSessionSetting`
+      // sends it, so a pick there retargets the process that is already
+      // running. Mode and agent do not — the CLI offers no runtime control
+      // request for either — so a pick on those rows only arms the next
+      // session. Every row is armed regardless: it is also the default the
+      // *next* session starts with.
       setSessionSetting(sessionId, key, value);
-      // The adapter has no runtime setter for model or mode, so a pick cannot
-      // retarget the session that is already running. It arms the next one.
       armSession(key, value);
       setOpenSessionControls((current) => {
         const next = { ...current };
@@ -345,6 +347,21 @@ export default function App() {
                 // Console PTY is bound to the cwd it opened in; closing is
                 // honest — a silent swap would strand the operator.
                 closeKind("console");
+                // A session window is scoped to the project its session runs
+                // in the same way — left open across a switch it reads as
+                // live when the checkout behind it is no longer in view.
+                // Closes every chat window outside the target project, not
+                // just the one being left, so windows stranded open by a
+                // prior switch get swept up too.
+                const targetIds = new Set(
+                  sessions
+                    .filter((session) => session.projectId === project.id)
+                    .map((session) => session.id),
+                );
+                closeWhere(
+                  (w) =>
+                    w.kind === "chat" && !targetIds.has(String(w.payload ?? "")),
+                );
                 const last = [...sessions]
                   .reverse()
                   .find((session) => session.projectId === project.id);
@@ -367,7 +384,6 @@ export default function App() {
         <OverseerSpace
           signals={shell.signals}
           headline={shell.headline}
-          busy={sessionBusy}
           loading={shell.loading}
           typingChance={shell.typingChance}
           holdCaret={shell.holdCaret}

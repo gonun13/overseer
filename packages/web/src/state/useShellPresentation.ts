@@ -29,7 +29,6 @@ type OpenWindow = (
  */
 export function useShellPresentation(
   wizard: DiscoveryController,
-  busy: boolean,
   openWindow: OpenWindow,
   sessions: Session[] = [],
 ) {
@@ -74,7 +73,6 @@ export function useShellPresentation(
         approvals: [],
         capabilities: [],
         provider,
-        busy,
         rejected: wizard.rejected,
         untrackedFolders: wizard.untrackedFolders,
         personalityMissing: wizard.personalityMissing,
@@ -86,7 +84,6 @@ export function useShellPresentation(
       activeProject,
       sessions,
       provider,
-      busy,
       wizard.rejected,
       wizard.untrackedFolders,
       wizard.personalityMissing,
@@ -98,7 +95,7 @@ export function useShellPresentation(
   const askingName = welcomeNeedsName(wizard);
   const pickingTone = welcomeNeedsTone(wizard);
   const wizardWord = wizardHeadline(wizard);
-  const derivedHeadline = headlineFor(signals, busy);
+  const derivedHeadline = headlineFor(signals);
   const headline = wizard.error
     ? { text: wizard.error, activity: "attention" as const }
     : wizardWord

@@ -3,6 +3,7 @@ import type { PermissionMode } from "./adapter.js";
 /** Normalized event union emitted by every adapter over `SessionHandle.events`. */
 export type AgentEvent =
   | SessionInitEvent
+  | SessionModelEvent
   | TextDeltaEvent
   | ThinkingDeltaEvent
   | ToolStartEvent
@@ -34,6 +35,15 @@ export interface SessionInitEvent extends BaseEvent {
   permissionMode?: PermissionMode;
   /** Subagents this session can call, as the provider named them. */
   agents: string[];
+}
+
+/** A runtime `set_model` request the CLI confirmed — the resolved model id it
+ * echoed, not the menu value that was asked for (`"haiku"` in,
+ * `"claude-haiku-4-5-20251001"` out). A rejected request surfaces as `error`
+ * instead; this event only fires on success. */
+export interface SessionModelEvent extends BaseEvent {
+  type: "session.model";
+  model: string;
 }
 
 export interface TextDeltaEvent extends BaseEvent {
@@ -103,6 +113,11 @@ export interface SubagentEndEvent extends BaseEvent {
 
 export interface TurnEndEvent extends BaseEvent {
   type: "turn.end";
+  /** The resolved model that actually produced this reply, read off the
+   * turn's own `assistant` frames — not the row the operator has armed, which
+   * names what the *next* turn will run on and can differ mid-session after a
+   * runtime `set_model`. Absent when no assistant frame carried one. */
+  model?: string;
   usage: {
     inputTokens: number;
     outputTokens: number;

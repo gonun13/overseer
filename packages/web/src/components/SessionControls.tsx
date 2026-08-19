@@ -1,5 +1,5 @@
 import { ChevronIcon } from "./icons";
-import { headLabel, labelForValue } from "../session";
+import { findOption, headLabel, labelForValue } from "../session";
 import type {
   SessionOption,
   SessionOptionKey,
@@ -38,9 +38,11 @@ export function SessionControls({
       {options.map((option, i) => {
         const open = openKey === option.key;
         const value = settings[option.key];
-        const current = option.values.find(
-          (candidate) => candidate.value === value,
-        );
+        // A model row's armed value can be the CLI's resolved id rather than
+        // the menu's own wire value (see `findOption`) — matching on identity
+        // once here, rather than `candidate.value === value` per row below,
+        // is what keeps the ▪ mark and the head in agreement.
+        const current = findOption(option.values, value);
         return (
           <div
             key={option.key}
@@ -70,7 +72,7 @@ export function SessionControls({
             {option.values.length > 0 && (
               <div className="session-ctl-values" role="listbox">
                 {option.values.map((candidate) => {
-                  const selected = candidate.value === value;
+                  const selected = candidate === current;
                   return (
                     <button
                       key={candidate.value}

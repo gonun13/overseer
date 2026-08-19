@@ -97,6 +97,10 @@ export type ClientMessage =
   | { type: "session.open"; sessionId: string }
   /** Send a user turn to a live session. */
   | { type: "session.send"; sessionId: string; text: string }
+  /** Retarget an already-running session's next turn — a control request on
+   * the live process, not a respawn. Resumes a dormant session first, the
+   * same as `session.send`. */
+  | { type: "session.model"; sessionId: string; model: string }
   /** Interrupt the in-flight turn. */
   | { type: "session.interrupt"; sessionId: string }
   /** Close a live session process. */
@@ -341,6 +345,8 @@ export const CONSOLE_MAX_INPUT_CHARS = 64_000;
 export const SESSION_MAX_ID_CHARS = 64;
 export const SESSION_MAX_TEXT_CHARS = 64_000;
 export const SESSION_MAX_NAME_CHARS = 256;
+/** Matches `SESSION_MAX_AGENT_CHARS` — a menu value, not free text. */
+export const SESSION_MAX_MODEL_CHARS = 128;
 
 /** Mirrors `PermissionMode`. The CLI rejects anything else outright, and a
  * rejected spawn reads to the operator as a broken session rather than a bad
@@ -485,6 +491,15 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       typeof msg.text === "string" &&
       msg.text.length > 0 &&
       msg.text.length <= SESSION_MAX_TEXT_CHARS
+    );
+  }
+  if (type === "session.model") {
+    const msg = value as { sessionId?: unknown; model?: unknown };
+    return (
+      isSessionId(msg.sessionId) &&
+      typeof msg.model === "string" &&
+      msg.model.length > 0 &&
+      msg.model.length <= SESSION_MAX_MODEL_CHARS
     );
   }
   return false;

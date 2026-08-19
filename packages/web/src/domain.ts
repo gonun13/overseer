@@ -89,7 +89,27 @@ export interface WorkspaceInfo {
 }
 
 export type Turn =
-  | { id: string; kind: "user" | "agent"; text: string }
+  | { id: string; kind: "user"; text: string }
+  | {
+      id: string;
+      kind: "agent";
+      text: string;
+      /** The resolved model that produced this reply. Live turns only — a
+       * runtime `set_model` can change what later turns in the same session
+       * run on, so this is read off the turn itself, not the session's
+       * current setting. Backfilled history leaves this unset. */
+      model?: string;
+    }
+  | {
+      id: string;
+      kind: "thinking";
+      /** The model's own reasoning for the reply that follows. Live turns
+       * only — Claude can summarize or withhold this entirely depending on
+       * account/model settings, so a turn is only ever created once real text
+       * has arrived (see `applySessionEvent`); an empty stream leaves no turn
+       * at all rather than a bubble with nothing in it. */
+      text: string;
+    }
   | {
       id: string;
       kind: "tool";

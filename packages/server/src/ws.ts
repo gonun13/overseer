@@ -559,6 +559,14 @@ export function attachWebSocketServer(httpServer: Server): {
           if (!result.ok) send(sessionError("session.send", result.reason));
           return;
         }
+        case "session.model": {
+          const result = await sessionSupervisor.setModel(
+            parsed.sessionId,
+            parsed.model,
+          );
+          if (!result.ok) send(sessionError("session.model", result.reason));
+          return;
+        }
         case "session.interrupt": {
           const result = sessionSupervisor.interrupt(parsed.sessionId);
           if (!result.ok) {

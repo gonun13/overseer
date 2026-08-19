@@ -152,6 +152,12 @@ export function createSessionHandle(
     string,
     { toolName: string; input: unknown }
   >();
+  /** `set_model` requests awaiting their `control_response`, keyed by request
+   * id — the response itself doesn't echo the model back. */
+  const pendingModelRequests = new Map<string, string>();
+  /** The model the most recent `assistant` frame ran on. `turn.end` has no
+   * model of its own; this is what attaches one to it. */
+  let lastAssistantModel: string | undefined;
 
   const ctx = {
     sessionId,
@@ -166,6 +172,7 @@ export function createSessionHandle(
       const line = buffer.slice(0, index).trim();
       buffer = buffer.slice(index + 1);
       if (line !== "") {
+        handleControlResponse(line);
         for (const event of normalizeLine(line, ctx)) {
           if (event.type === "permission.request") {
             pendingPermissions.set(event.requestId, {
@@ -176,6 +183,12 @@ export function createSessionHandle(
           if (event.type === "turn.end") {
             turnInFlight = false;
             flushSendQueue();
+            queue.push(
+              lastAssistantModel !== undefined
+                ? { ...event, model: lastAssistantModel }
+                : event,
+            );
+            continue;
           }
           queue.push(event);
         }
@@ -183,6 +196,55 @@ export function createSessionHandle(
       index = buffer.indexOf("\n");
     }
   });
+
+  /** Track the model each `assistant` frame ran on, and resolve any
+   * `set_model` control request awaiting this line's `control_response`.
+   * Both read the raw frame directly — neither is a normalized `AgentEvent`. */
+  function handleControlResponse(line: string): void {
+    let record: unknown;
+    try {
+      record = JSON.parse(line);
+    } catch {
+      return;
+    }
+    if (typeof record !== "object" || record === null) return;
+    const obj = record as Record<string, unknown>;
+
+    if (obj.type === "assistant") {
+      const message = obj.message as Record<string, unknown> | undefined;
+      if (typeof message?.model === "string" && message.model !== "") {
+        lastAssistantModel = message.model;
+      }
+      return;
+    }
+
+    if (obj.type !== "control_response") return;
+    const response = obj.response as Record<string, unknown> | undefined;
+    const requestId = response?.request_id;
+    if (typeof requestId !== "string") return;
+    const model = pendingModelRequests.get(requestId);
+    if (model === undefined) return;
+    pendingModelRequests.delete(requestId);
+
+    if (response?.subtype === "success") {
+      queue.push({
+        type: "session.model",
+        sessionId,
+        timestamp: ctx.timestamp(),
+        model,
+      });
+    } else {
+      const detail =
+        typeof response?.error === "string" ? response.error : "rejected";
+      queue.push({
+        type: "error",
+        sessionId,
+        timestamp: ctx.timestamp(),
+        message: `model switch failed: ${detail}`,
+        recoverable: true,
+      });
+    }
+  }
 
   child.stderr.on("data", (chunk: Buffer) => {
     const text = chunk.toString("utf8").trim();
@@ -245,6 +307,17 @@ export function createSessionHandle(
         type: "control_request",
         request_id: `req_${controlSeq}_interrupt`,
         request: { subtype: "interrupt" },
+      });
+    },
+
+    setModel(model: string): void {
+      controlSeq += 1;
+      const requestId = `req_${controlSeq}_set_model`;
+      pendingModelRequests.set(requestId, model);
+      writeLine({
+        type: "control_request",
+        request_id: requestId,
+        request: { subtype: "set_model", model },
       });
     },
 

@@ -66,11 +66,40 @@ export function labelForValue(
   option: SessionOption,
   value: string,
 ): string | undefined {
-  const match = option.values.find((candidate) => candidate.value === value);
+  const match = findOption(option.values, value);
   if (match !== undefined) return match.label;
   // Fall back to the raw value: a live session can be running a model that is
   // no longer in the menu, and showing it is better than showing nothing.
   return value === "" ? undefined : value;
+}
+
+/**
+ * Match a row's live value back to its catalog entry. A model row's `value`
+ * is the menu's own wire id (`"haiku"`); once a session is actually running
+ * one, `SessionMeta.model` and per-turn attribution carry the CLI's
+ * *resolved* id instead (`"claude-haiku-4-5-20251001"`) — so a plain `value`
+ * match alone would miss every live model and fall through to printing the
+ * raw resolved id. Mode and agent rows carry no `resolvedModel`, so this is a
+ * no-op for them.
+ *
+ * `"default"` is excluded from the `resolvedModel` search: it means
+ * "whatever the account resolves to" and so shares its `resolvedModel` with
+ * whichever concrete entry the account currently defaults to (`"sonnet"`,
+ * today) — matching it first would report every live Sonnet turn as
+ * "Default" even when the operator picked "Sonnet 5" by name. A concrete
+ * entry is always the more truthful read of a live id; `"default"` is only
+ * ever the right answer for an exact `value` match (row still reads "not
+ * set" / "unset"), never for resolving a reported model back.
+ */
+export function findOption(
+  values: ProviderOption[],
+  value: string,
+): ProviderOption | undefined {
+  const exact = values.find((candidate) => candidate.value === value);
+  if (exact !== undefined) return exact;
+  return values.find(
+    (candidate) => candidate.value !== "default" && candidate.resolvedModel === value,
+  );
 }
 
 /**

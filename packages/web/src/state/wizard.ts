@@ -118,6 +118,18 @@ export interface WizardState {
   /** Workspace folders that are not git projects — drive signals. */
   untrackedFolders: UntrackedFolder[];
   providers: DiscoveredProvider[];
+  /**
+   * Latest status seen per provider id, independent of whether that id is in
+   * `providers` yet. Discovery's own steps are paced for the operations
+   * window (`useDiscoveryPacing`, one reveal/second) but the server is not —
+   * a fast `/usage` reply can broadcast `provider.status` before the paced
+   * `discovery.step.done`/`discovery.complete` has put that id in `providers`
+   * at all. Without this the update has nothing to match and is dropped, and
+   * the widget sits on "retrieving…" until it times out, only to have the
+   * next 5-minute recheck succeed. Applied whenever `providers` is
+   * (re)assigned so a race never outlives the pass that lost it.
+   */
+  providerStatusOverrides: Record<string, AdapterStatus>;
   /** Provider the operator connected. Undefined until they pick one (or a
    * prior attach is restored). Never defaults to the first registered id. */
   attachedProviderId?: string;
@@ -166,6 +178,18 @@ export interface WizardState {
   bootMinElapsed: boolean;
 }
 
+/** Overlay the latest known status per id onto a freshly (re)assigned roster —
+ * see `providerStatusOverrides`. */
+function withStatusOverrides(
+  providers: DiscoveredProvider[],
+  overrides: Record<string, AdapterStatus>,
+): DiscoveredProvider[] {
+  return providers.map((provider) => {
+    const status = overrides[provider.id];
+    return status ? { ...provider, status } : provider;
+  });
+}
+
 const NO_REVEAL: Record<FurnitureReveal, boolean> = {
   clock: false,
   projectPanel: false,
@@ -181,6 +205,7 @@ export const INITIAL_WIZARD: WizardState = {
   projects: [],
   untrackedFolders: [],
   providers: [],
+  providerStatusOverrides: {},
   theme: "samaritan",
   revealed: { ...NO_REVEAL },
   personality: {},
@@ -391,15 +416,17 @@ export function wizardReducer(
     case "provider.connected":
       return { ...state, attachedProviderId: action.id };
 
-    case "provider.status":
+    case "provider.status": {
+      const providerStatusOverrides = {
+        ...state.providerStatusOverrides,
+        [action.id]: action.status,
+      };
       return {
         ...state,
-        providers: state.providers.map((provider) =>
-          provider.id === action.id
-            ? { ...provider, status: action.status }
-            : provider,
-        ),
+        providerStatusOverrides,
+        providers: withStatusOverrides(state.providers, providerStatusOverrides),
       };
+    }
 
     case "auth.requested":
       return {
@@ -621,7 +648,12 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
           ? { untrackedFolders: event.untrackedFolders }
           : {}),
         ...(event.providers !== undefined
-          ? { providers: event.providers }
+          ? {
+              providers: withStatusOverrides(
+                event.providers,
+                state.providerStatusOverrides,
+              ),
+            }
           : {}),
         ...(event.workspaceRoot !== undefined
           ? { workspaceRoot: event.workspaceRoot }
@@ -656,7 +688,10 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
         phase: "settling",
         projects: event.projects,
         untrackedFolders: event.untrackedFolders ?? [],
-        providers: event.providers,
+        providers: withStatusOverrides(
+          event.providers,
+          state.providerStatusOverrides,
+        ),
         workspaceRoot: event.workspaceRoot,
         activeProjectPath: event.activeProjectPath,
         // Omitted means none attached — do not keep a stale id from a prior pass.

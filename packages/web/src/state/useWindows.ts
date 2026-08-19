@@ -169,6 +169,14 @@ export function useWindows() {
     setWindows((current) => current.filter((w) => w.kind !== kind));
   }, []);
 
+  /** Dismiss every window matching a predicate (e.g. a chat window whose
+   * session belongs to a project that just stopped being active — a session
+   * window is scoped to the project its session runs in, the same way
+   * console is scoped to the cwd it opened in). */
+  const closeWhere = useCallback((predicate: (w: OpenWindow) => boolean) => {
+    setWindows((current) => current.filter((w) => !predicate(w)));
+  }, []);
+
   const move = useCallback((id: string, x: number, y: number) => {
     setWindows((current) =>
       current.map((w) => (w.id === id ? { ...w, x, y } : w)),
@@ -199,6 +207,7 @@ export function useWindows() {
     closeTop,
     closeAll,
     closeKind,
+    closeWhere,
     raise,
     move,
     resize,

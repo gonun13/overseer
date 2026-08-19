@@ -36,11 +36,25 @@ describe("parseInitializeResponse", () => {
       options.models.map((m) => m.value),
       ["default", "sonnet", "claude-fable-5[1m]", "opus", "haiku"],
     );
-    // The CLI's own display name and description, not ours.
+    // The CLI's own display name and description, not ours — with the
+    // version the description repeats moved onto the label instead.
     assert.deepEqual(options.models[3], {
       value: "opus",
-      label: "Opus",
-      detail: "Opus 5 · Best for everyday, complex tasks · ~2× usage vs Sonnet",
+      label: "Opus 5",
+      detail: "Best for everyday, complex tasks · ~2× usage vs Sonnet",
+      resolvedModel: "claude-opus-5",
+    });
+  });
+
+  it("leaves 'default' alone — its description names the resolved model, not itself", async () => {
+    const line = await fixtureLine();
+    const options = parseInitializeResponse(findInitializeBody(line));
+
+    assert.deepEqual(options.models[0], {
+      value: "default",
+      label: "Default (recommended)",
+      detail: "Sonnet 5 · Efficient for routine tasks",
+      resolvedModel: "claude-sonnet-5",
     });
   });
 

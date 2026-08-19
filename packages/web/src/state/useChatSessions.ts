@@ -14,20 +14,14 @@ import {
 import {
   appendUserTurn,
   applySessionEvent,
+  type Chat,
   metaToSession,
+  reconcileSessionList,
   settingsFromMeta,
   turnWireToTurn,
 } from "./session-events";
 
-/** One conversation: the metadata every session list renders, the transcript
- * its own window renders, and what it is armed with. */
-export interface Chat {
-  session: Session;
-  turns: Turn[];
-  settings: SessionSettings;
-}
-
-type Turn = import("../domain").Turn;
+export type { Chat } from "./session-events";
 
 /**
  * Server-backed chat sessions — list, create, open, send over `/ws`.
@@ -105,37 +99,7 @@ export function useChatSessions(
   useEffect(() => {
     return subscribeSession((message) => {
       if (message.type === "session.list") {
-        setChats((current) => {
-          const byId = new Map(current.map((c) => [c.session.id, c]));
-          for (const meta of message.sessions) {
-            const existing = byId.get(meta.id);
-            const session = metaToSession(
-              meta,
-              existing?.session.activity ?? "idle",
-            );
-            if (existing) {
-              byId.set(meta.id, {
-                ...existing,
-                session: { ...session, activity: existing.session.activity },
-                settings: {
-                  ...existing.settings,
-                  ...settingsFromMeta(meta),
-                },
-              });
-            } else {
-              byId.set(meta.id, {
-                session,
-                turns: [],
-                settings: {
-                  ...BLANK_SESSION_SETTINGS,
-                  ...settingsFromMeta(meta),
-                },
-              });
-            }
-          }
-          const ids = new Set(message.sessions.map((s) => s.id));
-          return [...byId.values()].filter((c) => ids.has(c.session.id));
-        });
+        setChats((current) => reconcileSessionList(current, message.sessions));
         return;
       }
       if (message.type === "session.meta") {
@@ -238,8 +202,13 @@ export function useChatSessions(
             : chat,
         ),
       );
+      // Model is the one row with a runtime setter (`set_model`) — retarget
+      // the process that is already running instead of only arming the next
+      // one. The optimistic head above is confirmed or corrected once the
+      // server's own `session.model`/`error` frame comes back.
+      if (key === "model") send({ type: "session.model", sessionId: id, model: value });
     },
-    [],
+    [send],
   );
 
   const chatFor = useCallback(

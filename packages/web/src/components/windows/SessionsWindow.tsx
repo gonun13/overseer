@@ -1,11 +1,14 @@
 import { WProviderNote, WRow } from "./bits";
 import { TrashIcon } from "../icons";
 import type { Project, ProviderInfo, Session } from "../../domain";
+import type { ProviderOption } from "@overseer/protocol";
+import { findOption } from "../../session";
 
 export function SessionsWindow({
   sessions,
   projects,
   provider,
+  models,
   onOpenSession,
   onNewSession,
   onDeleteSession,
@@ -13,6 +16,9 @@ export function SessionsWindow({
   sessions: Session[];
   projects: Project[];
   provider: ProviderInfo;
+  /** The model row's catalog — resolves a session's raw reported model id
+   * back to the name the operator picked, the same as the session controls. */
+  models: ProviderOption[];
   onOpenSession: (id: string) => void;
   onNewSession: () => void;
   onDeleteSession: (id: string) => void;
@@ -30,7 +36,12 @@ export function SessionsWindow({
             primary={s.name}
             // Unset fields are omitted rather than shown blank, so the line
             // never reads as " · · " with the values rubbed out.
-            secondary={[project?.name, s.branch, s.model, s.doing]
+            secondary={[
+              project?.name,
+              s.branch,
+              s.model === "" ? undefined : (findOption(models, s.model)?.label ?? s.model),
+              s.doing,
+            ]
               .filter(Boolean)
               .join(" · ")}
             right={s.cost}

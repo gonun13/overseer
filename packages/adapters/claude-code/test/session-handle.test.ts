@@ -162,6 +162,92 @@ describe("createSessionHandle stdin", () => {
       updatedInput: { file_path: "/etc/hostname" },
     });
   });
+
+  it("sends a runtime model switch as a nested, identified control request", () => {
+    const fake = install();
+    const handle = createSessionHandle("s11", { projectDir: "/workspace" });
+
+    handle.setModel("haiku");
+
+    const [frame] = frames(fake.written);
+    assert.equal(frame.type, "control_request");
+    assert.equal(typeof frame.request_id, "string");
+    assert.deepEqual(frame.request, { subtype: "set_model", model: "haiku" });
+  });
+
+  it("reports the resolved model once the CLI confirms the switch", async () => {
+    const fake = install();
+    const handle = createSessionHandle("s12", { projectDir: "/workspace" });
+    const seen: AgentEvent[] = [];
+    void (async () => {
+      for await (const event of handle.events) seen.push(event);
+    })();
+
+    handle.setModel("haiku");
+    const [frame] = frames(fake.written);
+
+    await fake.emit({
+      type: "control_response",
+      response: { subtype: "success", request_id: frame.request_id },
+    });
+
+    assert.equal(seen.length, 1);
+    assert.deepEqual(seen[0], {
+      type: "session.model",
+      sessionId: "s12",
+      timestamp: seen[0]!.timestamp,
+      model: "haiku",
+    });
+  });
+
+  it("surfaces a rejected model switch as a recoverable error, not a silent no-op", async () => {
+    const fake = install();
+    const handle = createSessionHandle("s13", { projectDir: "/workspace" });
+    const seen: AgentEvent[] = [];
+    void (async () => {
+      for await (const event of handle.events) seen.push(event);
+    })();
+
+    handle.setModel("nonexistent-model");
+    const [frame] = frames(fake.written);
+
+    await fake.emit({
+      type: "control_response",
+      response: {
+        subtype: "error",
+        request_id: frame.request_id,
+        error: "invalid_model_type",
+      },
+    });
+
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0]!.type, "error");
+    assert.match((seen[0] as { message: string }).message, /invalid_model_type/);
+  });
+
+  it("attaches the model that actually produced a turn's reply to turn.end", async () => {
+    const fake = install();
+    const handle = createSessionHandle("s14", { projectDir: "/workspace" });
+    const seen: AgentEvent[] = [];
+    void (async () => {
+      for await (const event of handle.events) seen.push(event);
+    })();
+
+    await fake.emit({
+      type: "assistant",
+      message: {
+        model: "claude-haiku-4-5-20251001",
+        content: [{ type: "text", text: "hi" }],
+      },
+    });
+    await fake.emit({ type: "result", total_cost_usd: 0.01 });
+
+    const turnEnd = seen.find((event) => event.type === "turn.end");
+    assert.equal(
+      (turnEnd as { model?: string } | undefined)?.model,
+      "claude-haiku-4-5-20251001",
+    );
+  });
 });
 
 describe("createSessionHandle argv", () => {

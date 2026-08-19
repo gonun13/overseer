@@ -99,6 +99,34 @@ export function normalizePermissionMode(
     : undefined;
 }
 
+/**
+ * The CLI's own `description` leads with the display name repeated alongside
+ * its version — `"Sonnet 5 · Efficient for routine tasks"` for a row already
+ * labelled "Sonnet". Move that version onto the label (`"Sonnet"` →
+ * `"Sonnet 5"`) and leave only the blurb behind it in `detail`, so the
+ * version reads as part of the model's name rather than buried mid-sentence.
+ *
+ * Left untouched when the description does not open on the display name's
+ * own first word — "Default (recommended)" describes whichever model the
+ * account resolves to, not itself, and gets no version stitched onto it.
+ */
+function withVersionInLabel(
+  displayName: string,
+  description: string,
+): { label: string; detail?: string } {
+  const trimmed = description.trim();
+  const match = /^(\S+)\s+([\d.]+)(?:\s*·\s*(.*))?$/.exec(trimmed);
+  const leadWord = displayName.trim().split(/\s+/)[0]?.toLowerCase();
+  if (!match || match[1]!.toLowerCase() !== leadWord) {
+    return trimmed === "" ? { label: displayName } : { label: displayName, detail: trimmed };
+  }
+  const [, , version, rest] = match;
+  return {
+    label: `${displayName} ${version}`,
+    ...(rest !== undefined && rest.trim() !== "" ? { detail: rest.trim() } : {}),
+  };
+}
+
 /** Turn the `initialize` response body into menus. Total on anything odd. */
 export function parseInitializeResponse(body: unknown): InitializeAnswer {
   if (typeof body !== "object" || body === null) return noProbeAnswer();
@@ -110,14 +138,20 @@ export function parseInitializeResponse(body: unknown): InitializeAnswer {
       if (typeof entry !== "object" || entry === null) continue;
       const model = entry as Record<string, unknown>;
       if (typeof model.value !== "string" || model.value === "") continue;
+      const displayName =
+        typeof model.displayName === "string" && model.displayName !== ""
+          ? model.displayName
+          : model.value;
+      const description =
+        typeof model.description === "string" ? model.description : "";
+      const { label, detail } = withVersionInLabel(displayName, description);
       models.push({
         value: model.value,
-        label:
-          typeof model.displayName === "string" && model.displayName !== ""
-            ? model.displayName
-            : model.value,
-        ...(typeof model.description === "string" && model.description !== ""
-          ? { detail: model.description }
+        label,
+        ...(detail !== undefined ? { detail } : {}),
+        ...(typeof model.resolvedModel === "string" &&
+        model.resolvedModel !== ""
+          ? { resolvedModel: model.resolvedModel }
           : {}),
       });
     }
