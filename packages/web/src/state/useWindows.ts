@@ -18,7 +18,7 @@ export function useWindows() {
   }, []);
 
   const open = useCallback(
-    (kind: WindowKind, payload?: unknown, title?: string) => {
+    (kind: WindowKind, payload?: unknown, title?: string, detail?: string) => {
       setWindows((current) => {
         // Re-summoning a window that's already up raises it rather than stacking a duplicate.
         const existing = current.find(
@@ -37,6 +37,8 @@ export function useWindows() {
           spec.h === undefined
             ? undefined
             : Math.min(spec.h, window.innerHeight - 160);
+        const detailFields =
+          detail !== undefined ? ({ detail } as const) : ({} as const);
 
         // Providers opens from the instrument that summoned it: right-aligned
         // with the bottom-right widget, sitting just above it rather than at a
@@ -51,6 +53,7 @@ export function useWindows() {
               id: `${kind}-${++seq}`,
               kind,
               title: title ?? spec.title,
+              ...detailFields,
               x: Math.max(24, window.innerWidth - width - margin),
               y: Math.max(
                 56,
@@ -75,6 +78,7 @@ export function useWindows() {
               id: `${kind}-${++seq}`,
               kind,
               title: title ?? spec.title,
+              ...detailFields,
               x: Math.max(24, window.innerWidth - width - margin),
               y: Math.max(
                 56,
@@ -105,6 +109,7 @@ export function useWindows() {
               id: `${kind}-${++seq}`,
               kind,
               title: title ?? spec.title,
+              ...detailFields,
               x: Math.max(
                 24,
                 Math.min(
@@ -130,6 +135,7 @@ export function useWindows() {
             id: `${kind}-${++seq}`,
             kind,
             title: title ?? spec.title,
+            ...detailFields,
             x: Math.max(
               24,
               Math.min(spec.x + cascade, window.innerWidth - width - 24),
@@ -190,10 +196,16 @@ export function useWindows() {
   }, []);
 
   const retitle = useCallback(
-    (kind: WindowKind, payload: unknown, title: string) => {
+    (kind: WindowKind, payload: unknown, title: string, detail?: string) => {
       setWindows((current) =>
         current.map((w) =>
-          w.kind === kind && w.payload === payload ? { ...w, title } : w,
+          w.kind === kind && w.payload === payload
+            ? {
+                ...w,
+                title,
+                detail,
+              }
+            : w,
         ),
       );
     },

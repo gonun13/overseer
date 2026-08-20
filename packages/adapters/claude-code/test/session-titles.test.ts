@@ -68,7 +68,7 @@ describe("resolveSessionTitle", () => {
 
     assert.equal(
       await resolveSessionTitle(configDir, projectDir, sessionId),
-      "what is in this rep…",
+      "what is in this repo?",
     );
   });
 
@@ -96,11 +96,11 @@ describe("resolveSessionTitle", () => {
 
     assert.equal(
       await resolveSessionTitle(configDir, projectDir, sessionId),
-      "Explored auth flow …",
+      "Explored auth flow and fixed redir…",
     );
   });
 
-  it("truncates long titles to 20 characters", async () => {
+  it("truncates long titles to 35 characters", async () => {
     configDir = await mkdtemp(path.join(tmpdir(), "claude-titles-"));
     const slugDir = path.join(
       configDir,
@@ -124,7 +124,7 @@ describe("resolveSessionTitle", () => {
 
     assert.equal(
       await resolveSessionTitle(configDir, projectDir, sessionId),
-      "this is a very long…",
+      "this is a very long session title …",
     );
   });
 });

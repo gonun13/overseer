@@ -11,6 +11,7 @@ const MIN_HEIGHT = 240;
  */
 export function Window({
   title,
+  detail,
   x,
   y,
   z,
@@ -24,6 +25,8 @@ export function Window({
   children,
 }: {
   title: string;
+  /** Dim secondary on the tab — not uppercased (e.g. project name). */
+  detail?: string;
   x: number;
   y: number;
   z: number;
@@ -152,10 +155,22 @@ export function Window({
         <span style={{ color: "var(--mark-fill)" }}>▽</span>
         <span style={{ opacity: 0.5, fontSize: 12 }}>///</span>
         <span>{title}</span>
+        {detail !== undefined && detail !== "" && (
+          <>
+            <span className="window-tab-detail" aria-hidden>
+              ·
+            </span>
+            <span className="window-tab-detail">{detail}</span>
+          </>
+        )}
         <button
           className="tab-close"
           onClick={onClose}
-          aria-label={`close ${title}`}
+          aria-label={
+            detail !== undefined && detail !== ""
+              ? `close ${title} ${detail}`
+              : `close ${title}`
+          }
         >
           <CloseIcon />
         </button>

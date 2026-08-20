@@ -2,7 +2,7 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import { projectDirSlug } from "./project-slug.js";
 
-const MAX_TITLE_LEN = 20;
+const MAX_TITLE_LEN = 35;
 
 interface IndexEntry {
   sessionId?: string;

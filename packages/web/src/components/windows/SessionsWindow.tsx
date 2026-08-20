@@ -50,7 +50,6 @@ export function SessionsWindow({
                 <button className="w-btn" onClick={() => onOpenSession(s.id)}>
                   open
                 </button>
-                <button className="w-btn">fork</button>
                 <button
                   className="w-btn danger"
                   onClick={() => onDeleteSession(s.id)}

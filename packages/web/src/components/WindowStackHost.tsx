@@ -109,6 +109,7 @@ export function WindowStackHost({
       <Window
         key={windowState.id}
         title={windowState.title}
+        detail={windowState.detail}
         x={windowState.x}
         y={windowState.y}
         z={windowState.z}

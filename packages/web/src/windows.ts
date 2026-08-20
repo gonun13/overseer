@@ -15,6 +15,8 @@ export interface OpenWindow {
   id: string;
   kind: WindowKind;
   title: string;
+  /** Dim secondary on the tab (e.g. project name on a chat window). */
+  detail?: string;
   x: number;
   y: number;
   w: number;

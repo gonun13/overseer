@@ -10,7 +10,7 @@ import type { SessionSettings } from "../session";
  * help — this file is unit-tested directly under `node --test`, not bundled. */
 const BLANK_SETTINGS: SessionSettings = { model: "", mode: "", agent: "" };
 
-const SESSION_NAME_MAX = 20;
+const SESSION_NAME_MAX = 35;
 
 function truncateSessionName(name: string): string {
   if (name.length <= SESSION_NAME_MAX) return name;

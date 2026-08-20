@@ -32,6 +32,14 @@
   clip-path: inset(0 0 0 0);
 }
 
+/* Same voice as `.w-row-secondary`: natural case, dim, smaller than the tab. */
+.window-tab-detail {
+  font-size: 11px;
+  letter-spacing: 0;
+  text-transform: none;
+  color: var(--ink-dim);
+}
+
 .tab-close {
   display: flex;
   align-items: center;

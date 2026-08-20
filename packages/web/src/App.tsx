@@ -9,7 +9,7 @@ import { ProviderWidget } from "./components/ProviderWidget";
 import { SessionPanel } from "./components/SessionPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { WindowStackHost } from "./components/WindowStackHost";
-import type { Session } from "./domain";
+import type { Project, Session } from "./domain";
 import { SESSION_CONTROL_KEYS, type SessionOptionKey } from "./session";
 import type { Signal } from "./state/signals";
 import { useChatSessions } from "./state/useChatSessions";
@@ -19,6 +19,17 @@ import { useProviderOptions } from "./state/useProviderOptions";
 import { useShellKeyboard } from "./state/useShellKeyboard";
 import { useShellPresentation } from "./state/useShellPresentation";
 import { useWindows } from "./state/useWindows";
+
+/** Tab label for a chat window: session name + project as dim detail. */
+function chatWindowLabel(
+  session: Session,
+  projects: Project[],
+): { title: string; detail?: string } {
+  const project = projects.find((p) => p.id === session.projectId);
+  return project === undefined
+    ? { title: session.name }
+    : { title: session.name, detail: project.name };
+}
 
 export default function App() {
   const [projectsOpen, setProjectsOpen] = useState(true);
@@ -183,9 +194,10 @@ export default function App() {
   const openChat = useCallback(
     (session: Session) => {
       focusSession(session.id);
-      open("chat", session.id, session.name);
+      const { title, detail } = chatWindowLabel(session, shell.projects);
+      open("chat", session.id, title, detail);
     },
-    [focusSession, open],
+    [focusSession, open, shell.projects],
   );
   openChatRef.current = openChat;
 
@@ -203,9 +215,10 @@ export default function App() {
 
   useEffect(() => {
     for (const session of sessions) {
-      retitle("chat", session.id, session.name);
+      const { title, detail } = chatWindowLabel(session, shell.projects);
+      retitle("chat", session.id, title, detail);
     }
-  }, [retitle, sessions]);
+  }, [retitle, sessions, shell.projects]);
 
   const activeProject = shell.activeProject;
   const startChat = useCallback(() => {
