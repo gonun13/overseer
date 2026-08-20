@@ -45,6 +45,10 @@ Open http://127.0.0.1:3000. The compiled SPA is served by the Node server. The c
 owns its own `~/.claude` in a named volume; `./workspace` is the only directory shared
 with the host.
 
+Provider usage and limit reset phrases follow the container timezone (`TZ`). Default is
+UTC. To use your local zone, copy `.env.example` to `.env` and uncomment a `TZ=…` line
+(Compose loads it automatically).
+
 ```sh
 ./bin/stop
 ```

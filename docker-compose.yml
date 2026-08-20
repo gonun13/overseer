@@ -16,6 +16,8 @@ services:
       - OVERSEER_INTERNAL_DIR=/app/.overseer
       - DISABLE_AUTOUPDATER=1
       - DISABLE_UPDATES=1
+      # From project .env (see .env.example). Unset → UTC.
+      - TZ=${TZ:-UTC}
 
 volumes:
   claude-home:

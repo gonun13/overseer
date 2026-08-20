@@ -34,8 +34,10 @@ FROM ${NODE_IMAGE} AS dev
 # python3/make/g++: node-pty (raw OPEN CONSOLE PTY) is a native module.
 # curl: available for later script-based CLI installs (not used for Cursor yet).
 # Provider CLIs are pinned — bump deliberately, never via floating @latest.
+# tzdata: IANA zones for TZ=… from .env so provider CLIs format reset times
+# in the operator's zone instead of the image default (UTC).
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git ripgrep ca-certificates curl python3 make g++ \
+      git ripgrep ca-certificates curl python3 make g++ tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g \
          @anthropic-ai/claude-code@2.1.226 \
@@ -104,8 +106,9 @@ FROM ${NODE_IMAGE} AS runtime
 # python3/make/g++: node-pty for the raw OPEN CONSOLE escape hatch. Auth login
 # still uses plain pipes (architecture-design.md §2); the console is the only
 # PTY path. Build tools are removed after `npm ci` so the runtime image stays lean.
+# tzdata: same as the dev stage — TZ from .env must resolve inside the image.
 RUN apt-get update && apt-get install -y --no-install-recommends \
-      git ripgrep ca-certificates curl python3 make g++ \
+      git ripgrep ca-certificates curl python3 make g++ tzdata \
     && rm -rf /var/lib/apt/lists/* \
     && npm install -g \
          @anthropic-ai/claude-code@2.1.226 \
