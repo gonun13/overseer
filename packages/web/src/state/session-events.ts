@@ -227,7 +227,13 @@ export function applySessionEvent(
       }
       break;
     case "error":
-      session = { ...session, activity: "attention" };
+      session = {
+        ...session,
+        activity: "attention",
+        // Overseer signals read `doing` for "what happened" — without this
+        // the attention line is only the session name.
+        doing: event.message,
+      };
       break;
     case "exit":
       session = { ...session, activity: "idle", doing: "" };

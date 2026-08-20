@@ -249,6 +249,52 @@ describe("session-events", () => {
     const turn = chat.turns[0];
     assert.equal(turn?.kind === "tool" && turn.status, "error");
   });
+
+  it("keeps a quota error's text after turn.end settles activity on attention", () => {
+    // Adapter order for is_error results: text.delta → turn.end → error.
+    // turn.end alone would leave the session idle with no visible reply.
+    const base = {
+      session: metaToSession({
+        id: "s1",
+        adapterId: "claude-code",
+        projectDir: "/workspace/demo",
+        model: "",
+        permissionMode: "default" as const,
+        status: "live" as const,
+        createdAt: "2026-01-01T00:00:00.000Z",
+        lastActiveAt: "2026-01-01T00:00:00.000Z",
+        totalCostUsd: 0,
+      }),
+      turns: [{ id: "s1-u0", kind: "user" as const, text: "hi" }],
+    };
+    const limit = "You've hit your weekly limit · resets 3am (UTC)";
+    let chat = applySessionEvent(base, {
+      type: "text.delta",
+      sessionId: "s1",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      text: limit,
+    });
+    chat = applySessionEvent(chat, {
+      type: "turn.end",
+      sessionId: "s1",
+      timestamp: "2026-01-01T00:00:01.000Z",
+      usage: { inputTokens: 0, outputTokens: 0 },
+      totalCostUsd: 0,
+      durationMs: 12,
+      numTurns: 1,
+    });
+    chat = applySessionEvent(chat, {
+      type: "error",
+      sessionId: "s1",
+      timestamp: "2026-01-01T00:00:01.000Z",
+      message: limit,
+      recoverable: true,
+    });
+    assert.equal(chat.session.activity, "attention");
+    assert.equal(chat.session.doing, limit);
+    const reply = chat.turns.find((t) => t.kind === "agent");
+    assert.equal(reply?.kind === "agent" && reply.text, limit);
+  });
 });
 
 describe("reconcileSessionList", () => {

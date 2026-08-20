@@ -3,7 +3,7 @@ import type {
   RejectedCustomization,
   UntrackedFolder,
 } from "@overseer/protocol";
-import { ACTIVITY_HEADLINE, ACTIVITY_RANK, type Activity } from "../status";
+import { ACTIVITY_HEADLINE, ACTIVITY_RANK, type Activity } from "../status.ts";
 import type { WindowKind } from "../windows";
 import type { Approval, Capability, Project, Session } from "../domain";
 
@@ -212,7 +212,9 @@ export function deriveSignals(world: WorldState): Signal[] {
       id: `session-${session.id}`,
       activity: session.activity,
       kicker: "session",
-      text: `${session.name} · ${session.doing}.`,
+      text: session.doing
+        ? `${session.name} · ${session.doing}.`
+        : `${session.name} needs attention.`,
       target: { kind: "window", window: "sessions" },
     });
   }

@@ -61,3 +61,50 @@ describe("deriveSignals usage", () => {
     assert.equal(signals.find((signal) => signal.id === "usage"), undefined);
   });
 });
+
+describe("deriveSignals session attention", () => {
+  it("names what went wrong, not only the session", () => {
+    const signals = deriveSignals({
+      ...baseWorld,
+      sessions: [
+        {
+          id: "s1",
+          activity: "attention",
+          name: "new session",
+          projectId: "/workspace/demo",
+          branch: "",
+          model: "",
+          cost: "",
+          doing: "You've hit your weekly limit · resets 3am (UTC)",
+        },
+      ],
+    });
+    const session = signals.find((signal) => signal.id === "session-s1");
+    assert.ok(session);
+    assert.match(
+      session.text,
+      /^new session · You've hit your weekly limit · resets 3am \(UTC\)\.$/,
+    );
+  });
+
+  it("falls back when attention has no detail yet", () => {
+    const signals = deriveSignals({
+      ...baseWorld,
+      sessions: [
+        {
+          id: "s1",
+          activity: "attention",
+          name: "new session",
+          projectId: "/workspace/demo",
+          branch: "",
+          model: "",
+          cost: "",
+          doing: "",
+        },
+      ],
+    });
+    const session = signals.find((signal) => signal.id === "session-s1");
+    assert.ok(session);
+    assert.equal(session.text, "new session needs attention.");
+  });
+});

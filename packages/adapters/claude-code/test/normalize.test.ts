@@ -171,4 +171,97 @@ describe("normalizeLine frame shapes", () => {
     assert.deepEqual(normalizeLine('{"type":"rate_limit_event"}', ctx), []);
     assert.deepEqual(normalizeLine("not json at all", ctx), []);
   });
+
+  it("surfaces an is_error result's text live — quota hits skip text deltas", () => {
+    // Claude ends a hard limit with is_error + result copy and no
+    // content_block_delta stream; dropping that string left the session
+    // window blank until a reload hydrated the JSONL assistant turn.
+    const line = JSON.stringify({
+      type: "result",
+      subtype: "success",
+      is_error: true,
+      api_error_status: 429,
+      result: "You've hit your weekly limit · resets 3am (UTC)",
+      usage: { input_tokens: 0, output_tokens: 0 },
+      total_cost_usd: 0,
+      duration_ms: 12,
+      num_turns: 1,
+    });
+    const events = normalizeLine(line, ctx);
+    assert.deepEqual(
+      events.map((e) => e.type),
+      ["text.delta", "turn.end", "error"],
+    );
+    const text = events[0] as Extract<AgentEvent, { type: "text.delta" }>;
+    const err = events[2] as Extract<AgentEvent, { type: "error" }>;
+    assert.equal(text.text, "You've hit your weekly limit · resets 3am (UTC)");
+    assert.equal(err.message, text.text);
+    assert.equal(err.recoverable, true);
+  });
+
+  it("does not replay a successful result's text — deltas already carried it", () => {
+    const line = JSON.stringify({
+      type: "result",
+      is_error: false,
+      result: "hello from the final frame",
+      usage: { input_tokens: 1, output_tokens: 2 },
+      total_cost_usd: 0.01,
+      duration_ms: 100,
+      num_turns: 1,
+    });
+    const events = normalizeLine(line, ctx);
+    assert.equal(events.length, 1);
+    assert.equal(events[0]?.type, "turn.end");
+  });
+
+  it("takes assistant text when the turn skipped stream deltas", () => {
+    const turn = { emittedText: false };
+    const withTurn = { ...ctx, turn };
+    const assistant = JSON.stringify({
+      type: "assistant",
+      message: {
+        role: "assistant",
+        content: [
+          {
+            type: "text",
+            text: "You've hit your weekly limit · resets 3am (UTC)",
+          },
+        ],
+      },
+    });
+    const events = normalizeLine(assistant, withTurn);
+    assert.equal(events.length, 1);
+    assert.equal(events[0]?.type, "text.delta");
+    assert.equal(
+      (events[0] as Extract<AgentEvent, { type: "text.delta" }>).text,
+      "You've hit your weekly limit · resets 3am (UTC)",
+    );
+    assert.equal(turn.emittedText, true);
+  });
+
+  it("does not double assistant text after stream deltas for the same turn", () => {
+    const turn = { emittedText: false };
+    const withTurn = { ...ctx, turn };
+    normalizeLine(
+      JSON.stringify({
+        type: "stream_event",
+        event: {
+          type: "content_block_delta",
+          delta: { type: "text_delta", text: "hello" },
+        },
+      }),
+      withTurn,
+    );
+    const events = normalizeLine(
+      JSON.stringify({
+        type: "assistant",
+        message: {
+          role: "assistant",
+          content: [{ type: "text", text: "hello" }],
+        },
+      }),
+      withTurn,
+    );
+    assert.equal(events.length, 0);
+  });
 });

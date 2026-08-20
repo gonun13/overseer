@@ -159,9 +159,11 @@ export function createSessionHandle(
    * model of its own; this is what attaches one to it. */
   let lastAssistantModel: string | undefined;
 
+  const turn = { emittedText: false };
   const ctx = {
     sessionId,
     timestamp: () => new Date().toISOString(),
+    turn,
   };
 
   let buffer = "";
