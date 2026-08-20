@@ -290,15 +290,15 @@ button {
 }
 
 .light.waiting {
-  border-color: var(--light-warn);
-  background: var(--light-warn);
-  box-shadow: 0 0 6px var(--light-warn);
-}
-
-.light.attention {
   border-color: var(--light-accent);
   background: var(--light-accent);
   box-shadow: 0 0 6px var(--light-accent);
+}
+
+.light.attention {
+  border-color: var(--light-warn);
+  background: var(--light-warn);
+  box-shadow: 0 0 6px var(--light-warn);
 }
 
 @keyframes pulse {
@@ -315,8 +315,8 @@ button {
   animation: pulse 1.2s ease-in-out infinite;
 }
 
-/* Intervention pulses faster than work in progress — urgency is in the rhythm. */
-.light.attention.pulse {
+/* Blocked pulses faster than work in progress — urgency is in the rhythm. */
+.light.waiting.pulse {
   animation-duration: 0.7s;
 }
 

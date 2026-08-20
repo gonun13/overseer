@@ -7,8 +7,8 @@ export const ACTIVITY_PULSES: Record<Activity, boolean> = {
   idle: false,
   working: true,
   done: false,
-  waiting: false,
-  attention: true,
+  waiting: true,
+  attention: false,
 };
 
 /** Sort order for the overseer space: what the operator should look at first. */

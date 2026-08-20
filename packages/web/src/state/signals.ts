@@ -218,12 +218,15 @@ export function deriveSignals(world: WorldState): Signal[] {
   }
 
   const hottest = hottestUsage(provider.usage);
-  if (hottest && hottest.used >= 0.8) {
+  if (provider.name && hottest && hottest.used >= 0.8) {
+    const atLimit = hottest.used >= 1;
     signals.push({
       id: "usage",
-      activity: hottest.used >= 0.95 ? "attention" : "waiting",
+      activity: atLimit ? "waiting" : "attention",
       kicker: "usage",
-      text: `${Math.round(hottest.used * 100)}% of the ${hottest.label} window is spent.`,
+      text: atLimit
+        ? `${provider.name} · ${hottest.label} limit reached · sessions cannot start until it resets.`
+        : `${provider.name} · ${Math.round(hottest.used * 100)}% of the ${hottest.label} window is spent.`,
       target: { kind: "window", window: "providers" },
     });
   }
