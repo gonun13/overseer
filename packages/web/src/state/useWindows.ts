@@ -183,31 +183,48 @@ export function useWindows() {
     setWindows((current) => current.filter((w) => !predicate(w)));
   }, []);
 
+  // `.map()` always allocates, so an updater written that way hands React a new
+  // array even when nothing matched or nothing changed — and React re-renders on
+  // reference inequality alone. These three are called from pointer handlers and
+  // from an effect that sweeps every session, so they have to be able to bail
+  // out by returning `current` untouched.
   const move = useCallback((id: string, x: number, y: number) => {
-    setWindows((current) =>
-      current.map((w) => (w.id === id ? { ...w, x, y } : w)),
-    );
+    setWindows((current) => {
+      const i = current.findIndex((w) => w.id === id);
+      if (i === -1) return current;
+      const win = current[i];
+      if (win.x === x && win.y === y) return current;
+      const next = current.slice();
+      next[i] = { ...win, x, y };
+      return next;
+    });
   }, []);
 
   const resize = useCallback((id: string, w: number, h: number) => {
-    setWindows((current) =>
-      current.map((win) => (win.id === id ? { ...win, w, h } : win)),
-    );
+    setWindows((current) => {
+      const i = current.findIndex((win) => win.id === id);
+      if (i === -1) return current;
+      const win = current[i];
+      if (win.w === w && win.h === h) return current;
+      const next = current.slice();
+      next[i] = { ...win, w, h };
+      return next;
+    });
   }, []);
 
   const retitle = useCallback(
     (kind: WindowKind, payload: unknown, title: string, detail?: string) => {
-      setWindows((current) =>
-        current.map((w) =>
-          w.kind === kind && w.payload === payload
-            ? {
-                ...w,
-                title,
-                detail,
-              }
-            : w,
-        ),
-      );
+      setWindows((current) => {
+        const i = current.findIndex(
+          (w) => w.kind === kind && w.payload === payload,
+        );
+        if (i === -1) return current;
+        const win = current[i];
+        if (win.title === title && win.detail === detail) return current;
+        const next = current.slice();
+        next[i] = { ...win, title, detail };
+        return next;
+      });
     },
     [],
   );

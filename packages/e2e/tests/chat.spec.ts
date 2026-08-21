@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { passWizardOpening, SETTLED } from "./shell";
+import { passWizardOpening, runTag, SETTLED, uniquePrompt } from "./shell";
 
 /**
  * The split: the prompt terminal at the bottom of the field runs slash
@@ -53,9 +53,13 @@ test("opens a chat window per session, separate from the prompt", async ({
   const composer = page.getByPlaceholder(
     "Ask, or describe the change you want.",
   );
-  await composer.fill("what is in this repo?");
+  const question = uniquePrompt("what is in this repo?");
+  await composer.fill(question);
   await composer.press("Enter");
-  await expect(page.getByText("what is in this repo?")).toBeVisible();
+  // Scoped to the window's own transcript: the live session's row in the panel
+  // is titled from this same prompt, so a page-wide text match would be
+  // ambiguous even on a completely clean stack.
+  await expect(chat.locator(".turn-operator")).toContainText(question);
 
   // The prompt terminal is a different input and did not take the turn: it is
   // still on its own line, offering slash commands and session prompts.
@@ -156,10 +160,12 @@ test("slash commands autocomplete; other text goes to a session", async ({
   await page.getByLabel("close help").click();
 
   await bar.click();
-  await prompt.fill("what is in this repo?");
+  const question = uniquePrompt("what is in this repo?");
+  await prompt.fill(question);
   await prompt.press("Enter");
-  await expect(page.locator(".window-session")).toHaveCount(1);
-  await expect(page.getByText("what is in this repo?")).toBeVisible();
+  const started = page.locator(".window-session");
+  await expect(started).toHaveCount(1);
+  await expect(started.locator(".turn-operator")).toContainText(question);
 });
 
 /**
@@ -194,12 +200,17 @@ test("resumes a session from the list and answers a new question", async ({
   const composer = page.getByPlaceholder(
     "Ask, or describe the change you want.",
   );
-  await composer.fill("Reply with the single word: RESUMED");
+  // The word is tagged as well as the prompt: this session already holds
+  // earlier turns, so a bare "RESUMED" could be matched off a previous run's
+  // reply rather than the one this test just asked for.
+  const word = `RESUMED${runTag()}`;
+  await composer.fill(`Reply with the single word: ${word}`);
   await composer.press("Enter");
 
-  await expect(chat.locator(".turn-agent").last()).toContainText(/RESUMED/i, {
-    timeout: 120_000,
-  });
+  await expect(chat.locator(".turn-agent").last()).toContainText(
+    new RegExp(word, "i"),
+    { timeout: 120_000 },
+  );
 });
 
 /**
@@ -226,7 +237,9 @@ test("deletes a session from the sessions list, stopping and removing it", async
   const composer = page.getByPlaceholder(
     "Ask, or describe the change you want.",
   );
-  await composer.fill("Write a 400 word essay about the history of bicycles.");
+  await composer.fill(
+    uniquePrompt("Write a 400 word essay about the history of bicycles."),
+  );
   await composer.press("Enter");
   await expect(page.locator(".turn-agent")).toHaveCount(1, { timeout: 30_000 });
 

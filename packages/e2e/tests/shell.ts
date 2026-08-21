@@ -67,3 +67,27 @@ async function pickNeutralTone(tonePick: Locator) {
   // the group, which is what keeps `/neutral/` unambiguous.
   await tonePick.getByRole("button", { name: /neutral/i }).click();
 }
+
+/**
+ * A prompt no earlier run can collide with.
+ *
+ * The stack is stateful: sessions survive between runs in the `claude-home`
+ * volume, and a session's title is derived from its first user message. A spec
+ * that sends a fixed prompt therefore leaves a row carrying that exact text on
+ * the field for every later run, and `getByText(prompt)` starts matching the
+ * accumulated rows as well as the turn under test — a strict-mode violation
+ * whose count climbs by one per run, failing a build that broke nothing.
+ *
+ * Tagging the prompt keeps each run's text its own. Assertions should still be
+ * scoped to the transcript rather than the page: within a single run the live
+ * session's own row is titled from the prompt too.
+ */
+export function uniquePrompt(text: string): string {
+  return `${text} [${runTag()}]`;
+}
+
+/** Short, readable, and unique per call — one tag per prompt, not per file, so
+ * two specs in the same worker cannot collide with each other either. */
+export function runTag(): string {
+  return Math.random().toString(36).slice(2, 8).toUpperCase();
+}

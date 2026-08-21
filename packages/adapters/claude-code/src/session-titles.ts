@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import path from "node:path";
+import { operatorText } from "./operator-text.js";
 import { projectDirSlug } from "./project-slug.js";
 
 const MAX_TITLE_LEN = 35;
@@ -19,6 +20,7 @@ interface JsonlTitleRecord {
   type?: string;
   customTitle?: string;
   agentName?: string;
+  isMeta?: boolean;
   message?: {
     role?: string;
     content?: unknown;
@@ -37,23 +39,6 @@ function isUsableTitle(value: string | null | undefined): value is string {
   if (trimmed === "") return false;
   if (trimmed.toLowerCase() === "no prompt") return false;
   return true;
-}
-
-function textFromContent(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  const parts: string[] = [];
-  for (const block of content) {
-    if (
-      typeof block === "object" &&
-      block !== null &&
-      (block as { type?: string }).type === "text" &&
-      typeof (block as { text?: unknown }).text === "string"
-    ) {
-      parts.push((block as { text: string }).text);
-    }
-  }
-  return parts.join("");
 }
 
 async function readIndexEntry(
@@ -124,8 +109,11 @@ function titleFromJsonlRecords(records: JsonlTitleRecord[]): string | undefined 
     if (record.type !== "user") continue;
     const role = record.message?.role ?? record.type;
     if (role !== "user") continue;
-    const text = textFromContent(record.message?.content);
-    if (text.trim() === "") continue;
+    // Not simply the first user record: a session that opened with a slash
+    // command has the CLI's caveat banner and command echo ahead of anything
+    // the operator typed.
+    const text = operatorText(record);
+    if (text === undefined) continue;
     return truncateTitle(text);
   }
   return undefined;

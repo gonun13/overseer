@@ -1,4 +1,4 @@
-import { useCallback, useEffect, useReducer, useRef } from "react";
+import { useCallback, useEffect, useMemo, useReducer, useRef } from "react";
 import type {
   ClientMessage,
   DiscoveryEvent,
@@ -378,23 +378,48 @@ export function useDiscovery(): DiscoveryController {
     // refuses concurrent passes anyway, but this keeps it from having to.
   }, [phase, connected, send]);
 
-  return {
-    ...state,
-    submitOperatorName,
-    submitOperatorTone,
-    selectProject,
-    selectTheme,
-    connectProvider,
-    startLogin,
-    submitAuthCode,
-    cancelLogin,
-    signOut,
-    askReset,
-    declineReset,
-    confirmReset,
-    onHeadlineReady,
-    send,
-    subscribeConsole,
-    subscribeSession,
-  };
+  // Memoized because consumers key their own memos and effects off this object
+  // (useShellPresentation derives projects and signals from it). Returning a
+  // fresh literal every render defeated every one of those memos and drove a
+  // self-sustaining render loop through App's retitle effect.
+  return useMemo(
+    () => ({
+      ...state,
+      submitOperatorName,
+      submitOperatorTone,
+      selectProject,
+      selectTheme,
+      connectProvider,
+      startLogin,
+      submitAuthCode,
+      cancelLogin,
+      signOut,
+      askReset,
+      declineReset,
+      confirmReset,
+      onHeadlineReady,
+      send,
+      subscribeConsole,
+      subscribeSession,
+    }),
+    [
+      state,
+      submitOperatorName,
+      submitOperatorTone,
+      selectProject,
+      selectTheme,
+      connectProvider,
+      startLogin,
+      submitAuthCode,
+      cancelLogin,
+      signOut,
+      askReset,
+      declineReset,
+      confirmReset,
+      onHeadlineReady,
+      send,
+      subscribeConsole,
+      subscribeSession,
+    ],
+  );
 }

@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
+  AgentEvent,
   ClientMessage,
   PermissionMode,
   ServerMessage,
@@ -54,7 +55,23 @@ export function useChatSessions(
     );
   }, []);
 
-  const sessions = useMemo(() => chats.map((chat) => chat.session), [chats]);
+  // `chats` gets a new identity on every streamed token (the turn list grew),
+  // but the session objects inside it usually do not. Handing back the previous
+  // array when nothing actually changed is what lets useShellPresentation's
+  // `projects` and `signals` memos hold across a streaming run.
+  const lastSessions = useRef<Session[]>([]);
+  const sessions = useMemo(() => {
+    const next = chats.map((chat) => chat.session);
+    const previous = lastSessions.current;
+    if (
+      next.length === previous.length &&
+      next.every((session, i) => session === previous[i])
+    ) {
+      return previous;
+    }
+    lastSessions.current = next;
+    return next;
+  }, [chats]);
 
   const upsertMeta = useCallback((meta: SessionMeta) => {
     setChats((current) => {
@@ -96,8 +113,70 @@ export function useChatSessions(
     });
   }, [send]);
 
+  // Streamed text arrives far faster than the screen refreshes, and each frame
+  // lands in its own task — so React cannot batch them and every token forced
+  // its own render. Deltas are queued and folded once per animation frame
+  // instead; everything else still applies synchronously, after draining the
+  // queue, so ordering and side-effect timing are exactly what they were.
+  const deltaQueue = useRef<AgentEvent[]>([]);
+  const flushHandle = useRef<number | undefined>(undefined);
+
+  const applyQueuedDeltas = useCallback(() => {
+    const queued = deltaQueue.current;
+    if (queued.length === 0) return;
+    deltaQueue.current = [];
+    setChats((current) => {
+      let next = current;
+      for (const event of queued) {
+        const i = next.findIndex((chat) => chat.session.id === event.sessionId);
+        if (i === -1) continue;
+        if (next === current) next = current.slice();
+        next[i] = { ...next[i], ...applySessionEvent(next[i], event) };
+      }
+      return next;
+    });
+  }, []);
+
+  const flushDeltas = useCallback(() => {
+    if (flushHandle.current !== undefined) {
+      cancelAnimationFrame(flushHandle.current);
+      flushHandle.current = undefined;
+    }
+    applyQueuedDeltas();
+  }, [applyQueuedDeltas]);
+
+  const scheduleFlush = useCallback(() => {
+    if (flushHandle.current !== undefined) return;
+    flushHandle.current = requestAnimationFrame(() => {
+      flushHandle.current = undefined;
+      applyQueuedDeltas();
+    });
+  }, [applyQueuedDeltas]);
+
+  // rAF is throttled to a crawl in a background tab, so a hidden window would
+  // sit on an ever-growing queue and then repaint a wall of text on return.
   useEffect(() => {
-    return subscribeSession((message) => {
+    const onHidden = () => {
+      if (document.visibilityState === "hidden") flushDeltas();
+    };
+    document.addEventListener("visibilitychange", onHidden);
+    return () => document.removeEventListener("visibilitychange", onHidden);
+  }, [flushDeltas]);
+
+  useEffect(() => {
+    const unsubscribe = subscribeSession((message) => {
+      if (message.type === "session.event") {
+        const event = message.event;
+        if (event.type === "text.delta" || event.type === "thinking.delta") {
+          deltaQueue.current.push(event);
+          scheduleFlush();
+          return;
+        }
+      }
+      // Anything that is not a delta has to see the transcript the deltas
+      // already produced — `applySessionEvent` is a fold, and turn.end/tool.*
+      // read the turn the deltas were writing into.
+      flushDeltas();
       if (message.type === "session.list") {
         setChats((current) => reconcileSessionList(current, message.sessions));
         return;
@@ -146,7 +225,20 @@ export function useChatSessions(
         pendingSendSession.current = undefined;
       }
     });
-  }, [subscribeSession, upsertMeta, resetSessionActivity]);
+    return () => {
+      unsubscribe();
+      if (flushHandle.current !== undefined) {
+        cancelAnimationFrame(flushHandle.current);
+        flushHandle.current = undefined;
+      }
+    };
+  }, [
+    subscribeSession,
+    upsertMeta,
+    resetSessionActivity,
+    flushDeltas,
+    scheduleFlush,
+  ]);
 
   const armedRef = useRef(armed);
   armedRef.current = armed;

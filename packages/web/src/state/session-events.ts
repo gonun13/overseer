@@ -150,11 +150,15 @@ export function applySessionEvent(
           },
         ];
       }
-      session = { ...session, activity: "working" };
+      // Guarded: an unconditional clone would hand every consumer a new session
+      // identity per token, defeating the memos in useShellPresentation.
+      if (session.activity !== "working")
+        session = { ...session, activity: "working" };
       break;
     }
     case "thinking.delta":
-      session = { ...session, activity: "working" };
+      if (session.activity !== "working")
+        session = { ...session, activity: "working" };
       // Claude can summarize or withhold reasoning entirely depending on
       // account/model settings — an empty delta carries no text to show, so
       // it must not open a turn that would sit there permanently blank.

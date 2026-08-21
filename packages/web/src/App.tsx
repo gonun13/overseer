@@ -213,12 +213,23 @@ export default function App() {
     [windows, close, deleteSession],
   );
 
+  // One pass over the projects instead of a linear find per session. The sweep
+  // still re-runs whenever a status light repaints a project object, but
+  // `retitle` bails out when the text is unchanged, so a redundant pass costs a
+  // few map lookups and schedules no render.
+  const chatLabels = useMemo(() => {
+    const names = new Map(shell.projects.map((p) => [p.id, p.name]));
+    return sessions.map((session) => ({
+      id: session.id,
+      title: session.name,
+      detail: names.get(session.projectId),
+    }));
+  }, [sessions, shell.projects]);
+
   useEffect(() => {
-    for (const session of sessions) {
-      const { title, detail } = chatWindowLabel(session, shell.projects);
-      retitle("chat", session.id, title, detail);
-    }
-  }, [retitle, sessions, shell.projects]);
+    for (const label of chatLabels)
+      retitle("chat", label.id, label.title, label.detail);
+  }, [retitle, chatLabels]);
 
   const activeProject = shell.activeProject;
   const startChat = useCallback(() => {

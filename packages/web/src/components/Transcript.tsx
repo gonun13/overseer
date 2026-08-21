@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from "react";
+import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderOption } from "@overseer/protocol";
 import type { Turn } from "../domain";
 import { ChevronIcon } from "./icons";
@@ -25,6 +25,78 @@ const TOOL_MARK = {
   settled: { glyph: "▪", color: "var(--light-idle)" },
 } as const;
 
+/**
+ * Rows are memoized on the turn object. A streamed delta replaces only the last
+ * turn, so every earlier row keeps its identity and skips re-rendering — without
+ * this, one token re-rendered the entire transcript, and the cost of a token grew
+ * with the length of the reply.
+ */
+const TurnTool = memo(function TurnTool({
+  turn,
+  onInspect,
+}: {
+  turn: Extract<Turn, { kind: "tool" }>;
+  onInspect: (id: string) => void;
+}) {
+  const mark = TOOL_MARK[turn.status ?? "settled"];
+  return (
+    <button
+      className="turn-tool"
+      data-status={turn.status}
+      onClick={() => onInspect(turn.id)}
+    >
+      <span style={{ color: mark.color }}>{mark.glyph}</span>
+      <span className="turn-tool-name">{turn.tool}</span>
+      <span className="turn-tool-target">{turn.target}</span>
+    </button>
+  );
+});
+
+const TurnThinking = memo(function TurnThinking({
+  turn,
+  expanded,
+  onToggle,
+}: {
+  turn: Extract<Turn, { kind: "thinking" }>;
+  expanded: boolean;
+  onToggle: (id: string, expanded: boolean) => void;
+}) {
+  return (
+    <div className="turn-thinking">
+      <button
+        type="button"
+        className="turn-thinking-head"
+        aria-expanded={expanded}
+        onClick={() => onToggle(turn.id, expanded)}
+      >
+        <ChevronIcon open={expanded} />
+        <span className="turn-label">thinking</span>
+      </button>
+      {expanded && <p className="turn-text turn-thinking-text">{turn.text}</p>}
+    </div>
+  );
+});
+
+const TurnMessage = memo(function TurnMessage({
+  turn,
+  modelLabel,
+}: {
+  turn: Extract<Turn, { kind: "user" | "agent" }>;
+  modelLabel?: string;
+}) {
+  return (
+    <div className={turn.kind === "user" ? "turn-operator" : "turn-agent"}>
+      <div className="turn-label">
+        {turn.kind === "user" ? "operator" : "agent"}
+        {modelLabel !== undefined && (
+          <span className="turn-label-model"> · {modelLabel}</span>
+        )}
+      </div>
+      <p className="turn-text">{turn.text}</p>
+    </div>
+  );
+});
+
 export function Transcript({
   turns,
   models,
@@ -48,6 +120,11 @@ export function Transcript({
   const [thinkingToggled, setThinkingToggled] = useState<Record<string, boolean>>(
     {},
   );
+
+  // Stable so the memoized rows are not invalidated by a fresh closure per render.
+  const onToggleThinking = useCallback((id: string, expanded: boolean) => {
+    setThinkingToggled((current) => ({ ...current, [id]: !expanded }));
+  }, []);
 
   useEffect(() => {
     const panel = end.current?.closest(".transcript-panel");
@@ -73,20 +150,7 @@ export function Transcript({
     <div className="transcript no-drag">
       {turns.map((turn, i) => {
         if (turn.kind === "tool") {
-          return (
-            <button
-              key={turn.id}
-              className="turn-tool"
-              data-status={turn.status}
-              onClick={() => onInspect(turn.id)}
-            >
-              <span style={{ color: TOOL_MARK[turn.status ?? "settled"].color }}>
-                {TOOL_MARK[turn.status ?? "settled"].glyph}
-              </span>
-              <span className="turn-tool-name">{turn.tool}</span>
-              <span className="turn-tool-target">{turn.target}</span>
-            </button>
-          );
+          return <TurnTool key={turn.id} turn={turn} onInspect={onInspect} />;
         }
         if (turn.kind === "thinking") {
           // Open by default while it is the newest thing in the transcript —
@@ -95,25 +159,13 @@ export function Transcript({
           // the same way Claude Code's own CLI folds a finished thinking
           // block down to "thought for Ns". A manual click always wins.
           const isNewest = i === turns.length - 1;
-          const expanded = thinkingToggled[turn.id] ?? isNewest;
           return (
-            <div key={turn.id} className="turn-thinking">
-              <button
-                type="button"
-                className="turn-thinking-head"
-                aria-expanded={expanded}
-                onClick={() =>
-                  setThinkingToggled((current) => ({
-                    ...current,
-                    [turn.id]: !expanded,
-                  }))
-                }
-              >
-                <ChevronIcon open={expanded} />
-                <span className="turn-label">thinking</span>
-              </button>
-              {expanded && <p className="turn-text turn-thinking-text">{turn.text}</p>}
-            </div>
+            <TurnThinking
+              key={turn.id}
+              turn={turn}
+              expanded={thinkingToggled[turn.id] ?? isNewest}
+              onToggle={onToggleThinking}
+            />
           );
         }
         const modelLabel =
@@ -121,18 +173,7 @@ export function Transcript({
             ? (findOption(models, turn.model)?.label ?? turn.model)
             : undefined;
         return (
-          <div
-            key={turn.id}
-            className={turn.kind === "user" ? "turn-operator" : "turn-agent"}
-          >
-            <div className="turn-label">
-              {turn.kind === "user" ? "operator" : "agent"}
-              {modelLabel !== undefined && (
-                <span className="turn-label-model"> · {modelLabel}</span>
-              )}
-            </div>
-            <p className="turn-text">{turn.text}</p>
-          </div>
+          <TurnMessage key={turn.id} turn={turn} modelLabel={modelLabel} />
         );
       })}
       <div ref={end} />

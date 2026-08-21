@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { readdir, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
 import type { SessionMeta, TurnWire } from "@overseer/protocol";
+import { operatorText, textFromContent } from "./operator-text.js";
 import { projectDirSlug } from "./project-slug.js";
 import { resolveSessionTitle } from "./session-titles.js";
 
@@ -36,23 +37,6 @@ interface JsonlRecord {
   };
 }
 
-function asText(content: unknown): string {
-  if (typeof content === "string") return content;
-  if (!Array.isArray(content)) return "";
-  const parts: string[] = [];
-  for (const block of content) {
-    if (
-      typeof block === "object" &&
-      block !== null &&
-      (block as { type?: string }).type === "text" &&
-      typeof (block as { text?: unknown }).text === "string"
-    ) {
-      parts.push((block as { text: string }).text);
-    }
-  }
-  return parts.join("");
-}
-
 function toolSummary(content: unknown): { tool: string; target: string } | undefined {
   if (!Array.isArray(content)) return undefined;
   for (const block of content) {
@@ -83,8 +67,11 @@ function turnFromRecord(record: JsonlRecord): TurnWire | undefined {
   if (record.type !== "user" && record.type !== "assistant") return undefined;
   const role = record.message?.role ?? record.type;
   if (role === "user") {
-    const text = asText(record.message?.content);
-    if (text === "") return undefined;
+    // The CLI's own bookkeeping records share `type: "user"` with the
+    // operator's prompts; replaying them would put the caveat banner and slash
+    // command echoes in the transcript as things the operator said.
+    const text = operatorText(record);
+    if (text === undefined) return undefined;
     return { id: record.uuid ?? randomUUID(), kind: "user", text };
   }
   if (role === "assistant") {
@@ -97,7 +84,7 @@ function turnFromRecord(record: JsonlRecord): TurnWire | undefined {
         target: tool.target,
       };
     }
-    const text = asText(record.message?.content);
+    const text = textFromContent(record.message?.content);
     if (text === "") return undefined;
     return { id: record.uuid ?? randomUUID(), kind: "agent", text };
   }
