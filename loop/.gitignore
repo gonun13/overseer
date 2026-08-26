@@ -1,0 +1,9 @@
+# Runtime file-store — recreated by loop/request; never versioned.
+/db/
+
+# The repo-root .gitignore blanket-ignores any `.claude/` directory anywhere
+# in the tree (container-owned state at the app root). This tool's own
+# `.claude/` is versioned config (slash commands, project settings), not
+# runtime state — un-ignore it here.
+!/.claude/
+!/.claude/**

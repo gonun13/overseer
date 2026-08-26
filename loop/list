@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# List open (not cleared) requests and their current step/status, derived
+# from db/<slug>/index.jsonl — no separate state cache, per the README.
+#
+# Usage: loop/list [workspace-name]
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$LOOP_DIR/lib/db.sh"
+
+usage() {
+  cat >&2 <<'EOF'
+usage: loop/list [workspace-name]
+
+Lists open requests (any request not yet cleared) and their current
+step/status. With a workspace-name, lists only that workspace's slug;
+without one, lists every slug under db/.
+
+Exit codes: 0 ok, 1 general failure.
+EOF
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
+require_cmd jq
+
+name="${1:-}"
+slugs=()
+if [ -n "$name" ]; then
+  validate_workspace_name "$name"
+  slugs=("$(slugify "$name")")
+else
+  while IFS= read -r d; do
+    slugs+=("$(basename "$d")")
+  done < <(find "$LOOP_DIR/db" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
+fi
+
+if [ ${#slugs[@]} -eq 0 ]; then
+  log_info "no requests recorded yet"
+  exit 0
+fi
+
+found=0
+for slug in "${slugs[@]}"; do
+  while IFS= read -r event; do
+    [ -n "$event" ] || continue
+    status=$(printf '%s' "$event" | jq -r '.status')
+    [ "$status" = "cleared" ] && continue
+    if [ "$found" -eq 0 ]; then
+      printf '%-32s %-14s %-9s %-10s %-21s %s\n' ID SLUG STEP STATUS SUBMITTED TITLE
+    fi
+    found=1
+    id=$(printf '%s' "$event" | jq -r '.id')
+    step=$(printf '%s' "$event" | jq -r '.step')
+    at=$(printf '%s' "$event" | jq -r '.at')
+    title=$(printf '%s' "$event" | jq -r '.title')
+    printf '%-32s %-14s %-9s %-10s %-21s %s\n' "$id" "$slug" "$step" "$status" "$at" "$title"
+  done < <(latest_request_events "$slug")
+done
+
+[ "$found" -eq 1 ] || log_info "no open requests"

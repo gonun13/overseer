@@ -1,0 +1,111 @@
+#!/usr/bin/env bash
+# The `request` step: collect a raw feature/fix/change request for a project
+# under workspace/<name> and structure it into loop/db/<slug>/requests/<id>.md.
+#
+# Usage: loop/request <workspace-name> [--file <path>]
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$LOOP_DIR/lib/db.sh"
+# shellcheck disable=SC1091
+source "$LOOP_DIR/lib/providers.sh"
+
+usage() {
+  cat >&2 <<'EOF'
+usage: loop/request <workspace-name> [--file <path>]
+
+Collects a feature/fix/change request for the project at workspace/<workspace-name>
+and structures it into loop/db/<slug>/requests/<id>.md.
+
+Without --file, reads the request from stdin (interactive: type it, then Ctrl-D).
+
+Exit codes: 0 ok, 1 general/validation failure, 2 workspace not found, 3 empty input.
+EOF
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
+require_cmd jq
+load_provider
+
+name=""
+raw_input_file=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --file)
+      [ $# -ge 2 ] || die "--file requires a path argument" 1
+      raw_input_file=$2
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      die "unknown option: $1" 1
+      ;;
+    *)
+      if [ -n "$name" ]; then
+        die "unexpected extra argument: $1" 1
+      fi
+      name=$1
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$name" ]; then
+  usage
+  exit 1
+fi
+
+workspace_dir=$(resolve_workspace "$name")
+slug=$(slugify "$name")
+ensure_slug_dirs "$slug"
+
+if [ -n "$raw_input_file" ]; then
+  [ -f "$raw_input_file" ] || die "--file: no such file: $raw_input_file" 1
+  raw_text=$(cat "$raw_input_file")
+else
+  raw_text=$(read_multiline_input)
+fi
+
+if [ -z "$(printf '%s' "$raw_text" | tr -d '[:space:]')" ]; then
+  die "no request text received — aborting" 3
+fi
+
+id=$(gen_request_id)
+submitted_at=$(iso_now)
+
+raw_file=$(raw_path "$slug" "$id")
+printf '%s\n' "$raw_text" > "$raw_file"
+raw_ref="db/$slug/raw/$id.txt"
+
+record_file=$(record_path "$slug" "$id")
+record_ref="db/$slug/requests/$id.md"
+
+log_info "structuring request $id via provider '$PROVIDER_ID'…"
+
+if ! provider_structure "$raw_file" "$record_file" "$id" "$name" "$slug" "$submitted_at" "$raw_ref"; then
+  die "structuring failed — raw request preserved at $raw_ref
+retry with: loop/request $name --file $raw_file" 1
+fi
+
+if ! record_is_valid "$record_file"; then
+  die "provider '$PROVIDER_ID' did not write a valid record at $record_ref — raw request preserved at $raw_ref" 1
+fi
+
+title=$(record_title "$record_file")
+[ -n "$title" ] || title="(untitled)"
+
+append_event "$slug" "$id" "$submitted_at" "request" "created" "requested" "$title" "$raw_ref" "$record_ref"
+
+log_info "recorded $id for '$name'"
+printf '%s\n' "$title"
+printf '%s\n' "$record_ref"

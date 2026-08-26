@@ -288,6 +288,7 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Command palette                   | global       | keyboard-first jump to any session, zone, or action                 |
 | Desktop notifications             | global       | on approval request or turn completion                              |
 | Additional providers              | —            | catalog stubs (`codex`, `opencode`, `github-copilot`) land early; full adapter runtime still later |
+| Dev-loop CLI                      | —            | incubating outside `packages/*` as `loop/`; bash + Claude Code CLI + files only (§9) |
 
 ---
 
@@ -436,3 +437,73 @@ separate from the MVP "Console" zone in §3 and may ship inside `0.1.x`.
 
 Normal SemVer applies on top of the tier map: breaking protocol or UX changes → `MAJOR`; new Important-tier
 capability → `MINOR`; fix or internal cleanup → `PATCH`.
+
+---
+
+## 9. Dev Loop CLI (`loop/`)
+
+A standalone command-line tool, at `loop/` in this repo, that runs
+development loops — feature requests, fixes, changes — against a project
+under `workspace/<name>/`. It is **not** a `packages/*` workspace: it uses
+only bash scripts, the Claude Code CLI/slash-commands, and plain files, runs
+directly on the host (not inside Docker), and is versioned/released
+independently of the §8.1 package table. It's incubating — see §3's Feature
+Map row — with the intent to fold into the main app later, at which point it
+would gain a real `packages/` entry and join the lockstep-versioned set.
+Usage lives in [`loop/README.md`](../loop/README.md); this section is the
+spec-level summary.
+
+**File taxonomy.** Every file the tool writes is exactly one of three kinds:
+
+| Kind | Format | What goes here |
+|---|---|---|
+| Human intentions/decisions | `.txt` | Verbatim human input — a raw request now; later, a review decision |
+| Automated operation log | `.jsonl` | Append-only record of what the automation did, one line per event |
+| Everything else | `.md` | Agent-authored substantive content, meant to flow forward as context for the next step — or double as skill/subagent/command material |
+
+Markdown is chosen over JSON for the substantive record specifically because
+it's directly usable as LLM context with no parse step; a small
+frontmatter block (same tolerant, line-based convention §1.1.1 describes for
+`.claude/agents/*.md` name/description) carries the handful of fields that
+need to stay structured.
+
+**Provider abstraction.** `loop/lib/providers.sh` mirrors the shape of the
+`AgentAdapter` split in §1.1 — an id string plus a small function contract
+each provider implements — but is defined independently in bash, because the
+tool cannot read Overseer's own `attached_provider` state (§2's `state.json`
+lives inside a Docker-only volume, unreachable from a host-side script).
+Only `claude-code` has a real implementation, matching this app's own
+real-vs-stub balance for `codex`/`opencode`/`github-copilot`.
+
+**Context-window discipline.** Automated prompts keep bulk content out of
+the prompt body (passed by file path, read on demand) and sandwich critical
+instructions at both ends of a prompt rather than stating them once — a
+standing convention for every step, not just the first.
+
+**Terminology.** The loop is made of nine **steps**, in order: `request` →
+`research` → `scope` → `plan` → `implement` → `verify` → `decide` →
+`commit` → `review`. `plan` → `implement` → `verify` → `decide` (4-7) is a
+closed automated loop with no human in it; the only two ways out are
+`decide` routing back to `scope` (3, for extra scoping) or forward to
+`commit` (8) — every other handoff is a straight, one-directional pass.
+"Phase" is reserved for a more granular, not-yet-designed concept inside a
+`plan`. Each step is meant to carry its own behavior at
+`loop/.claude/commands/<step>/` defining how to execute it — a noted
+extension point, not built.
+
+**HITL vs automated execution.** `request`, `scope`, `commit`, and `review`
+are human-in-the-loop and run as interactive `claude` sessions; `research`,
+`plan`, `implement`, `verify`, and `decide` are automated and run as single
+headless `claude -p` calls (or plain bash). This lines up with the inner-loop
+boundary above: the closed loop plus the `research` feeding it is one-shot;
+its edges (`scope` in, `commit` out) plus the two endpoints (`request`,
+`review`) are interactive. `request` is a partial exception today: its
+human-in-the-loop part is plain stdin capture, not a `claude` session, since
+there's no agent to converse with at that point.
+
+**Current scope.** Only the `request` step is implemented: it collects a raw
+request via stdin, then a single headless provider call (a slash command,
+not yet at `loop/.claude/commands/<step>/`) structures it into
+`loop/db/<slug>/requests/<id>.md`. The
+other eight steps are spec-only — named and ordered (see
+[`loop/README.md`](../loop/README.md)) but not built.
