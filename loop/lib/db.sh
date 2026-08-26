@@ -6,13 +6,15 @@ slug_dir() { printf '%s/db/%s' "$LOOP_DIR" "$1"; }
 
 ensure_slug_dirs() {
   local slug=$1
-  mkdir -p "$(slug_dir "$slug")/requests" "$(slug_dir "$slug")/raw"
+  mkdir -p "$(slug_dir "$slug")/requests" "$(slug_dir "$slug")/raw" "$(slug_dir "$slug")/research"
 }
 
-record_path() { printf '%s/requests/%s.md' "$(slug_dir "$1")" "$2"; }
-raw_path()    { printf '%s/raw/%s.txt' "$(slug_dir "$1")" "$2"; }
-index_path()  { printf '%s/index.jsonl' "$(slug_dir "$1")"; }
-lock_path()   { printf '%s/.lock' "$(slug_dir "$1")"; }
+record_path()   { printf '%s/requests/%s.md' "$(slug_dir "$1")" "$2"; }
+raw_path()      { printf '%s/raw/%s.txt' "$(slug_dir "$1")" "$2"; }
+research_path() { printf '%s/research/%s.md' "$(slug_dir "$1")" "$2"; }
+memory_path()   { printf '%s/memory.md' "$(slug_dir "$1")"; }
+index_path()    { printf '%s/index.jsonl' "$(slug_dir "$1")"; }
+lock_path()     { printf '%s/.lock' "$(slug_dir "$1")"; }
 
 # record_frontmatter_get <file> <key> — line-based extraction between the
 # first two `---` delimiters, tolerant of malformed files, no YAML library.
@@ -39,17 +41,56 @@ record_title() {
   grep -m1 '^# ' "$file" | sed 's/^# *//'
 }
 
-# record_is_valid <file> — required frontmatter keys present + a title
-# heading exists. Never trust a provider's write blindly.
+# record_is_valid <file> <expected_id> <expected_slug> <expected_submitted_at>
+# Required frontmatter keys present, a title heading exists, AND id/slug/
+# submitted_at match what bash already independently knows — presence alone
+# isn't enough: a provider can write non-empty values into the wrong slots
+# (values shifted between fields), which presence-only checking can't catch.
+# Never trust a provider's write blindly.
 record_is_valid() {
-  local file=$1 key val
+  local file=$1 expected_id=$2 expected_slug=$3 expected_submitted_at=$4
+  local key val
   [ -f "$file" ] || return 1
   [ "$(head -n1 "$file")" = "---" ] || return 1
   for key in id workspace slug kind status step submitted_at; do
     val=$(record_frontmatter_get "$file" "$key")
     [ -n "$val" ] || return 1
   done
+  [ "$(record_frontmatter_get "$file" id)" = "$expected_id" ] || return 1
+  [ "$(record_frontmatter_get "$file" slug)" = "$expected_slug" ] || return 1
+  [ "$(record_frontmatter_get "$file" submitted_at)" = "$expected_submitted_at" ] || return 1
   grep -q '^# ' "$file" || return 1
+  return 0
+}
+
+# research_is_valid <file> <expected_id> <expected_slug>
+#   <expected_researched_at> <expected_request_ref>
+# Same shape/principle as record_is_valid, for research reports.
+research_is_valid() {
+  local file=$1 expected_id=$2 expected_slug=$3 expected_researched_at=$4 expected_request_ref=$5
+  local key val
+  [ -f "$file" ] || return 1
+  [ "$(head -n1 "$file")" = "---" ] || return 1
+  for key in id workspace slug status step researched_at request_ref; do
+    val=$(record_frontmatter_get "$file" "$key")
+    [ -n "$val" ] || return 1
+  done
+  [ "$(record_frontmatter_get "$file" id)" = "$expected_id" ] || return 1
+  [ "$(record_frontmatter_get "$file" slug)" = "$expected_slug" ] || return 1
+  [ "$(record_frontmatter_get "$file" researched_at)" = "$expected_researched_at" ] || return 1
+  [ "$(record_frontmatter_get "$file" request_ref)" = "$expected_request_ref" ] || return 1
+  grep -q '^# ' "$file" || return 1
+  return 0
+}
+
+# memory_is_valid <file> — memory.md has no frontmatter (not tied to one
+# request id), so its contract is lighter: exists, non-empty, and its first
+# non-blank line is a top-level heading.
+memory_is_valid() {
+  local file=$1 first_line
+  [ -s "$file" ] || return 1
+  first_line=$(grep -m1 '.' "$file")
+  [[ "$first_line" =~ ^#\  ]] || return 1
   return 0
 }
 
@@ -97,18 +138,21 @@ latest_request_events() {
 }
 
 # clear_request <slug> <id> <step> <title> <raw_ref> <record_ref> — deletes
-# a request's raw/record files and appends its "cleared" event, both inside
-# one flock so this can't interleave with a concurrent loop/request or
-# loop/clear on the same slug. Files are deleted; index.jsonl never is
-# (append-only, per the taxonomy) — the cleared event is the permanent
-# record that this request existed and was removed.
+# a request's raw/record/research files and appends its "cleared" event,
+# all inside one flock so this can't interleave with a concurrent
+# loop/request, loop/research, or loop/clear on the same slug. Files are
+# deleted; index.jsonl never is (append-only, per the taxonomy) — the
+# cleared event is the permanent record that this request existed and was
+# removed. memory.md is deliberately NOT touched here: it's cumulative and
+# shared across every request for the slug, and must outlive any single
+# request's clear.
 clear_request() {
   local slug=$1 id=$2 step=$3 title=$4 raw_ref=$5 record_ref=$6
   local lock line
   lock=$(lock_path "$slug")
   (
     flock -x 9
-    rm -f "$(record_path "$slug" "$id")" "$(raw_path "$slug" "$id")"
+    rm -f "$(record_path "$slug" "$id")" "$(raw_path "$slug" "$id")" "$(research_path "$slug" "$id")"
     line=$(jq -nc \
       --arg at "$(iso_now)" \
       --arg id "$id" \

@@ -27,21 +27,31 @@ Which provider (CLI) runs the structuring step is controlled by
 `LOOP_PROVIDER=<id>` environment override.
 
 ```sh
+loop/research <workspace-name> [--id <request-id>]
 loop/list [workspace-name]
 loop/clear <workspace-name> (--id <request-id> | --all) [--yes]
 ```
 
+- `loop/research` explores the actual codebase at `workspace/<name>` for a
+  request already past `request`, writes a context report at
+  `db/<slug>/research/<id>.md` to prime the upcoming `scope` step, and
+  updates `db/<slug>/memory.md` — a living document shared across every
+  future request/step for that workspace, not just this one. Without
+  `--id`, it auto-picks the one request still at `step: request, status:
+  requested`; dies if there's none, or more than one (pass `--id` to
+  disambiguate). Fully automated — no human in the loop, always headless.
 - `loop/list` prints open (not yet cleared) requests and their current
   step/status — for one workspace, or every slug under `db/` if the name is
   omitted. Read-only; derives state from `index.jsonl` (see below), not a
   separate cache.
-- `loop/clear` deletes a request's raw/record files, after running that
-  request's current step's teardown hook (see "Safe dismount" below).
+- `loop/clear` deletes a request's raw/record/research files, after running
+  that request's current step's teardown hook (see "Safe dismount" below).
   Requires `--id <id>` or `--all`, prints what it's about to delete, and
   asks for confirmation unless `--yes` is passed (mandatory in a
   non-interactive shell — there's no default-yes fallback). `index.jsonl`
   is never rewritten: clearing appends a `cleared` event rather than
-  erasing the request's history.
+  erasing the request's history. `memory.md` is never touched by `clear` —
+  it outlives any single request.
 
 ## The three-way file taxonomy
 
@@ -55,7 +65,14 @@ files:
 | **Everything else** | `.md` | Substantive, agent-authored content meant to flow forward as context for the next step in the chain — or double as material for a skill/subagent/command later |
 
 Concretely, per request: `db/<slug>/raw/<id>.txt` (human), `db/<slug>/index.jsonl`
-(automation log), `db/<slug>/requests/<id>.md` (the structured record).
+(automation log), `db/<slug>/requests/<id>.md` (the structured record), and
+now `db/<slug>/research/<id>.md` (the research report).
+
+One deliberate partial exception: `db/<slug>/memory.md` is also "everything
+else" `.md`, but it doesn't flow forward to just *the next* step in the
+chain — it flows forward to *every* future step and *every* future request
+for that slug. It's a living document `research` reads and updates each run
+(merging in new findings, not just appending), not a per-request artifact.
 
 No separate cache is kept to answer "what step is this request on" — that
 would be a fourth file kind, breaking the taxonomy above. The record's own
@@ -99,25 +116,31 @@ be mistaken for project source or accidentally committed into someone's app
 repo.
 
 **Bash — not the provider — commits the log.** The provider call's only
-filesystem write is the one request record, on paths bash chose. Bash
-validates that write (file exists, required frontmatter present, has a
-title) before it ever touches `index.jsonl`, and the jsonl append is
-`flock`-serialized so two concurrent `loop/request` runs on the same slug
-can't interleave — a file-locking concern, not something to hand an LLM tool
-call.
+filesystem write is the request's own artifact(s), on paths bash chose. Bash
+validates that write before it ever touches `index.jsonl` — and that check
+is more than presence: `record_is_valid`/`research_is_valid` cross-check
+`id`/`slug`/`submitted_at` (or `researched_at`/`request_ref`) against the
+values bash itself already generated, not just that the fields are
+non-empty. Presence-only checking once let a provider write a real request
+record with `id`/`slug`/`submitted_at` shifted into each other's fields —
+non-empty, so it passed, but wrong. The jsonl append is `flock`-serialized
+so two concurrent `loop/request`/`loop/research`/`loop/clear` runs on the
+same slug can't interleave — a file-locking concern, not something to hand
+an LLM tool call.
 
 **Provider abstraction.** The tool must not hardcode `claude`. `lib/providers.sh`
 + `lib/providers/<id>.sh` mirror the shape of Overseer's own `AgentAdapter`
 split (`packages/protocol/src/adapter.ts`) — an id string plus a small
-function contract (`provider_check_available`, `provider_structure`)
-each provider implements. Only `claude-code` is real today, matching
-Overseer's own real-vs-stub balance (`codex`/`opencode`/`github-copilot` are
-catalog names with no adapter code anywhere in that app either). Overseer's
-own "currently attached provider" state lives inside a Docker-only volume
-unreachable from a host-side tool, so this tool tracks its own default in the
-tracked `loop/.provider` file instead. Adding a second real provider later
-means writing `lib/providers/<id>.sh` implementing the same two functions —
-no changes to `loop/request`.
+function contract (`provider_check_available`, `provider_structure`,
+`provider_research`) each provider implements. Only `claude-code` is real
+today, matching Overseer's own real-vs-stub balance
+(`codex`/`opencode`/`github-copilot` are catalog names with no adapter code
+anywhere in that app either). Overseer's own "currently attached provider"
+state lives inside a Docker-only volume unreachable from a host-side tool,
+so this tool tracks its own default in the tracked `loop/.provider` file
+instead. Adding a second real provider later means writing
+`lib/providers/<id>.sh` implementing the same three functions — no changes
+to `loop/request`/`loop/research`.
 
 **Context-window discipline (smart zone / dumb zone).** LLM attention over a
 single context window is uneven: instructions near the very start and very
@@ -136,10 +159,10 @@ possible.
 
 The loop is made of nine **steps**, in order:
 
-1. **request** — capture the raw human intent. *(built; HITL — interactive.
-   The rest below are spec-only, not built)*
-2. **research** — gather the context needed to scope the work. *(automated
-   — one-shot)*
+1. **request** — capture the raw human intent. *(built; HITL — interactive)*
+2. **research** — explore the codebase, write a context report for `scope`,
+   and update the shared memory file. *(built; automated — one-shot. The
+   rest below are spec-only, not built)*
 3. **scope** — bound what this iteration will actually do. *(HITL —
    interactive)*
 4. **plan** — decide how to do it. *(automated — one-shot)*
@@ -175,9 +198,10 @@ at its edges (`scope` in, `commit` out) plus the two endpoints (`request`,
 
 **One command per step.** Each step is meant to be executed by its own
 behavior and instructions, at `loop/.claude/commands/<step>/`, documenting/enforcing how
-that step runs. This is a noted extension point: `request` is the only step
-built so far, and today it runs as a slash command
-(`.claude/commands/structure-request.md`).
+that step runs. This is a noted extension point: `request` and `research`
+are the only steps built so far, and today they run as flat slash commands
+(`.claude/commands/structure-request.md`, `.claude/commands/research-request.md`)
+rather than in `<step>/` subdirectories.
 
 Each step reuses the same taxonomy: human input/decisions stay `.txt`,
 automation logs its actions to `index.jsonl`, and any new substantive content
@@ -190,5 +214,7 @@ workspace/<name>` mount, a tracked subagent process, a git worktree —
 that needs releasing before deletion is safe. `lib/steps.sh` dispatches to
 an optional `lib/steps/<step>.sh` defining `step_teardown_hook <slug> <id>`,
 mirroring the provider abstraction above; a step with nothing to release
-just doesn't define one. `request` is synchronous and stateless, so its
-hook (`lib/steps/request.sh`) is a no-op.
+just doesn't define one. `request` and `research` are both synchronous and
+stateless (their `claude -p`/interactive calls fully return before the
+script continues, and neither leaves anything mounted or running), so their
+hooks (`lib/steps/request.sh`, `lib/steps/research.sh`) are no-ops.

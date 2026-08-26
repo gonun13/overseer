@@ -465,10 +465,15 @@ Markdown is chosen over JSON for the substantive record specifically because
 it's directly usable as LLM context with no parse step; a small
 frontmatter block (same tolerant, line-based convention §1.1.1 describes for
 `.claude/agents/*.md` name/description) carries the handful of fields that
-need to stay structured.
+need to stay structured. One exception: `research`'s `memory.md` is also
+`.md` but has no frontmatter and isn't per-request — it's a living document
+per workspace, read and updated (not just appended to) on every `research`
+run, flowing forward to every future step/request for that workspace rather
+than just the next one.
 
 **Provider abstraction.** `loop/lib/providers.sh` mirrors the shape of the
 `AgentAdapter` split in §1.1 — an id string plus a small function contract
+(`provider_check_available`, `provider_structure`, `provider_research`)
 each provider implements — but is defined independently in bash, because the
 tool cannot read Overseer's own `attached_provider` state (§2's `state.json`
 lives inside a Docker-only volume, unreachable from a host-side script).
@@ -501,9 +506,12 @@ its edges (`scope` in, `commit` out) plus the two endpoints (`request`,
 human-in-the-loop part is plain stdin capture, not a `claude` session, since
 there's no agent to converse with at that point.
 
-**Current scope.** Only the `request` step is implemented: it collects a raw
-request via stdin, then a single headless provider call (a slash command,
-not yet at `loop/.claude/commands/<step>/`) structures it into
-`loop/db/<slug>/requests/<id>.md`. The
-other eight steps are spec-only — named and ordered (see
-[`loop/README.md`](../loop/README.md)) but not built.
+**Current scope.** `request` and `research` are implemented: `request`
+collects a raw request via stdin, then a single provider call structures it
+into `loop/db/<slug>/requests/<id>.md`; `research` then explores the actual
+project (via `--add-dir`), writes `loop/db/<slug>/research/<id>.md` as
+context for the upcoming `scope` step, and updates the shared
+`loop/db/<slug>/memory.md`. Both run as flat slash commands (not yet at
+`loop/.claude/commands/<step>/`). The other seven steps are spec-only —
+named and ordered (see [`loop/README.md`](../loop/README.md)) but not
+built.
