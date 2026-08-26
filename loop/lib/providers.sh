@@ -45,7 +45,7 @@ $available" 1
   source "$script"
 
   local fn
-  for fn in provider_check_available provider_structure; do
+  for fn in provider_check_available provider_structure provider_research provider_scope; do
     declare -F "$fn" >/dev/null || die "provider '$id' is missing function '$fn' ($script)" 1
   done
 

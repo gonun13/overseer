@@ -34,8 +34,24 @@ Steps:
 
 Reminder before you write: this is still a single deterministic pass — one
 Read already done, one Write next, no exploration, no questions back to the
-human. Now call Write exactly once, targeting the path in $2, with this
-exact markdown document and nothing else — no code fences wrapping it, no
+human.
+
+The frontmatter values below are fixed inputs, already given to you as
+arguments — copy each one verbatim into its own field. Do not swap them,
+reorder them, or derive a different value for any of them:
+- `id:` gets exactly the string from argument $3 (the request id — it
+  starts with `req_`, it is never the workspace name)
+- `workspace:` gets exactly the string from argument $4 (the workspace name
+  — a short human word, e.g. `personal`)
+- `slug:` gets exactly the string from argument $5 (the slug — usually the
+  same short word as $4; it is never a timestamp)
+- `submitted_at:` gets exactly the string from argument $6 (an ISO 8601 UTC
+  timestamp, e.g. `2026-08-26T13:05:26Z`)
+- `raw_ref:` gets exactly the string from argument $7 (a relative path
+  string, e.g. `db/personal/raw/req_....txt`)
+
+Now call Write exactly once, targeting the path in $2, with this exact
+markdown document and nothing else — no code fences wrapping it, no
 commentary before or after:
 
 ---

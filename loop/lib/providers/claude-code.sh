@@ -61,3 +61,71 @@ provider_structure() {
 
   return 0
 }
+
+# provider_research <record_file> <workspace_dir> <memory_file> <research_file>
+#   <id> <workspace> <slug> <researched_at> <request_ref>
+# Runs the /research-request slash command, scoped to loop/ so
+# .claude/commands/ is discovered — cwd stays $LOOP_DIR for that, while
+# --add-dir grants read access into the actual project so Read/Grep/Glob
+# can explore it. Always headless: research is an automated LLM step only,
+# no human watches it (unlike provider_structure's interactive branch).
+#
+# The caller (loop/research) never trusts this function's exit status
+# alone — research_is_valid() independently checks the file it wrote.
+provider_research() {
+  local record_file=$1 workspace_dir=$2 memory_file=$3 research_file=$4
+  local id=$5 workspace=$6 slug=$7 researched_at=$8 request_ref=$9
+  local prompt="/research-request $record_file $workspace_dir $memory_file $research_file $id $workspace $slug $researched_at $request_ref"
+
+  local result_json
+  result_json=$(cd "$LOOP_DIR" && claude -p \
+    "$prompt" \
+    --add-dir "$workspace_dir" \
+    --allowedTools "Read Grep Glob Write WebFetch WebSearch" \
+    --disallowedTools "Bash Edit Task" \
+    --permission-mode acceptEdits \
+    --setting-sources project \
+    --output-format json \
+    --no-session-persistence \
+    < /dev/null) || { echo "claude CLI exited non-zero" >&2; return 1; }
+
+  local is_error subtype
+  is_error=$(printf '%s' "$result_json" | jq -r '.is_error // false')
+  subtype=$(printf '%s' "$result_json" | jq -r '.subtype // "unknown"')
+
+  if [ "$is_error" != "false" ] || [ "$subtype" != "success" ]; then
+    printf 'research failed: %s\n' "$(printf '%s' "$result_json" | jq -r '.result // "unknown error"')" >&2
+    return 1
+  fi
+
+  return 0
+}
+
+# provider_scope <record_file> <research_file> <decision_file> <id> <workspace>
+#   <slug> <scoped_at> <request_ref> <research_ref>
+# Runs the /scope-request slash command, scoped to loop/ so
+# .claude/commands/ is discovered. Always interactive, foreground, inheriting
+# stdio — unlike provider_structure, there is no headless fallback branch:
+# grilling the human *is* the step, so a scripted/piped invocation makes no
+# sense here. loop/scope itself checks for a TTY and refuses to even load the
+# provider without one, so this function can assume it always has one.
+#
+# The caller (loop/scope) never trusts this function's exit status alone —
+# scope_is_valid() independently checks the file it wrote.
+provider_scope() {
+  local record_file=$1 research_file=$2 decision_file=$3 id=$4 workspace=$5
+  local slug=$6 scoped_at=$7 request_ref=$8 research_ref=$9
+  local prompt="/scope-request $record_file $research_file $decision_file $id $workspace $slug $scoped_at $request_ref $research_ref"
+
+  (cd "$LOOP_DIR" && claude "$prompt" \
+    --allowedTools "Read Write AskUserQuestion" \
+    --disallowedTools "Bash Edit Glob Grep Task WebFetch WebSearch" \
+    --permission-mode acceptEdits \
+    --setting-sources project)
+  local status=$?
+  if [ "$status" -ne 0 ]; then
+    echo "claude CLI exited non-zero ($status)" >&2
+    return 1
+  fi
+  return 0
+}

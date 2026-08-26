@@ -97,7 +97,7 @@ if ! provider_structure "$raw_file" "$record_file" "$id" "$name" "$slug" "$submi
 retry with: loop/request $name --file $raw_file" 1
 fi
 
-if ! record_is_valid "$record_file"; then
+if ! record_is_valid "$record_file" "$id" "$slug" "$submitted_at"; then
   die "provider '$PROVIDER_ID' did not write a valid record at $record_ref — raw request preserved at $raw_ref" 1
 fi
 

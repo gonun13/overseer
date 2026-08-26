@@ -27,21 +27,31 @@ Which provider (CLI) runs the structuring step is controlled by
 `LOOP_PROVIDER=<id>` environment override.
 
 ```sh
+loop/research <workspace-name> [--id <request-id>]
 loop/list [workspace-name]
 loop/clear <workspace-name> (--id <request-id> | --all) [--yes]
 ```
 
+- `loop/research` explores the actual codebase at `workspace/<name>` for a
+  request already past `request`, writes a context report at
+  `db/<slug>/research/<id>.md` to prime the upcoming `scope` step, and
+  updates `db/<slug>/memory.md` — a living document shared across every
+  future request/step for that workspace, not just this one. Without
+  `--id`, it auto-picks the one request still at `step: request, status:
+  requested`; dies if there's none, or more than one (pass `--id` to
+  disambiguate). Fully automated — no human in the loop, always headless.
 - `loop/list` prints open (not yet cleared) requests and their current
   step/status — for one workspace, or every slug under `db/` if the name is
   omitted. Read-only; derives state from `index.jsonl` (see below), not a
   separate cache.
-- `loop/clear` deletes a request's raw/record files, after running that
-  request's current step's teardown hook (see "Safe dismount" below).
+- `loop/clear` deletes a request's raw/record/research files, after running
+  that request's current step's teardown hook (see "Safe dismount" below).
   Requires `--id <id>` or `--all`, prints what it's about to delete, and
   asks for confirmation unless `--yes` is passed (mandatory in a
   non-interactive shell — there's no default-yes fallback). `index.jsonl`
   is never rewritten: clearing appends a `cleared` event rather than
-  erasing the request's history.
+  erasing the request's history. `memory.md` is never touched by `clear` —
+  it outlives any single request.
 
 ## The three-way file taxonomy
 
@@ -55,7 +65,15 @@ files:
 | **Everything else** | `.md` | Substantive, agent-authored content meant to flow forward as context for the next step in the chain — or double as material for a skill/subagent/command later |
 
 Concretely, per request: `db/<slug>/raw/<id>.txt` (human), `db/<slug>/index.jsonl`
-(automation log), `db/<slug>/requests/<id>.md` (the structured record).
+(automation log), `db/<slug>/requests/<id>.md` (the structured record),
+now `db/<slug>/research/<id>.md` (the research report), and
+`db/<slug>/scope/<id>.md` (the scope decision record).
+
+One deliberate partial exception: `db/<slug>/memory.md` is also "everything
+else" `.md`, but it doesn't flow forward to just *the next* step in the
+chain — it flows forward to *every* future step and *every* future request
+for that slug. It's a living document `research` reads and updates each run
+(merging in new findings, not just appending), not a per-request artifact.
 
 No separate cache is kept to answer "what step is this request on" — that
 would be a fourth file kind, breaking the taxonomy above. The record's own
@@ -75,7 +93,8 @@ live instead of waiting on a black box. The one-shot `claude -p` path still
 exists as a fallback for scripted/piped invocations (`--file`, piped stdin)
 where there's no terminal to attach to and no one to watch anyway — that
 path stays cheap, scriptable, and testable the way an interactive session
-isn't.
+isn't. `scope` deliberately does *not* follow this dual-mode pattern — see
+its own section below.
 
 **A slash command instead of an inline prompt in the bash script.** The
 structuring prompt lives at `.claude/commands/structure-request.md`, versioned
@@ -99,25 +118,32 @@ be mistaken for project source or accidentally committed into someone's app
 repo.
 
 **Bash — not the provider — commits the log.** The provider call's only
-filesystem write is the one request record, on paths bash chose. Bash
-validates that write (file exists, required frontmatter present, has a
-title) before it ever touches `index.jsonl`, and the jsonl append is
-`flock`-serialized so two concurrent `loop/request` runs on the same slug
-can't interleave — a file-locking concern, not something to hand an LLM tool
-call.
+filesystem write is the request's own artifact(s), on paths bash chose. Bash
+validates that write before it ever touches `index.jsonl` — and that check
+is more than presence: `record_is_valid`/`research_is_valid`/`scope_is_valid`
+cross-check `id`/`slug`/`submitted_at` (or `researched_at`/`request_ref`, or
+`scoped_at`/`request_ref`/`research_ref`) against the values bash itself
+already generated, not just that the fields are non-empty. Presence-only
+checking once let a provider write a real request record with
+`id`/`slug`/`submitted_at` shifted into each other's fields — non-empty, so
+it passed, but wrong. The jsonl append is `flock`-serialized so two
+concurrent `loop/request`/`loop/research`/`loop/scope`/`loop/clear` runs on
+the same slug can't interleave — a file-locking concern, not something to
+hand an LLM tool call.
 
 **Provider abstraction.** The tool must not hardcode `claude`. `lib/providers.sh`
 + `lib/providers/<id>.sh` mirror the shape of Overseer's own `AgentAdapter`
 split (`packages/protocol/src/adapter.ts`) — an id string plus a small
-function contract (`provider_check_available`, `provider_structure`)
-each provider implements. Only `claude-code` is real today, matching
-Overseer's own real-vs-stub balance (`codex`/`opencode`/`github-copilot` are
-catalog names with no adapter code anywhere in that app either). Overseer's
-own "currently attached provider" state lives inside a Docker-only volume
-unreachable from a host-side tool, so this tool tracks its own default in the
-tracked `loop/.provider` file instead. Adding a second real provider later
-means writing `lib/providers/<id>.sh` implementing the same two functions —
-no changes to `loop/request`.
+function contract (`provider_check_available`, `provider_structure`,
+`provider_research`, `provider_scope`) each provider implements. Only
+`claude-code` is real today, matching Overseer's own real-vs-stub balance
+(`codex`/`opencode`/`github-copilot` are catalog names with no adapter code
+anywhere in that app either). Overseer's own "currently attached provider"
+state lives inside a Docker-only volume unreachable from a host-side tool,
+so this tool tracks its own default in the tracked `loop/.provider` file
+instead. Adding a second real provider later means writing
+`lib/providers/<id>.sh` implementing the same function contract — no changes
+to `loop/request`/`loop/research`/`loop/scope`.
 
 **Context-window discipline (smart zone / dumb zone).** LLM attention over a
 single context window is uneven: instructions near the very start and very
@@ -136,12 +162,15 @@ possible.
 
 The loop is made of nine **steps**, in order:
 
-1. **request** — capture the raw human intent. *(built; HITL — interactive.
-   The rest below are spec-only, not built)*
-2. **research** — gather the context needed to scope the work. *(automated
-   — one-shot)*
-3. **scope** — bound what this iteration will actually do. *(HITL —
-   interactive)*
+1. **request** — capture the raw human intent. *(built; HITL — interactive)*
+2. **research** — explore the codebase, write a context report for `scope`,
+   and update the shared memory file. *(built; automated — one-shot)*
+3. **scope** — bound what this iteration will actually do: an agent reads
+   the request record and research report, then grills the human with up to
+   20 questions (important design questions first, best-practice defaults
+   for small doubts, a recommendation offered whenever it presents options)
+   and writes a decision record. *(built; HITL — interactive. The rest below
+   are spec-only, not built)*
 4. **plan** — decide how to do it. *(automated — one-shot)*
 5. **implement** — do it. *(automated — one-shot)*
 6. **verify** — check it. *(automated — one-shot)*
@@ -162,7 +191,10 @@ the human watches, and can act, because the work touches a person's
 judgment or context. That doesn't mean every one is a back-and-forth
 conversation: `request`'s structuring stays a single deterministic pass
 (one Read, one Write, no follow-up questions) — it's just no longer hidden
-behind a one-shot call. `research`, `plan`, `implement`, `verify`, and
+behind a one-shot call. `scope` is the opposite end of that spectrum: a real
+multi-turn conversation is the entire point of the step, capped at 20
+questions (a ceiling, not a quota — it stops as soon as the important
+questions are resolved). `research`, `plan`, `implement`, `verify`, and
 `decide` are automated, so each runs as a single headless `claude -p` call
 (or plain bash) with a fixed input/output contract and no human watching.
 This lines up exactly with the inner-loop boundary above: everything inside
@@ -170,14 +202,25 @@ the closed loop, plus the `research` that feeds it, is headless; everything
 at its edges (`scope` in, `commit` out) plus the two endpoints (`request`,
 `review`) runs in the open.
 
+**Why `scope` has no headless fallback.** `request` falls back to a `claude
+-p` one-shot when there's no terminal attached, because its structuring pass
+is deterministic — there's nothing conversational about it, so a scripted
+caller can supply the raw text and get the same result. `scope` has no such
+fallback: grilling the human *is* the step. `loop/scope` checks for a TTY
+before it ever loads the provider and dies with a clear message if one
+isn't attached, rather than silently downgrading to a call with no one to
+answer its questions.
+
 "**Phase**" is a different, more granular concept reserved for *inside* a
 `plan` — a plan decomposes work into phases — and isn't designed yet.
 
 **One command per step.** Each step is meant to be executed by its own
 behavior and instructions, at `loop/.claude/commands/<step>/`, documenting/enforcing how
-that step runs. This is a noted extension point: `request` is the only step
-built so far, and today it runs as a slash command
-(`.claude/commands/structure-request.md`).
+that step runs. This is a noted extension point: `request`, `research`, and
+`scope` are the only steps built so far, and today they run as flat slash
+commands (`.claude/commands/structure-request.md`,
+`.claude/commands/research-request.md`, `.claude/commands/scope-request.md`)
+rather than in `<step>/` subdirectories.
 
 Each step reuses the same taxonomy: human input/decisions stay `.txt`,
 automation logs its actions to `index.jsonl`, and any new substantive content
@@ -190,5 +233,8 @@ workspace/<name>` mount, a tracked subagent process, a git worktree —
 that needs releasing before deletion is safe. `lib/steps.sh` dispatches to
 an optional `lib/steps/<step>.sh` defining `step_teardown_hook <slug> <id>`,
 mirroring the provider abstraction above; a step with nothing to release
-just doesn't define one. `request` is synchronous and stateless, so its
-hook (`lib/steps/request.sh`) is a no-op.
+just doesn't define one. `request`, `research`, and `scope` are all
+synchronous and stateless (their `claude -p`/interactive calls fully return
+before the script continues, and none of them leaves anything mounted or
+running), so their hooks (`lib/steps/request.sh`, `lib/steps/research.sh`,
+`lib/steps/scope.sh`) are no-ops.
