@@ -29,13 +29,13 @@ resolve_provider_id() {
 load_provider() {
   local id script
   id=$(resolve_provider_id)
-  script="$LOOP_DIR/lib/providers/${id}.sh"
+  script="$LOOP_BIN_DIR/lib/providers/${id}.sh"
 
   if [ ! -f "$script" ]; then
     local available
-    available=$(find "$LOOP_DIR/lib/providers" -maxdepth 1 -name '*.sh' 2>/dev/null \
+    available=$(find "$LOOP_BIN_DIR/lib/providers" -maxdepth 1 -name '*.sh' 2>/dev/null \
       -printf '  - %f\n' | sed 's/\.sh$//' | sort)
-    [ -n "$available" ] || available="  (none found under $LOOP_DIR/lib/providers)"
+    [ -n "$available" ] || available="  (none found under $LOOP_BIN_DIR/lib/providers)"
     die "unknown provider '$id' — no $script
 Available providers:
 $available" 1

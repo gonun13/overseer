@@ -1,4 +1,4 @@
-# Runtime file-store — recreated by loop/request; never versioned.
+# Runtime file-store — recreated by loop/run; never versioned.
 /db/
 
 # The repo-root .gitignore blanket-ignores any `.claude/` directory anywhere

@@ -1,11 +1,15 @@
 #!/usr/bin/env bash
 # Shared helpers for loop/* scripts. Not meant to be run directly.
 
+# LOOP_LIB_DIR   loop/bin/lib   — this file's own directory
+# LOOP_BIN_DIR   loop/bin       — implementation root (scripts + lib/)
+# LOOP_DIR       loop/          — tool data/config root (db/, .provider, .claude/)
 LOOP_LIB_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
-LOOP_DIR="$(CDPATH= cd -- "$LOOP_LIB_DIR/.." && pwd)"
+LOOP_BIN_DIR="$(CDPATH= cd -- "$LOOP_LIB_DIR/.." && pwd)"
+LOOP_DIR="$(CDPATH= cd -- "$LOOP_BIN_DIR/.." && pwd)"
 REPO_ROOT="$(CDPATH= cd -- "$LOOP_DIR/.." && pwd)"
 WORKSPACE_ROOT="$REPO_ROOT/workspace"
-export LOOP_DIR REPO_ROOT WORKSPACE_ROOT
+export LOOP_LIB_DIR LOOP_BIN_DIR LOOP_DIR REPO_ROOT WORKSPACE_ROOT
 
 log_info() { printf 'loop: %s\n' "$*" >&2; }
 log_error() { printf 'loop: %s\n' "$*" >&2; }

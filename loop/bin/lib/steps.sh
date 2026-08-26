@@ -12,7 +12,7 @@
 # to release.
 step_teardown() {
   local slug=$1 id=$2 step=$3
-  local hook="$LOOP_DIR/lib/steps/${step}.sh"
+  local hook="$LOOP_BIN_DIR/lib/steps/${step}.sh"
 
   if [ -f "$hook" ]; then
     # shellcheck disable=SC1090

@@ -1,7 +1,7 @@
 ---
 description: Interactively scope a dev-loop request with the human developer and write a decision record.
 argument-hint: <record-file> <research-file> <decision-file> <id> <workspace> <slug> <scoped-at> <request-ref> <research-ref>
-allowed-tools: Read, Write, AskUserQuestion
+allowed-tools: Read, Write, AskUserQuestion, WebFetch, WebSearch
 ---
 
 You are scoping exactly one feature/fix/change request for the "dev loop"
@@ -27,10 +27,18 @@ Arguments, positional, in this order:
 
 Read $1 (title, summary, description, kind, acceptance criteria) and $2
 (relevant areas/files, key findings, risks/unknowns, open questions the
-research step flagged for you). That is your context. Do not use any tool
-other than Read here, and do not go looking for anything beyond these two
-files — research already did the codebase exploration; your job now is to
-turn what it found into a bounded, decided scope with the human.
+research step flagged for you). That is your context. Do not use Glob or
+Grep, and do not go looking through the codebase for anything beyond these
+two files — research already did that exploration; your job now is to turn
+what it found into a bounded, decided scope with the human.
+
+The one exception: if a live design question comes up during Step 2 that
+hinges on external, factual information research didn't cover (e.g. a
+library's current documented API/behavior), you may use WebSearch/WebFetch
+to check it on the spot rather than guessing or leaving it as an assumption.
+This is a narrow fallback for a genuine gap, same bar as research's own use
+of these tools — not a default step, and never a substitute for reading $1/$2
+first.
 
 ## Step 2 — Grill the human (at most 20 questions)
 

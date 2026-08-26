@@ -4,20 +4,20 @@
 # then appends a "cleared" event to db/<slug>/index.jsonl (files are
 # deleted; the automation log never is — see README taxonomy).
 #
-# Usage: loop/clear <workspace-name> (--id <request-id> | --all) [--yes]
+# Usage: loop/bin/clear <workspace-name> (--id <request-id> | --all) [--yes]
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/common.sh"
 # shellcheck disable=SC1091
-source "$LOOP_DIR/lib/db.sh"
+source "$LOOP_BIN_DIR/lib/db.sh"
 # shellcheck disable=SC1091
-source "$LOOP_DIR/lib/steps.sh"
+source "$LOOP_BIN_DIR/lib/steps.sh"
 
 usage() {
   cat >&2 <<'EOF'
-usage: loop/clear <workspace-name> (--id <request-id> | --all) [--yes]
+usage: loop/bin/clear <workspace-name> (--id <request-id> | --all) [--yes]
 
 Stops and deletes open (not yet cleared) requests for
 workspace/<workspace-name>. For each one: runs its current step's teardown

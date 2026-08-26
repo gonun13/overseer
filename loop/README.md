@@ -12,39 +12,55 @@ constraint changing what it already does.
 ## Usage
 
 ```sh
-loop/request <workspace-name>
+loop/run <workspace-name>
 ```
 
 - `<workspace-name>` must already exist as a directory under `workspace/`.
 - Prereqs: `claude` CLI on PATH and authenticated, `jq` on PATH.
-- Interactive: run it, type the request, finish with Ctrl-D (EOF).
-- Scripted: `loop/request my-project --file path/to/request.txt`, or pipe
-  stdin (`printf '...' | loop/request my-project`).
-- On success it prints the request id, title, and the record's path.
+- `loop/run` is the single point of entry: it carries a request through
+  every step that's actually built — `request` → `research` → `scope` — in
+  one run, resuming an in-flight request from wherever it left off, or
+  starting a fresh one if none is open. Plain bash, run directly in your own
+  terminal (not a nested agent session) — each step's own foreground
+  `claude` call (structuring, scoping) inherits that real terminal, exactly
+  as if you'd invoked it by hand.
+  - Fresh start: run it, type the request, finish with Ctrl-D (EOF); or
+    non-interactively via `loop/run my-project --file path/to/request.txt`,
+    or piped stdin.
+  - `research` then runs automatically — fully headless, no input needed.
+  - `scope` then grills you with up to 20 questions in the same terminal
+    session and writes the decision record.
+  - Once `scope` completes, it prints where the decision record landed
+    (`plan`/`implement`/`verify`/`decide`/`commit`/`review` aren't
+    implemented yet) and asks whether to start a new request for this
+    workspace — `y` loops back to a fresh `request` step right away
+    (`--file` is only ever consumed for the first request of a run, never
+    reused); anything else exits. It's an actual loop: it keeps offering a
+    new request until you decline.
+  - Without `--id`, auto-picks the workspace's one open (not cleared)
+    request; dies if there's more than one (pass `--id` to disambiguate).
+    With `--id`, resumes that exact request regardless of its current
+    step/status.
+  - `request`, `research`, and `scope` used to also be separate
+    `loop/bin/*` scripts for exercising one step in isolation while they
+    were being built; once they stabilized, that added nothing `loop/run`
+    couldn't already do on its own, so their logic now lives in
+    `bin/lib/steps/{request,research,scope}.sh`, called directly by `loop/run`.
 
-Which provider (CLI) runs the structuring step is controlled by
-`loop/.provider` (tracked, defaults to `claude-code`) or a one-off
-`LOOP_PROVIDER=<id>` environment override.
+Which provider (CLI) runs each step is controlled by `loop/.provider`
+(tracked, defaults to `claude-code`) or a one-off `LOOP_PROVIDER=<id>`
+environment override.
 
 ```sh
-loop/research <workspace-name> [--id <request-id>]
-loop/list [workspace-name]
-loop/clear <workspace-name> (--id <request-id> | --all) [--yes]
+loop/bin/list [workspace-name]
+loop/bin/clear <workspace-name> (--id <request-id> | --all) [--yes]
 ```
 
-- `loop/research` explores the actual codebase at `workspace/<name>` for a
-  request already past `request`, writes a context report at
-  `db/<slug>/research/<id>.md` to prime the upcoming `scope` step, and
-  updates `db/<slug>/memory.md` — a living document shared across every
-  future request/step for that workspace, not just this one. Without
-  `--id`, it auto-picks the one request still at `step: request, status:
-  requested`; dies if there's none, or more than one (pass `--id` to
-  disambiguate). Fully automated — no human in the loop, always headless.
-- `loop/list` prints open (not yet cleared) requests and their current
+- `loop/bin/list` prints open (not yet cleared) requests and their current
   step/status — for one workspace, or every slug under `db/` if the name is
   omitted. Read-only; derives state from `index.jsonl` (see below), not a
   separate cache.
-- `loop/clear` deletes a request's raw/record/research files, after running
+- `loop/bin/clear` deletes a request's raw/record/research files, after running
   that request's current step's teardown hook (see "Safe dismount" below).
   Requires `--id <id>` or `--all`, prints what it's about to delete, and
   asks for confirmation unless `--yes` is passed (mandatory in a
@@ -127,12 +143,11 @@ already generated, not just that the fields are non-empty. Presence-only
 checking once let a provider write a real request record with
 `id`/`slug`/`submitted_at` shifted into each other's fields — non-empty, so
 it passed, but wrong. The jsonl append is `flock`-serialized so two
-concurrent `loop/request`/`loop/research`/`loop/scope`/`loop/clear` runs on
-the same slug can't interleave — a file-locking concern, not something to
-hand an LLM tool call.
+concurrent `loop/run`/`loop/bin/clear` runs on the same slug can't
+interleave — a file-locking concern, not something to hand an LLM tool call.
 
-**Provider abstraction.** The tool must not hardcode `claude`. `lib/providers.sh`
-+ `lib/providers/<id>.sh` mirror the shape of Overseer's own `AgentAdapter`
+**Provider abstraction.** The tool must not hardcode `claude`. `bin/lib/providers.sh`
++ `bin/lib/providers/<id>.sh` mirror the shape of Overseer's own `AgentAdapter`
 split (`packages/protocol/src/adapter.ts`) — an id string plus a small
 function contract (`provider_check_available`, `provider_structure`,
 `provider_research`, `provider_scope`) each provider implements. Only
@@ -142,8 +157,8 @@ anywhere in that app either). Overseer's own "currently attached provider"
 state lives inside a Docker-only volume unreachable from a host-side tool,
 so this tool tracks its own default in the tracked `loop/.provider` file
 instead. Adding a second real provider later means writing
-`lib/providers/<id>.sh` implementing the same function contract — no changes
-to `loop/request`/`loop/research`/`loop/scope`.
+`bin/lib/providers/<id>.sh` implementing the same function contract — no
+changes to `loop/run` or `bin/lib/steps/*.sh`.
 
 **Context-window discipline (smart zone / dumb zone).** LLM attention over a
 single context window is uneven: instructions near the very start and very
@@ -206,10 +221,10 @@ at its edges (`scope` in, `commit` out) plus the two endpoints (`request`,
 -p` one-shot when there's no terminal attached, because its structuring pass
 is deterministic — there's nothing conversational about it, so a scripted
 caller can supply the raw text and get the same result. `scope` has no such
-fallback: grilling the human *is* the step. `loop/scope` checks for a TTY
-before it ever loads the provider and dies with a clear message if one
-isn't attached, rather than silently downgrading to a call with no one to
-answer its questions.
+fallback: grilling the human *is* the step. `loop/run` checks for a TTY
+before it does anything and dies with a clear message if one isn't
+attached, rather than silently downgrading to a call with no one to answer
+its questions.
 
 "**Phase**" is a different, more granular concept reserved for *inside* a
 `plan` — a plan decomposes work into phases — and isn't designed yet.
@@ -227,14 +242,17 @@ automation logs its actions to `index.jsonl`, and any new substantive content
 it produces is `.md` — additive, feeding forward as context for the next
 step in the chain.
 
-**Safe dismount.** `loop/clear` deletes a request's files, but some steps
+**Safe dismount.** `loop/bin/clear` deletes a request's files, but some steps
 will leave something behind first — `implement`'s `--add-dir
 workspace/<name>` mount, a tracked subagent process, a git worktree —
-that needs releasing before deletion is safe. `lib/steps.sh` dispatches to
-an optional `lib/steps/<step>.sh` defining `step_teardown_hook <slug> <id>`,
+that needs releasing before deletion is safe. `bin/lib/steps.sh` dispatches to
+an optional `bin/lib/steps/<step>.sh` defining `step_teardown_hook <slug> <id>`,
 mirroring the provider abstraction above; a step with nothing to release
-just doesn't define one. `request`, `research`, and `scope` are all
-synchronous and stateless (their `claude -p`/interactive calls fully return
-before the script continues, and none of them leaves anything mounted or
-running), so their hooks (`lib/steps/request.sh`, `lib/steps/research.sh`,
-`lib/steps/scope.sh`) are no-ops.
+just doesn't define one. `bin/lib/steps/{request,research,scope}.sh` each
+hold two things: the step's actual logic (`step_request`/`step_research`/
+`step_scope`, called directly by `loop/run`) and that step's teardown hook —
+kept together since they're the same step, per the provider/step-id
+convention the rest of the tool follows. `request`, `research`, and `scope`
+are all synchronous and stateless (their `claude`/interactive calls fully
+return before `loop/run` continues, and none of them leaves anything
+mounted or running), so all three hooks are no-ops.

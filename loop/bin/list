@@ -2,18 +2,18 @@
 # List open (not cleared) requests and their current step/status, derived
 # from db/<slug>/index.jsonl — no separate state cache, per the README.
 #
-# Usage: loop/list [workspace-name]
+# Usage: loop/bin/list [workspace-name]
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/lib/common.sh"
 # shellcheck disable=SC1091
-source "$LOOP_DIR/lib/db.sh"
+source "$LOOP_BIN_DIR/lib/db.sh"
 
 usage() {
   cat >&2 <<'EOF'
-usage: loop/list [workspace-name]
+usage: loop/bin/list [workspace-name]
 
 Lists open requests (any request not yet cleared) and their current
 step/status. With a workspace-name, lists only that workspace's slug;

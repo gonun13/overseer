@@ -1,0 +1,189 @@
+#!/usr/bin/env bash
+# The `run` entrypoint: the single point of entry into the dev loop. Carries
+# a request through every step that's actually built — request -> research
+# -> scope — calling each step's logic (lib/steps/*.sh) directly in-process
+# rather than as separate scripts. request/research/scope used to also be
+# standalone loop/bin/* scripts for exercising one step at a time; once the
+# steps stabilized, keeping them separate added nothing loop/run couldn't
+# already do on its own, so they were folded in here. Because loop/run is
+# plain bash running in the human's own terminal (not a nested agent
+# session), each step's own foreground claude call (structure/scope) still
+# gets a real inherited TTY, exactly as if the human had invoked it by hand.
+#
+# Usage: loop/run <workspace-name> [--id <request-id>] [--file <path>]
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/bin/lib/common.sh"
+# shellcheck disable=SC1091
+source "$LOOP_BIN_DIR/lib/db.sh"
+# shellcheck disable=SC1091
+source "$LOOP_BIN_DIR/lib/providers.sh"
+# shellcheck disable=SC1091
+source "$LOOP_BIN_DIR/lib/steps/request.sh"
+# shellcheck disable=SC1091
+source "$LOOP_BIN_DIR/lib/steps/research.sh"
+# shellcheck disable=SC1091
+source "$LOOP_BIN_DIR/lib/steps/scope.sh"
+
+usage() {
+  cat >&2 <<'EOF'
+usage: loop/run <workspace-name> [--id <request-id>] [--file <path>]
+
+Carries a request through every dev-loop step that's actually built:
+request -> research -> scope. Resumes an in-flight request from wherever
+it left off, or starts a fresh one if none is open — interactively (type
+the request, finish with Ctrl-D), or non-interactively via --file/piped
+stdin for the request text (first request only — see below).
+
+Without --id, auto-picks the workspace's one open (not cleared) request.
+Dies if there's more than one (pass --id to disambiguate). With --id,
+resumes that exact request regardless of its current step/status.
+
+Once scope completes for a request, prints where the decision record
+landed (plan/implement/verify/decide/commit/review aren't implemented yet)
+and asks whether to start a new request for this workspace — answering yes
+loops back to a fresh `request` step (typed interactively; --file is only
+consumed for the very first request of a run, never reused); answering no
+exits the loop.
+
+Requires an interactive terminal — the request/scope steps need to talk to
+you.
+
+Exit codes: 0 ok, 1 general/validation/provider failure, 2 workspace not
+found, 3 ambiguous selection without --id, 4 no terminal attached.
+EOF
+}
+
+# confirm <prompt> — y/N read from the same terminal the whole script
+# requires; anything but y/yes counts as no.
+confirm() {
+  local prompt=$1 reply
+  read -r -p "$prompt " reply || return 1
+  case "$reply" in
+    y|Y|yes|YES) return 0 ;;
+    *) return 1 ;;
+  esac
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
+if [ ! -t 0 ] || [ ! -t 1 ]; then
+  die "loop/run requires an interactive terminal — the request/scope steps need to talk to you" 4
+fi
+
+require_cmd jq
+load_provider
+
+name=""
+id=""
+raw_input_file=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --id)
+      [ $# -ge 2 ] || die "--id requires a value" 1
+      id=$2
+      shift 2
+      ;;
+    --file)
+      [ $# -ge 2 ] || die "--file requires a path argument" 1
+      raw_input_file=$2
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      die "unknown option: $1" 1
+      ;;
+    *)
+      if [ -n "$name" ]; then
+        die "unexpected extra argument: $1" 1
+      fi
+      name=$1
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$name" ]; then
+  usage
+  exit 1
+fi
+
+workspace_dir=$(resolve_workspace "$name")
+slug=$(slugify "$name")
+
+first_pass=1
+while true; do
+  step="" status=""
+
+  if [ "$first_pass" -eq 1 ] && [ -n "$id" ]; then
+    event=$(latest_request_events "$slug" | jq -c --arg id "$id" 'select(.id == $id)')
+    [ -n "$event" ] || die "no request '$id' found for '$name'" 1
+    status=$(printf '%s' "$event" | jq -r '.status')
+    [ "$status" != "cleared" ] || die "request '$id' was cleared — its record no longer exists" 1
+    step=$(printf '%s' "$event" | jq -r '.step')
+  elif [ "$first_pass" -eq 1 ]; then
+    candidates=()
+    while IFS= read -r ev; do
+      [ -n "$ev" ] || continue
+      candidates+=("$ev")
+    done < <(latest_request_events "$slug" | jq -c 'select(.status != "cleared")')
+
+    if [ ${#candidates[@]} -gt 1 ]; then
+      log_error "multiple open requests for '$name' — pass --id to resume a specific one:"
+      for ev in "${candidates[@]}"; do
+        printf '  - %s [%s/%s] %s\n' \
+          "$(printf '%s' "$ev" | jq -r '.id')" \
+          "$(printf '%s' "$ev" | jq -r '.step')" \
+          "$(printf '%s' "$ev" | jq -r '.status')" \
+          "$(printf '%s' "$ev" | jq -r '.title')" >&2
+      done
+      exit 3
+    fi
+
+    if [ ${#candidates[@]} -eq 1 ]; then
+      id=$(printf '%s' "${candidates[0]}" | jq -r '.id')
+      step=$(printf '%s' "${candidates[0]}" | jq -r '.step')
+      status=$(printf '%s' "${candidates[0]}" | jq -r '.status')
+    fi
+    # else: nothing open — step/id/status stay empty, start fresh below.
+  fi
+  # else (not first_pass): a prior request just finished what's built —
+  # step/id/status stay empty so the block below starts a brand-new request.
+
+  first_pass=0
+
+  if [ -z "$step" ]; then
+    id=$(step_request "$workspace_dir" "$name" "$slug" "$raw_input_file")
+    raw_input_file="" # only ever consumed for the very first request
+    step="request"; status="requested"
+  fi
+
+  if [ "$step" = "request" ] && [ "$status" = "requested" ]; then
+    step_research "$workspace_dir" "$name" "$slug" "$id"
+    step="research"; status="researched"
+  fi
+
+  if [ "$step" = "research" ] && [ "$status" = "researched" ]; then
+    step_scope "$workspace_dir" "$name" "$slug" "$id"
+    step="scope"; status="scoped"
+  fi
+
+  if [ "$step" = "scope" ] && [ "$status" = "scoped" ]; then
+    log_info "$id is scoped and ready at db/$slug/scope/$id.md — plan, implement, verify, decide, commit, and review aren't implemented yet."
+    id=""
+    if confirm "loop: start a new request for '$name'? [y/N]"; then
+      continue
+    fi
+    exit 0
+  fi
+
+  die "request '$id' is at an unexpected state (step: $step, status: $status) — don't know how to proceed" 1
+done

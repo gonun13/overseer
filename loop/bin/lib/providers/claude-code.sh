@@ -110,6 +110,12 @@ provider_research() {
 # sense here. loop/scope itself checks for a TTY and refuses to even load the
 # provider without one, so this function can assume it always has one.
 #
+# WebFetch/WebSearch are allowed (unlike Glob/Grep, still denied) so a live
+# design question the human raises mid-conversation — one `research` didn't
+# anticipate — can be checked against external docs on the spot, without
+# ending the scoping session to go re-run research. Still no codebase
+# re-exploration: that's what Glob/Grep staying denied enforces.
+#
 # The caller (loop/scope) never trusts this function's exit status alone —
 # scope_is_valid() independently checks the file it wrote.
 provider_scope() {
@@ -118,8 +124,8 @@ provider_scope() {
   local prompt="/scope-request $record_file $research_file $decision_file $id $workspace $slug $scoped_at $request_ref $research_ref"
 
   (cd "$LOOP_DIR" && claude "$prompt" \
-    --allowedTools "Read Write AskUserQuestion" \
-    --disallowedTools "Bash Edit Glob Grep Task WebFetch WebSearch" \
+    --allowedTools "Read Write AskUserQuestion WebFetch WebSearch" \
+    --disallowedTools "Bash Edit Glob Grep Task" \
     --permission-mode acceptEdits \
     --setting-sources project)
   local status=$?
