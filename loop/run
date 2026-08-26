@@ -57,14 +57,47 @@ EOF
 }
 
 # confirm <prompt> — y/N read from the same terminal the whole script
-# requires; anything but y/yes counts as no.
+# requires; anything but y/yes (including Ctrl-C, which just kills the
+# script) counts as no.
 confirm() {
   local prompt=$1 reply
-  read -r -p "$prompt " reply || return 1
+  read -r -p "$prompt [$(hl y)/$(hl N)] " reply || return 1
   case "$reply" in
     y|Y|yes|YES) return 0 ;;
     *) return 1 ;;
   esac
+}
+
+# print_open_requests <slug> <name> — same table loop/bin/list prints,
+# shown right before asking for a new request (whether that's because
+# nothing was resumable to begin with, or a prior request just finished
+# what's built) so the operator can see everything already in flight for
+# this workspace before deciding to add another.
+print_open_requests() {
+  local slug=$1 name=$2 event status found=0
+  local head="" reset=""
+  if [ "$LOOP_COLOR" = 1 ]; then
+    head=$(tput bold)$(tput setaf 6)
+    reset=$(tput sgr0)
+  fi
+  while IFS= read -r event; do
+    [ -n "$event" ] || continue
+    status=$(printf '%s' "$event" | jq -r '.status')
+    [ "$status" = "cleared" ] && continue
+    if [ "$found" -eq 0 ]; then
+      printf '\n'
+      log_info "open requests for '$name':"
+      printf '%s%-32s %-9s %-10s %-21s %s%s\n' "$head" ID STEP STATUS SUBMITTED TITLE "$reset"
+    fi
+    found=1
+    printf '%-32s %-9s %-10s %-21s %s\n' \
+      "$(printf '%s' "$event" | jq -r '.id')" \
+      "$(printf '%s' "$event" | jq -r '.step')" \
+      "$status" \
+      "$(printf '%s' "$event" | jq -r '.at')" \
+      "$(printf '%s' "$event" | jq -r '.title')"
+  done < <(latest_request_events "$slug")
+  [ "$found" -eq 0 ] || printf '\n'
 }
 
 if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
@@ -130,14 +163,18 @@ while true; do
     [ "$status" != "cleared" ] || die "request '$id' was cleared — its record no longer exists" 1
     step=$(printf '%s' "$event" | jq -r '.step')
   elif [ "$first_pass" -eq 1 ]; then
+    # Only requests that could actually still move forward count as
+    # disambiguation candidates. One already sitting at scope/scoped has
+    # nothing left to resume (until plan/implement/... exist) — it's no
+    # different from a cleared slate, so it shouldn't force --id.
     candidates=()
     while IFS= read -r ev; do
       [ -n "$ev" ] || continue
       candidates+=("$ev")
-    done < <(latest_request_events "$slug" | jq -c 'select(.status != "cleared")')
+    done < <(latest_request_events "$slug" | jq -c 'select(.status != "cleared" and (.step == "scope" and .status == "scoped" | not))')
 
     if [ ${#candidates[@]} -gt 1 ]; then
-      log_error "multiple open requests for '$name' — pass --id to resume a specific one:"
+      log_error "multiple resumable requests for '$name' — pass --id to resume a specific one:"
       for ev in "${candidates[@]}"; do
         printf '  - %s [%s/%s] %s\n' \
           "$(printf '%s' "$ev" | jq -r '.id')" \
@@ -153,7 +190,7 @@ while true; do
       step=$(printf '%s' "${candidates[0]}" | jq -r '.step')
       status=$(printf '%s' "${candidates[0]}" | jq -r '.status')
     fi
-    # else: nothing open — step/id/status stay empty, start fresh below.
+    # else: nothing resumable — step/id/status stay empty, start fresh below.
   fi
   # else (not first_pass): a prior request just finished what's built —
   # step/id/status stay empty so the block below starts a brand-new request.
@@ -161,6 +198,7 @@ while true; do
   first_pass=0
 
   if [ -z "$step" ]; then
+    print_open_requests "$slug" "$name"
     id=$(step_request "$workspace_dir" "$name" "$slug" "$raw_input_file")
     raw_input_file="" # only ever consumed for the very first request
     step="request"; status="requested"
@@ -179,7 +217,7 @@ while true; do
   if [ "$step" = "scope" ] && [ "$status" = "scoped" ]; then
     log_info "$id is scoped and ready at db/$slug/scope/$id.md — plan, implement, verify, decide, commit, and review aren't implemented yet."
     id=""
-    if confirm "loop: start a new request for '$name'? [y/N]"; then
+    if confirm "loop: start a new request for '$name'?"; then
       continue
     fi
     exit 0
