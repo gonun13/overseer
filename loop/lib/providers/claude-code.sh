@@ -100,3 +100,32 @@ provider_research() {
 
   return 0
 }
+
+# provider_scope <record_file> <research_file> <decision_file> <id> <workspace>
+#   <slug> <scoped_at> <request_ref> <research_ref>
+# Runs the /scope-request slash command, scoped to loop/ so
+# .claude/commands/ is discovered. Always interactive, foreground, inheriting
+# stdio — unlike provider_structure, there is no headless fallback branch:
+# grilling the human *is* the step, so a scripted/piped invocation makes no
+# sense here. loop/scope itself checks for a TTY and refuses to even load the
+# provider without one, so this function can assume it always has one.
+#
+# The caller (loop/scope) never trusts this function's exit status alone —
+# scope_is_valid() independently checks the file it wrote.
+provider_scope() {
+  local record_file=$1 research_file=$2 decision_file=$3 id=$4 workspace=$5
+  local slug=$6 scoped_at=$7 request_ref=$8 research_ref=$9
+  local prompt="/scope-request $record_file $research_file $decision_file $id $workspace $slug $scoped_at $request_ref $research_ref"
+
+  (cd "$LOOP_DIR" && claude "$prompt" \
+    --allowedTools "Read Write AskUserQuestion" \
+    --disallowedTools "Bash Edit Glob Grep Task WebFetch WebSearch" \
+    --permission-mode acceptEdits \
+    --setting-sources project)
+  local status=$?
+  if [ "$status" -ne 0 ]; then
+    echo "claude CLI exited non-zero ($status)" >&2
+    return 1
+  fi
+  return 0
+}

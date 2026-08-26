@@ -1,0 +1,151 @@
+#!/usr/bin/env bash
+# The `scope` step: a fully interactive session where an agent reads a
+# request's structured record and research report, then grills the human
+# developer with up to 20 questions to bound what this iteration will
+# actually do, and writes loop/db/<slug>/scope/<id>.md — the decision
+# record the automated `plan` → `implement` → `verify` → `decide` loop
+# consumes next. Human-in-the-loop by design: there is no headless mode.
+#
+# Usage: loop/scope <workspace-name> [--id <request-id>]
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$LOOP_DIR/lib/db.sh"
+# shellcheck disable=SC1091
+source "$LOOP_DIR/lib/providers.sh"
+
+usage() {
+  cat >&2 <<'EOF'
+usage: loop/scope <workspace-name> [--id <request-id>]
+
+Runs the interactive scoping session for a request that's already past
+`research`: an agent reads the request record and research report, grills
+you with up to 20 questions (important design questions first, best-practice
+defaults for small doubts), and writes loop/db/<slug>/scope/<id>.md.
+
+Without --id, auto-picks the one request at step "research"/status
+"researched" for this workspace. Dies if there's none, or more than one
+(pass --id to disambiguate). With --id, targets that request regardless of
+its current step/status — re-scoping an already-scoped request is allowed
+on purpose.
+
+Requires an interactive terminal — grilling the human is the entire point
+of this step, so there is no headless/scripted fallback.
+
+Exit codes: 0 ok, 1 general/validation/provider failure, 2 workspace not
+found, 3 no eligible request / ambiguous selection without --id, 4 no
+terminal attached.
+EOF
+}
+
+if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
+  usage
+  exit 0
+fi
+
+if [ ! -t 0 ] || [ ! -t 1 ]; then
+  die "loop/scope requires an interactive terminal — it grills you with questions, there's no headless mode" 4
+fi
+
+require_cmd jq
+load_provider
+
+name=""
+id=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --id)
+      [ $# -ge 2 ] || die "--id requires a value" 1
+      id=$2
+      shift 2
+      ;;
+    -h|--help)
+      usage
+      exit 0
+      ;;
+    -*)
+      die "unknown option: $1" 1
+      ;;
+    *)
+      if [ -n "$name" ]; then
+        die "unexpected extra argument: $1" 1
+      fi
+      name=$1
+      shift
+      ;;
+  esac
+done
+
+if [ -z "$name" ]; then
+  usage
+  exit 1
+fi
+
+workspace_dir=$(resolve_workspace "$name")
+slug=$(slugify "$name")
+
+if [ -n "$id" ]; then
+  event=$(latest_request_events "$slug" | jq -c --arg id "$id" 'select(.id == $id)')
+  [ -n "$event" ] || die "no request '$id' found for '$name'" 3
+  status=$(printf '%s' "$event" | jq -r '.status')
+  [ "$status" != "cleared" ] || die "request '$id' was cleared — its record no longer exists" 3
+else
+  candidates=()
+  while IFS= read -r ev; do
+    [ -n "$ev" ] || continue
+    candidates+=("$ev")
+  done < <(latest_request_events "$slug" | jq -c 'select(.step == "research" and .status == "researched")')
+
+  if [ ${#candidates[@]} -eq 0 ]; then
+    die "no request awaiting scoping for '$name' — run loop/research first, or check loop/list $name" 3
+  fi
+  if [ ${#candidates[@]} -gt 1 ]; then
+    log_error "multiple requests awaiting scoping for '$name' — pass --id to disambiguate:"
+    for ev in "${candidates[@]}"; do
+      printf '  - %s %s\n' "$(printf '%s' "$ev" | jq -r '.id')" "$(printf '%s' "$ev" | jq -r '.title')" >&2
+    done
+    exit 3
+  fi
+
+  event="${candidates[0]}"
+  id=$(printf '%s' "$event" | jq -r '.id')
+fi
+
+raw_ref=$(printf '%s' "$event" | jq -r '.raw_ref')
+
+record_file=$(record_path "$slug" "$id")
+[ -f "$record_file" ] || die "no request record found at db/$slug/requests/$id.md for '$id'" 1
+
+research_file=$(research_path "$slug" "$id")
+[ -f "$research_file" ] || die "no research report found at db/$slug/research/$id.md for '$id' — run loop/research first" 1
+
+ensure_slug_dirs "$slug"
+
+decision_file=$(scope_path "$slug" "$id")
+scoped_at=$(iso_now)
+request_ref="db/$slug/requests/$id.md"
+research_ref="db/$slug/research/$id.md"
+scope_ref="db/$slug/scope/$id.md"
+
+log_info "scoping $id via provider '$PROVIDER_ID'…"
+
+if ! provider_scope "$record_file" "$research_file" "$decision_file" "$id" "$name" "$slug" "$scoped_at" "$request_ref" "$research_ref"; then
+  die "scoping failed — request/research records untouched
+retry with: loop/scope $name --id $id" 1
+fi
+
+if ! scope_is_valid "$decision_file" "$id" "$slug" "$scoped_at" "$request_ref" "$research_ref"; then
+  die "provider '$PROVIDER_ID' did not write a valid scope decision record at $scope_ref" 1
+fi
+
+title=$(record_title "$record_file")
+[ -n "$title" ] || title="(untitled)"
+
+append_event "$slug" "$id" "$scoped_at" "scope" "completed" "scoped" "$title" "$raw_ref" "$scope_ref"
+
+log_info "scoped $id for '$name'"
+printf '%s\n' "$title"
+printf '%s\n' "$scope_ref"
