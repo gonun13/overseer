@@ -1,8 +1,7 @@
 #!/usr/bin/env bash
 # Isolation lint for loop/ provider bundles. Fail if provider-specific
-# CLIs, config paths, or slash-command names leak into orchestration (or
-# into another provider's bundle). Run from anywhere; resolves paths via
-# common.sh.
+# CLIs or config paths leak into orchestration (or into another provider's
+# bundle). Run from anywhere; resolves paths via common.sh.
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -16,7 +15,7 @@ err() {
 }
 
 CONTRACT_FNS=(provider_check_available provider_structure provider_research provider_scope)
-CC_COMMANDS=(structure-request.md research-request.md scope-request.md)
+STEP_COMMANDS=(structure-request.md research-request.md scope-request.md)
 
 # Strip comments and string refs to Overseer's packages/adapters/claude-code
 # so a path mention of that TS package is not treated as a CLI leak.
@@ -27,14 +26,14 @@ scrub() {
     "$1"
 }
 
-# True if scrubbed content still has a bare "claude" token (CLI / .claude /
-# slash cmds), not only the provider id "claude-code".
+# True if scrubbed content still has a bare "claude" token (CLI / .claude),
+# not only the provider id "claude-code".
 has_claude_leak() {
   local content
   content=$(scrub "$1")
   # Drop the allowed default provider id token, then look for remaining hits.
   content=$(printf '%s' "$content" | sed -E 's/claude-code//g')
-  printf '%s' "$content" | grep -Eiq 'claude|\.claude|/structure-request|/research-request|/scope-request'
+  printf '%s' "$content" | grep -Eiq 'claude|\.claude'
 }
 
 # --- 1. Orchestration must not name a specific provider CLI or its assets ---
@@ -42,6 +41,7 @@ orchestration_files=(
   "$LOOP_DIR/run"
   "$LOOP_BIN_DIR/list"
   "$LOOP_BIN_DIR/clear"
+  "$LOOP_BIN_DIR/provider"
   "$LOOP_BIN_DIR/lib/providers.sh"
   "$LOOP_BIN_DIR/lib/common.sh"
   "$LOOP_BIN_DIR/lib/db.sh"
@@ -57,13 +57,8 @@ for f in "${orchestration_files[@]}"; do
     err "provider-specific token in orchestration: ${f#"$LOOP_DIR"/}"
   fi
   # Specific CLI binary names that must stay inside provider bundles.
-  if scrub "$f" | grep -Eiq '(^|[^[:alnum:]_-])(claude|cursor)([^[:alnum:]_-]|$)'; then
-    # Allow default id / env docs that say claude-code only (already scrubbed
-    # claude-code away above for the claude check). cursor as a word in
-    # providers.sh listing is not expected in orchestration.
-    if scrub "$f" | sed -E 's/claude-code//g' | grep -Eiq '(^|[^[:alnum:]_-])(claude|cursor)([^[:alnum:]_-]|$)'; then
-      err "provider CLI name in orchestration: ${f#"$LOOP_DIR"/}"
-    fi
+  if scrub "$f" | sed -E 's/claude-code//g' | grep -Eiq '(^|[^[:alnum:]_-])(claude|agent)([^[:alnum:]_-]|$)'; then
+    err "provider CLI name in orchestration: ${f#"$LOOP_DIR"/}"
   fi
 done
 
@@ -75,9 +70,10 @@ while IFS= read -r bundle; do
     case "$f" in
       *.md) continue ;; # docs may mention other providers by name
     esac
-    if grep -Eiq 'claude|\.claude|/structure-request|/research-request|/scope-request' "$f"; then
-      # Allow "claude" only inside "not implemented" / isolation docs in README —
-      # already skipped *.md. Shell stubs must stay clean of Claude paths.
+    # Shared step command stems (structure-request, …) are allowed; only
+    # Claude CLI / .claude/ config paths are leaks. Mentions of the
+    # provider id "claude-code" are fine.
+    if scrub "$f" | sed -E 's/claude-code//g' | grep -Eiq 'claude|\.claude'; then
       err "claude-code leak in provider '$id': ${f#"$LOOP_DIR"/}"
     fi
   done < <(find "$bundle" -type f 2>/dev/null | sort)
@@ -97,11 +93,23 @@ done < <(find "$LOOP_DIR/providers" -mindepth 1 -maxdepth 1 -type d 2>/dev/null 
 
 # --- 4. claude-code bundle has the three slash-command files ---
 cc="$LOOP_DIR/providers/claude-code"
-for cmd in "${CC_COMMANDS[@]}"; do
+for cmd in "${STEP_COMMANDS[@]}"; do
   [ -f "$cc/.claude/commands/$cmd" ] || err "claude-code missing .claude/commands/$cmd"
 done
 [ -f "$cc/manifest" ] || err "claude-code missing manifest"
 [ -f "$cc/provider.sh" ] || err "claude-code missing provider.sh"
+
+# --- 5. cursor bundle has commands + cli.json ---
+cur="$LOOP_DIR/providers/cursor"
+for cmd in "${STEP_COMMANDS[@]}"; do
+  [ -f "$cur/.cursor/commands/$cmd" ] || err "cursor missing .cursor/commands/$cmd"
+done
+[ -f "$cur/.cursor/cli.json" ] || err "cursor missing .cursor/cli.json"
+[ -f "$cur/manifest" ] || err "cursor missing manifest"
+[ -f "$cur/provider.sh" ] || err "cursor missing provider.sh"
+if [ -f "$cur/manifest" ] && ! grep -Eq '^PROVIDER_CLI=agent$' "$cur/manifest"; then
+  err "cursor manifest must set PROVIDER_CLI=agent"
+fi
 
 if [ "$fail" -ne 0 ]; then
   printf 'check-providers: FAILED\n' >&2

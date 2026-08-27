@@ -3,9 +3,10 @@
 A standalone command-line tool that runs development loops — feature
 requests, fixes, changes — against a project living under `workspace/<name>/`
 in this repo. It exists outside the main Overseer app on purpose: it uses
-**only available system commands, bash scripts, the Claude Code CLI / slash-commands, and plain files**
-— no Node/TS, no database server, nothing routes through npm. 
-**It runs directly on the host for now** 
+**only available system commands, bash scripts, a provider CLI (Claude Code
+or Cursor Agent) plus that provider's command files, and plain files**
+— no Node/TS, no database server, nothing routes through npm.
+**It runs directly on the host for now**
 Should be run inside docker and can be folded into the main app later without that
 constraint changing what it already does.
 
@@ -16,13 +17,14 @@ loop/run <workspace-name>
 ```
 
 - `<workspace-name>` must already exist as a directory under `workspace/`.
-- Prereqs: `claude` CLI on PATH and authenticated, `jq` on PATH.
+- Prereqs: `jq` on PATH, plus the active provider's CLI authenticated
+  (`claude` for `claude-code`, `agent` for `cursor`).
 - `loop/run` is the single point of entry: it carries a request through
   every step that's actually built — `request` → `research` → `scope` — in
   one run, resuming an in-flight request from wherever it left off, or
   starting a fresh one if none is open. Plain bash, run directly in your own
   terminal (not a nested agent session) — each step's own foreground
-  `claude` call (structuring, scoping) inherits that real terminal, exactly
+  provider call (structuring, scoping) inherits that real terminal, exactly
   as if you'd invoked it by hand.
   - Fresh start: run it, type the request, finish with Ctrl-D (EOF); or
     non-interactively via `loop/run my-project --file path/to/request.txt`,
@@ -49,11 +51,12 @@ loop/run <workspace-name>
 
 Which provider (CLI) runs each step is controlled by `loop/.provider`
 (tracked, defaults to `claude-code`) or a one-off `LOOP_PROVIDER=<id>`
-environment override.
+environment override. Use `loop/bin/provider` to list and pick one.
 
 ```sh
 loop/bin/list [workspace-name]
 loop/bin/clear <workspace-name> (--id <request-id> | --all) [--yes]
+loop/bin/provider [<id>]
 ```
 
 - `loop/bin/list` prints open (not yet cleared) requests and their current
@@ -68,6 +71,10 @@ loop/bin/clear <workspace-name> (--id <request-id> | --all) [--yes]
   is never rewritten: clearing appends a `cleared` event rather than
   erasing the request's history. `memory.md` is never touched by `clear` —
   it outlives any single request.
+- `loop/bin/provider` lists bundles under `loop/providers/` and writes the
+  chosen id to `loop/.provider`. With no argument on a TTY it prompts; with
+  `<id>` it sets that provider directly. `LOOP_PROVIDER` still overrides
+  at runtime when set.
 
 ## The three-way file taxonomy
 
@@ -157,15 +164,15 @@ contract (`provider_check_available`, `provider_structure`,
 `provider_research`, `provider_scope`) each provider implements.
 **Invariant:** when a provider is active, LLM invocations use only that
 bundle's config root (`PROVIDER_ROOT`) — never `loop/` root, never another
-provider's tree. Only `claude-code` is real today (assets under
-`providers/claude-code/`); `providers/cursor/` is a layout stub that fails
-at load. Overseer's own "currently attached provider" state lives inside a
-Docker-only volume unreachable from a host-side tool, so this tool tracks
-its own default in the tracked `loop/.provider` file instead. Adding a
-second real provider later means filling out `providers/<id>/` to the same
+provider's tree. Real providers today: `claude-code` (`providers/claude-code/`,
+CLI `claude`) and `cursor` (`providers/cursor/`, CLI `agent`). Overseer's
+own "currently attached provider" state lives inside a Docker-only volume
+unreachable from a host-side tool, so this tool tracks its own default in
+the tracked `loop/.provider` file instead (defaults to `claude-code`).
+Adding another provider means filling out `providers/<id>/` to the same
 contract — no changes to `loop/run` or `bin/lib/steps/*.sh`. Run
-`loop/bin/check-providers` to lint that Claude-specific paths/CLIs stay
-inside the claude-code bundle.
+`loop/bin/check-providers` to lint that provider-specific CLIs/config stay
+inside their own bundles.
 
 **Context-window discipline (smart zone / dumb zone).** LLM attention over a
 single context window is uneven: instructions near the very start and very

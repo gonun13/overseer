@@ -1,28 +1,28 @@
-# Cursor provider (stub)
+# Cursor provider
 
-This bundle defines the layout a future Cursor implementation must ship.
-It is **not** implemented: selecting `LOOP_PROVIDER=cursor` fails at
-provider load with a clear message.
+Self-contained bundle for the Cursor Agent CLI (`agent`). Implements the
+same three built steps as `claude-code`: structure, research, and scope.
 
-## Required layout
+## Layout
 
 ```
 loop/providers/cursor/
-  manifest              # PROVIDER_ID, PROVIDER_CLI, PROVIDER_CONFIG_DIR, …
+  manifest              # PROVIDER_ID, PROVIDER_CLI=agent, PROVIDER_CONFIG_DIR, …
   provider.sh           # four-function contract (see below)
-  .cursor/commands/     # Cursor-native command files for each step
-    structure-request.*
-    research-request.*
-    scope-request.*
+  .cursor/
+    cli.json            # project permissions (deny Shell; allow Read/Write/WebFetch)
+    commands/
+      structure-request.md
+      research-request.md
+      scope-request.md
 ```
 
-`PROVIDER_CONFIG_DIR=.cursor` is a placeholder convention so
-`--setting-sources`-equivalent discovery (whatever Cursor uses for project
-commands) stays rooted at this bundle, never at `loop/`.
+`PROVIDER_CONFIG_DIR=.cursor` keeps project discovery rooted at this
+bundle, never at `loop/` or another provider.
 
 ## Provider contract
 
-`provider.sh` must define:
+`provider.sh` defines:
 
 | Function | Called by | Must write |
 |---|---|---|
@@ -31,15 +31,24 @@ commands) stays rooted at this bundle, never at `loop/`.
 | `provider_research` | `step_research` | `research/<id>.md`, `memory.md` |
 | `provider_scope` | `step_scope` | `scope/<id>.md` |
 
-Step scripts call only these functions. Command names, CLI flags, and
-config paths stay inside this bundle.
+## How invocations work
+
+- CLI binary: `agent` (on PATH; authenticated via `agent login` or
+  `CURSOR_API_KEY`).
+- cwd / `--workspace` is always `$PROVIDER_ROOT`.
+- Prompts are composed from the matching `.cursor/commands/*.md` body plus
+  an explicit `$1`…`$N` argument binding block. Slash-command + trailing
+  args are avoided (the agent CLI has dropped that trailing text).
+- Interactive when a TTY is attached (`structure`, always for `scope`);
+  headless `agent -p --force --trust --output-format json` otherwise
+  (`structure` without TTY, always for `research`).
+- Research passes `--add-dir` for the project workspace.
+- Step scripts never see Cursor-specific flags — only the four contract
+  functions.
 
 ## Constraints
 
 - Bash orchestration only: no Node/Python helpers under `loop/` for the
-  provider invoke path (CLI on PATH is fine).
-- Invocations must `cd` to `PROVIDER_ROOT` (this directory) so project
-  config discovery cannot pick up `providers/claude-code/.claude/` or
-  anything at the loop root.
+  provider invoke path (`agent` on PATH is fine).
 - Run `loop/bin/check-providers` after changes — it fails if Claude-specific
   paths or CLIs leak into orchestration or into this bundle.
