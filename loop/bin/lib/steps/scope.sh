@@ -3,7 +3,7 @@
 # lib/steps/request.sh for why this lives here instead of a standalone
 # script. Unlike request/research, this step is fully interactive — it's
 # called directly from loop/run's own process, which inherits the real
-# terminal the human is sitting at, so provider_scope's foreground claude
+# terminal the human is sitting at, so provider_scope's foreground interactive
 # session gets a real TTY same as if a human had typed the command by hand.
 
 # step_scope <workspace_dir> <name> <slug> <id>

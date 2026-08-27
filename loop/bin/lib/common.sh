@@ -3,7 +3,7 @@
 
 # LOOP_LIB_DIR   loop/bin/lib   — this file's own directory
 # LOOP_BIN_DIR   loop/bin       — implementation root (scripts + lib/)
-# LOOP_DIR       loop/          — tool data/config root (db/, .provider, .claude/)
+# LOOP_DIR       loop/          — tool data/config root (db/, .provider, providers/)
 LOOP_LIB_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOOP_BIN_DIR="$(CDPATH= cd -- "$LOOP_LIB_DIR/.." && pwd)"
 LOOP_DIR="$(CDPATH= cd -- "$LOOP_BIN_DIR/.." && pwd)"

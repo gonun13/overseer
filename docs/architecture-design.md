@@ -471,14 +471,20 @@ per workspace, read and updated (not just appended to) on every `research`
 run, flowing forward to every future step/request for that workspace rather
 than just the next one.
 
-**Provider abstraction.** `loop/lib/providers.sh` mirrors the shape of the
-`AgentAdapter` split in §1.1 — an id string plus a small function contract
-(`provider_check_available`, `provider_structure`, `provider_research`)
-each provider implements — but is defined independently in bash, because the
-tool cannot read Overseer's own `attached_provider` state (§2's `state.json`
-lives inside a Docker-only volume, unreachable from a host-side script).
-Only `claude-code` has a real implementation, matching this app's own
-real-vs-stub balance for `codex`/`opencode`/`github-copilot`.
+**Provider abstraction.** `loop/bin/lib/providers.sh` loads a self-contained
+bundle from `loop/providers/<id>/` (manifest + `provider.sh` + that
+provider's config tree). It mirrors the shape of the `AgentAdapter` split
+in §1.1 — an id string plus a small function contract
+(`provider_check_available`, `provider_structure`, `provider_research`,
+`provider_scope`) each provider implements — but is defined independently
+in bash, because the tool cannot read Overseer's own `attached_provider`
+state (§2's `state.json` lives inside a Docker-only volume, unreachable
+from a host-side script). **Invariant:** LLM invocations for an active
+provider use only that bundle's `PROVIDER_ROOT` for project config
+discovery — never `loop/` root, never another provider. Only `claude-code`
+has a real implementation (`loop/providers/claude-code/`); `cursor` ships
+as a failing layout stub. `loop/bin/check-providers` enforces no
+cross-provider leakage into orchestration.
 
 **Context-window discipline.** Automated prompts keep bulk content out of
 the prompt body (passed by file path, read on demand) and sandwich critical
@@ -492,9 +498,9 @@ closed automated loop with no human in it; the only two ways out are
 `decide` routing back to `scope` (3, for extra scoping) or forward to
 `commit` (8) — every other handoff is a straight, one-directional pass.
 "Phase" is reserved for a more granular, not-yet-designed concept inside a
-`plan`. Each step is meant to carry its own behavior at
-`loop/.claude/commands/<step>/` defining how to execute it — a noted
-extension point, not built.
+`plan`. Each step is meant to carry its own behavior under the active
+provider's commands tree (e.g. `loop/providers/claude-code/.claude/commands/<step>/`)
+defining how to execute it — a noted extension point, not built.
 
 **HITL vs automated execution.** `request`, `scope`, `commit`, and `review`
 are human-in-the-loop and run as interactive `claude` sessions; `research`,
@@ -506,12 +512,13 @@ its edges (`scope` in, `commit` out) plus the two endpoints (`request`,
 human-in-the-loop part is plain stdin capture, not a `claude` session, since
 there's no agent to converse with at that point.
 
-**Current scope.** `request` and `research` are implemented: `request`
-collects a raw request via stdin, then a single provider call structures it
-into `loop/db/<slug>/requests/<id>.md`; `research` then explores the actual
-project (via `--add-dir`), writes `loop/db/<slug>/research/<id>.md` as
-context for the upcoming `scope` step, and updates the shared
-`loop/db/<slug>/memory.md`. Both run as flat slash commands (not yet at
-`loop/.claude/commands/<step>/`). The other seven steps are spec-only —
-named and ordered (see [`loop/README.md`](../loop/README.md)) but not
-built.
+**Current scope.** `request`, `research`, and `scope` are implemented:
+`request` collects a raw request via stdin, then a single provider call
+structures it into `loop/db/<slug>/requests/<id>.md`; `research` then
+explores the actual project (via `--add-dir`), writes
+`loop/db/<slug>/research/<id>.md` as context for `scope`, and updates the
+shared `loop/db/<slug>/memory.md`; `scope` writes
+`loop/db/<slug>/scope/<id>.md`. All three run as flat slash commands inside
+the active provider bundle (not yet at `…/commands/<step>/`). The other six
+steps are spec-only — named and ordered (see
+[`loop/README.md`](../loop/README.md)) but not built.
