@@ -113,10 +113,12 @@ isn't. `scope` deliberately does *not* follow this dual-mode pattern — see
 its own section below.
 
 **A slash command instead of an inline prompt in the bash script.** The
-structuring prompt lives at `.claude/commands/structure-request.md`, versioned
+structuring prompt lives at
+`providers/claude-code/.claude/commands/structure-request.md`, versioned
 and reviewable on its own, with its own frontmatter-declared tool scope
 (`allowed-tools: Read, Write`) as a second, independent layer of the
 minimal-tool-surface guarantee, on top of the CLI's own `--allowedTools`.
+(Other providers keep their own command files inside their bundle.)
 
 **Markdown records instead of JSON.** A markdown file is directly usable as
 LLM context with zero parsing — a later step can `Read` it straight into a
@@ -146,19 +148,24 @@ it passed, but wrong. The jsonl append is `flock`-serialized so two
 concurrent `loop/run`/`loop/bin/clear` runs on the same slug can't
 interleave — a file-locking concern, not something to hand an LLM tool call.
 
-**Provider abstraction.** The tool must not hardcode `claude`. `bin/lib/providers.sh`
-+ `bin/lib/providers/<id>.sh` mirror the shape of Overseer's own `AgentAdapter`
-split (`packages/protocol/src/adapter.ts`) — an id string plus a small
-function contract (`provider_check_available`, `provider_structure`,
-`provider_research`, `provider_scope`) each provider implements. Only
-`claude-code` is real today, matching Overseer's own real-vs-stub balance
-(`codex`/`opencode`/`github-copilot` are catalog names with no adapter code
-anywhere in that app either). Overseer's own "currently attached provider"
-state lives inside a Docker-only volume unreachable from a host-side tool,
-so this tool tracks its own default in the tracked `loop/.provider` file
-instead. Adding a second real provider later means writing
-`bin/lib/providers/<id>.sh` implementing the same function contract — no
-changes to `loop/run` or `bin/lib/steps/*.sh`.
+**Provider abstraction.** The tool must not hardcode a specific CLI into
+orchestration. `bin/lib/providers.sh` loads a self-contained bundle from
+`providers/<id>/` (manifest + `provider.sh` + that provider's config tree),
+mirroring Overseer's own `AgentAdapter` split
+(`packages/protocol/src/adapter.ts`) — an id string plus a small function
+contract (`provider_check_available`, `provider_structure`,
+`provider_research`, `provider_scope`) each provider implements.
+**Invariant:** when a provider is active, LLM invocations use only that
+bundle's config root (`PROVIDER_ROOT`) — never `loop/` root, never another
+provider's tree. Only `claude-code` is real today (assets under
+`providers/claude-code/`); `providers/cursor/` is a layout stub that fails
+at load. Overseer's own "currently attached provider" state lives inside a
+Docker-only volume unreachable from a host-side tool, so this tool tracks
+its own default in the tracked `loop/.provider` file instead. Adding a
+second real provider later means filling out `providers/<id>/` to the same
+contract — no changes to `loop/run` or `bin/lib/steps/*.sh`. Run
+`loop/bin/check-providers` to lint that Claude-specific paths/CLIs stay
+inside the claude-code bundle.
 
 **Context-window discipline (smart zone / dumb zone).** LLM attention over a
 single context window is uneven: instructions near the very start and very
@@ -230,11 +237,12 @@ its questions.
 `plan` — a plan decomposes work into phases — and isn't designed yet.
 
 **One command per step.** Each step is meant to be executed by its own
-behavior and instructions, at `loop/.claude/commands/<step>/`, documenting/enforcing how
-that step runs. This is a noted extension point: `request`, `research`, and
-`scope` are the only steps built so far, and today they run as flat slash
-commands (`.claude/commands/structure-request.md`,
-`.claude/commands/research-request.md`, `.claude/commands/scope-request.md`)
+behavior and instructions, under the active provider's commands tree
+(for claude-code: `providers/claude-code/.claude/commands/<step>/`),
+documenting/enforcing how that step runs. This is a noted extension point:
+`request`, `research`, and `scope` are the only steps built so far, and
+today they run as flat slash commands
+(`structure-request.md`, `research-request.md`, `scope-request.md`)
 rather than in `<step>/` subdirectories.
 
 Each step reuses the same taxonomy: human input/decisions stay `.txt`,

@@ -7,7 +7,7 @@
 # steps stabilized, keeping them separate added nothing loop/run couldn't
 # already do on its own, so they were folded in here. Because loop/run is
 # plain bash running in the human's own terminal (not a nested agent
-# session), each step's own foreground claude call (structure/scope) still
+# session), each step's own foreground provider call (structure/scope) still
 # gets a real inherited TTY, exactly as if the human had invoked it by hand.
 #
 # Usage: loop/run <workspace-name> [--id <request-id>] [--file <path>]
