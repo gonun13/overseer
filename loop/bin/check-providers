@@ -14,8 +14,8 @@ err() {
   fail=1
 }
 
-CONTRACT_FNS=(provider_check_available provider_structure provider_research provider_scope)
-STEP_COMMANDS=(structure-request.md research-request.md scope-request.md)
+CONTRACT_FNS=(provider_check_available provider_structure provider_research provider_scope provider_plan provider_pick_plan)
+STEP_COMMANDS=(structure-request.md research-request.md scope-request.md plan-request.md pick-plan-request.md)
 
 # Strip comments and string refs to Overseer's packages/adapters/claude-code
 # so a path mention of that TS package is not treated as a CLI leak.
@@ -91,7 +91,7 @@ while IFS= read -r bundle; do
   done
 done < <(find "$LOOP_DIR/providers" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
 
-# --- 4. claude-code bundle has the three slash-command files ---
+# --- 4. claude-code bundle has the slash-command files ---
 cc="$LOOP_DIR/providers/claude-code"
 for cmd in "${STEP_COMMANDS[@]}"; do
   [ -f "$cc/.claude/commands/$cmd" ] || err "claude-code missing .claude/commands/$cmd"
