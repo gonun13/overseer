@@ -1,6 +1,5 @@
 # Sourced by bin/lib/providers.sh after resolving this bundle.
-# Stub only — documents the required layout; provider.sh is not implemented.
 PROVIDER_ID=cursor
-PROVIDER_CLI=cursor
+PROVIDER_CLI=agent
 PROVIDER_CONFIG_DIR=.cursor
 PROVIDER_COMMANDS_DIR=.cursor/commands

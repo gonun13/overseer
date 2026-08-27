@@ -28,10 +28,42 @@ resolve_provider_id() {
   printf 'claude-code'
 }
 
-# list_provider_bundles — prints "  - <id>" lines for every bundle dir.
-list_provider_bundles() {
-  find "$LOOP_DIR/providers" -mindepth 1 -maxdepth 1 -type d -printf '  - %f\n' 2>/dev/null | sort
+# list_provider_ids — prints one provider id per line for every valid bundle
+# (directory under providers/ that has both manifest and provider.sh).
+list_provider_ids() {
+  local d id
+  while IFS= read -r d; do
+    id=$(basename "$d")
+    [ -f "$d/manifest" ] && [ -f "$d/provider.sh" ] || continue
+    printf '%s\n' "$id"
+  done < <(find "$LOOP_DIR/providers" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
 }
+
+# list_provider_bundles — prints "  - <id>" lines for every valid bundle.
+list_provider_bundles() {
+  local id
+  while IFS= read -r id; do
+    printf '  - %s\n' "$id"
+  done < <(list_provider_ids)
+}
+
+# set_provider_id <id> — writes loop/.provider after validating the bundle
+# exists. Does not require the provider CLI to be on PATH (selection is
+# config; availability is checked at load_provider time).
+set_provider_id() {
+  local id=$1
+  local root="$LOOP_DIR/providers/$id"
+  if [ ! -f "$root/manifest" ] || [ ! -f "$root/provider.sh" ]; then
+    local available
+    available=$(list_provider_bundles)
+    [ -n "$available" ] || available="  (none found under $LOOP_DIR/providers)"
+    die "unknown provider '$id'
+Available providers:
+$available" 1
+  fi
+  printf '%s\n' "$id" > "$LOOP_DIR/.provider"
+}
+
 
 # load_provider — sources providers/<id>/{manifest,provider.sh}, asserts the
 # contract, and checks the provider is available. Sets PROVIDER_ID,
