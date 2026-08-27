@@ -48,6 +48,10 @@ fi
 
 found=0
 for slug in "${slugs[@]}"; do
+  held=$(running_get "$slug" || true)
+  if [ -n "$held" ]; then
+    log_info "running [$slug]: $(printf '%s' "$held" | jq -r '"\(.step) \(.id) (pid \(.pid), since \(.started_at))"')"
+  fi
   while IFS= read -r event; do
     [ -n "$event" ] || continue
     status=$(printf '%s' "$event" | jq -r '.status')

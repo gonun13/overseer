@@ -103,7 +103,8 @@ provider_research() {
 }
 
 # provider_scope <record_file> <research_file> <decision_file> <id> <workspace>
-#   <slug> <scoped_at> <request_ref> <research_ref>
+#   <slug> <scoped_at> <request_ref> <research_ref> <plan_file> <planned_at>
+#   <scope_ref> <workspace_dir> <memory_file>
 # Runs the /scope-request slash command under this bundle's config root.
 # Always interactive, foreground, inheriting stdio — unlike
 # provider_structure, there is no headless fallback branch: grilling the
@@ -111,22 +112,78 @@ provider_research() {
 # loop/run checks for a TTY and refuses to even load the provider without
 # one, so this function can assume it always has one.
 #
-# WebFetch/WebSearch are allowed (unlike Glob/Grep, still denied) so a live
-# design question the human raises mid-conversation — one `research` didn't
-# anticipate — can be checked against external docs on the spot, without
-# ending the scoping session to go re-run research. Still no codebase
-# re-exploration: that's what Glob/Grep staying denied enforces.
+# After writing the scope decision, the same session continues into the plan
+# step (writes plan_file) when the human is ready — Grep/Glob are allowed
+# for that planning half only as light clarification, not a second research
+# pass. WebFetch/WebSearch stay allowed for live design facts mid-scope.
 #
 # The caller never trusts this function's exit status alone —
-# scope_is_valid() independently checks the file it wrote.
+# scope_is_valid() / plan_is_present_valid() independently check the files.
 provider_scope() {
   local record_file=$1 research_file=$2 decision_file=$3 id=$4 workspace=$5
   local slug=$6 scoped_at=$7 request_ref=$8 research_ref=$9
-  local prompt="/scope-request $record_file $research_file $decision_file $id $workspace $slug $scoped_at $request_ref $research_ref"
+  local plan_file=$10 planned_at=$11 scope_ref=$12 workspace_dir=$13 memory_file=$14
+  local prompt="/scope-request $record_file $research_file $decision_file $id $workspace $slug $scoped_at $request_ref $research_ref $plan_file $planned_at $scope_ref $workspace_dir $memory_file"
 
   (cd "$PROVIDER_ROOT" && claude "$prompt" \
-    --allowedTools "Read Write AskUserQuestion WebFetch WebSearch" \
-    --disallowedTools "Bash Edit Glob Grep Task" \
+    --add-dir "$workspace_dir" \
+    --allowedTools "Read Write AskUserQuestion WebFetch WebSearch Grep Glob" \
+    --disallowedTools "Bash Edit Task" \
+    --permission-mode acceptEdits \
+    --setting-sources project)
+  local status=$?
+  if [ "$status" -ne 0 ]; then
+    echo "claude CLI exited non-zero ($status)" >&2
+    return 1
+  fi
+  return 0
+}
+
+# provider_plan <record_file> <research_file> <scope_file> <memory_file>
+#   <workspace_dir> <plan_file> <id> <workspace> <slug> <planned_at>
+#   <request_ref> <research_ref> <scope_ref>
+# Headless one-shot plan. Caller validates with plan_is_valid.
+provider_plan() {
+  local record_file=$1 research_file=$2 scope_file=$3 memory_file=$4
+  local workspace_dir=$5 plan_file=$6 id=$7 workspace=$8 slug=$9
+  local planned_at=$10 request_ref=$11 research_ref=$12 scope_ref=$13
+  local prompt="/plan-request $record_file $research_file $scope_file $memory_file $workspace_dir $plan_file $id $workspace $slug $planned_at $request_ref $research_ref $scope_ref"
+
+  local result_json
+  result_json=$(cd "$PROVIDER_ROOT" && claude -p \
+    "$prompt" \
+    --add-dir "$workspace_dir" \
+    --allowedTools "Read Grep Glob Write" \
+    --disallowedTools "Bash Edit Task WebFetch WebSearch" \
+    --permission-mode acceptEdits \
+    --setting-sources project \
+    --output-format json \
+    --no-session-persistence \
+    < /dev/null) || { echo "claude CLI exited non-zero" >&2; return 1; }
+
+  local is_error subtype
+  is_error=$(printf '%s' "$result_json" | jq -r '.is_error // false')
+  subtype=$(printf '%s' "$result_json" | jq -r '.subtype // "unknown"')
+
+  if [ "$is_error" != "false" ] || [ "$subtype" != "success" ]; then
+    printf 'planning failed: %s\n' "$(printf '%s' "$result_json" | jq -r '.result // "unknown error"')" >&2
+    return 1
+  fi
+
+  return 0
+}
+
+# provider_pick_plan <bundle_file> <result_file> <workspace_dir>
+# Interactive: analyze scoped candidates, AskUserQuestion, write pick result
+# and the chosen request's plan in the same session. Caller validates the plan.
+provider_pick_plan() {
+  local bundle_file=$1 result_file=$2 workspace_dir=$3
+  local prompt="/pick-plan-request $bundle_file $result_file $workspace_dir"
+
+  (cd "$PROVIDER_ROOT" && claude "$prompt" \
+    --add-dir "$workspace_dir" \
+    --allowedTools "Read Write AskUserQuestion Grep Glob" \
+    --disallowedTools "Bash Edit Task WebFetch WebSearch" \
     --permission-mode acceptEdits \
     --setting-sources project)
   local status=$?

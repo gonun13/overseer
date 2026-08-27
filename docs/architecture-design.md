@@ -476,7 +476,8 @@ bundle from `loop/providers/<id>/` (manifest + `provider.sh` + that
 provider's config tree). It mirrors the shape of the `AgentAdapter` split
 in §1.1 — an id string plus a small function contract
 (`provider_check_available`, `provider_structure`, `provider_research`,
-`provider_scope`) each provider implements — but is defined independently
+`provider_scope`, `provider_plan`, `provider_pick_plan`) each provider
+implements — but is defined independently
 in bash, because the tool cannot read Overseer's own `attached_provider`
 state (§2's `state.json` lives inside a Docker-only volume, unreachable
 from a host-side script). **Invariant:** LLM invocations for an active
@@ -494,31 +495,36 @@ standing convention for every step, not just the first.
 **Terminology.** The loop is made of nine **steps**, in order: `request` →
 `research` → `scope` → `plan` → `implement` → `verify` → `decide` →
 `commit` → `review`. `plan` → `implement` → `verify` → `decide` (4-7) is a
-closed automated loop with no human in it; the only two ways out are
-`decide` routing back to `scope` (3, for extra scoping) or forward to
-`commit` (8) — every other handoff is a straight, one-directional pass.
-"Phase" is reserved for a more granular, not-yet-designed concept inside a
-`plan`. Each step is meant to carry its own behavior under the active
-provider's commands tree (e.g. `loop/providers/claude-code/.claude/commands/<step>/`)
-defining how to execute it — a noted extension point, not built.
+closed automated loop with no human in it (except that `plan` may be entered
+from an interactive scope session or after an interactive pick-and-plan
+session among scoped requests); the only two ways out are `decide` routing back to `scope` (3,
+for extra scoping) or forward to `commit` (8) — every other handoff is a
+straight, one-directional pass. Inside a `plan`, work is decomposed into
+**horizontal/vertical layers**, **phases**, and **vertical tracers** (see
+[`loop/README.md`](../loop/README.md)); the plan file also carries an
+`impact` score. Each step is meant to carry its own behavior under the
+active provider's commands tree (e.g.
+`loop/providers/claude-code/.claude/commands/<step>/`) defining how to
+execute it — a noted extension point; built steps today use flat slash
+commands including `plan-request.md` and `pick-plan-request.md`.
 
 **HITL vs automated execution.** `request`, `scope`, `commit`, and `review`
-are human-in-the-loop and run as interactive `claude` sessions; `research`,
-`plan`, `implement`, `verify`, and `decide` are automated and run as single
-headless `claude -p` calls (or plain bash). This lines up with the inner-loop
-boundary above: the closed loop plus the `research` feeding it is one-shot;
-its edges (`scope` in, `commit` out) plus the two endpoints (`request`,
-`review`) are interactive. `request` is a partial exception today: its
-human-in-the-loop part is plain stdin capture, not a `claude` session, since
-there's no agent to converse with at that point.
+are human-in-the-loop and run as interactive provider sessions; `research`,
+`plan` (headless path), `implement`, `verify`, and `decide` are automated
+and run as single headless provider calls (or plain bash). Picking which
+scoped request to plan is interactive: the provider analyzes candidates,
+asks the human, then continues into `plan` in the same session.
 
-**Current scope.** `request`, `research`, and `scope` are implemented:
-`request` collects a raw request via stdin, then a single provider call
-structures it into `loop/db/<slug>/requests/<id>.md`; `research` then
-explores the actual project (via `--add-dir`), writes
+**Current scope.** `request`, `research`, `scope`, and `plan` are
+implemented: `request` collects a raw request via stdin, then a single
+provider call structures it into `loop/db/<slug>/requests/<id>.md`;
+`research` then explores the actual project (via `--add-dir`), writes
 `loop/db/<slug>/research/<id>.md` as context for `scope`, and updates the
 shared `loop/db/<slug>/memory.md`; `scope` writes
-`loop/db/<slug>/scope/<id>.md`. All three run as flat slash commands inside
-the active provider bundle (not yet at `…/commands/<step>/`). The other six
-steps are spec-only — named and ordered (see
+`loop/db/<slug>/scope/<id>.md` and continues into planning in the same
+interactive session when it can; `plan` writes
+`loop/db/<slug>/plan/<id>.md` (also via headless `step_plan` or after a
+pick among scoped requests). A per-slug `running.json` lease surfaces
+in-flight plan/scope work to other terminals. The other five steps are
+spec-only — named and ordered (see
 [`loop/README.md`](../loop/README.md)) but not built.

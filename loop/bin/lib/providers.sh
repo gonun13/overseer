@@ -8,7 +8,7 @@
 # (manifest + provider.sh + that provider's own config tree). Orchestration
 # never references a specific CLI or config layout.
 
-# resolve_provider_id — env override > tracked .provider file > fallback.
+# resolve_provider_id — env override > local .provider file > fallback.
 resolve_provider_id() {
   if [ -n "${LOOP_PROVIDER:-}" ]; then
     printf '%s' "$LOOP_PROVIDER"
@@ -64,7 +64,6 @@ $available" 1
   printf '%s\n' "$id" > "$LOOP_DIR/.provider"
 }
 
-
 # load_provider — sources providers/<id>/{manifest,provider.sh}, asserts the
 # contract, and checks the provider is available. Sets PROVIDER_ID,
 # PROVIDER_ROOT, and PROVIDER_CONFIG_ROOT on success.
@@ -105,7 +104,7 @@ $available" 1
   source "$script"
 
   local fn
-  for fn in provider_check_available provider_structure provider_research provider_scope; do
+  for fn in provider_check_available provider_structure provider_research provider_scope provider_plan provider_pick_plan; do
     declare -F "$fn" >/dev/null || die "provider '$id' is missing function '$fn' ($script)" 1
   done
 

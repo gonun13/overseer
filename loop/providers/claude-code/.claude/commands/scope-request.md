@@ -1,16 +1,15 @@
 ---
-description: Interactively scope a dev-loop request with the human developer and write a decision record.
-argument-hint: <record-file> <research-file> <decision-file> <id> <workspace> <slug> <scoped-at> <request-ref> <research-ref>
-allowed-tools: Read, Write, AskUserQuestion, WebFetch, WebSearch
+description: Interactively scope a dev-loop request with the human developer, write a decision record, then continue into the plan step in the same session.
+argument-hint: <record-file> <research-file> <decision-file> <id> <workspace> <slug> <scoped-at> <request-ref> <research-ref> <plan-file> <planned-at> <scope-ref> <workspace-dir> <memory-file>
+allowed-tools: Read, Write, AskUserQuestion, WebFetch, WebSearch, Grep, Glob
 ---
 
 You are scoping exactly one feature/fix/change request for the "dev loop"
 tool, together with the human developer who is sitting at this terminal
-right now. This is the last human checkpoint before an automated
-`plan → implement → verify → decide` loop runs unattended on whatever you
-and the human decide here — so what you resolve in this conversation is
-what gets built. Get the important things confirmed; don't waste the
-human's attention on things you can just decide well.
+right now. After the scope decision is written, you continue in this same
+session into the **plan** step for that request — so the human leaves with
+both a scope decision and a plan. Get the important things confirmed; don't
+waste the human's attention on things you can just decide well.
 
 Arguments, positional, in this order:
 - $1 — absolute path to the request's structured record (read-only input)
@@ -22,15 +21,20 @@ Arguments, positional, in this order:
 - $7 — scoped_at, ISO 8601 UTC
 - $8 — request_ref, a relative path string to embed verbatim (do not alter it)
 - $9 — research_ref, a relative path string to embed verbatim (do not alter it)
+- $10 — absolute path to write the plan record to
+- $11 — planned_at, ISO 8601 UTC (embed verbatim in the plan frontmatter)
+- $12 — scope_ref, relative path string for the plan frontmatter (embed verbatim)
+- $13 — absolute path to the project workspace (explore only if plan needs it)
+- $14 — absolute path to memory.md (may be missing; read-only)
 
 ## Step 1 — Read, don't explore
 
 Read $1 (title, summary, description, kind, acceptance criteria) and $2
 (relevant areas/files, key findings, risks/unknowns, open questions the
 research step flagged for you). That is your context. Do not use Glob or
-Grep, and do not go looking through the codebase for anything beyond these
-two files — research already did that exploration; your job now is to turn
-what it found into a bounded, decided scope with the human.
+Grep yet, and do not go looking through the codebase for anything beyond
+these two files — research already did that exploration; your job in Steps
+1–3 is to turn what it found into a bounded, decided scope with the human.
 
 The one exception: if a live design question comes up during Step 2 that
 hinges on external, factual information research didn't cover (e.g. a
@@ -90,7 +94,7 @@ exactly this moment.
 The human may also volunteer constraints or answer things you hadn't asked
 yet — track that, and don't re-ask something already answered.
 
-## Step 3 — Confirm and write
+## Step 3 — Confirm and write scope
 
 Once you've resolved what you need (whether that's after 3 questions or
 20), summarize in plain text what you're about to record — in scope, out of
@@ -164,3 +168,75 @@ explicitly chose to carry forward rather than eliminate — omit if none>
 ## Open Follow-ups
 <anything left genuinely unresolved because you hit the 20-question ceiling
 or the human deferred it — omit this section if there's nothing left open>
+
+## Step 4 — Plan in this same session
+
+Immediately after the scope Write succeeds, plan the work. Tell the human
+you are moving to the plan step. You may briefly confirm the phase shape if
+something is ambiguous; do not re-open scoping.
+
+**Vocabulary:** horizontal layers (architectural strata), vertical layers
+(cross-cutting sequencing constraints — only when needed), phases (ordered
+batches), vertical tracers (thin end-to-end slices, ids like `p1.t1`).
+Layers = map; tracers = routes; phases = waves.
+
+1. If $14 exists, read it. Use Grep/Glob/Read on $13 only when scope/research
+   leave a concrete path unclear — not a full re-research.
+2. Prefer few phases; one phase for tiny/audit/single-surface work.
+3. Each tracer: goal, owned paths, verify check; `parallel: true` only with
+   disjoint file ownership in the same phase.
+4. Score **impact** (integer >= 1, lower = smaller blast radius):
+   1 docs/audit-only; 2 single leaf; 3 one feature vertical; 4 cross-cutting
+   in one area; 5 multi-package/schema/auth; 6+ rare.
+5. Call Write exactly once on $10 with the plan document below — no code
+   fences, no commentary. Fixed frontmatter from arguments:
+   - `id:` ← $4
+   - `workspace:` ← $5
+   - `slug:` ← $6
+   - `planned_at:` ← $11
+   - `request_ref:` ← $8
+   - `research_ref:` ← $9
+   - `scope_ref:` ← $12
+   - `impact:` / `phase_count:` your integers (>= 1)
+
+---
+id: $4
+workspace: $5
+slug: $6
+status: planned
+step: plan
+planned_at: $11
+request_ref: $8
+research_ref: $9
+scope_ref: $12
+impact: <n>
+phase_count: <n>
+---
+
+# Plan: <short label derived from the scope title>
+
+## Impact
+<score and one paragraph: blast radius>
+
+## Layers
+### Horizontal
+- <layer> — <why>
+
+### Vertical
+- <layer> — <why>
+(omit Vertical if none)
+
+## Implementation Order
+
+### Phase 1 — <name>
+#### Tracer `p1.t1`
+- Goal: <one line>
+- Files/areas: <owned paths>
+- Verify: <check>
+- Parallel: false
+
+## Out of Plan
+<echo scoped-out temptations>
+
+## Risks / Sequencing Notes
+<or omit if trivial>
