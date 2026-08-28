@@ -19,8 +19,12 @@ usage: loop/bin/clear <workspace-name> (--id <request-id> | --all) [--yes]
 
 Stops and deletes open (not yet cleared) requests for
 workspace/<workspace-name>. For each one: deletes every artifact it owns
-(raw text, request record, research, scope, plan) and appends a "cleared"
-event to db/<slug>/index.jsonl.
+(the raw text, the human's sign-off, and each step's record), takes down its
+QA worktree, prunes the loop's metadata from its branch so it leaves the
+train, and appends a "cleared" event to db/<slug>/index.jsonl.
+
+The branch itself and any open pull request are left alone — deleting work
+you may still want is not this command's call. It says which they were.
 
 --id <id>   clear exactly one request
 --all       clear every open request for this workspace
@@ -37,7 +41,7 @@ fi
 
 require_cmd jq
 
-name="" id="" all=0 yes=0
+name="" id="" all=0 yes=0 repo="" branch=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --id)
@@ -133,6 +137,19 @@ for event in "${targets[@]}"; do
   title=$(printf '%s' "$event" | jq -r '.title')
   raw_ref=$(printf '%s' "$event" | jq -r '.raw_ref')
   record_ref=$(printf '%s' "$event" | jq -r '.record_ref')
+
+  # Take the request out of the train before its records go. A cleared request
+  # that kept its branch metadata would stay the base every later request is
+  # stacked on, forever, with nothing left to explain why.
+  repo="$WORKSPACE_ROOT/$name"
+  if [ -d "$repo" ] && git_is_repo "$repo"; then
+    branch=$(git_request_branch "$repo" "$id")
+    if [ -n "$branch" ]; then
+      "$LOOP_BIN_DIR/worktree" "$name" "$id" --remove >/dev/null 2>&1 || true
+      git_unset_branch_meta "$repo" "$branch"
+      log_info "branch '$branch' is no longer tracked by the loop — it and any pull request are still there"
+    fi
+  fi
 
   clear_request "$slug" "$id" "$step" "$title" "$raw_ref" "$record_ref"
   log_info "cleared $id"

@@ -36,7 +36,9 @@ an altered one is rejected and the step has to be redone.
    every run, in that order. A red result is recorded and the next check still
    runs. Nothing here exits early.
 2. **Change nothing.** No source edits, no fixes, no dependency additions, no
-   version control — not a commit, not a stash, not a revert. Build output,
+   version control — not a commit, not a stash, not a revert, and not a
+   checkout: you are on this request's own branch and it stays that way.
+   Committing is the `commit` step's business, two steps away. Build output,
    caches and installed dependencies that a test command creates on its own are
    fine; a tracked source file is not. If a check needs a scratch file, put it
    outside `workspace_dir` and say so.

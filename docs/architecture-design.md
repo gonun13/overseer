@@ -463,9 +463,10 @@ shell state machine, the orchestration the agent is better at.
 **The bash surface.** What bash does own is everything a language model should
 not improvise: allocating request ids and paths, stamping timestamps,
 validating what a step wrote, appending to the log, and serializing access to
-the project's working tree. That is eight commands — `list`, `new`, `step`,
-`record`, `tracers`, `phase`, `clear`, `provider` (plus `check`) — each
-taking a workspace name, printing JSON to stdout and human text to stderr. The
+the project's working tree. That is fourteen commands — `list`, `new`, `step`, `record`, `tracers`,
+`phase`, `land`, `publish`, `train`, `worktree`, `signoff`, `close`, `clear`,
+`provider` (plus `check`) — each taking a workspace name, printing JSON to
+stdout and human text to stderr. The
 overseer drives them and acts on their output. `loop/bin/step` hands a step one
 **named** JSON context (inputs, output path, and the literal frontmatter block
 to copy); `loop/bin/record` checks the written artifact against the same values
@@ -476,7 +477,7 @@ no human runs as a subagent of the overseer, not as a second bash code path.
 
 | Kind | Format | What goes here |
 |---|---|---|
-| Human intentions/decisions | `.txt` | Verbatim human input — a raw request now; later, a review decision |
+| Human intentions/decisions | `.txt` | Verbatim human input — a raw request, and a review sign-off |
 | Automated operation log | `.jsonl` | Append-only record of what the automation did, one line per event |
 | Everything else | `.md` | Agent-authored substantive content, meant to flow forward as context for the next step — or double as skill/subagent/command material |
 
@@ -533,41 +534,86 @@ plus one addition, because routing is the overseer's own job. `scope` is a
 conversation, so the overseer runs it in its own session; it runs `decide`
 itself too, since deciding what happens next is the one thing an orchestrator
 must not delegate, and `steps/decide.md` bounds what it may read to keep that
-cheap. `request`, `research`, `plan`, `implement` and `verify` need nobody, so
-each is delegated to a subagent that reads its instruction file and reports one
-line back. `commit` and `review`, both unbuilt, are human-in-the-loop.
+cheap. `request`, `research`, `plan`, `implement`, `verify` and `commit` need nobody,
+so each is delegated to a subagent that reads its instruction file and reports
+one line back. `review` splits: the overseer runs it, because it ends in the
+human's decision, but delegates the audit of the whole request's diff to a
+subagent — so it is the second `steps/*.md` the overseer reads, alongside
+`scope.md`.
 
-**The exclusive phase.** `implement`, `verify` and `decide` take the project's
-working tree, so exactly one request may be in that phase per workspace — two
-of them editing the same tree is an unrecoverable conflict. Bash enforces it
-rather than the overseer: `loop/bin/step` claims `db/<slug>/implement.lock`
-(two lines: the holding request's id, and what that claim has recorded) before
-handing over a context and refuses
-when another request holds it, and `loop/bin/record` refuses a step whose claim
-has lapsed. Unlike the session lease it outlives the session on purpose, so a
-restarted overseer finds the tree still owned. A request holds it for its whole
-stay in the cycle, not for one lap: `decide` turns the cycle without handing the
-tree back, because the changes are still there and still that request's. Only
-`commit` would end the phase, and `commit` is unbuilt, so a request `decide`
-routes there **halts** that workspace — the overseer reports why and offers to
-exit, rather than offering other work in front of a change nobody has
-committed. The lock also enforces order within a lap: `loop/bin/step` turns
-away a request that has already recorded that step under its current claim —
-`record` marks each one it commits on the lock's second line — and tells it
-which step comes next instead, because a run nothing has checked must not be
-built on. `decide` then clears that line, which is what lets the same request
-take another lap. The marker is scoped to the claim, so a failed `record` is
-still retryable. The exception is a `decide` that routed to `commit`: its marks
-stay, since re-running it would only re-judge work already judged.
+**The exclusive phase.** `implement`, `verify`, `decide` and `commit` take the
+project's working tree, so exactly one request may be in that phase per
+workspace — two of them editing the same tree is an unrecoverable conflict.
+Bash enforces it rather than the overseer: `loop/bin/step` claims
+`db/<slug>/implement.lock` (two lines: the holding request's id, and what that
+claim has recorded) before handing over a context and refuses when another
+request holds it, and `loop/bin/record` refuses a step whose claim has lapsed.
+Unlike the session lease it outlives the session on purpose, so a restarted
+overseer finds the tree still owned. A request holds it for its whole stay in
+the cycle, not for one lap: `decide` turns the cycle without handing the tree
+back, because the changes are still there and still that request's.
+
+`loop/bin/land` ends the phase — not `record commit`. Recording a commit means
+the artifact was written and validated; the repository has not moved, and
+letting another request in there would cut its branch off a tree still holding
+uncommitted work. `review` is outside the phase entirely: it reads a throwaway
+`git worktree` at the request's own branch, so a request under review never
+blocks the next one from starting, which is the whole point of releasing at
+`land`. The lock also enforces order within a lap: `loop/bin/step` turns away a
+request that has already recorded that step under its current claim — `record`
+marks each one it commits on the lock's second line — and tells it which step
+comes next instead, because a run nothing has checked must not be built on.
+`decide` then clears that line, which is what lets the same request take
+another lap. The marker is scoped to the claim, so a failed `record` is still
+retryable. The exception is a `decide` that routed to `commit`: its marks stay,
+since re-running it would only re-judge work already judged.
 `loop/bin/phase --release` and `loop/bin/clear` are administrative cleanup
 outside a session; neither marks anything verified.
 
-**Current scope.** Everything up to `decide` is implemented — `request`,
-`research`, `scope`, `plan`, `implement`, `verify`, `decide`: `request`
+**Nothing is public until a human approves it.** A request's work moves in
+three separately-refusable stages: `land` commits it to a local branch,
+`publish` pushes that branch and opens the pull request, `close` merges it.
+Only the last two are visible to anyone else, and `publish` is refused until a
+recorded `review` says the human approved the work — a `rejected` review
+publishes nothing at all.
+
+That ordering is why `review` reads a local branch rather than a pull request.
+A review that runs after the pull request is open is a formality: the mistake
+is already public, and withdrawing it is its own announcement. Auditing a local
+branch makes the human's approval the act that publishes. The cost is that the
+`commit` step writes a pull-request title and body that may never be used —
+cheap, and it is `review` that most wants them, since a body describing what
+changed and what to look at is exactly a reviewer's briefing.
+
+**The train, and where branch metadata lives.** Past `commit` several requests
+are alive at once, each on its own branch with a pull request open. They do not
+collide because every request's branch is cut off the one in front of it — a
+train of stacked branches ending at the default branch. `loop/bin/step` cuts it
+at *phase entry* rather than at commit, so a request's diff is exactly its own
+work against exactly the tree it was written on, and a dirty tree is refused
+there because whatever is in it belongs to somebody else.
+
+That chain is stored in the workspace repo's own `.git/config` —
+`branch.<b>.looprequest`, `.loopbase`, `.looppr` — which is **the one place the
+tool writes outside `db/`**, and a deliberate exception to the rule stated
+above. The rule exists so the tool's bookkeeping is never mistaken for project
+source or committed into someone's app repo; `.git/config` is neither tracked
+nor committable, and per-branch metadata is where git itself keeps
+`branch.<b>.remote`. A table in `db/` would instead be a cache of git state
+that goes stale whenever a branch is touched outside the loop. `loop/bin/train`
+is the only reader, so the overseer never runs git to find out where things
+stand. `loop/bin/close` prunes those keys once the work has landed, which is
+the whole of how a merged request stops being anyone's base.
+
+**Current scope.** All nine steps are implemented — `request`, `research`,
+`scope`, `plan`, `implement`, `verify`, `decide`, `commit`, `review`: `request`
 captures raw text via `loop/bin/new` and structures it
 into `loop/db/<slug>/requests/<id>.md`; `research` explores the actual project,
 writes `loop/db/<slug>/research/<id>.md` as context for `scope`, and rewrites
-the shared `loop/db/<slug>/memory.md`; `scope` writes
+the shared `loop/db/<slug>/memory.md`; `scope` grills the human, first establishing that the work will change files
+at all — a request that changes none is an audit rather than a code change, and
+`scope` offers to take it out of the loop rather than spend a whole cycle
+dead-ending at `land`, which is only the backstop for it — and writes
 `loop/db/<slug>/scope/<id>.md`; `plan` writes `loop/db/<slug>/plan/<id>.md`;
 `implement` builds one tracer group — test-first where the project allows it —
 and rewrites `loop/db/<slug>/implement/<id>.md`, a cumulative record whose
@@ -588,12 +634,23 @@ carrying a `route` that bash validates against a fixed set and `loop/bin/list`
 surfaces, so the next action survives the overseer being restarted mid-cycle.
 That record is appended to rather than rewritten: the sequence of decisions is
 how `decide` sees it has already sent the same group back twice, which is the
-rule that escalates a stuck group to a re-plan instead of a third rework. A
-per-slug `running.json` lease surfaces an active overseer session to other
-terminals. `commit` and `review` are spec-only — named and ordered (see
-[`loop/README.md`](../loop/README.md)) but not built. Adding one is a row in
-`bin/lib/db.sh`'s `LOOP_STEPS` table plus a `loop/steps/<step>.md`, and a name
-in `LOOP_EXCLUSIVE_STEPS` if it takes the working tree.
+rule that escalates a stuck group to a re-plan instead of a third rework. `commit` writes the commit message and the pull-request body from the records
+and the real diff into `loop/db/<slug>/commit/<id>.md`, and runs no git at all;
+`loop/bin/land` then stages, commits it to the request's branch and releases
+the phase, skipping the commit if it already happened so an interrupted run is
+retried by rerunning it. It appends a `landed` event of its own, which is what
+distinguishes "the record was written" from "the work is committed" after a
+crash between the two. `land` is **local**: nothing is pushed. `review` audits
+the whole request's diff for security and performance in a delegated subagent,
+walks the operator through manual QA in a throwaway `git worktree` at that
+request's branch, and records the outcome they chose — captured first,
+verbatim, by `loop/bin/signoff` into the second of the two `.txt` kinds.
+`loop/bin/publish` pushes the branch and opens the pull request, and is refused
+unless that review recorded `approved` or `followups`. `loop/bin/close` then
+ends the request once the pull request has landed. A per-slug `running.json` lease surfaces an active overseer
+session to other terminals. Adding a step is a row in `bin/lib/db.sh`'s
+`LOOP_STEPS` table plus a `loop/steps/<step>.md`, and a name in
+`LOOP_EXCLUSIVE_STEPS` if it takes the working tree.
 
 **The tool grant is sized for `implement`, not the overseer.** It is the only
 step that edits the project, `verify` is the other that runs it, and a subagent

@@ -2,7 +2,8 @@
 # Print the context for one step of one request: every path, ref, and
 # frontmatter value that step needs, named. Nearly pure — it creates the slug's
 # directories, and for a step that takes the working tree it claims the
-# workspace's exclusive-phase lock before handing the context over.
+# workspace's exclusive-phase lock and puts the tree on that request's own
+# branch before handing the context over.
 #
 # Usage: loop/bin/step <workspace-name> <request-id> <step> [--tracer <ids>]
 set -euo pipefail
@@ -32,18 +33,27 @@ same values, so anything altered here is rejected there.
           `loop/bin/tracers <ws> <id> --next` prints exactly what to pass.
           Omit it and the step picks the next pending group itself. Those
           steps also claim the workspace's exclusive-phase lock here: one
-          request owns the working tree at a time, and loop/bin/phase
-          hands it on.
+          request owns the working tree at a time, and loop/bin/land
+          hands it back when the work is committed.
+
+Taking the exclusive phase also puts the working tree on the branch that
+request owns, cutting it off the tip of the train (loop/bin/train) the first
+time. That is why a request is refused entry with a dirty tree: its branch is
+cut at that moment, and anything uncommitted would ride along into it and into
+its pull request.
 
 Exit codes: 0 ok, 1 general/validation failure, 2 workspace not found,
 3 the exclusive phase is unavailable — another request holds it, or this
-  request has already recorded this step on the current lap of the cycle.
+  request has already recorded this step on the current lap of the cycle,
+4 the workspace is not a git repository, or has no origin remote,
+5 the working tree is not clean, so the request cannot enter the phase.
 USAGE
 }
 
 require_cmd jq
+require_cmd git
 
-name="" id="" step="" tracers="" held="" onward=""
+name="" id="" step="" tracers="" held="" onward="" already_held=0 kind="" title="" rc=0
 args=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -82,12 +92,16 @@ if step_is_exclusive "$step"; then
   # still be retried, and releasing the phase clears the slate.
   if [ "$(impl_lock_holder "$slug")" = "$id" ] && impl_lock_recorded "$slug" "$step"; then
     onward=$(next_exclusive_step "$step")
-    if [ "$onward" = commit ]; then
-      die "'$step' has already run for $id, and it routed the request to 'commit'
-'commit' is not built, so nothing can take the work from here — the loop for
-'$name' is halted at the end of the cycle by design, not blocked on something
-you can retry. $LOOP_BIN_DIR/phase $name reports the state; clearing the
-request is what ends it." 3
+    if [ -z "$onward" ]; then
+      # `commit` recorded but the phase is still held, so `land` has not run:
+      # the artifact is committed and the repo has not moved. Say the recovery
+      # rather than the refusal — this is the one half-failure in the phase
+      # that leaves a request stranded with nothing obvious to type.
+      die "'commit' has already recorded for $id, but its work has not been pushed
+The record is committed; the repository has not moved. Committing, pushing,
+opening the pull request and handing the working tree back is a separate verb,
+so that a failed push leaves a retryable state rather than an unlogged one:
+  $LOOP_BIN_DIR/land $name $id" 3
     fi
     die "'$step' has already recorded for $id — '$onward' is what comes next
 Each of $LOOP_EXCLUSIVE_STEPS runs once per lap of the cycle, in that order:
@@ -95,11 +109,32 @@ Each of $LOOP_EXCLUSIVE_STEPS runs once per lap of the cycle, in that order:
 Rerun '$step' only after 'decide' has routed this request back for another
 lap. $LOOP_BIN_DIR/phase $name reports the state." 3
   fi
+  # Whether this request already owned the tree decides one thing only: a dirty
+  # tree is expected of a request mid-phase and refused of one entering it.
+  already_held=0
+  [ "$(impl_lock_holder "$slug")" = "$id" ] && already_held=1
+
   if ! held=$(impl_lock_claim "$slug" "$id" 2>&1); then
     die "request $held already holds the exclusive phase for '$name'
 Only one request at a time may run $LOOP_EXCLUSIVE_STEPS, so two of them
 cannot edit the same working tree. Finish or hand the phase on first:
-  $LOOP_BIN_DIR/phase $name --release" 3
+  $LOOP_BIN_DIR/land $name $held        # if its work is ready to commit
+  $LOOP_BIN_DIR/phase $name --release   # to take it back by hand" 3
+  fi
+
+  # Put the tree on this request's branch, cutting it off the train's tip the
+  # first time. A request that cannot get onto its branch must not be left
+  # holding the tree, so a failure hands the claim straight back — but only
+  # when this call is what took it, never when the request already had it.
+  kind=$(record_frontmatter_get "$(artifact_path "$slug" request "$id")" kind)
+  title=$(record_title "$(artifact_path "$slug" request "$id")")
+  set +e
+  git_phase_enter "$workspace_dir" "$name" "$id" "$kind" "$title" "$already_held" >/dev/null
+  rc=$?
+  set -e
+  if [ "$rc" -ne 0 ]; then
+    [ "$already_held" -eq 1 ] || impl_lock_release "$slug"
+    exit "$rc"
   fi
 elif [ -n "$tracers" ]; then
   die "--tracer applies only to $LOOP_EXCLUSIVE_STEPS, not '$step'" 1

@@ -31,13 +31,51 @@ context. Do not go looking through the codebase beyond these two files —
 research already did that exploration; your job is to turn what it found into a
 bounded, decided scope with the human.
 
-The one exception: if a live design question comes up in Step 2 that hinges on
+The one exception: if a live design question comes up in Step 3 that hinges on
 external, factual information research didn't cover (e.g. a library's current
 documented API), you may use WebSearch/WebFetch to check it on the spot rather
 than guessing. A narrow fallback for a genuine gap — never a substitute for
 reading the two files first.
 
-## Step 2 — Grill the human (at most 20 questions)
+## Step 2 — Check this belongs in the loop
+
+Before you spend a single question on *how* to do the work, settle whether the
+loop should be doing it at all. **This loop delivers code changes.** Every step
+after this one assumes there will be a diff: `implement` writes it, `verify`
+runs it, `commit` describes it, and `land` commits it. A request that changes
+no file has nothing for any of them to work on, and dead-ends at `land` with
+nothing to commit — after a full plan/implement/verify/decide cycle has been
+spent on it.
+
+So ask yourself, from the request and the research: **when this is done, which
+files under `workspace_dir` will be different?**
+
+If you cannot name any, the request is an audit, a review, a recommendation, an
+investigation, or a question. Those are real and often valuable — they are just
+not this loop's job, and an agent asked directly answers them in one pass
+instead of seven steps. Say so, plainly, and put it to the human as a choice:
+
+1. **Take it out of the loop** — they get the answer from an agent directly,
+   and the request is cleared. Recommend this when the request is genuinely a
+   question.
+2. **Reshape it into a change** — the audit is the means, not the end, and what
+   they actually want is the edit it implies ("remove the skills that don't
+   belong" rather than "review whether the skills belong"). Scope *that*, and
+   carry on to Step 3.
+3. **Keep it as-is anyway** — they want the written record in `db/` and accept
+   that it commits nothing. Carry on to Step 3, and say in `## Out of Scope`
+   that this produces no code change, so nobody is surprised at `land`.
+
+If they take option 1, **stop here and write nothing.** Do not create the scope
+record. Nothing has been recorded for this request yet, so leaving it unwritten
+costs nothing — report back that the request is audit-only and the human chose
+to take it out of the loop, and the overseer will clear it.
+
+A request that plainly changes files needs none of this. Do not put the
+question to the human when the answer is obvious — that is a wasted turn, and
+this step already spends enough of their attention.
+
+## Step 3 — Grill the human (at most 20 questions)
 
 Have a real conversation. This is not a form to fill in — ask one thing at a
 time, listen to the answer, and let it change what you ask next (an answer may
@@ -85,7 +123,7 @@ your question budget — they were flagged for exactly this moment.
 The human may also volunteer constraints or answer things you hadn't asked
 yet — track that, and don't re-ask something already answered.
 
-## Step 3 — Confirm and write
+## Step 4 — Confirm and write
 
 Once you've resolved what you need — whether that took 3 questions or 20 —
 summarize in plain text what you're about to record (in scope, out of scope,
@@ -95,8 +133,8 @@ confirmation does not count against the 20-question budget.
 Then call Write exactly once, targeting `output_file`, with this document and
 nothing else — no code fences, no commentary before or after. Every `{{…}}` is
 a value from the step context; substitute it verbatim. `questions_asked` is the
-number of questions you actually put to the human in Step 2 (an integer, 0-20 —
-never counting the Step 3 confirmation).
+number of questions you actually put to the human in Step 3 (an integer, 0-20 —
+never counting the Step 4 confirmation).
 
 ---
 id: {{frontmatter.id}}
@@ -117,6 +155,12 @@ questions_asked: <n>
 
 ## In Scope
 - <bullet>
+
+## Files this will change
+- `<path or area>` — <what changes there>
+<the concrete answer to Step 2, carried forward: what `implement` will edit and
+`commit` will describe. Write `none — this request produces no code change` only
+if the human chose option 3 in Step 2.>
 
 ## Out of Scope
 <explicitly deferred or rejected, each with a one-line why when it isn't

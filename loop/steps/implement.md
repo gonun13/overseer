@@ -98,8 +98,10 @@ an altered one is rejected and the step has to be redone.
    genuinely must touch a file no tracer in the group owns, make the smallest
    possible change and record it under `## Deviations`.
 10. **Do not touch version control.** No commit, no branch, no stash, no revert,
-   no reset. Leave the working tree dirty — committing is a later step, and the
-   human wants to see what you did. Write nothing under the loop's own `db/`
+   no reset. You are already on this request's own branch — `loop/bin/step` cut
+   it off the tip of the train when the request took the working tree — so stay
+   on it and leave the tree dirty. Committing is the `commit` step, where bash
+   runs git rather than an agent. Write nothing under the loop's own `db/`
    except `output_file`.
 
 ## Output

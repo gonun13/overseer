@@ -23,15 +23,20 @@ On failure nothing is recorded, a per-key actual-vs-expected dump goes to
 stderr, and the artifact is left on disk to inspect or overwrite — rerun the
 step, then run this again.
 
-For a step that takes the working tree (implement, verify, decide) the
-request must still hold the workspace's exclusive-phase lock — the lock is
-what loop/bin/step granted it. Recording does not release it: the rest of
-that phase inherits the same claim. Recording a `decide` whose route is not
-`commit` clears the claim's recorded steps, so the request may take another
-implement/verify/decide lap on the same tree.
+For a step that takes the working tree (implement, verify, decide, commit)
+the request must still hold the workspace's exclusive-phase lock — the lock
+is what loop/bin/step granted it. Recording never releases it: the rest of
+that phase inherits the same claim, and the tree stays owned until
+loop/bin/land has actually committed the work. Recording a `decide` whose
+route is not `commit` clears the claim's recorded steps, so the request may
+take another implement/verify/decide lap on the same tree.
+
+Recording a `review` requires the human's sign-off to already be on disk
+(loop/bin/signoff) and takes down that request's QA worktree.
 
 Exit codes: 0 recorded, 1 validation/general failure, 2 workspace not found,
-3 the exclusive phase is not held by this request.
+3 the exclusive phase is not held by this request,
+6 the review has no sign-off from the human yet.
 USAGE
 }
 
@@ -63,6 +68,21 @@ Start it properly first:
   fi
 fi
 
+# A review record transcribes the human's decision, so their own words have to
+# exist before it can be believed. `loop/bin/step` already refuses to hand out
+# a review context without them — this is the second half of the same rule,
+# for a record written from a context obtained earlier.
+if [ "$step" = review ]; then
+  signoff_file=$(artifact_path "$slug" signoff "$id")
+  if [ ! -s "$signoff_file" ] || [ -z "$(tr -d '[:space:]' < "$signoff_file")" ]; then
+    die "'review' for $id was not recorded: the human has not signed off
+A review record states an outcome the human chose, so their words go on disk
+first — verbatim, before anything structures them, exactly as a raw request
+does. Capture them, then record:
+  $LOOP_BIN_DIR/signoff $name $id" 6
+  fi
+fi
+
 artifact_validate "$slug" "$name" "$id" "$step" \
   || die "'$step' for $id was not recorded — see the mismatches above" 1
 
@@ -86,7 +106,7 @@ append_event "$slug" "$id" "$at" "$step" "$event" "$status" "$title" "$raw_ref" 
 
 # Note it against the claim, so the same step cannot run twice under it: that
 # is what keeps implement -> verify -> decide in order inside one lap.
-route=""
+route="" signoff_file=""
 if step_is_exclusive "$step"; then
   impl_lock_mark "$slug" "$step"
 fi
@@ -102,8 +122,20 @@ if [ "$step" = decide ]; then
   [ "$route" = commit ] || impl_lock_clear_marks "$slug"
 fi
 
+# A recorded commit does not end the phase — `loop/bin/land` does, once the
+# work is actually committed and pushed. Letting another request in here would
+# cut its branch off a tree still holding uncommitted changes.
+outcome=""
+if [ "$step" = review ]; then
+  outcome=$(record_frontmatter_get "$file" outcome)
+  # The QA worktree existed for this review and nothing else.
+  "$LOOP_BIN_DIR/worktree" "$name" "$id" --remove >/dev/null 2>&1 || true
+fi
+
 jq -n \
   --arg id "$id" --arg step "$step" --arg status "$status" \
   --arg title "$title" --arg ref "$record_ref" --arg route "$route" \
+  --arg outcome "$outcome" \
   '{recorded:true, id:$id, step:$step, status:$status, title:$title, ref:$ref}
-   + (if $route == "" then {} else {route:$route} end)'
+   + (if $route == "" then {} else {route:$route} end)
+   + (if $outcome == "" then {} else {outcome:$outcome} end)'

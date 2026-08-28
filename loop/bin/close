@@ -1,0 +1,168 @@
+#!/usr/bin/env bash
+# Close a request whose pull request has landed: drop its branch out of the
+# train and append the terminal event.
+#
+# A request stops affecting the loop when its work is in the default branch —
+# until then it stays the base that later requests are stacked on, because
+# their changes were written on top of it. Closing is what prunes it, and it is
+# a deliberate verb rather than something inferred, because "has this landed"
+# has two possible answers and only one of them is reliable (see below).
+#
+# Usage: loop/bin/close <workspace-name> <request-id> [--merge] [--abandon] [--yes]
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$LOOP_BIN_DIR/lib/db.sh"
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: loop/bin/close <workspace-name> <request-id> [--merge] [--abandon] [--yes]
+
+Ends a request: prunes the loop's metadata from its branch so it leaves the
+train, deletes the local branch, and appends a `closed` event. From then on no
+other request bases on it.
+
+With no flag it only closes a request whose work has already landed on the
+default branch — fetch first, then check. That is the "somebody merged it in
+the browser" path.
+
+--merge    merge the pull request first, with `gh pr merge --merge`.
+           A real merge commit, never a squash or a rebase: those rewrite the
+           commits, so the branch never becomes an ancestor of the default
+           branch and the stacked requests behind it lose their footing.
+--abandon  close without landing — the work is dropped. The branch leaves the
+           train and the pull request is left open for a human to deal with.
+           Requires --yes.
+--yes      skip the confirmation prompt (required in a non-interactive shell)
+
+The branch is deleted locally; the remote branch and the pull request are left
+alone unless --merge deleted them. Nothing here deletes work you might want.
+
+Exit codes: 0 closed, 1 general failure, 2 workspace not found,
+3 the work has not landed and neither --merge nor --abandon was given,
+4 not a git repository, or no origin remote,
+6 gh is missing or not authenticated.
+USAGE
+}
+
+require_cmd jq
+require_cmd git
+
+name="" id="" do_merge=0 abandon=0 yes=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --merge)   do_merge=1; shift ;;
+    --abandon) abandon=1; shift ;;
+    --yes)     yes=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    -*) die "unknown option: $1" 1 ;;
+    *)
+      if [ -z "$name" ]; then name=$1
+      elif [ -z "$id" ]; then id=$1
+      else die "unexpected extra argument: $1" 1
+      fi
+      shift
+      ;;
+  esac
+done
+
+[ -n "$name" ] && [ -n "$id" ] || { usage; exit 1; }
+[ $((do_merge + abandon)) -le 1 ] || die "pass either --merge or --abandon, not both" 1
+
+repo=$(resolve_workspace "$name")
+slug=$(slugify "$name")
+git_require_repo "$repo" "$name"
+
+event=$(request_event "$slug" "$id")
+[ -n "$event" ] || die "no request '$id' found for '$name'" 1
+
+branch=$(git_request_branch "$repo" "$id")
+[ -n "$branch" ] || die "request $id has no branch tracked — nothing to close
+  $LOOP_BIN_DIR/train $name" 1
+
+default_ref=$(git_require_default_ref "$repo" "$name")
+
+need_gh() {
+  command -v gh >/dev/null 2>&1 || die "gh is not on PATH: https://cli.github.com" 6
+  gh auth status >/dev/null 2>&1 || die "gh is not authenticated:  gh auth login" 6
+}
+
+if [ "$do_merge" -eq 1 ]; then
+  need_gh
+  if [ "$yes" -ne 1 ]; then
+    if [ ! -t 0 ]; then
+      die "refusing to merge without --yes in a non-interactive shell" 1
+    fi
+    read -r -p "loop: merge '$branch' into ${default_ref#origin/}? [y/N] " reply
+    case "$reply" in
+      y|Y|yes|YES) ;;
+      *) log_info "aborted — nothing changed"; exit 0 ;;
+    esac
+  fi
+  (cd "$repo" && gh pr merge "$branch" --merge --delete-branch) \
+    || die "gh could not merge '$branch' — merge it yourself, then run this again without --merge" 1
+fi
+
+landed=0
+if [ "$abandon" -eq 1 ]; then
+  [ "$yes" -eq 1 ] || die "--abandon drops this request's work out of the train; pass --yes to mean it" 1
+  log_info "abandoning $id — its work is not on ${default_ref#origin/}"
+else
+  git_ws "$repo" fetch --quiet origin 2>/dev/null \
+    || log_info "could not fetch origin — judging against the local view of it"
+  if git_branch_landed "$repo" "$branch" "$default_ref"; then
+    landed=1
+  elif command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
+    # Ancestry is the reliable answer only for a real merge commit. A squash or
+    # rebase merge rewrites the commits, so the branch is never an ancestor
+    # however genuinely merged it is — ask GitHub itself before refusing.
+    if [ -n "$(cd "$repo" && gh pr view "$branch" --json mergedAt --jq '.mergedAt // empty' 2>/dev/null)" ]; then
+      landed=1
+      log_info "merged by squash or rebase — ancestry does not hold, closing on the pull request's own state"
+    fi
+  fi
+  [ "$landed" -eq 1 ] || die "request $id has not landed on ${default_ref#origin/}
+Its branch '$branch' is not contained there and no merged pull request was
+found for it. Merge it, then close:
+  $LOOP_BIN_DIR/close $name $id --merge --yes
+Or drop the work entirely:
+  $LOOP_BIN_DIR/close $name $id --abandon --yes" 3
+fi
+
+# A branch cannot be deleted while it is checked out, and it usually is — this
+# request was the last thing in the tree. Move off it when that is safe; when
+# it is not, say so and still prune the metadata, because a request that is
+# over must stop being the base of everything that follows either way.
+current=$(git_ws "$repo" branch --show-current)
+if [ "$current" = "$branch" ]; then
+  if git_tree_clean "$repo"; then
+    git_ws "$repo" checkout --quiet "${default_ref#origin/}" 2>/dev/null \
+      || git_ws "$repo" checkout --quiet --detach "$default_ref"
+  else
+    log_info "'$branch' is checked out with uncommitted changes — leaving the branch in place"
+  fi
+fi
+
+git_unset_branch_meta "$repo" "$branch"
+current=$(git_ws "$repo" branch --show-current)
+if [ "$current" != "$branch" ]; then
+  git_ws "$repo" branch -D "$branch" >/dev/null 2>&1 \
+    && log_info "deleted local branch '$branch'" \
+    || true
+fi
+
+"$LOOP_BIN_DIR/worktree" "$name" "$id" --remove >/dev/null 2>&1 || true
+
+status=closed
+[ "$abandon" -eq 1 ] && status=abandoned
+title=$(printf '%s' "$event" | jq -r '.title')
+append_event "$slug" "$id" "$(iso_now)" review closed "$status" "$title" \
+  "$(printf '%s' "$event" | jq -r '.raw_ref')" \
+  "$(printf '%s' "$event" | jq -r '.record_ref')"
+
+log_info "$id is $status — it is out of the train"
+jq -n --arg id "$id" --arg branch "$branch" --arg status "$status" \
+  '{closed:true, id:$id, branch:$branch, status:$status}'

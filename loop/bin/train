@@ -1,0 +1,117 @@
+#!/usr/bin/env bash
+# List the workspace's train: the stacked branches its requests own, what each
+# was cut from, and which one the next request will be cut from.
+#
+# This exists so the overseer can steer the train without running git itself —
+# the same reason loop/bin/tracers exists so it never reads a plan. Read-only:
+# it writes nothing, in the repo or in db/.
+#
+# Usage: loop/bin/train <workspace-name> [--json | --tip] [--id <request-id>]
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$LOOP_BIN_DIR/lib/db.sh"
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: loop/bin/train <workspace-name> [--json | --tip] [--id <request-id>]
+
+Lists the branches the loop tracks in workspace/<workspace-name>, bases before
+the branches stacked on them, with the request each belongs to, the pull
+request opened for it, and whether it has landed on the default branch.
+
+A request's branch is cut when it takes the working tree, off the tip of this
+train — so a request always starts from the one in front of it, and only from
+the default branch when nothing is ahead. `loop/bin/close` prunes a landed
+request's metadata, which is how it leaves the train and stops being anyone's
+base.
+
+--json  one object per branch: {request, branch, base, pr, state, tip}.
+        The form to read from a script or an agent.
+--tip   print only the branch a new request would be cut from, bare and ready
+        to read — the default branch when the train is empty.
+--id    report only the branch belonging to that request.
+
+Exit codes: 0 ok, 1 general failure, 2 workspace not found,
+4 not a git repository, or no origin remote.
+USAGE
+}
+
+require_cmd jq
+require_cmd git
+
+name="" want_id="" as_json=0 tip_only=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --json) as_json=1; shift ;;
+    --tip)  tip_only=1; shift ;;
+    --id)
+      [ $# -ge 2 ] || die "--id needs a request id" 1
+      want_id=$2
+      shift 2
+      ;;
+    -h|--help) usage; exit 0 ;;
+    -*) die "unknown option: $1" 1 ;;
+    *)
+      [ -z "$name" ] || die "unexpected extra argument: $1" 1
+      name=$1
+      shift
+      ;;
+  esac
+done
+
+[ -n "$name" ] || { usage; exit 1; }
+[ $((as_json + tip_only)) -le 1 ] || die "pass at most one of --json, --tip" 1
+
+repo=$(resolve_workspace "$name")
+git_require_repo "$repo" "$name"
+
+tip=$(git_train_tip "$repo")
+
+if [ "$tip_only" -eq 1 ]; then
+  printf '%s\n' "$tip"
+  exit 0
+fi
+
+rows=()
+while IFS= read -r row; do
+  [ -n "$row" ] || continue
+  rows+=("$row")
+done < <(git_train_rows "$repo")
+
+if [ "$as_json" -eq 1 ]; then
+  for row in "${rows[@]}"; do
+    IFS=$'\t' read -r branch id base state <<<"$row"
+    [ -z "$want_id" ] || [ "$want_id" = "$id" ] || continue
+    jq -nc --arg r "$id" --arg b "$branch" --arg base "$base" \
+      --arg pr "$(git_branch_meta "$repo" "$branch" "$LOOP_GIT_KEY_PR")" \
+      --arg state "$state" --argjson tip "$([ "$branch" = "$tip" ] && echo true || echo false)" \
+      '{request:$r, branch:$b, base:$base,
+        pr:(if $pr == "" then null else $pr end), state:$state, tip:$tip}'
+  done | jq -s --arg tip "$tip" '{tip:$tip, branches:.}'
+  exit 0
+fi
+
+if [ ${#rows[@]} -eq 0 ]; then
+  log_info "no branches tracked for '$name' — a new request would be cut off $tip"
+  exit 0
+fi
+
+found=0
+for row in "${rows[@]}"; do
+  IFS=$'\t' read -r branch id base state <<<"$row"
+  [ -z "$want_id" ] || [ "$want_id" = "$id" ] || continue
+  if [ "$found" -eq 0 ]; then
+    printf '%-32s %-44s %-24s %-8s %s\n' REQUEST BRANCH BASE STATE PR
+  fi
+  found=1
+  pr=$(git_branch_meta "$repo" "$branch" "$LOOP_GIT_KEY_PR")
+  printf '%-32s %-44s %-24s %-8s %s\n' \
+    "$id" "$branch$([ "$branch" = "$tip" ] && printf ' *')" "$base" "$state" "${pr:--}"
+done
+
+[ "$found" -eq 1 ] || { log_info "no branch tracked for ${want_id:-that request}"; exit 0; }
+log_info "* is the tip — a new request would be cut off $tip"

@@ -4,12 +4,11 @@
 # hatch, hand it back.
 #
 # This is an administrative command, not a part of the loop. A request holds the
-# phase until its work is committed — `decide` turns the cycle without handing
-# the tree back — and `commit` is not built, so a workspace whose request was
-# decided onto `commit` stays there: the overseer halts and says so. --release
-# exists for a human cleaning up outside a session, never as a stand-in for the
-# judgement `verify` and `decide` already make. Nothing here says a run was
-# good.
+# phase from its first `implement` until `loop/bin/land` commits and pushes its
+# work — `decide` turns the cycle without handing the tree back, because the
+# changes are still there and still that request's. --release exists for a
+# human cleaning up outside a session, never as a stand-in for the judgement
+# `verify` and `decide` already make. Nothing here says a run was good.
 #
 # Usage: loop/bin/phase <workspace-name> [--release] [--yes] [--force]
 set -euo pipefail
@@ -30,15 +29,16 @@ pending. With no --release it only reports.
 
 An administrative command, not a step. Nothing here judges a run: that is what
 `verify` and `decide` are for. A request keeps the phase across every lap of
-the cycle and is only meant to leave it by being committed, so until `commit`
-exists a request `decide` routed there halts the loop for that workspace.
+the cycle and leaves it by being committed:
 
---release  hand the phase back, for a human cleaning up outside a session.
-           Refused while the holding request still has pending tracers, since
-           letting another request in would put two unfinished sets of changes
-           in the same tree — pass --force to do it anyway. A request already
-           decided onto `commit` will still halt the overseer until it is
-           cleared.
+  loop/bin/land <workspace-name> <request-id>
+
+--release  hand the phase back without committing, for a human cleaning up
+           outside a session. Refused while the holding request still has
+           pending tracers, since letting another request in would put two
+           unfinished sets of changes in the same tree — pass --force to do it
+           anyway. It leaves the holder's branch checked out and its work
+           uncommitted; it is not a way to finish a request.
 --yes      skip the confirmation prompt (required in non-interactive shells)
 
 Exit codes: 0 ok (including when nothing is held), 1 general failure,
@@ -46,7 +46,7 @@ Exit codes: 0 ok (including when nothing is held), 1 general failure,
 USAGE
 }
 
-name="" release=0 yes=0 force=0
+name="" release=0 yes=0 force=0 onward=""
 while [ $# -gt 0 ]; do
   case "$1" in
     --release) release=1; shift ;;
@@ -88,7 +88,13 @@ for s in $LOOP_EXCLUSIVE_STEPS; do
 done
 if [ -n "$recorded" ]; then
   log_info "recorded on this lap of the cycle: $recorded"
-  log_info "next in the cycle: $(next_exclusive_step "${recorded##* }")"
+  onward=$(next_exclusive_step "${recorded##* }")
+  if [ -n "$onward" ]; then
+    log_info "next in the cycle: $onward"
+  else
+    # `commit` recorded and the phase is still held, so `land` has not run.
+    log_info "commit is recorded but not pushed — $LOOP_BIN_DIR/land $name $held"
+  fi
 fi
 if [ ${#pending[@]} -gt 0 ]; then
   log_info "tracers still pending: ${pending[*]}"

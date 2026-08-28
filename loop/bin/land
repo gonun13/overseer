@@ -1,0 +1,180 @@
+#!/usr/bin/env bash
+# Commit a request's work to its own branch, and hand the working tree back.
+#
+# Local only. Nothing is pushed and no pull request is opened here — that is
+# `loop/bin/publish`, and it runs only after a human has reviewed the work and
+# approved it. Until then the whole request lives on this machine, so a bad
+# run costs a branch delete rather than a public pull request somebody has to
+# be told to ignore.
+#
+# This is the irreversible half of the `commit` step, and it is bash rather
+# than the agent on purpose. The step writes a message and a pull-request body;
+# nothing more. `git commit` and `git push` stay denied to every provider, so
+# the verbs that cannot be undone stay where they are deterministic and
+# reviewable, the same way id allocation and the jsonl append do.
+#
+# It runs AFTER loop/bin/record, not before. `record` is the gate that
+# validates the artifact; if the repository moved first and validation then
+# failed, the work would be committed with nothing in the log to say so, and a
+# retry would commit twice. Running second means a failure here leaves a valid
+# `committed` record and an untouched repository — which is retryable, and
+# which this script is written to be.
+#
+# Usage: loop/bin/land <workspace-name> <request-id> [--dry-run]
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$LOOP_BIN_DIR/lib/db.sh"
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: loop/bin/land <workspace-name> <request-id> [--dry-run]
+
+Stages everything in the workspace, commits it to that request's branch with
+the message its commit record carries, and releases the exclusive phase so the
+next request can take the working tree.
+
+Local only. The branch is not pushed and no pull request is opened — that is
+loop/bin/publish, which runs after `review` and only when the human approved
+the work. Nothing about this request is public until then.
+
+Run it after `loop/bin/record <ws> <id> commit`. The request must still hold
+the phase and must have recorded its commit step.
+
+The commit is skipped when it has already happened — nothing to commit and
+HEAD already carrying this message — so an interrupted run is retried by
+running it again. Appends a `landed` event, which is what distinguishes "the
+record was written" from "the work is committed" after a crash between the two.
+
+--dry-run  print the exact commands and change nothing
+
+Exit codes: 0 ok, 1 general/validation failure, 2 workspace not found,
+3 this request does not hold the phase, or has not recorded `commit`,
+4 not a git repository, or no origin remote.
+USAGE
+}
+
+require_cmd jq
+require_cmd git
+
+name="" id="" dry=0
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --dry-run) dry=1; shift ;;
+    -h|--help) usage; exit 0 ;;
+    -*) die "unknown option: $1" 1 ;;
+    *)
+      if [ -z "$name" ]; then name=$1
+      elif [ -z "$id" ]; then id=$1
+      else die "unexpected extra argument: $1" 1
+      fi
+      shift
+      ;;
+  esac
+done
+
+[ -n "$name" ] && [ -n "$id" ] || { usage; exit 1; }
+
+repo=$(resolve_workspace "$name")
+slug=$(slugify "$name")
+git_require_repo "$repo" "$name"
+
+held=$(impl_lock_holder "$slug")
+[ "$held" = "$id" ] || die "$id does not hold the exclusive phase for '$name' (${held:-nobody} does)
+Only the request that owns the working tree may commit it." 3
+impl_lock_recorded "$slug" commit || die "$id has not recorded its commit step
+The commit record is what carries the message and the pull-request body, and
+it is not believed until it has been validated:
+  $LOOP_BIN_DIR/step $name $id commit
+  $LOOP_BIN_DIR/record $name $id commit" 3
+
+file=$(artifact_path "$slug" commit "$id")
+[ -f "$file" ] || die "no commit record at $(artifact_ref "$slug" commit "$id")" 1
+
+branch=$(git_request_branch "$repo" "$id")
+[ -n "$branch" ] || die "request $id has no branch — it never entered the phase properly" 1
+base=$(git_base_ref "$repo" "$branch")
+pr_title=$(record_frontmatter_get "$file" pr_title)
+message=$(record_section "$file" "Commit message")
+pr_body=$(record_section "$file" "PR body")
+
+[ -n "$message" ] || die "the commit record has no '## Commit message' section — nothing to commit with" 1
+# The pull-request title and body are not used here — loop/bin/publish opens
+# the pull request later — but they are checked now, while the step that wrote
+# them is still the obvious thing to rerun.
+[ -n "$pr_title" ] || die "the commit record has no pr_title" 1
+[ -n "$pr_body" ] || die "the commit record has no '## PR body' section
+It is not needed until $LOOP_BIN_DIR/publish, but a commit record without one
+means the commit step was not finished — rerun it now rather than discovering
+this after the review." 1
+
+subject=$(printf '%s\n' "$message" | head -n1)
+
+if [ "$dry" -eq 1 ]; then
+  log_info "would run, in workspace/$name (on branch $branch, base $base):"
+  printf '  git add -A\n'
+  printf '  git commit -F -   # %s\n' "$subject"
+  printf '  # then: release the exclusive phase for %s\n' "$name"
+  printf '  # nothing is pushed here — %s/publish %s %s does that, after review\n' \
+    "$LOOP_BIN_DIR" "$name" "$id"
+  exit 0
+fi
+
+current=$(git_ws "$repo" branch --show-current)
+[ "$current" = "$branch" ] || die "workspace '$name' is on '$current', not '$branch'
+The request's work belongs on its own branch and this tree has been moved off
+it. Put it back before committing:
+  git -C $repo checkout $branch" 1
+
+# --- commit -------------------------------------------------------------
+# Skipped when there is nothing staged or unstaged AND HEAD already carries
+# this subject: that is the shape of a rerun after this script was interrupted
+# between committing and logging it.
+if git_tree_clean "$repo" && [ "$(git_ws "$repo" log -1 --pretty=%s 2>/dev/null)" = "$subject" ]; then
+  log_info "already committed: $(git_ws "$repo" rev-parse --short HEAD) $subject"
+else
+  git_tree_clean "$repo" && die "$id changed no files — there is nothing to commit
+Its branch is identical to the one it was cut from, and HEAD is not this
+request's commit either, so nothing was left for this step to take:
+  $branch
+  $base
+
+Two things cause this. Either the work was already committed by something other
+than the loop — check the branch's log — or the request was never a code change
+at all: an audit, a review, a recommendation. The loop delivers diffs, so a
+request with no diff has nowhere to go from here and 'scope' is meant to catch
+it before a whole cycle is spent. If that is what happened, take it out:
+  $LOOP_BIN_DIR/clear $name --id $id --yes
+That releases the working tree for the next request. Clearing deletes the
+records, so read anything worth keeping out of this one first:
+  $(artifact_ref "$slug" implement "$id")" 1
+  git_ws "$repo" add -A
+  # Fall back to a tool identity only when the repo and the user have none —
+  # never override an identity the human has configured.
+  if git_ws "$repo" var GIT_AUTHOR_IDENT >/dev/null 2>&1; then
+    printf '%s\n' "$message" | git_ws "$repo" commit --quiet -F -
+  else
+    printf '%s\n' "$message" | git_ws "$repo" \
+      -c user.name=overseer -c user.email=overseer@localhost commit --quiet -F -
+  fi
+  log_info "committed $(git_ws "$repo" rev-parse --short HEAD) on $branch"
+fi
+sha=$(git_ws "$repo" rev-parse HEAD)
+
+# --- log it, then hand the tree back ------------------------------------
+# The event is what tells a restarted overseer that the repository actually
+# moved. `committed` means the record exists; `landed` means the work is on its
+# branch. Neither means anything has left this machine.
+title=$(record_title "$(artifact_path "$slug" request "$id")")
+[ -n "$title" ] || title="(untitled)"
+append_event "$slug" "$id" "$(iso_now)" commit landed landed "$title" \
+  "$(artifact_ref "$slug" raw "$id")" "$(artifact_ref "$slug" commit "$id")"
+
+impl_lock_release "$slug"
+log_info "exclusive phase released — the next request may take the working tree"
+
+jq -n --arg id "$id" --arg branch "$branch" --arg base "$base" --arg sha "$sha" \
+  '{landed:true, id:$id, branch:$branch, base:$base, sha:$sha}'

@@ -1,0 +1,101 @@
+#!/usr/bin/env bash
+# Stand up, tear down, or locate the throwaway checkout a review is QA'd in.
+#
+# `commit` hands the working tree back so the next request can start, which
+# means by the time a request is reviewed another one may already be building
+# on top of it in the main tree. A reviewer looking at that tree would be
+# looking at both changes at once and unable to tell which broke what — so a
+# review gets its own checkout of just its own branch.
+#
+# It lives under the loop's own db/, never inside the project: the workspace's
+# .gitignore is the project's file and this tool does not edit it, and a
+# directory inside the repo is one `git add -A` away from being committed.
+#
+# Usage: loop/bin/worktree <workspace-name> <request-id> (--create|--remove|--path)
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$LOOP_BIN_DIR/lib/db.sh"
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: loop/bin/worktree <workspace-name> <request-id> (--create|--remove|--path)
+
+Manages the QA checkout for one request's review, at
+db/<slug>/worktrees/<id>/. Prints its path on stdout.
+
+--create  add the worktree, detached at that request's branch, and print its
+          path. Idempotent: an existing or half-removed one is cleared first,
+          so a review abandoned mid-way costs the next one nothing.
+--remove  take it down. Silent when there is nothing there.
+--path    print where it would be, without touching anything.
+
+The checkout is detached on purpose. A branch cannot be checked out in two
+worktrees at once, and the request's branch is usually still HEAD in the main
+tree — detaching at the same commit gives the reviewer identical content with
+no contention. QA reads; it does not commit.
+
+Exit codes: 0 ok, 1 general failure, 2 workspace not found,
+3 that request has no branch to review, 4 not a git repository.
+USAGE
+}
+
+require_cmd git
+
+name="" id="" action=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --create|--remove|--path)
+      [ -z "$action" ] || die "pass exactly one of --create, --remove, --path" 1
+      action=${1#--}
+      shift
+      ;;
+    -h|--help) usage; exit 0 ;;
+    -*) die "unknown option: $1" 1 ;;
+    *)
+      if [ -z "$name" ]; then name=$1
+      elif [ -z "$id" ]; then id=$1
+      else die "unexpected extra argument: $1" 1
+      fi
+      shift
+      ;;
+  esac
+done
+
+[ -n "$name" ] && [ -n "$id" ] && [ -n "$action" ] || { usage; exit 1; }
+
+slug=$(slugify "$name")
+path="$(slug_dir "$slug")/worktrees/$id"
+
+if [ "$action" = path ]; then
+  printf '%s\n' "$path"
+  exit 0
+fi
+
+repo=$(resolve_workspace "$name")
+git_require_repo "$repo" "$name"
+
+# Removal is unconditional cleanup, and every path takes it: --remove does it
+# and stops, --create does it first so a leftover from a crashed review can
+# never block the next one.
+git_ws "$repo" worktree remove --force "$path" >/dev/null 2>&1 || true
+rm -rf "$path"
+git_ws "$repo" worktree prune >/dev/null 2>&1 || true
+
+if [ "$action" = remove ]; then
+  log_info "QA worktree for $id removed"
+  exit 0
+fi
+
+branch=$(git_request_branch "$repo" "$id")
+[ -n "$branch" ] || die "request $id has no branch to review
+A branch is cut when a request takes the working tree, and a review reads that
+branch. $LOOP_BIN_DIR/train $name shows what is tracked." 3
+
+mkdir -p "$(dirname "$path")"
+git_ws "$repo" worktree add --detach --quiet "$path" "$branch"
+log_info "QA worktree for $id at $path (detached at $branch)"
+printf '%s\n' "$path"

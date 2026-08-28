@@ -3,6 +3,13 @@
 # knowledge lives here, and no control flow: nothing in this file decides what
 # the loop does next. Requires common.sh to already be sourced (LOOP_DIR).
 
+# It sources lib/git.sh, which is the workspace repo's version-control layer:
+# `commit` and `review` carry frontmatter values bash derives from git the same
+# way it derives a `*_ref` from a path (see column 11 below), so the same
+# compare-don't-count rule can cover them.
+# shellcheck source=./git.sh
+. "$LOOP_LIB_DIR/git.sh"
+
 # --- The step spec table -----------------------------------------------------
 #
 # One row per artifact kind. Everything else in this file — paths, refs, the
@@ -34,16 +41,35 @@
 #                     precondition. This is how a `decide` directive reaches
 #                     the next `implement` run without making the first one
 #                     impossible to start.
+#  11 git_keys        further required keys whose values bash derives from the
+#                     *workspace's* git repo rather than from db/, resolved
+#                     through lib/git.sh. Consulted only for a step whose row
+#                     names one, so every other step still validates in a
+#                     workspace whose directory has gone. Unlike the timestamp
+#                     these are compared for equality, not shape: they are
+#                     written into the workspace's .git/config when the request
+#                     takes the working tree and read back unchanged, so bash
+#                     still holds the exact value when `record` runs.
 LOOP_STEPS=(
-  "raw|raw|txt|||||||"
-  "request|requests|md|requested|submitted_at|raw|kind||||"
+  "raw|raw|txt||||||||"
+  "signoff|signoff|txt||||||||"
+  "request|requests|md|requested|submitted_at|raw|||kind:feature,fix,change,epic||"
   "research|research|md|researched|researched_at|request|||||"
   "scope|scope|md|scoped|scoped_at|request research|questions_asked||||"
   "plan|plan|md|planned|planned_at|request research scope||impact phase_count|||"
-  "implement|implement|md|implemented|implemented_at|request research scope plan|tracers|||decide"
-  "verify|verify|md|verified|verified_at|scope plan implement|checks_run||verdict:pass,fail,blocked|"
-  "decide|decide|md|decided|decided_at|plan implement verify||decisions|route:implement,rework,plan,scope,commit|"
+  "implement|implement|md|implemented|implemented_at|request research scope plan|tracers|||decide|"
+  "verify|verify|md|verified|verified_at|scope plan implement|checks_run||verdict:pass,fail,blocked||"
+  "decide|decide|md|decided|decided_at|plan implement verify||decisions|route:implement,rework,plan,scope,commit||"
+  "commit|commit|md|committed|committed_at|request implement decide|pr_title||||branch base_branch"
+  "review|review|md|reviewed|reviewed_at|request scope commit signoff|findings||outcome:approved,followups,rejected||branch base_branch"
 )
+
+# `signoff` carries no done_status for the same reason `raw` does not: it is the
+# human's own words, not an agent-written artifact, so nothing validates or
+# records it and `step_names` skips it. The row still earns its place — paths,
+# `ensure_slug_dirs`, `artifact_ref` and `clear`'s deletion list all derive from
+# it, and `review` names it as a required ref, which is what makes the human's
+# sign-off a precondition of the review record rather than an afterthought.
 
 # A step's ref_steps are what it actually reads, not everything before it: each
 # ref is one more frontmatter value a step can mis-copy into a rejected record,
@@ -61,10 +87,18 @@ LOOP_STEPS=(
 # The order is the order they run in. `decide` does not release the lock — it
 # clears the claim's recorded marks so the cycle can turn again (see
 # impl_lock_clear_marks) — so the holder keeps the working tree until the work
-# is committed. `commit` is what would end the phase; it is not built, which is
-# where the loop halts today. `loop/bin/phase --release` and `loop/bin/clear`
-# are the administrative ways out.
-LOOP_EXCLUSIVE_STEPS="implement verify decide"
+# is committed. `commit` is the last of them and the one that ends the phase,
+# though it is `loop/bin/land` that actually releases it: `record` writing a
+# commit artifact does not move the repo, and letting another request in before
+# the changes are committed would put its branch on top of a tree still full of
+# uncommitted work. `loop/bin/phase --release` and `loop/bin/clear` remain the
+# administrative ways out.
+#
+# `review` is deliberately NOT here. It reads a throwaway worktree at the
+# request's own branch, never the main tree, so a request under review must not
+# block the next one from entering — that is the whole point of releasing at
+# commit.
+LOOP_EXCLUSIVE_STEPS="implement verify decide commit"
 
 # step_is_exclusive <step> — 0 if that step takes the working tree.
 step_is_exclusive() {
@@ -74,10 +108,13 @@ step_is_exclusive() {
   return 1
 }
 
-# next_exclusive_step <step> — the step that follows it inside the phase, or
-# `commit` at the end of the list: the phase runs to a commit, and that is the
-# step that would hand the working tree back. Prints nothing for a step that is
-# not exclusive.
+# next_exclusive_step <step> — the step that follows it inside the phase.
+# Prints nothing for `commit`, because nothing follows it: the phase ends there
+# rather than being handed on. (It used to print the literal string `commit`
+# here, back when `commit` was outside the list and unbuilt. Leaving that in
+# once `commit` joined the list would have made next_exclusive_step commit
+# answer "commit" — and `loop/bin/step` say "commit has already recorded;
+# commit is what comes next".) Prints nothing for a step that is not exclusive.
 next_exclusive_step() {
   local step=$1 s take=0
   for s in $LOOP_EXCLUSIVE_STEPS; do
@@ -87,7 +124,6 @@ next_exclusive_step() {
     fi
     [ "$s" = "$step" ] && take=1
   done
-  [ "$take" -eq 1 ] && printf 'commit'
   return 0
 }
 
@@ -168,6 +204,10 @@ ensure_slug_dirs() {
 # uses for name/description frontmatter.
 record_frontmatter_get() {
   local file=$1 key=$2
+  # A missing file is a legitimate question with an empty answer — `list` asks
+  # about records a `clear` has already deleted — so it is not an error and
+  # must not leak awk's complaint to stderr.
+  [ -f "$file" ] || return 0
   awk -v key="$key" '
     /^---[[:space:]]*$/ { n++; next }
     n==1 {
@@ -184,6 +224,7 @@ record_frontmatter_get() {
 # record_title <file> — the first top-level markdown heading in the body.
 record_title() {
   local file=$1
+  [ -f "$file" ] || return 0
   grep -m1 '^# ' "$file" | sed 's/^# *//'
 }
 
@@ -235,6 +276,31 @@ plan_tracers() {
   ' "$file"
 }
 
+# record_section <file> <heading> — the body of one `## <heading>` section of a
+# record, up to the next heading of the same or a higher level. Blank when the
+# section is absent or empty.
+#
+# This is how `loop/bin/land` gets the commit message and the pull-request body
+# out of a commit record. It lives here beside plan_tracers and ledger_statuses
+# for the same reason they do: markdown parsing belongs in one file, so nothing
+# else in the tool grows a private idea of what an artifact looks like.
+record_section() {
+  local file=$1 heading=$2
+  [ -f "$file" ] || return 0
+  awk -v want="## $heading" '
+    $0 == want { inside = 1; next }
+    inside && /^#{1,2}[[:space:]]/ { inside = 0 }
+    inside { print }
+  ' "$file" | sed -e '/./,$!d' | awk '
+    { lines[NR] = $0 }
+    END {
+      last = NR
+      while (last > 0 && lines[last] ~ /^[[:space:]]*$/) last--
+      for (i = 1; i <= last; i++) print lines[i]
+    }
+  '
+}
+
 # ledger_statuses <implement-file> — one `tracer<TAB>status` line per row of the
 # implement record's tracer ledger table. Empty (not an error) when no record
 # exists yet: nothing has been implemented, so nothing is done.
@@ -273,6 +339,39 @@ expected_frontmatter() {
   fi
   for ref_step in $(step_field "$step" 6); do
     printf '%s_ref\t%s\n' "$ref_step" "$(artifact_ref "$slug" "$ref_step" "$id")"
+  done
+
+  # Values bash derives from the workspace's git repo rather than from db/.
+  # Resolved only for a step whose row names one, so a step with no git_keys
+  # never touches git and still validates in a workspace whose directory has
+  # been removed — which is what lets `clear` tidy up after a deleted project.
+  local git_keys key repo
+  git_keys=$(step_field "$step" 11)
+  if [ -n "$git_keys" ]; then
+    repo=$(resolve_workspace "$workspace")
+    for key in $git_keys; do
+      printf '%s\t%s\n' "$key" "$(git_derived_value "$repo" "$id" "$key")"
+    done
+  fi
+}
+
+# require_git_keys <workspace> <id> <step> — resolve every git-derived key this
+# step declares, discarding the values, purely so a failure to resolve one is
+# fatal *here*.
+#
+# expected_frontmatter is always read through a command or process
+# substitution, and `die` in a subshell ends only that subshell — the caller
+# carries on with a key missing or empty. An empty expectation compared against
+# an empty write passes, which is precisely the presence-only hole the
+# compare-don't-count rule exists to close. So callers resolve the keys in
+# their own shell first, where dying actually stops them.
+require_git_keys() {
+  local workspace=$1 id=$2 step=$3 git_keys key repo
+  git_keys=$(step_field "$step" 11)
+  [ -n "$git_keys" ] || return 0
+  repo=$(resolve_workspace "$workspace")
+  for key in $git_keys; do
+    git_derived_value "$repo" "$id" "$key" >/dev/null
   done
 }
 
@@ -315,6 +414,7 @@ artifact_validate() {
   local file at_key key spec want got ok=0
   file=$(artifact_path "$slug" "$step" "$id")
   at_key=$(step_field "$step" 5)
+  require_git_keys "$workspace" "$id" "$step"
 
   if [ ! -f "$file" ]; then
     printf 'no %s artifact written at %s\n' "$step" "$file" >&2
@@ -582,9 +682,10 @@ impl_lock_claim() {
   ) 9>>"$lock"
 }
 
-# impl_lock_release <slug> — drop the lock, whoever holds it. The release valve
-# behind loop/bin/phase --release: a human decides when the phase is over, because the
-# step that would decide it (`decide`) is not built yet.
+# impl_lock_release <slug> — drop the lock, whoever holds it. Called by
+# loop/bin/land once the work is actually committed and pushed, which is the
+# normal end of the phase, and by loop/bin/phase --release, which is the hatch
+# for a human cleaning up outside a session.
 impl_lock_release() {
   local slug=$1 lock
   lock=$(lock_path "$slug")
@@ -708,6 +809,11 @@ clear_request() {
 step_context_json() {
   local workspace=$1 slug=$2 id=$3 step=$4 workspace_dir=$5 at=$6 tracers=${7:-}
   local ref_step file inputs='{}' front='{}' open='{}' key val ctx
+
+  # Resolve the git-derived keys before building anything, so a step whose
+  # branch or pull request is missing is refused outright rather than handed a
+  # context with an empty value in it.
+  require_git_keys "$workspace" "$id" "$step"
 
   for ref_step in $(step_field "$step" 6); do
     file=$(artifact_path "$slug" "$ref_step" "$id")

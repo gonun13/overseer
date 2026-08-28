@@ -1,0 +1,59 @@
+#!/usr/bin/env bash
+# Persist the human's review decision, verbatim, for one request.
+#
+# The mirror of loop/bin/new, for the other end of the loop and for the same
+# reason: the human's own words go to disk before any agent structures them, so
+# a failed review pass can never lose what they said. `review` then reads this
+# file and transcribes the outcome from it — it does not decide the outcome.
+#
+# Usage: loop/bin/signoff <workspace-name> <request-id>   (decision on stdin)
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$LOOP_BIN_DIR/lib/db.sh"
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: loop/bin/signoff <workspace-name> <request-id>   (decision on stdin)
+
+Writes the human's review decision to db/<slug>/signoff/<id>.txt, exactly as
+they gave it. Nothing is recorded in index.jsonl: this is human input, not a
+step, the same as the raw request text loop/bin/new persists.
+
+`review` names this file as a required input, so loop/bin/step refuses to hand
+out a review context until it exists, and loop/bin/record refuses to record a
+review whose sign-off is missing or blank. That inverts the usual order — the
+human speaks before the step is started, exactly as `new` precedes `request`.
+
+Re-running overwrites the file. A decision is a decision; the review record
+that quotes it is what carries the history.
+
+Exit codes: 0 ok, 1 general failure, 2 workspace not found, 3 empty input.
+USAGE
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
+
+[ $# -eq 2 ] || { usage; exit 1; }
+name=$1
+id=$2
+
+resolve_workspace "$name" >/dev/null
+slug=$(slugify "$name")
+ensure_slug_dirs "$slug"
+
+[ -n "$(request_event "$slug" "$id")" ] || die "no request '$id' found for '$name'" 1
+
+text=$(cat)
+if [ -z "$(printf '%s' "$text" | tr -d '[:space:]')" ]; then
+  die "no decision text on stdin — nothing to sign off" 3
+fi
+
+path=$(artifact_path "$slug" signoff "$id")
+printf '%s\n' "$text" > "$path"
+log_info "sign-off recorded for $id at $(artifact_ref "$slug" signoff "$id")"

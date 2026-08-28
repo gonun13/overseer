@@ -22,11 +22,14 @@ without one, lists every slug under db/.
 --json  one object per workspace: {slug, session, lock, requests: [...]}.
         `session` is the overseer session currently driving that workspace
         (null if none); `lock` is the id of the request that owns the working
-        tree while it runs implement/verify/decide (null if none) — no other
-        request may enter that phase until it is released. A request whose
-        latest step is `decide` also carries `route`: where that decision sent
-        it, which is the whole of how the next action survives a restart. This
-        is the form to read from a script or an agent.
+        tree while it runs implement/verify/decide/commit (null if none) — no
+        other request may enter that phase until loop/bin/land hands it back.
+        A request whose latest step is `decide` also carries `route`: where
+        that decision sent it, and one whose latest step is `review` carries
+        `outcome` — which is the whole of how the next action survives a
+        restart. Every request that owns a branch also carries `branch`:
+        {name, base, pr, state}, so the train is visible without running git.
+        This is the form to read from a script or an agent.
 
 Exit codes: 0 ok, 1 general failure.
 USAGE
@@ -45,6 +48,50 @@ event_route() {
   [ "$step" = decide ] || return 0
   id=$(printf '%s' "$event" | jq -r '.id')
   record_frontmatter_get "$(artifact_path "$slug" decide "$id")" route
+}
+
+# event_outcome <slug> <event-json> — the outcome a `review` recorded. Same
+# argument as event_route: an outcome is an instruction about what happens
+# next, not content, so reading it here is what keeps the overseer from opening
+# the review record itself.
+event_outcome() {
+  local slug=$1 event=$2 step id
+  step=$(printf '%s' "$event" | jq -r '.step')
+  [ "$step" = review ] || return 0
+  id=$(printf '%s' "$event" | jq -r '.id')
+  record_frontmatter_get "$(artifact_path "$slug" review "$id")" outcome
+}
+
+# event_branch <slug> <workspace-dir> <event-json> — that request's place in
+# the train as a JSON object, or `null`. Empty when the workspace directory is
+# gone or is not a git repo, so `list` keeps working for a project that has
+# been deleted out from under its records.
+event_branch() {
+  local slug=$1 repo=$2 event=$3 id branch base state default_ref
+  [ -n "$repo" ] && [ -d "$repo" ] || { printf 'null'; return 0; }
+  git_is_repo "$repo" || { printf 'null'; return 0; }
+  id=$(printf '%s' "$event" | jq -r '.id')
+  branch=$(git_request_branch "$repo" "$id")
+  [ -n "$branch" ] || { printf 'null'; return 0; }
+  default_ref=$(git_default_ref "$repo") || default_ref=""
+  state=live
+  if [ -n "$default_ref" ] && git_branch_landed "$repo" "$branch" "$default_ref"; then
+    state=landed
+  fi
+  base=$(git_branch_meta "$repo" "$branch" "$LOOP_GIT_KEY_BASE")
+  jq -nc --arg n "$branch" --arg b "$base" --arg state "$state" \
+    --arg pr "$(git_branch_meta "$repo" "$branch" "$LOOP_GIT_KEY_PR")" \
+    '{name:$n, base:(if $b == "" then null else $b end),
+      pr:(if $pr == "" then null else $pr end), state:$state}'
+}
+
+# workspace_dir_of <slug-or-name> — the project directory if it still exists,
+# empty otherwise. `list` deliberately does not require one (a cleared-up
+# project still has records worth listing), so this never dies.
+workspace_dir_of() {
+  local dir="$WORKSPACE_ROOT/$1"
+  [ -d "$dir" ] && printf '%s' "$dir"
+  return 0
 }
 
 name="" as_json=0
@@ -76,10 +123,15 @@ if [ "$as_json" -eq 1 ]; then
     session=$(running_get "$slug" || true)
     [ -n "$session" ] || session=null
     held=$(impl_lock_holder "$slug" || true)
+    repo=$(workspace_dir_of "$slug")
     while IFS= read -r event; do
       [ -n "$event" ] || continue
       printf '%s' "$event" | jq -c --arg route "$(event_route "$slug" "$event")" \
-        '. + {route: (if $route == "" then null else $route end)}'
+        --arg outcome "$(event_outcome "$slug" "$event")" \
+        --argjson branch "$(event_branch "$slug" "$repo" "$event")" \
+        '. + {route: (if $route == "" then null else $route end),
+              outcome: (if $outcome == "" then null else $outcome end),
+              branch: $branch}'
     done < <(open_request_events "$slug") \
       | jq -s --arg slug "$slug" --argjson session "$session" --arg lock "$held" \
           '{slug:$slug, session:$session,

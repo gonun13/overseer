@@ -47,6 +47,12 @@ loop/bin/step <workspace-name> <request-id> <step> [--tracer <ids>]
 loop/bin/record <workspace-name> <request-id> <step>
 loop/bin/tracers <workspace-name> <request-id> [--json | --next | --last]
 loop/bin/phase <workspace-name> [--release] [--yes] [--force]
+loop/bin/land <workspace-name> <request-id> [--dry-run]
+loop/bin/publish <workspace-name> <request-id> [--dry-run] [--force]
+loop/bin/train <workspace-name> [--json | --tip] [--id <request-id>]
+loop/bin/worktree <workspace-name> <request-id> (--create|--remove|--path)
+loop/bin/signoff <workspace-name> <request-id>    # decision text on stdin
+loop/bin/close <workspace-name> <request-id> [--merge] [--abandon] [--yes]
 loop/bin/clear <workspace-name> (--id <request-id> | --all) [--yes]
 loop/bin/provider [<id>]
 loop/bin/check
@@ -60,6 +66,12 @@ loop/bin/check
 | `record` | Validates what the step wrote against the frontmatter `step` handed out, then appends the step's event to `index.jsonl`. On failure it records nothing and prints which keys are wrong. A step that takes the working tree must still hold the lock. Recording a `decide` whose route is not `commit` also clears that lock's record of the lap just finished, which is what lets the cycle turn again. |
 | `tracers` | That request's tracers, from its plan, with the phase they belong to, whether the plan declared them parallel, and their status from the implement record's ledger. `--next` prints just the group to implement next, comma-separated and ready for `step --tracer`; `--last` prints the group the implement record says was actually built, which is what `verify` checks and what a rework redoes. Read-only, and the only place plan markdown is parsed. |
 | `phase` | Reports who holds the exclusive phase, how far through the current lap of the cycle they are, and which tracers are pending. `--release` hands the phase back — an administrative hatch for a human cleaning up outside a session, refused while the holder still has pending tracers unless `--force`, and never a statement that a run was good. Changes nothing else — no artifact, no status, no `index.jsonl` line. |
+| `land` | The irreversible half of `commit`, run after `record`: stages everything, commits it to the request's branch with the message the commit record carries, appends a `landed` event, and releases the exclusive phase. **Local only** — nothing is pushed. Skipped when it has already happened, so an interrupted run is retried by running it again. |
+| `publish` | Pushes the branch and opens the pull request, using the title and body the commit record carries. Refused until a recorded `review` says the human approved the work. This is the first moment anything about a request leaves the machine, and the only command that makes it public. Requires `gh`. |
+| `train` | The stacked branches this workspace's requests own — each one's base, its pull request, whether it has landed, and which is the tip a new request would be cut from. Read-only, and the only place branch metadata is read outside the libs. |
+| `worktree` | Stands up, tears down, or locates the throwaway checkout a `review` is QA'd in — detached at that request's branch, under `db/<slug>/worktrees/<id>/`. `--create` is idempotent, so a review abandoned mid-way costs the next one nothing. |
+| `signoff` | Writes the human's review decision to `db/<slug>/signoff/<id>.txt`, verbatim. The mirror of `new`, for the other end of the loop and for the same reason. Nothing is recorded in `index.jsonl`. |
+| `close` | Ends a request whose pull request has landed: prunes the loop's metadata from its branch so it leaves the train, deletes the local branch, and appends a `closed` event. `--merge` merges it first; `--abandon` drops the work. |
 | `clear` | Deletes a request's artifacts and appends a `cleared` event. Requires `--id` or `--all`, prints what it's about to delete, and asks for confirmation unless `--yes` (mandatory in a non-interactive shell). `index.jsonl` is never rewritten; `memory.md` is never touched. Releases the lock if the cleared request held it. |
 | `provider` | Lists bundles under `providers/` and writes the chosen id to `loop/.provider`. `LOOP_PROVIDER` still overrides at runtime. |
 | `check` | The lint gate: bash syntax, shellcheck (from PATH, or its container image), and `check-providers`. |
@@ -132,21 +144,35 @@ files:
 
 | Kind | Format | What goes here |
 |---|---|---|
-| **Human intentions/decisions** | `.txt` | Verbatim, unedited human input — the raw request text now; later, a review/approve-or-reject decision |
+| **Human intentions/decisions** | `.txt` | Verbatim, unedited human input — the raw request text, and the review sign-off |
 | **Automated operation log** | `.jsonl` | Append-only record of what the automation *did* — one line per lifecycle event |
 | **Everything else** | `.md` | Substantive, agent-authored content meant to flow forward as context for the next step — or double as material for a skill/subagent/command later |
 
-Concretely, per request: `db/<slug>/raw/<id>.txt` (human), `db/<slug>/index.jsonl`
-(automation log), and one `.md` per completed step —
-`db/<slug>/requests/<id>.md`, `research/<id>.md`, `scope/<id>.md`,
-`plan/<id>.md`, `implement/<id>.md`, `verify/<id>.md`, `decide/<id>.md`. Two
-per-slug files are automation state rather than a fourth taxonomy kind:
+Concretely, per request: `db/<slug>/raw/<id>.txt` and
+`db/<slug>/signoff/<id>.txt` (human), `db/<slug>/index.jsonl` (automation log),
+and one `.md` per completed step — `db/<slug>/requests/<id>.md`,
+`research/<id>.md`, `scope/<id>.md`, `plan/<id>.md`, `implement/<id>.md`,
+`verify/<id>.md`, `decide/<id>.md`, `commit/<id>.md`, `review/<id>.md`.
+
+The two `.txt` kinds bracket the loop, and both exist for the same reason: the
+human's words reach disk before anything structures them, so a failed pass can
+never lose what they said. `raw` precedes the `request` step; `signoff`
+precedes the `review` step, which is why `review` is the one step whose human
+input is captured *before* `loop/bin/step` is called rather than during it.
+
+Three per-slug things are automation state rather than a fourth taxonomy kind:
 `db/<slug>/running.json` (the overseer session's pid and start time) lets
 concurrent terminals see that a workspace is being driven, and
 `db/<slug>/implement.lock` (two lines: the request id that owns the working
 tree, and which exclusive steps have recorded on the current lap of the cycle)
-says who holds the phase and how far through a lap they are. Neither is a record
-of anything that happened — that is what `index.jsonl` is for.
+says who holds the phase and how far through a lap they are; and
+`db/<slug>/worktrees/<id>/` is the throwaway checkout a `review` is QA'd in.
+None is a record of anything that happened — that is what `index.jsonl` is for.
+
+The worktree lives here rather than inside the project for the same reason
+everything else does: a directory inside the workspace repo is one `git add -A`
+away from being committed into it, and un-ignoring it would mean editing the
+project's own `.gitignore`.
 
 Three files are still "everything else" `.md` but do not flow forward to just
 *the next* step, because the inner loop runs more than once:
@@ -184,10 +210,11 @@ The loop is made of nine **steps**, in order:
 2. **research** — explore the codebase, write a context report for `scope`, and
    update the shared memory file. *(built)*
 3. **scope** — bound what this iteration will actually do: read the request and
-   the research, grill the human with up to 20 questions (important design
-   questions first, best-practice defaults for small doubts, a recommendation
-   offered whenever options are presented), and write a decision record.
-   *(built)*
+   the research, check the work will actually change files (see below), grill
+   the human with up to 20 questions (important design questions first,
+   best-practice defaults for small doubts, a recommendation offered whenever
+   options are presented), and write a decision record naming the files that
+   will change. *(built)*
 4. **plan** — decide how to do it: decompose scope into layers, phases, and
    independently verifiable vertical tracers; write one `plan/<id>.md` with an
    `impact` score. *(built)*
@@ -200,8 +227,16 @@ The loop is made of nine **steps**, in order:
 7. **decide** — judge that lap and route it: another tracer group, a rework of
    the same one, back to `plan`, out to `scope`, or forward to `commit`. One
    append-only decision record per request. *(built)*
-8. **commit** — commit the work. *(spec-only — not built)*
-9. **review** — final human review. *(spec-only — not built)*
+8. **commit** — commit the work: write the commit message and the
+   pull-request body from the records and the real diff, then `loop/bin/land`
+   commits it to the request's own branch and hands the working tree back.
+   Local; nothing is pushed. *(built)*
+9. **review** — final review, and the gate before anything becomes public: an
+   automated security and performance audit of the whole request's diff, manual
+   QA with the operator in a throwaway worktree at that branch, and their
+   decision — which the step records but does not make. `loop/bin/publish`
+   pushes and opens the pull request afterwards, and only on approval.
+   *(built)*
 
 **The inner loop.** `plan` → `implement` → `verify` → `decide` (4-7) is a closed
 automated loop with no human in it. `decide` is the only thing that says where
@@ -225,27 +260,37 @@ already talking to that session, and no subagent can take over the conversation.
 `decide` it also runs itself: the decision of what happens next is the one thing
 the overseer must not delegate, and the two records it reads are telegraphic by
 design and bounded by `steps/decide.md`. `request`, `research`, `plan`,
-`implement` and `verify` need nobody, so each goes to a subagent that reads its
-instruction file, does the work, and reports one line back. That is what keeps
-the overseer's window on the state of the loop instead of on the contents of the
-artifacts.
+`implement`, `verify` and `commit` need nobody, so each goes to a subagent that
+reads its instruction file, does the work, and reports one line back. That is
+what keeps the overseer's window on the state of the loop instead of on the
+contents of the artifacts.
 
-**The exclusive phase.** `implement`, `verify` and `decide` take the project's
-working tree, so one request may be in there at a time — two of them editing
-the same tree produces a conflict nobody can untangle afterwards. Bash owns
-that rule rather than the overseer's good intentions: `loop/bin/step` claims
-`db/<slug>/implement.lock` before handing over the context and refuses when
-another request holds it; `loop/bin/record` refuses to record a step whose
+`review` is the one step that splits: the overseer runs it, because it ends in
+the human's decision, but delegates the audit of the whole request's diff to a
+subagent — bulk content that must never enter the overseer's window. It is
+therefore the second `steps/*.md` the overseer reads, alongside `scope.md`.
+
+**The exclusive phase.** `implement`, `verify`, `decide` and `commit` take the
+project's working tree, so one request may be in there at a time — two of them
+editing the same tree produces a conflict nobody can untangle afterwards. Bash
+owns that rule rather than the overseer's good intentions: `loop/bin/step`
+claims `db/<slug>/implement.lock` before handing over the context and refuses
+when another request holds it; `loop/bin/record` refuses to record a step whose
 claim has gone. The lock deliberately outlives the session, so a restarted
 overseer finds the request still holding the tree.
 
 A request holds it for the whole of its stay in the cycle, not for one lap:
 `decide` turns the cycle without ever handing the tree back, because the
-changes are still there and still that request's. `commit` is what would end
-the phase, and `commit` is not built — so a request `decide` routes to `commit`
-keeps the tree and the workspace **halts**. The overseer says why and offers to
-exit. `loop/bin/phase --release` and `loop/bin/clear` are the administrative
-ways out, and neither is a statement that the work was good.
+changes are still there and still that request's. `loop/bin/land` is what ends
+the phase — not `record commit`. Recording a commit means the artifact was
+written and validated; the repository has not moved, and letting another
+request in at that point would cut its branch off a tree still holding
+uncommitted work. `land` is local: it commits and releases, and nothing is
+pushed until a review has approved it.
+
+`review` is deliberately outside the phase. It reads a throwaway worktree at
+the request's own branch, so a request under review never blocks the next one
+from starting — which is the whole point of handing the tree back at `land`.
 
 **One lap at a time.** `plan` → `implement` → `verify` → `decide` is a cycle,
 so running `implement` twice before anything checked the first would stack two
@@ -259,9 +304,8 @@ committed, so nothing marked — is still retryable, and releasing the phase
 clears the slate.
 
 The one thing that does not clear is a `decide` that routed to `commit`: the
-phase is being handed on, and re-running `decide` would only re-judge work
-already judged. That is the halt, and it is the loop working, not a fault to
-route around. The operator is never asked to adjudicate a lap either — the
+phase is on its last step, and re-running `decide` would only re-judge work
+already judged. The operator is never asked to adjudicate a lap either — the
 cycle is closed and automated, so a human standing in for `verify` or `decide`
 would just be a built step wearing a hat.
 
@@ -289,8 +333,9 @@ rather than fanned out across several that would clobber each other's ledger.
 `bin/lib/db.sh` and a `steps/<step>.md` next to the others. The row is the
 whole declaration — its directory, the status it lands in, its timestamp key,
 which earlier artifacts it must reference, any extra frontmatter it owns
-(free text, an integer, or a value from a fixed set), and any artifact it
-should be handed *if it exists* without being blocked when it doesn't. Paths,
+(free text, an integer, or a value from a fixed set), any artifact it should be
+handed *if it exists* without being blocked when it doesn't, and any key whose
+value bash derives from the workspace's git repo rather than from `db/`. Paths,
 refs, the step context, validation, `ensure_slug_dirs`, and `clear`'s deletion
 list all derive from it. `loop/bin/check` fails if a step has no instructions,
 or instructions no step. A step that takes the project's working tree is also
@@ -304,6 +349,118 @@ routing instruction that is not one of the five. An optional-artifact column is
 what carries a `decide` directive into the *next* `implement` run: making it a
 required reference would mean the first `implement` could never start, since
 nothing has decided anything yet.
+
+### The loop delivers diffs
+
+Every step after `scope` assumes there will be one: `implement` writes it,
+`verify` runs it, `commit` describes it, `land` commits it. A request that
+changes no file — an audit, a review, a recommendation, a question — has
+nothing for any of them to do. It runs the whole cycle, reaches `land`, and
+dead-ends there with nothing to commit, having spent a plan, an implement, a
+verify and a decide on something an agent asked directly would have answered in
+one pass.
+
+So `scope` establishes, before it spends a single question on *how*, which
+files under the workspace will be different when this is done. If the answer is
+none, it says so and puts it to the human: take it out of the loop, reshape it
+into the change it implies, or knowingly keep it as a record that commits
+nothing. Taking it out means `scope` writes nothing at all and the overseer
+clears the request — nothing past `research` was ever recorded, so there is no
+other cleanup.
+
+`land` is the backstop rather than the guard. When a request reaches it having
+changed nothing, it names the audit case and points at `loop/bin/clear`, which
+is what releases the working tree for the next request. That is a worse place
+to find out, which is why the question is asked at `scope`.
+
+### The train
+
+Past `commit` several requests are alive at once — each on its own branch, each
+with a pull request open. Nothing serializes them any more: `land` hands the
+working tree back, so the next request starts while the last is still in
+review. What keeps them from colliding is that **every request is cut off the
+one in front of it**:
+
+```
+origin/main <- feature/add-a-login-form-aaaa1111
+            <- hotfix/fix-the-logout-redirect-bbbb2222
+            <- change/third-thing-cccc3333          (the tip)
+```
+
+A train of requests, a train of stacked branches. A request's changes were
+written on top of everything before it, so that is the only base against which
+its diff means anything.
+
+**The branch is cut at phase entry, not at commit.** `loop/bin/step` resolves
+the tip and checks out a new branch the moment a request takes the working
+tree. Deciding the base later would mean either a checkout carrying changes
+somewhere they were never built against, or a rebase nobody asked for. Cutting
+first makes a request's diff exactly its own work, against exactly the tree it
+was written on — and makes "start from the correct branch" a precondition bash
+enforces rather than something the overseer is trusted to remember. It is also
+why a dirty tree is refused at entry: whatever is in it belongs to somebody
+else, and it would ride into this request's branch and its pull request.
+
+**The chain lives in git, not in `db/`.** Three keys per branch, in the
+workspace repo's own config:
+
+```
+branch.<branch>.looprequest   the request that owns it
+branch.<branch>.loopbase      what it was cut from
+branch.<branch>.looppr        the pull request url
+```
+
+That is the linked list, and it is the exception to "centralized `db/` instead
+of writing into the workspace" — a deliberate one. The rule exists so the
+tool's bookkeeping is never mistaken for project source or committed into
+someone's app repo; `.git/config` is neither tracked nor committable, and
+per-branch metadata is exactly where git itself keeps `branch.<b>.remote`. The
+alternative — a table in `db/` — would be a cache of git state that goes stale
+the moment a branch is deleted outside the loop.
+
+The tip is the live branch no other live branch names as its base.
+`loop/bin/train` computes it; nothing else, least of all the overseer, works it
+out by running git.
+
+**A request leaves the train when it lands, and only then.** `loop/bin/close`
+fetches and asks whether the branch is contained in the default branch, then
+prunes those three keys — after which it is invisible to `train` and nobody
+bases on it again. Requests already stacked behind it keep their recorded base
+even though it has gone: their history is written, and the base falls back to
+the default branch, which is where the vanished commits now live.
+
+Ancestry is the reliable test only for a real merge commit, which is why
+`close --merge` uses `gh pr merge --merge` and never `--squash` or `--rebase`:
+those rewrite the commits, so the branch never becomes an ancestor however
+genuinely merged it is. For a pull request somebody squash-merged in the
+browser, `close` falls back to asking GitHub whether it was merged at all.
+
+### Nothing is public until a human says so
+
+The work of a request moves in three separate, separately-refusable steps, and
+only the third one is visible to anyone else:
+
+| | What it does | Where it is |
+|---|---|---|
+| `land` | commits the work to the request's branch | this machine |
+| `publish` | pushes the branch and opens the pull request | GitHub |
+| `close` | merges the pull request and ends the request | GitHub |
+
+`publish` is refused until `db/<slug>/review/<id>.md` exists and its `outcome`
+is `approved` or `followups`. A review that came back `rejected` publishes
+nothing at all: its branch stays local, stays in the train, and the findings
+become requests cut off it.
+
+That split is why `review` reads a local branch rather than a pull request. A
+review that runs *after* the pull request is open is a formality — the blunder
+is already visible, and withdrawing it is its own small announcement. Running
+the audit and the QA against a local branch makes the human's approval the
+thing that publishes, rather than something that follows publication.
+
+The cost is that the `commit` step writes a pull-request title and body for a
+pull request that may never be opened. That is the right trade: writing them is
+free, and it is `review` that most wants them — a body describing what changed
+and what to look at is exactly the briefing a reviewer needs.
 
 ### Plan decomposition (inside a `plan`)
 

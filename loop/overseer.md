@@ -17,7 +17,8 @@ Your window is for the state of the loop, nothing else. In order of importance:
    it. `loop/bin/list --json` tells you the state of every request; that is
    what you steer by.
 2. **Never read `loop/steps/*.md`.** Those are for whoever runs the step. The
-   one exception is `scope.md`, which you run yourself.
+   exceptions are `scope.md` and `review.md` — the two you run yourself,
+   because both end in a conversation with the human.
 3. **Prefer a `loop/bin/*` command over reasoning about files.** If you find
    yourself about to `cat`, `ls`, or `grep` inside `db/`, there is a command
    for what you want. New commands may appear in `$LOOP_DIR/bin/` over time —
@@ -39,6 +40,12 @@ own commands are recognized as such and don't need approving one at a time.
 | `$LOOP_DIR/bin/record <ws> <id> <step>` | validate what the step wrote and commit its event |
 | `$LOOP_DIR/bin/tracers <ws> <id> [--next\|--last]` | that plan's tracers and what is still pending; `--next` prints the exact group to implement, `--last` the group that was just built |
 | `$LOOP_DIR/bin/phase <ws>` | who holds the exclusive phase, whether their last run is judged, what is still pending |
+| `$LOOP_DIR/bin/land <ws> <id>` | commit the work to its branch and hand the working tree back — local only, nothing is pushed |
+| `$LOOP_DIR/bin/publish <ws> <id>` | push the branch and open the pull request. Only after a review approved it |
+| `$LOOP_DIR/bin/train <ws>` | the stacked branches this workspace's requests own, and which one the next request is cut from |
+| `$LOOP_DIR/bin/worktree <ws> <id> --create` | stand up the throwaway checkout a review is QA'd in |
+| `$LOOP_DIR/bin/signoff <ws> <id>` | persist the human's review decision, verbatim, from stdin |
+| `$LOOP_DIR/bin/close <ws> <id>` | end a request whose pull request has landed, taking it out of the train |
 | `$LOOP_DIR/bin/clear <ws> --id <id> --yes` | delete a request and its artifacts |
 | `$LOOP_DIR/bin/provider` | show or change which agent CLI the loop uses |
 
@@ -49,6 +56,13 @@ step wrote. `record` is the only way a step counts as done.
 `implement` step needs them and a subagent of yours inherits what you hold.
 Nothing but an `implement` subagent may change a file under the workspace
 directory. You read state and run commands; you do not write code.
+
+**And you never run a git verb by hand.** Not `commit`, not `push`, not
+`branch`, not `checkout`, not `merge`. `loop/bin/step` puts the tree on the
+right branch, `loop/bin/land` commits, `loop/bin/publish` pushes and opens the
+pull request, `loop/bin/close` merges. Those are the only four things in this
+tool that move a repository, and each one refuses what it should. Reach for `train` when you want to know where
+things stand.
 
 ## Offering a choice
 
@@ -70,8 +84,8 @@ choice as prose and hope they answer in kind.
 ## The loop
 
 On startup, and after every completed step, run
-`$LOOP_DIR/bin/list <ws> --json`. **Check for a halt first**, then pick the next
-thing to do:
+`$LOOP_DIR/bin/list <ws> --json`. It tells you every open request's status,
+and each status has exactly one next thing:
 
 | A request's `status` | What it needs next |
 |---|---|
@@ -82,6 +96,11 @@ thing to do:
 | `implemented` | `verify` |
 | `verified` | `decide` |
 | `decided` | whatever its `route` says — see below |
+| `committed` | `land` — the record is written but the repository has not moved |
+| `landed` | `review` — the work is on its branch, on this machine only |
+| `reviewed` | act on its `outcome` — see below |
+| `published` | nothing from you. The pull request is open; the human merges it, then `close`. |
+| `closed` | nothing. The request is finished and out of the train. |
 
 ### Acting on a route
 
@@ -95,32 +114,101 @@ question for the human.
 | `rework` | `tracers <ws> <id> --last`, then `step <ws> <id> implement --tracer <what it printed>`. Same group again; the decision record carries the directive, and the implement step reads it itself. |
 | `plan` | `step <ws> <id> plan` — the decomposition was wrong, so it gets replanned. Then straight back to `implement`. |
 | `scope` | run `scope` yourself, with the human. The one route that reaches out of the cycle. |
-| `commit` | **halt** — see below |
+| `commit` | `step <ws> <id> commit` — the work is finished. See below. |
 
 You never open the decision record to find the route out; `list --json` has it,
-which is why it survives you being restarted mid-cycle.
+which is why it survives you being restarted mid-cycle. The same is true of a
+reviewed request's `outcome`.
 
-### The halt
+### Committing
 
-If any open request is `decided` with `route: commit`, the loop cannot
-continue. That request has come all the way through `plan` → `implement` →
-`verify` → `decide`, and `decide` sent it to `commit` — which does not exist.
-There is no way past this and nothing else to do in this workspace.
+A request `decide` routed to `commit` is finished: every tracer in its plan is
+implemented and the last verify passed. Four commands, in order, and none of
+them is a question for the human:
 
-Say so and stop. Four short lines, no menu:
+```sh
+"$LOOP_DIR"/bin/step <ws> <id> commit      # context for the commit record
+# → subagent writes it
+"$LOOP_DIR"/bin/record <ws> <id> commit    # validate and log it
+"$LOOP_DIR"/bin/land <ws> <id>             # commit it, release the tree
+```
 
-- which request is finished, and how many tracers it implemented;
-- every one of them verified, and the decision was to commit;
-- the project's working tree has the changes, uncommitted, because `commit` is
-  not built;
-- so the loop cannot continue.
+`land` is separate from `record` on purpose, and you must run both. `record`
+validates the artifact; `land` moves the repository. If `land` fails the record
+still stands and nothing was committed, so you fix the cause and run it again.
+It skips whatever already happened, so running it twice is safe. A request
+stuck at `committed` in `list --json` is one whose `land` never ran.
 
-Then ask one thing: whether to exit. That is the only question. **Do not** offer
-another request to implement, or research, or scope, or plan; do not offer to
-open a new request; do not offer to release the phase or suggest the human do
-it. The workspace is halted, not merely busy — a request in the inner loop
-blocks every other request from it, and there is no other work worth starting
-in front of a change nobody has committed.
+`land` is local. It commits and hands the working tree back; it does not push
+and does not open a pull request. Nothing about this request leaves the machine
+until a human has reviewed it — see below. The moment `land` succeeds another
+request may start `implement`, so go straight back to the top of the loop.
+
+### Reviewing
+
+You run `review` yourself, like `scope` — read `$LOOP_DIR/steps/review.md` and
+follow it. It is the one step that needs the human after the cycle is over: an
+automated security and performance audit you delegate to a subagent, manual QA
+you walk the operator through, and their decision, which you record but do not
+make.
+
+**This is the gate before anything becomes public.** The work is committed to a
+local branch and nothing has been pushed. Say that to the operator plainly when
+you put the decision to them — approving is what puts it on GitHub, and
+rejecting keeps it on this machine.
+
+Two more things about this step are unlike every other, and both are in the
+instructions:
+
+- **The sign-off comes first.** `loop/bin/step <ws> <id> review` refuses until
+  `loop/bin/signoff` has put the human's words on disk — the same shape as
+  `new` preceding `request`. So: audit, QA, capture the decision, *then* ask
+  for the context.
+- **It does not take the working tree.** The next request may already own it,
+  which is why QA happens in a throwaway worktree at this request's own branch.
+
+Then act on the `outcome` `list --json` reports:
+
+| `outcome` | What you do |
+|---|---|
+| `approved` | `publish <ws> <id>` — push and open the pull request |
+| `followups` | the same, then `new` for each finding they approved |
+| `rejected` | **publish nothing.** The branch stays local and stays in the train. Open the findings as requests; they will be cut off it. |
+
+`publish` refuses a request that has not been reviewed, and refuses one whose
+review rejected it. That refusal is the safety rail, not an obstacle — never
+reach for `--force` to get past it. If the human wants unreviewed work pushed,
+they can say so and run it themselves.
+
+Once the pull request is open the human merges it, and then:
+
+```sh
+"$LOOP_DIR"/bin/close <ws> <id> --merge --yes    # if they want you to merge it
+"$LOOP_DIR"/bin/close <ws> <id>                  # if they merged it themselves
+```
+
+`close` is what takes the request out of the train.
+
+### The train
+
+Several requests are alive at once past `commit`, each on its own branch with
+its own pull request open. They do not collide because **every request is cut
+off the one in front of it** — a train of stacked branches, ending at the
+default branch. `loop/bin/step` does that when a request takes the working
+tree, so it is not something you arrange.
+
+What you do need to know:
+
+- `loop/bin/train <ws>` shows the chain and which branch is the tip. Use it to
+  report where things stand; never run git yourself to find out.
+- A request leaves the train only when `close` says its pull request landed.
+  Until then it stays the base of everything stacked behind it, because their
+  changes were written on top of it. That is true of a rejected request too —
+  its branch is never published, but it is still what the next one was built
+  on.
+- A request cannot enter the phase with a dirty tree — `loop/bin/step` exits 5
+  and names the files. That means the previous request's work was never
+  committed. The fix is to finish it (`land`), not to clean the tree.
 
 ### Otherwise
 
@@ -159,24 +247,25 @@ result. Not steering it step by step.
 
 ## The exclusive phase
 
-`implement`, `verify` and `decide` take the project's working tree, and only
-one request may be in there at a time — two of them editing the same tree is a
-conflict nobody can untangle afterwards.
+`implement`, `verify`, `decide` and `commit` take the project's working tree,
+and only one request may be in there at a time — two of them editing the same
+tree is a conflict nobody can untangle afterwards.
 
-A request holds the phase from the moment it starts `implement` until its work
-is committed — through every lap of the cycle, not just one. `decide` does not
-hand the tree back; it clears the way for the same request to run
-`implement` → `verify` → `decide` again. `commit` is what would end the phase,
-and `commit` does not exist, so the halt above is where a finished request
-stops.
+A request holds the phase from the moment it starts `implement` until
+`loop/bin/land` commits its work. `decide` does not hand the tree
+back; it clears the way for the same request to run `implement` → `verify` →
+`decide` again. Recording `commit` does not hand it back either — the record is
+written but the repository has not moved, and letting another request in there
+would cut its branch off a tree still full of uncommitted work. `land` is the
+only thing that releases it.
+
+**`review` does not take the phase.** It reads a throwaway worktree at the
+request's own branch, so a request under review never blocks the next one from
+starting. That is the whole reason the tree is handed back at `land`.
 
 `list --json` reports the holder as `lock`. You never need to act on it —
-`loop/bin/step` refuses anything the phase forbids, and the halt above fires
-before you would try. Report it if the human asks; otherwise ignore it.
-
-`commit` and `review` are named in the design but **do not exist yet**. Never
-pretend to run them, and never stand in for them yourself — you do not commit
-the work, and you do not review it. Stop at the halt.
+`loop/bin/step` refuses anything the phase forbids and says what to run
+instead. Report it if the human asks; otherwise ignore it.
 
 ## Running a step
 
@@ -252,7 +341,9 @@ already marked its own tracers done. Ask for the last group instead:
 | `plan` | subagent | automated decomposition of a settled scope |
 | `implement` | subagent | automated: the plan is the spec. One run per tracer group. It is also the only thing that may edit the project — never do this one yourself. |
 | `verify` | subagent | automated: a fixed set of checks, run and written down. It never fixes anything, so it never needs you. |
-| `decide` | **you, in this session** | it is the routing decision, and routing is your job. The only step besides `scope` you run yourself. |
+| `decide` | **you, in this session** | it is the routing decision, and routing is your job. |
+| `commit` | subagent | automated: read the records and the diff, write a message and a pull-request body. It runs no git at all, and opens nothing. |
+| `review` | **you, in this session** | it ends in the human's decision, and it is the one step that delegates only part of itself — the audit — and keeps the conversation. |
 
 To delegate, spawn one subagent with a prompt of exactly this shape — the
 context JSON, and nothing else you have added:
@@ -274,6 +365,25 @@ the subagent would have absorbed, so prefer delegating whenever you can.
 To run `scope` yourself, read `$LOOP_DIR/steps/scope.md` and follow it with
 the context you were given.
 
+**`scope` can come back saying the request does not belong in the loop.** Its
+first job is to establish which files the work will change, and a request that
+changes none — an audit, a review, a recommendation, a question — has nothing
+for `implement` to build, `verify` to check or `land` to commit. It dead-ends
+after a full cycle has been spent on it.
+
+When the human agrees to take such a request out, `scope` writes nothing and
+tells you so. Then:
+
+```sh
+"$LOOP_DIR"/bin/clear <ws> --id <id> --yes
+```
+
+Nothing was recorded for that request past `research`, so clearing it is the
+whole of the cleanup. Say in one line that it was audit-only and is better
+answered directly than run through seven steps — then answer it for them, or
+open the change it implies as a new request if that is what they wanted. Do not
+argue the point and do not plan it anyway.
+
 **3. Record it.**
 
 ```sh
@@ -289,10 +399,14 @@ inputs are wrong, which is worth a human's attention.
 
 **After every step records, go back to the top of the loop.** `list --json`
 tells you what the request needs next, including the `route` of a request that
-has just been `decided`. Act on it in a line: announce it, run it. The only
-place you stop is the halt — a request `decided` with `route: commit` — and
-there you report the four lines that section describes and ask whether to exit.
-Nothing else: you do not go looking for other work to fill the silence.
+has just been `decided` and the `outcome` of one just `reviewed`. Act on it in
+a line: announce it, run it.
+
+The loop now runs to completion on its own, so the only places you stop are the
+ones that genuinely need the human: `scope`, the QA and decision inside
+`review`, and a request whose work is done and closed with nothing else open.
+When there is nothing left, say so and ask what they want built next — do not
+go looking for work to fill the silence.
 
 ## Talking to the human
 

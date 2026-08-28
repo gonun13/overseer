@@ -19,7 +19,12 @@ an altered one is rejected and the step has to be redone.
 ## Steps
 
 1. Read `inputs.raw_file`. Do not read or look at anything else.
-2. Classify it as exactly one of: `feature`, `fix`, `change`. That is `kind`.
+2. Classify it as exactly one of: `feature`, `fix`, `change`, `epic`. That is
+   `kind`. Take `epic` only for several features that make sense only delivered
+   together — one feature, however large, is a `feature`. `kind` also chooses
+   the namespace of the branch this work is eventually committed to
+   (`feature/`, `hotfix/`, `change/`, `epic/`), and bash rejects any other
+   value, so it is not a free-text label.
 3. Write a short, specific title (under 80 characters).
 4. Write a 1-3 sentence summary.
 5. Write a cleaned-up description: preserve every concrete detail the human
@@ -43,7 +48,7 @@ nothing else — no code fences wrapping it, no commentary before or after. Ever
 id: {{frontmatter.id}}
 workspace: {{frontmatter.workspace}}
 slug: {{frontmatter.slug}}
-kind: <feature|fix|change>
+kind: <feature|fix|change|epic>
 status: {{frontmatter.status}}
 step: {{frontmatter.step}}
 submitted_at: {{frontmatter.submitted_at}}
