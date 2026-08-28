@@ -1,0 +1,48 @@
+#!/usr/bin/env bash
+# Open a new request: allocate its id, persist the raw human text verbatim, and
+# print the context for its first step. The text is on disk before any agent
+# sees it, so a failed structuring pass can never lose what the human said.
+#
+# Usage: loop/bin/new <workspace-name>   (raw request text on stdin)
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$LOOP_BIN_DIR/lib/db.sh"
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: loop/bin/new <workspace-name>   (raw request text on stdin)
+
+Allocates a request id, writes the raw text to db/<slug>/raw/<id>.txt, and
+prints the `request` step context as JSON — the same shape loop/bin/step
+prints. Nothing is recorded in index.jsonl until loop/bin/record runs.
+
+Exit codes: 0 ok, 1 general failure, 2 workspace not found, 3 empty input.
+USAGE
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
+
+require_cmd jq
+
+[ $# -eq 1 ] || { usage; exit 1; }
+name=$1
+
+workspace_dir=$(resolve_workspace "$name")
+slug=$(slugify "$name")
+ensure_slug_dirs "$slug"
+
+raw_text=$(cat)
+if [ -z "$(printf '%s' "$raw_text" | tr -d '[:space:]')" ]; then
+  die "no request text on stdin — nothing to open" 3
+fi
+
+id=$(gen_request_id)
+printf '%s\n' "$raw_text" > "$(artifact_path "$slug" raw "$id")"
+
+step_context_json "$name" "$slug" "$id" request "$workspace_dir" "$(iso_now)"

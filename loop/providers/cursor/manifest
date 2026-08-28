@@ -2,4 +2,3 @@
 PROVIDER_ID=cursor
 PROVIDER_CLI=agent
 PROVIDER_CONFIG_DIR=.cursor
-PROVIDER_COMMANDS_DIR=.cursor/commands

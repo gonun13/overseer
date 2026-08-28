@@ -1,6 +1,24 @@
 {
   "permissions": {
-    "allow": ["Read", "Write"],
-    "deny": ["Bash", "Edit", "Task"]
+    "allow": [
+      "Read",
+      "Write",
+      "Glob",
+      "Grep",
+      "Task",
+      "AskUserQuestion",
+      "WebFetch",
+      "WebSearch"
+    ],
+    "deny": [
+      "Edit",
+      "NotebookEdit",
+      "Bash(rm:*)",
+      "Bash(sudo:*)",
+      "Bash(git commit:*)",
+      "Bash(git push:*)",
+      "Bash(npm:*)",
+      "Bash(curl:*)"
+    ]
   }
 }

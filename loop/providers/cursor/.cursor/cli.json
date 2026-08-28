@@ -3,10 +3,9 @@
     "allow": [
       "Read(**)",
       "Write(**)",
-      "WebFetch(*)"
-    ],
-    "deny": [
+      "WebFetch(*)",
       "Shell(*)"
-    ]
+    ],
+    "deny": []
   }
 }

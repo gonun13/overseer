@@ -1,428 +1,66 @@
 #!/usr/bin/env bash
-# The `run` entrypoint: the single point of entry into the dev loop. Carries
-# a request through every step that's actually built — request -> research
-# -> scope -> plan — calling each step's logic (lib/steps/*.sh) directly
-# in-process. Because loop/run is plain bash running in the human's own
-# terminal (not a nested agent session), each step's own foreground provider
-# call (structure/scope/pick) still gets a real inherited TTY.
+# The `run` entrypoint, and the whole of it: open an interactive session on the
+# configured provider agent, pointed at the overseer instructions. That session
+# *is* the loop — it reads state with loop/bin/*, decides what runs next,
+# delegates steps to subagents, and talks to the human. This script does not
+# orchestrate; it validates, leases the workspace, and hands over the terminal.
 #
-# Usage: loop/run <workspace-name> [--id <request-id>] [--file <path>]
+# Usage: loop/run <workspace-name>
 set -euo pipefail
 
-SCRIPT_DIR="$(CDPATH= cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 # shellcheck disable=SC1091
 source "$SCRIPT_DIR/bin/lib/common.sh"
 # shellcheck disable=SC1091
 source "$LOOP_BIN_DIR/lib/db.sh"
 # shellcheck disable=SC1091
 source "$LOOP_BIN_DIR/lib/providers.sh"
-# shellcheck disable=SC1091
-source "$LOOP_BIN_DIR/lib/steps/request.sh"
-# shellcheck disable=SC1091
-source "$LOOP_BIN_DIR/lib/steps/research.sh"
-# shellcheck disable=SC1091
-source "$LOOP_BIN_DIR/lib/steps/scope.sh"
-# shellcheck disable=SC1091
-source "$LOOP_BIN_DIR/lib/steps/plan.sh"
 
 usage() {
-  cat >&2 <<'EOF'
-usage: loop/run <workspace-name> [--id <request-id>] [--file <path>]
+  cat >&2 <<'USAGE'
+usage: loop/run <workspace-name>
 
-Carries a request through every dev-loop step that's actually built:
-request -> research -> scope -> plan. Resumes an in-flight request from
-wherever it left off, or starts a fresh one if none is open — interactively
-(type the request, finish with Ctrl-D), or non-interactively via
---file/piped stdin for the request text (first request only — see below).
+Opens an interactive overseer session on the configured provider agent for
+workspace/<workspace-name>. The overseer picks up whatever is open — resuming
+a request mid-flight, planning one already scoped — or asks for a new request
+when nothing is pending, and keeps going until you stop it.
 
-Without --id, auto-picks the workspace's one open mid-flight request
-(request/research). If nothing is mid-flight but scoped requests still need
-plans, an agent helps pick which to plan. With --id, resumes that exact
-request regardless of its current step/status.
+Requires an interactive terminal: the overseer talks to you. Use
+loop/bin/provider to choose which agent CLI runs it, loop/bin/list to see
+what is open without starting a session.
 
-After a request is planned, asks whether to plan another scoped request or
-start a new one. implement/verify/decide/commit/review aren't built yet.
-
-Requires an interactive terminal — request/scope/pick need to talk to you.
-
-Exit codes: 0 ok, 1 general/validation/provider failure, 2 workspace not
-found, 3 ambiguous selection without --id, 4 no terminal attached, 5
-running lease held by another process.
-EOF
+Exit codes: 0 ok, 1 general/provider failure, 2 workspace not found,
+4 no terminal attached, 5 another overseer session holds this workspace.
+USAGE
 }
 
-# confirm <prompt> — y/N read from the same terminal the whole script
-# requires; anything but y/yes (including Ctrl-C, which just kills the
-# script) counts as no.
-confirm() {
-  local prompt=$1 reply
-  read -r -p "$prompt [$(hl y)/$(hl N)] " reply || return 1
-  case "$reply" in
-    y|Y|yes|YES) return 0 ;;
-    *) return 1 ;;
-  esac
-}
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
 
-# print_running_lease <slug> <name> — surface cross-terminal activity.
-print_running_lease() {
-  local slug=$1 name=$2 held
-  held=$(running_get "$slug" || true)
-  if [ -n "$held" ]; then
-    log_info "running on '$name': $(printf '%s' "$held" | jq -r '"\(.step) \(.id) (pid \(.pid), since \(.started_at))"')"
-  fi
-}
-
-# print_open_requests <slug> <name> — same table loop/bin/list prints.
-print_open_requests() {
-  local slug=$1 name=$2 event status found=0
-  local head="" reset=""
-  if [ "$LOOP_COLOR" = 1 ]; then
-    head=$(tput bold)$(tput setaf 6)
-    reset=$(tput sgr0)
-  fi
-  print_running_lease "$slug" "$name"
-  while IFS= read -r event; do
-    [ -n "$event" ] || continue
-    status=$(printf '%s' "$event" | jq -r '.status')
-    [ "$status" = "cleared" ] && continue
-    if [ "$found" -eq 0 ]; then
-      printf '\n'
-      log_info "open requests for '$name':"
-      printf '%s%-32s %-9s %-10s %-21s %s%s\n' "$head" ID STEP STATUS SUBMITTED TITLE "$reset"
-    fi
-    found=1
-    printf '%-32s %-9s %-10s %-21s %s\n' \
-      "$(printf '%s' "$event" | jq -r '.id')" \
-      "$(printf '%s' "$event" | jq -r '.step')" \
-      "$status" \
-      "$(printf '%s' "$event" | jq -r '.at')" \
-      "$(printf '%s' "$event" | jq -r '.title')"
-  done < <(latest_request_events "$slug")
-  [ "$found" -eq 0 ] || printf '\n'
-}
-
-# collect_scoped_unplanned <slug> — fills global array SCOPED_UNPLANNED with
-# latest-event JSON lines for scoped requests that still need a plan.
-collect_scoped_unplanned() {
-  local slug=$1 event id
-  SCOPED_UNPLANNED=()
-  while IFS= read -r event; do
-    [ -n "$event" ] || continue
-    [ "$(printf '%s' "$event" | jq -r '.status')" = "scoped" ] || continue
-    [ "$(printf '%s' "$event" | jq -r '.step')" = "scope" ] || continue
-    id=$(printf '%s' "$event" | jq -r '.id')
-    plan_is_present_valid "$slug" "$id" && continue
-    SCOPED_UNPLANNED+=("$event")
-  done < <(latest_request_events "$slug")
-}
-
-# write_pick_bundle <workspace_dir> <name> <slug> <planned_at> <path>
-# JSON bundle for provider_pick_plan (candidates + absolute paths + refs).
-write_pick_bundle() {
-  local workspace_dir=$1 name=$2 slug=$3 planned_at=$4 path=$5
-  local memory_file held running_arg id candidates_json="[]"
-  memory_file=$(memory_path "$slug")
-  [ -f "$memory_file" ] || memory_file=""
-  held=$(running_get "$slug" || true)
-  if [ -n "$held" ]; then
-    running_arg=$held
-  else
-    running_arg=none
-  fi
-
-  for ev in "${SCOPED_UNPLANNED[@]}"; do
-    id=$(printf '%s' "$ev" | jq -r '.id')
-    candidates_json=$(jq -c \
-      --argjson acc "$candidates_json" \
-      --arg id "$id" \
-      --arg title "$(printf '%s' "$ev" | jq -r '.title')" \
-      --arg scoped_at "$(printf '%s' "$ev" | jq -r '.at')" \
-      --arg record_file "$(record_path "$slug" "$id")" \
-      --arg research_file "$(research_path "$slug" "$id")" \
-      --arg scope_file "$(scope_path "$slug" "$id")" \
-      --arg plan_file "$(plan_path "$slug" "$id")" \
-      --arg request_ref "db/$slug/requests/$id.md" \
-      --arg research_ref "db/$slug/research/$id.md" \
-      --arg scope_ref "db/$slug/scope/$id.md" \
-      '$acc + [{
-        id:$id, title:$title, scoped_at:$scoped_at,
-        record_file:$record_file, research_file:$research_file,
-        scope_file:$scope_file, plan_file:$plan_file,
-        request_ref:$request_ref, research_ref:$research_ref, scope_ref:$scope_ref
-      }]')
-  done
-  jq -n \
-    --arg workspace "$name" \
-    --arg slug "$slug" \
-    --arg planned_at "$planned_at" \
-    --arg memory_file "$memory_file" \
-    --arg running "$running_arg" \
-    --argjson candidates "$candidates_json" \
-    '{workspace:$workspace, slug:$slug, planned_at:$planned_at, memory_file:$memory_file, running:$running, candidates:$candidates}' \
-    > "$path"
-}
-
-# pick_and_plan_scoped <workspace_dir> <name> <slug> — interactive provider
-# session: analyze scoped candidates, human picks one, agent writes the plan
-# in the same session. Returns 0 if a plan was recorded, 1 if cancelled/none.
-pick_and_plan_scoped() {
-  local workspace_dir=$1 name=$2 slug=$3
-  local held planned_at bundle_file result_file chosen id raw_ref title plan_file
-  local request_ref research_ref scope_ref plan_ref
-
-  collect_scoped_unplanned "$slug"
-  if [ ${#SCOPED_UNPLANNED[@]} -eq 0 ]; then
-    return 1
-  fi
-
-  held=$(running_get "$slug" || true)
-  if [ -n "$held" ]; then
-    log_error "cannot plan: workspace '$name' is already running $(printf '%s' "$held" | jq -r '"\(.step) on \(.id) (pid \(.pid))"')"
-    exit 5
-  fi
-
-  print_open_requests "$slug" "$name"
-  ensure_slug_dirs "$slug"
-
-  # Single candidate: headless plan (no pick conversation needed).
-  if [ ${#SCOPED_UNPLANNED[@]} -eq 1 ]; then
-    id=$(printf '%s' "${SCOPED_UNPLANNED[0]}" | jq -r '.id')
-    log_info "one scoped request needs a plan — planning $id"
-    step_plan "$workspace_dir" "$name" "$slug" "$id"
-    return 0
-  fi
-
-  planned_at=$(iso_now)
-  bundle_file=$(mktemp)
-  result_file=$(mktemp)
-  # shellcheck disable=SC2064
-  trap 'rm -f "$bundle_file" "$result_file"' RETURN
-
-  write_pick_bundle "$workspace_dir" "$name" "$slug" "$planned_at" "$bundle_file"
-
-  if ! running_claim "$slug" "__picking__" "plan"; then
-    die "could not claim running lease for '$name' — another terminal holds it" 1
-  fi
-
-  log_info "pick-and-plan via provider '$PROVIDER_ID' — analyze, choose, then plan in one session"
-  log_info "when the agent says the plan is done, exit that session so the loop can continue"
-  if ! provider_pick_plan "$bundle_file" "$result_file" "$workspace_dir"; then
-    running_release "$slug" "__picking__"
-    die "pick-and-plan failed" 1
-  fi
-
-  running_release "$slug" "__picking__"
-
-  if [ ! -f "$result_file" ] || [ "$(record_frontmatter_get "$result_file" status)" != "picked" ]; then
-    die "pick-and-plan did not write a valid result at $result_file" 1
-  fi
-
-  chosen=$(record_frontmatter_get "$result_file" chosen)
-  chosen=${chosen%% *} # one id
-  if [ -z "$(printf '%s' "$chosen" | tr -d '[:space:]')" ]; then
-    log_info "no scoped request chosen to plan"
-    return 1
-  fi
-
-  id=$chosen
-  plan_file=$(plan_path "$slug" "$id")
-  request_ref="db/$slug/requests/$id.md"
-  research_ref="db/$slug/research/$id.md"
-  scope_ref="db/$slug/scope/$id.md"
-  plan_ref="db/$slug/plan/$id.md"
-
-  if ! plan_is_valid "$plan_file" "$id" "$slug" "$planned_at" "$request_ref" "$research_ref" "$scope_ref"; then
-    log_error "plan file failed validation after pick-and-plan:"
-    plan_explain_invalid "$plan_file" "$id" "$slug" "$planned_at" "$request_ref" "$research_ref" "$scope_ref"
-    rm -f "$plan_file"
-    die "planning failed — scope/research records untouched" 1
-  fi
-
-  raw_ref=$(latest_request_events "$slug" | jq -r --arg id "$id" 'select(.id == $id) | .raw_ref')
-  title=$(record_title "$(record_path "$slug" "$id")")
-  [ -n "$title" ] || title="(untitled)"
-  append_event "$slug" "$id" "$planned_at" "plan" "completed" "planned" "$title" "$raw_ref" "$plan_ref"
-  log_info "planned $id for '$name' — $plan_ref (impact $(record_frontmatter_get "$plan_file" impact))"
-  return 0
-}
-
-# advance_to_plan <workspace_dir> <name> <slug> <id> — after scope, ensure
-# plan exists (in-session write or headless step_plan).
-advance_to_plan() {
-  local workspace_dir=$1 name=$2 slug=$3 id=$4
-  local event raw_ref status step
-  event=$(latest_request_events "$slug" | jq -c --arg id "$id" 'select(.id == $id)')
-  status=$(printf '%s' "$event" | jq -r '.status')
-  step=$(printf '%s' "$event" | jq -r '.step')
-  raw_ref=$(printf '%s' "$event" | jq -r '.raw_ref')
-
-  if [ "$step" = "plan" ] && [ "$status" = "planned" ]; then
-    return 0
-  fi
-  if plan_is_present_valid "$slug" "$id"; then
-    record_plan_if_present "$slug" "$id" "$raw_ref" || true
-    return 0
-  fi
-  step_plan "$workspace_dir" "$name" "$slug" "$id"
-}
-
-if [ "${1:-}" = "-h" ] || [ "${1:-}" = "--help" ]; then
-  usage
-  exit 0
-fi
+[ $# -eq 1 ] || { usage; exit 1; }
+name=$1
 
 if [ ! -t 0 ] || [ ! -t 1 ]; then
-  die "loop/run requires an interactive terminal — the request/scope/pick steps need to talk to you" 4
+  die "loop/run requires an interactive terminal — the overseer needs to talk to you" 4
 fi
 
 require_cmd jq
-load_provider
-
-name=""
-id=""
-raw_input_file=""
-while [ $# -gt 0 ]; do
-  case "$1" in
-    --id)
-      [ $# -ge 2 ] || die "--id requires a value" 1
-      id=$2
-      shift 2
-      ;;
-    --file)
-      [ $# -ge 2 ] || die "--file requires a path argument" 1
-      raw_input_file=$2
-      shift 2
-      ;;
-    -h|--help)
-      usage
-      exit 0
-      ;;
-    -*)
-      die "unknown option: $1" 1
-      ;;
-    *)
-      if [ -n "$name" ]; then
-        die "unexpected extra argument: $1" 1
-      fi
-      name=$1
-      shift
-      ;;
-  esac
-done
-
-if [ -z "$name" ]; then
-  usage
-  exit 1
-fi
-
 workspace_dir=$(resolve_workspace "$name")
 slug=$(slugify "$name")
+load_provider
 
-first_pass=1
-while true; do
-  step="" status=""
+if ! running_claim "$slug"; then
+  die "workspace '$name' already has an overseer session (see the holder above)" 5
+fi
+trap 'running_release "$slug"' EXIT
 
-  if [ "$first_pass" -eq 1 ] && [ -n "$id" ]; then
-    event=$(latest_request_events "$slug" | jq -c --arg id "$id" 'select(.id == $id)')
-    [ -n "$event" ] || die "no request '$id' found for '$name'" 1
-    status=$(printf '%s' "$event" | jq -r '.status')
-    [ "$status" != "cleared" ] || die "request '$id' was cleared — its record no longer exists" 1
-    step=$(printf '%s' "$event" | jq -r '.step')
-  elif [ "$first_pass" -eq 1 ]; then
-    # Mid-flight = still before scoped (request/research). Scoped-without-plan
-    # is handled by the pick path below, not as ambiguous resume.
-    candidates=()
-    while IFS= read -r ev; do
-      [ -n "$ev" ] || continue
-      candidates+=("$ev")
-    done < <(latest_request_events "$slug" | jq -c 'select(.status != "cleared" and .status != "scoped" and .status != "planned")')
+# Point at the instructions rather than inlining them: the overseer re-reads
+# them as it works, and a prompt this short can't stall a CLI on argv size.
+prompt="Read $LOOP_DIR/overseer.md and act as the overseer for workspace '$name'.
+LOOP_DIR=$LOOP_DIR
+WORKSPACE=$name
+WORKSPACE_DIR=$workspace_dir"
 
-    if [ ${#candidates[@]} -gt 1 ]; then
-      log_error "multiple resumable requests for '$name' — pass --id to resume a specific one:"
-      for ev in "${candidates[@]}"; do
-        printf '  - %s [%s/%s] %s\n' \
-          "$(printf '%s' "$ev" | jq -r '.id')" \
-          "$(printf '%s' "$ev" | jq -r '.step')" \
-          "$(printf '%s' "$ev" | jq -r '.status')" \
-          "$(printf '%s' "$ev" | jq -r '.title')" >&2
-      done
-      exit 3
-    fi
-
-    if [ ${#candidates[@]} -eq 1 ]; then
-      id=$(printf '%s' "${candidates[0]}" | jq -r '.id')
-      step=$(printf '%s' "${candidates[0]}" | jq -r '.step')
-      status=$(printf '%s' "${candidates[0]}" | jq -r '.status')
-    else
-      collect_scoped_unplanned "$slug"
-      if [ ${#SCOPED_UNPLANNED[@]} -gt 0 ]; then
-        if pick_and_plan_scoped "$workspace_dir" "$name" "$slug"; then
-          id=""
-          first_pass=0
-          if confirm "loop: plan another scoped request for '$name'?"; then
-            continue
-          fi
-          if confirm "loop: start a new request for '$name'?"; then
-            continue
-          fi
-          exit 0
-        fi
-        # pick returned none — fall through to optional new request
-        id=""
-        first_pass=0
-        if confirm "loop: start a new request for '$name'?"; then
-          continue
-        fi
-        exit 0
-      fi
-    fi
-  fi
-
-  first_pass=0
-
-  if [ -z "$step" ]; then
-    print_open_requests "$slug" "$name"
-    id=$(step_request "$workspace_dir" "$name" "$slug" "$raw_input_file")
-    raw_input_file=""
-    step="request"; status="requested"
-  fi
-
-  if [ "$step" = "request" ] && [ "$status" = "requested" ]; then
-    step_research "$workspace_dir" "$name" "$slug" "$id"
-    step="research"; status="researched"
-  fi
-
-  if [ "$step" = "research" ] && [ "$status" = "researched" ]; then
-    step_scope "$workspace_dir" "$name" "$slug" "$id"
-    # Refresh state after scope (may already be planned in-session).
-    event=$(latest_request_events "$slug" | jq -c --arg id "$id" 'select(.id == $id)')
-    step=$(printf '%s' "$event" | jq -r '.step')
-    status=$(printf '%s' "$event" | jq -r '.status')
-  fi
-
-  if [ "$step" = "scope" ] && [ "$status" = "scoped" ]; then
-    advance_to_plan "$workspace_dir" "$name" "$slug" "$id"
-    event=$(latest_request_events "$slug" | jq -c --arg id "$id" 'select(.id == $id)')
-    step=$(printf '%s' "$event" | jq -r '.step')
-    status=$(printf '%s' "$event" | jq -r '.status')
-  fi
-
-  if [ "$step" = "plan" ] && [ "$status" = "planned" ]; then
-    log_info "$id is planned at db/$slug/plan/$id.md — implement/verify/decide/commit/review aren't implemented yet."
-    id=""
-    collect_scoped_unplanned "$slug"
-    if [ ${#SCOPED_UNPLANNED[@]} -gt 0 ]; then
-      if confirm "loop: plan another scoped request for '$name'?"; then
-        if pick_and_plan_scoped "$workspace_dir" "$name" "$slug"; then
-          continue
-        fi
-      fi
-    fi
-    if confirm "loop: start a new request for '$name'?"; then
-      continue
-    fi
-    exit 0
-  fi
-
-  die "request '$id' is at an unexpected state (step: $step, status: $status) — don't know how to proceed" 1
-done
+log_info "overseer session on '$name' via provider '$PROVIDER_ID'"
+provider_session "$prompt" "$workspace_dir"

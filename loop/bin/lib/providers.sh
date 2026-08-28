@@ -1,8 +1,9 @@
 #!/usr/bin/env bash
 # Provider resolution/loading. Mirrors the shape of Overseer's own
 # AgentAdapter split (packages/protocol/src/adapter.ts): an id string plus a
-# small function contract each provider implements. Requires common.sh to
-# already be sourced (LOOP_DIR, die, require_cmd).
+# small function contract each provider implements — here just two functions,
+# because a provider's whole job is to open one interactive session. Requires
+# common.sh to already be sourced (LOOP_DIR, die, require_cmd).
 #
 # Each provider lives as a self-contained bundle under loop/providers/<id>/
 # (manifest + provider.sh + that provider's own config tree). Orchestration
@@ -96,15 +97,14 @@ $available" 1
   PROVIDER_ROOT=$root
   PROVIDER_CONFIG_ROOT="$PROVIDER_ROOT/$PROVIDER_CONFIG_DIR"
   export PROVIDER_ID PROVIDER_ROOT PROVIDER_CONFIG_ROOT
-  # Optional manifest fields — export if set so provider.sh can use them.
+  # Optional manifest field — export if set so provider.sh can use it.
   [ -n "${PROVIDER_CLI:-}" ] && export PROVIDER_CLI
-  [ -n "${PROVIDER_COMMANDS_DIR:-}" ] && export PROVIDER_COMMANDS_DIR
 
   # shellcheck disable=SC1090
   source "$script"
 
   local fn
-  for fn in provider_check_available provider_structure provider_research provider_scope provider_plan provider_pick_plan; do
+  for fn in provider_check_available provider_session; do
     declare -F "$fn" >/dev/null || die "provider '$id' is missing function '$fn' ($script)" 1
   done
 

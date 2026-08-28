@@ -288,7 +288,7 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Command palette                   | global       | keyboard-first jump to any session, zone, or action                 |
 | Desktop notifications             | global       | on approval request or turn completion                              |
 | Additional providers              | —            | catalog stubs (`codex`, `opencode`, `github-copilot`) land early; full adapter runtime still later |
-| Dev-loop CLI                      | —            | incubating outside `packages/*` as `loop/`; bash + Claude Code CLI + files only (§9) |
+| Dev-loop CLI                      | —            | incubating outside `packages/*` as `loop/`; bash + a provider CLI + files only (§9) |
 
 ---
 
@@ -442,16 +442,34 @@ capability → `MINOR`; fix or internal cleanup → `PATCH`.
 
 ## 9. Dev Loop CLI (`loop/`)
 
-A standalone command-line tool, at `loop/` in this repo, that runs
-development loops — feature requests, fixes, changes — against a project
-under `workspace/<name>/`. It is **not** a `packages/*` workspace: it uses
-only bash scripts, the Claude Code CLI/slash-commands, and plain files, runs
-directly on the host (not inside Docker), and is versioned/released
-independently of the §8.1 package table. It's incubating — see §3's Feature
-Map row — with the intent to fold into the main app later, at which point it
-would gain a real `packages/` entry and join the lockstep-versioned set.
-Usage lives in [`loop/README.md`](../loop/README.md); this section is the
-spec-level summary.
+A standalone command-line tool, at `loop/` in this repo, that runs development
+loops — feature requests, fixes, changes — against a project under
+`workspace/<name>/`. It is **not** a `packages/*` workspace: it uses only bash
+scripts, a provider CLI, and plain files, runs directly on the host (not inside
+Docker), and is versioned/released independently of the §8.1 package table.
+It's incubating — see §3's Feature Map row — with the intent to fold into the
+main app later, at which point it would gain a real `packages/` entry and join
+the lockstep-versioned set. Usage lives in [`loop/README.md`](../loop/README.md);
+this section is the spec-level summary.
+
+**The overseer.** `loop/run <workspace>` opens one interactive session on the
+configured provider agent and hands it the terminal. That session is the
+orchestrator: it reads the workspace's state, resumes what is mid-flight, plans
+what is scoped, or asks the human for a new request, and keeps going until the
+human stops it. Its instructions are [`loop/overseer.md`](../loop/overseer.md).
+Bash owns no control flow — the tool deliberately does not reimplement, as a
+shell state machine, the orchestration the agent is better at.
+
+**The bash surface.** What bash does own is everything a language model should
+not improvise: allocating request ids and paths, stamping timestamps,
+validating what a step wrote, and appending to the log. That is six commands —
+`list`, `new`, `step`, `record`, `clear`, `provider` (plus `check`) — each
+taking a workspace name, printing JSON to stdout and human text to stderr. The
+overseer drives them and acts on their output. `loop/bin/step` hands a step one
+**named** JSON context (inputs, output path, and the literal frontmatter block
+to copy); `loop/bin/record` checks the written artifact against the same values
+before `index.jsonl` is touched. There is no headless mode: a step that needs
+no human runs as a subagent of the overseer, not as a second bash code path.
 
 **File taxonomy.** Every file the tool writes is exactly one of three kinds:
 
@@ -462,69 +480,65 @@ spec-level summary.
 | Everything else | `.md` | Agent-authored substantive content, meant to flow forward as context for the next step — or double as skill/subagent/command material |
 
 Markdown is chosen over JSON for the substantive record specifically because
-it's directly usable as LLM context with no parse step; a small
-frontmatter block (same tolerant, line-based convention §1.1.1 describes for
-`.claude/agents/*.md` name/description) carries the handful of fields that
-need to stay structured. One exception: `research`'s `memory.md` is also
-`.md` but has no frontmatter and isn't per-request — it's a living document
-per workspace, read and updated (not just appended to) on every `research`
-run, flowing forward to every future step/request for that workspace rather
-than just the next one.
+it's directly usable as LLM context with no parse step; a small frontmatter
+block (same tolerant, line-based convention §1.1.1 describes for
+`.claude/agents/*.md` name/description) carries the handful of fields that need
+to stay structured. One exception: `memory.md` is also `.md` but has no
+frontmatter and isn't per-request — it's a living document per workspace, read
+and rewritten on every `research` run, flowing forward to every future
+step/request for that workspace rather than just the next one.
 
 **Provider abstraction.** `loop/bin/lib/providers.sh` loads a self-contained
-bundle from `loop/providers/<id>/` (manifest + `provider.sh` + that
-provider's config tree). It mirrors the shape of the `AgentAdapter` split
-in §1.1 — an id string plus a small function contract
-(`provider_check_available`, `provider_structure`, `provider_research`,
-`provider_scope`, `provider_plan`, `provider_pick_plan`) each provider
-implements — but is defined independently
-in bash, because the tool cannot read Overseer's own `attached_provider`
-state (§2's `state.json` lives inside a Docker-only volume, unreachable
-from a host-side script). **Invariant:** LLM invocations for an active
-provider use only that bundle's `PROVIDER_ROOT` for project config
-discovery — never `loop/` root, never another provider. Only `claude-code`
-has a real implementation (`loop/providers/claude-code/`); `cursor` ships
-as a failing layout stub. `loop/bin/check-providers` enforces no
-cross-provider leakage into orchestration.
+bundle from `loop/providers/<id>/` (manifest + `provider.sh` + that provider's
+config tree). It mirrors the shape of the `AgentAdapter` split in §1.1 — an id
+string plus a small function contract — but is defined independently in bash,
+because the tool cannot read Overseer's own `attached_provider` state (§2's
+`state.json` lives inside a Docker-only volume, unreachable from a host-side
+script). The contract is two functions, `provider_check_available` and
+`provider_session <prompt> <workspace_dir>`, because a provider's whole job is
+to open one session. **Invariant:** the session's config discovery sees only
+that bundle's `PROVIDER_ROOT` — never `loop/` root, never another provider.
+Both `claude-code` (`providers/claude-code/`, CLI `claude`) and `cursor`
+(`providers/cursor/`, CLI `agent`) are real implementations.
+`loop/bin/check` lints that a provider's CLI name and config directory stay
+inside its own bundle, deriving what to look for from the manifests themselves.
 
-**Context-window discipline.** Automated prompts keep bulk content out of
-the prompt body (passed by file path, read on demand) and sandwich critical
-instructions at both ends of a prompt rather than stating them once — a
-standing convention for every step, not just the first.
+**Step instructions are provider-neutral.** Each step's behavior is one file,
+`loop/steps/<step>.md`, read by whichever agent runs that step — so it counts
+as orchestration for the isolation lint above. They were previously duplicated
+as slash commands inside each provider's config tree.
+
+**Context-window discipline.** Prompts keep bulk content out of the prompt body
+(passed by file path, read on demand) and sandwich critical instructions at both
+ends rather than stating them once — a standing convention for every step. The
+overseer applies it to itself: it delegates every step it can so the artifacts
+never enter its own window, and steers by `loop/bin/list --json` rather than by
+reading `db/`.
 
 **Terminology.** The loop is made of nine **steps**, in order: `request` →
-`research` → `scope` → `plan` → `implement` → `verify` → `decide` →
-`commit` → `review`. `plan` → `implement` → `verify` → `decide` (4-7) is a
-closed automated loop with no human in it (except that `plan` may be entered
-from an interactive scope session or after an interactive pick-and-plan
-session among scoped requests); the only two ways out are `decide` routing back to `scope` (3,
-for extra scoping) or forward to `commit` (8) — every other handoff is a
-straight, one-directional pass. Inside a `plan`, work is decomposed into
-**horizontal/vertical layers**, **phases**, and **vertical tracers** (see
-[`loop/README.md`](../loop/README.md)); the plan file also carries an
-`impact` score. Each step is meant to carry its own behavior under the
-active provider's commands tree (e.g.
-`loop/providers/claude-code/.claude/commands/<step>/`) defining how to
-execute it — a noted extension point; built steps today use flat slash
-commands including `plan-request.md` and `pick-plan-request.md`.
+`research` → `scope` → `plan` → `implement` → `verify` → `decide` → `commit` →
+`review`. `plan` → `implement` → `verify` → `decide` (4-7) is meant to be a
+closed automated loop with no human in it; the only two ways out are `decide`
+routing back to `scope` (3, for extra scoping) or forward to `commit` (8) —
+every other handoff is a straight, one-directional pass. Inside a `plan`, work
+is decomposed into **horizontal/vertical layers**, **phases**, and **vertical
+tracers** (see [`loop/README.md`](../loop/README.md)); the plan file also
+carries an `impact` score.
 
-**HITL vs automated execution.** `request`, `scope`, `commit`, and `review`
-are human-in-the-loop and run as interactive provider sessions; `research`,
-`plan` (headless path), `implement`, `verify`, and `decide` are automated
-and run as single headless provider calls (or plain bash). Picking which
-scoped request to plan is interactive: the provider analyzes candidates,
-asks the human, then continues into `plan` in the same session.
+**Who runs a step.** One question decides it: whether the step needs the human.
+`scope` is a conversation, so the overseer runs it in its own session.
+`request`, `research`, and `plan` need nobody, so each is delegated to a
+subagent that reads its instruction file and reports one line back. The same
+rule extends to the unbuilt steps: `commit` and `review` are human-in-the-loop;
+`implement`, `verify`, and `decide` are not.
 
-**Current scope.** `request`, `research`, `scope`, and `plan` are
-implemented: `request` collects a raw request via stdin, then a single
-provider call structures it into `loop/db/<slug>/requests/<id>.md`;
-`research` then explores the actual project (via `--add-dir`), writes
-`loop/db/<slug>/research/<id>.md` as context for `scope`, and updates the
-shared `loop/db/<slug>/memory.md`; `scope` writes
-`loop/db/<slug>/scope/<id>.md` and continues into planning in the same
-interactive session when it can; `plan` writes
-`loop/db/<slug>/plan/<id>.md` (also via headless `step_plan` or after a
-pick among scoped requests). A per-slug `running.json` lease surfaces
-in-flight plan/scope work to other terminals. The other five steps are
-spec-only — named and ordered (see
-[`loop/README.md`](../loop/README.md)) but not built.
+**Current scope.** `request`, `research`, `scope`, and `plan` are implemented:
+`request` captures raw text via `loop/bin/new` and structures it into
+`loop/db/<slug>/requests/<id>.md`; `research` explores the actual project,
+writes `loop/db/<slug>/research/<id>.md` as context for `scope`, and rewrites
+the shared `loop/db/<slug>/memory.md`; `scope` writes
+`loop/db/<slug>/scope/<id>.md`; `plan` writes `loop/db/<slug>/plan/<id>.md`. A
+per-slug `running.json` lease surfaces an active overseer session to other
+terminals. The other five steps are spec-only — named and ordered (see
+[`loop/README.md`](../loop/README.md)) but not built. Adding one is a row in
+`bin/lib/db.sh`'s `LOOP_STEPS` table plus a `loop/steps/<step>.md`.

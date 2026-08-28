@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+# Validate the artifact a step wrote and commit its lifecycle event. This is
+# the only way an event reaches index.jsonl: bash — not the agent that wrote
+# the artifact — decides whether the step counts as done.
+#
+# Usage: loop/bin/record <workspace-name> <request-id> <step>
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$LOOP_BIN_DIR/lib/db.sh"
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: loop/bin/record <workspace-name> <request-id> <step>
+
+Checks the file that step was told to write against the frontmatter
+loop/bin/step handed it, then appends the step's event to index.jsonl.
+
+On failure nothing is recorded, a per-key actual-vs-expected dump goes to
+stderr, and the artifact is left on disk to inspect or overwrite — rerun the
+step, then run this again.
+
+Exit codes: 0 recorded, 1 validation/general failure, 2 workspace not found.
+USAGE
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
+
+require_cmd jq
+
+[ $# -eq 3 ] || { usage; exit 1; }
+name=$1
+id=$2
+step=$3
+
+validate_workspace_name "$name"
+slug=$(slugify "$name")
+require_step "$step"
+
+artifact_validate "$slug" "$name" "$id" "$step" \
+  || die "'$step' for $id was not recorded — see the mismatches above" 1
+
+file=$(artifact_path "$slug" "$step" "$id")
+at=$(record_frontmatter_get "$file" "$(step_field "$step" 5)")
+status=$(step_field "$step" 4)
+record_ref=$(artifact_ref "$slug" "$step" "$id")
+raw_ref=$(artifact_ref "$slug" raw "$id")
+
+# The title is the request's own, for every step: it names the request in
+# `loop/bin/list`, and a later step's heading describes that step, not the work.
+title=$(record_title "$(artifact_path "$slug" request "$id")")
+[ -n "$title" ] || title="(untitled)"
+
+# `request` is the event that brings a request into existence; everything after
+# it completes a step of one that already exists.
+event=completed
+[ "$step" = request ] && event=created
+
+append_event "$slug" "$id" "$at" "$step" "$event" "$status" "$title" "$raw_ref" "$record_ref"
+
+jq -n \
+  --arg id "$id" --arg step "$step" --arg status "$status" \
+  --arg title "$title" --arg ref "$record_ref" \
+  '{recorded:true, id:$id, step:$step, status:$status, title:$title, ref:$ref}'
