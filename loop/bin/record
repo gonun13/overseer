@@ -86,6 +86,14 @@ fi
 artifact_validate "$slug" "$name" "$id" "$step" \
   || die "'$step' for $id was not recorded — see the mismatches above" 1
 
+# Advice, not validation, and deliberately after the record is known good: a
+# plan that serializes tracers owning disjoint files is recorded exactly as
+# written, and the overseer is told what it will cost. See
+# plan_parallelism_warn in lib/db.sh for why this can never be a refusal.
+if [ "$step" = plan ]; then
+  plan_parallelism_warn "$(artifact_path "$slug" plan "$id")"
+fi
+
 file=$(artifact_path "$slug" "$step" "$id")
 at=$(record_frontmatter_get "$file" "$(step_field "$step" 5)")
 status=$(step_field "$step" 4)

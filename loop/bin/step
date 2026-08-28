@@ -26,6 +26,12 @@ Copy `frontmatter` into the written file verbatim; supply the keys listed in
 `frontmatter_open` yourself. `loop/bin/record` checks the result against the
 same values, so anything altered here is rejected there.
 
+`model` names the model a subagent running this step should be spawned on, or
+is null for "whatever the session is already on" — the usual case, and what
+every step that has to explore or judge wants. It is advisory: nothing
+validates it against the record, and a caller that cannot honour it, or finds
+that model unavailable, falls back to the session default.
+
 --tracer  the slice of the plan to work, for a step that takes the working
           tree (implement, verify, decide). Takes one tracer id, a
           comma-separated list, or the flag repeated — several ids mean the

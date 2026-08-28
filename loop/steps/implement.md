@@ -11,10 +11,15 @@ need is named in it:
 - `inputs.plan_file` — the plan (read-only; the authority on *how*)
 - `inputs.scope_file` — the scope decision (read-only; the authority on what is
   in and out)
-- `inputs.request_file` — the request record (read-only; what was asked for)
-- `inputs.research_file` — the research report (read-only)
 - `inputs.memory_file` — this workspace's accumulated knowledge (read-only; may
-  not exist). It often already names the project's test command.
+  not exist). Its `## Commands` block names the project's test and lint
+  commands; take them from there rather than looking for them.
+
+The request record and the research report are deliberately **not** here. The
+plan is what they became — that is what `plan` was for — and re-reading the ask
+and the exploration in front of every lap buys nothing the plan does not
+already say. Both stay reachable through the plan's own `request_ref` and
+`research_ref` if a tracer genuinely turns out to need one.
 - `inputs.decide_file` — the decisions taken on earlier laps of this request
   (read-only; absent on the first run). **Read its last `## Decision` block
   before anything else** — if it routed `rework`, that block's `Directive` is
@@ -62,12 +67,10 @@ an altered one is rejected and the step has to be redone.
    under `## Deviations` when it does not. A directive that names no tracer
    applies to the whole group you were handed.
 4. **Read before you write.** Each tracer's block in `inputs.plan_file`, then
-   `inputs.scope_file` for the in/out bounds and `inputs.request_file` for what
-   was actually asked. Read `inputs.memory_file` if it exists. Read
-   `inputs.research_file` only when the plan leaves a concrete path unclear.
-   Then read the code the tracers name, in `workspace_dir`, before changing any
-   of it. Look up a library's own documentation online when its behaviour
-   matters and you are not sure of it.
+   `inputs.scope_file` for the in/out bounds. Read `inputs.memory_file` if it
+   exists. Then read the code the tracers name, in `workspace_dir`, before
+   changing any of it — that is the reading that pays. Look up a library's own
+   documentation online when its behaviour matters and you are not sure of it.
 5. **Where they conflict, scope wins.** The plan says how; the scope says what
    is in and out. A plan step that reaches outside the scope is not done — it
    is recorded under `## Deviations`.

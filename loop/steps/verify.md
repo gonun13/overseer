@@ -18,7 +18,7 @@ need is named in it:
 - `inputs.scope_file` — the scope decision; read it only when a `Verify` line
   points at an acceptance item you need the wording of (read-only)
 - `inputs.memory_file` — this workspace's accumulated knowledge (read-only; may
-  not exist). It often already names the project's test and lint commands.
+  not exist). Its `## Commands` block is **authoritative** — see below.
 - `tracers` — the tracer ids this run checks. Never re-derive them.
 - `workspace_dir` — the project. You run its commands; you do not edit it.
 - `output_file` — the verify record to write
@@ -54,17 +54,45 @@ an altered one is rejected and the step has to be redone.
 
 ## The checks
 
-**1. Tests.** Find the command: `inputs.memory_file` and the implement record's
-`## Suite` line usually name it; otherwise look for a test script in
-`package.json`, a `Makefile` target, `pyproject.toml`, or a test directory next
-to the code the tracers touched. Run the targeted tests for the group's files
-first, then the wider suite once. Record both. If the project has no test
-setup, that is a skip with a reason — not a failure, and not something you go
-and build.
+### Where the commands come from
 
-**2. Lints.** Only what the project already defines: its lint, typecheck, and
-format-check commands. Run each one. Never add tooling the project lacks, and
-never reconfigure the tooling it has to make a run go green.
+`inputs.memory_file` carries a `## Commands` block, one line per command:
+
+```
+- test: none
+- lint: none
+- typecheck: ./node_modules/.bin/tsc --noEmit
+- build: npm run generate
+```
+
+**Treat it as authoritative, in both directions.** A command it names is the
+command you run — do not go looking for a better one. A command it records as
+`none` does not exist: record that check as a skip and move on in the same
+breath. Do not open `package.json`, hunt for a `Makefile` target, or grep for a
+test directory to confirm it; `research` established this against the real
+project, and re-deriving it on every run of every lap is the single most
+wasteful thing this step can do.
+
+The two things that override it, and nothing else: the implement record's
+`## Suite` line, when it names a command it actually ran, and a command from
+memory that fails because it does not exist. Either one means memory is stale —
+say so in `## Not checked`, use what you found instead, and the next `research`
+pass will correct the block.
+
+When there is no `## Commands` block at all (an older memory, or none yet),
+fall back to finding the commands yourself, exactly as below.
+
+**1. Tests.** Take the command from `## Commands`. Without one: the implement
+record's `## Suite` line, then a test script in `package.json`, a `Makefile`
+target, `pyproject.toml`, or a test directory next to the code the tracers
+touched. Run the targeted tests for the group's files first, then the wider
+suite once. Record both. `test: none`, or no test setup found, is a skip with a
+reason — not a failure, and not something you go and build.
+
+**2. Lints.** Only what the project already defines: the `lint`, `typecheck`,
+and format-check commands from `## Commands`. Run each one that is not `none`.
+Never add tooling the project lacks, and never reconfigure the tooling it has to
+make a run go green.
 
 **3. Simulation.** Drive the surface each tracer touched, the way someone using
 it would: run the command-line path end to end, call the endpoint, exercise the
