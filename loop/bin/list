@@ -19,9 +19,12 @@ Lists open requests (any request not yet cleared) and their current
 step/status. With a workspace-name, lists only that workspace's slug;
 without one, lists every slug under db/.
 
---json  one object per workspace: {slug, session, requests: [...]}, where
+--json  one object per workspace: {slug, session, lock, requests: [...]}.
         `session` is the overseer session currently driving that workspace
-        (null if none). This is the form to read from a script or an agent.
+        (null if none); `lock` is the id of the request that owns the working
+        tree while it runs implement/verify/decide (null if none) — no other
+        request may enter that phase until it is released. This is the form to
+        read from a script or an agent.
 
 Exit codes: 0 ok, 1 general failure.
 USAGE
@@ -57,9 +60,12 @@ if [ "$as_json" -eq 1 ]; then
   for slug in "${slugs[@]}"; do
     session=$(running_get "$slug" || true)
     [ -n "$session" ] || session=null
+    held=$(impl_lock_holder "$slug" || true)
     open_request_events "$slug" \
-      | jq -s --arg slug "$slug" --argjson session "$session" \
-          '{slug:$slug, session:$session, requests:.}'
+      | jq -s --arg slug "$slug" --argjson session "$session" --arg lock "$held" \
+          '{slug:$slug, session:$session,
+            lock:(if $lock == "" then null else $lock end),
+            requests:.}'
   done
   exit 0
 fi
@@ -71,17 +77,21 @@ fi
 
 found=0
 for slug in "${slugs[@]}"; do
-  held=$(running_get "$slug" || true)
+  session=$(running_get "$slug" || true)
+  if [ -n "$session" ]; then
+    log_info "overseer session on [$slug]: pid $(printf '%s' "$session" | jq -r '.pid'), since $(printf '%s' "$session" | jq -r '.started_at')"
+  fi
+  held=$(impl_lock_holder "$slug" || true)
   if [ -n "$held" ]; then
-    log_info "overseer session on [$slug]: pid $(printf '%s' "$held" | jq -r '.pid'), since $(printf '%s' "$held" | jq -r '.started_at')"
+    log_info "exclusive phase on [$slug]: held by $held"
   fi
   while IFS= read -r event; do
     [ -n "$event" ] || continue
     if [ "$found" -eq 0 ]; then
-      printf '%-32s %-14s %-9s %-10s %-21s %s\n' ID SLUG STEP STATUS UPDATED TITLE
+      printf '%-32s %-14s %-10s %-12s %-21s %s\n' ID SLUG STEP STATUS UPDATED TITLE
     fi
     found=1
-    printf '%-32s %-14s %-9s %-10s %-21s %s\n' \
+    printf '%-32s %-14s %-10s %-12s %-21s %s\n' \
       "$(printf '%s' "$event" | jq -r '.id')" \
       "$slug" \
       "$(printf '%s' "$event" | jq -r '.step')" \

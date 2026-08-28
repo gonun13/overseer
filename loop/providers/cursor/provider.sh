@@ -17,11 +17,12 @@ provider_check_available() {
 # Open a foreground interactive session, inheriting this terminal, and return
 # when the human exits it. The prompt is the overseer's kickoff.
 #
-# --force allows tool calls that .cursor/cli.json does not explicitly deny:
-# the overseer needs a shell to run the loop's own commands, and there is a
-# human watching the whole session. The deny list in cli.json is what actually
-# bounds it. --sandbox disabled is required for an interactive session to reach
-# the loop's db/ and the project at all.
+# --force allows tool calls the config does not explicitly deny: the overseer
+# needs a shell to run the loop's own commands, and the `implement` step needs
+# to edit the project and run its tests. There is a human watching the whole
+# session, and overseer.md's standing rule is that only an `implement` subagent
+# may change a file under the workspace. --sandbox disabled is required for an
+# interactive session to reach the loop's db/ and the project at all.
 provider_session() {
   local prompt=$1 workspace_dir=$2 status=0
 

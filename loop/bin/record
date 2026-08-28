@@ -23,7 +23,13 @@ On failure nothing is recorded, a per-key actual-vs-expected dump goes to
 stderr, and the artifact is left on disk to inspect or overwrite — rerun the
 step, then run this again.
 
-Exit codes: 0 recorded, 1 validation/general failure, 2 workspace not found.
+For a step that takes the working tree (implement, verify, decide) the
+request must still hold the workspace's exclusive-phase lock — the lock is
+what loop/bin/step granted it. Recording does not release it: the rest of
+that phase inherits the same claim.
+
+Exit codes: 0 recorded, 1 validation/general failure, 2 workspace not found,
+3 the exclusive phase is not held by this request.
 USAGE
 }
 
@@ -41,6 +47,19 @@ step=$3
 validate_workspace_name "$name"
 slug=$(slugify "$name")
 require_step "$step"
+
+# A step that takes the working tree must still hold the claim loop/bin/step
+# granted it. Without that, this artifact was not produced by the loop's own
+# dispatch — or another request has since been let into the phase — and either
+# way it must not become the record of what happened.
+if step_is_exclusive "$step"; then
+  held=$(impl_lock_holder "$slug")
+  if [ "$held" != "$id" ]; then
+    die "'$step' for $id was not recorded: ${held:-nobody} holds the exclusive phase for '$name'
+Start it properly first:
+  $LOOP_BIN_DIR/step $name $id $step" 3
+  fi
+fi
 
 artifact_validate "$slug" "$name" "$id" "$step" \
   || die "'$step' for $id was not recorded — see the mismatches above" 1
@@ -62,6 +81,14 @@ event=completed
 [ "$step" = request ] && event=created
 
 append_event "$slug" "$id" "$at" "$step" "$event" "$status" "$title" "$raw_ref" "$record_ref"
+
+# Note it against the claim, so the next run of the same step needs a fresh
+# one. That is how `plan -> implement -> verify -> decide` stays a cycle while
+# the steps that would close it do not exist: the phase has to be handed back
+# before more work goes into the same working tree.
+if step_is_exclusive "$step"; then
+  impl_lock_mark "$slug" "$step"
+fi
 
 jq -n \
   --arg id "$id" --arg step "$step" --arg status "$status" \

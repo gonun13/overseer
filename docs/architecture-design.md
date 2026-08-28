@@ -462,8 +462,9 @@ shell state machine, the orchestration the agent is better at.
 
 **The bash surface.** What bash does own is everything a language model should
 not improvise: allocating request ids and paths, stamping timestamps,
-validating what a step wrote, and appending to the log. That is six commands —
-`list`, `new`, `step`, `record`, `clear`, `provider` (plus `check`) — each
+validating what a step wrote, appending to the log, and serializing access to
+the project's working tree. That is eight commands — `list`, `new`, `step`,
+`record`, `tracers`, `phase`, `clear`, `provider` (plus `check`) — each
 taking a workspace name, printing JSON to stdout and human text to stderr. The
 overseer drives them and acts on their output. `loop/bin/step` hands a step one
 **named** JSON context (inputs, output path, and the literal frontmatter block
@@ -527,18 +528,61 @@ carries an `impact` score.
 
 **Who runs a step.** One question decides it: whether the step needs the human.
 `scope` is a conversation, so the overseer runs it in its own session.
-`request`, `research`, and `plan` need nobody, so each is delegated to a
-subagent that reads its instruction file and reports one line back. The same
-rule extends to the unbuilt steps: `commit` and `review` are human-in-the-loop;
-`implement`, `verify`, and `decide` are not.
+`request`, `research`, `plan`, and `implement` need nobody, so each is delegated
+to a subagent that reads its instruction file and reports one line back. The
+same rule extends to the unbuilt steps: `commit` and `review` are
+human-in-the-loop; `verify` and `decide` are not.
 
-**Current scope.** `request`, `research`, `scope`, and `plan` are implemented:
-`request` captures raw text via `loop/bin/new` and structures it into
-`loop/db/<slug>/requests/<id>.md`; `research` explores the actual project,
+**The exclusive phase.** `implement`, `verify` and `decide` take the project's
+working tree, so exactly one request may be in that phase per workspace — two
+of them editing the same tree is an unrecoverable conflict. Bash enforces it
+rather than the overseer: `loop/bin/step` claims `db/<slug>/implement.lock`
+(two lines: the holding request's id, and what that claim has recorded) before
+handing over a context and refuses
+when another request holds it, and `loop/bin/record` refuses a step whose claim
+has lapsed. Unlike the session lease it outlives the session on purpose, so a
+restarted overseer finds the tree still owned. Nothing automatic releases it
+while `decide` is unbuilt, so the loop parks after one run — `loop/bin/phase`
+or clearing the request are the ways out. The lock also enforces the cycle
+within a request: `loop/bin/step` turns away a request that still holds the
+phase and has already recorded that step — `record` marks each one it commits
+on the lock's second line — because a run nothing has judged must not be built
+on. The marker is scoped to the claim, so a failed `record` is still
+retryable. With `decide` unbuilt nothing can make that judgement, and nothing
+is asked to: the inner loop is closed and automated, so a human standing in for
+`verify` would just be the missing step wearing a hat. A request occupies the
+phase until `decide` routes it out, so today the first one to reach
+`implemented` **halts** that workspace — the overseer reports why and offers to
+exit, rather than offering other work in front of a change nobody has checked.
+`loop/bin/phase --release` and `loop/bin/clear` are administrative cleanup
+outside a session; neither marks anything verified.
+
+**Current scope.** `request`, `research`, `scope`, `plan`, and `implement` are
+implemented: `request` captures raw text via `loop/bin/new` and structures it
+into `loop/db/<slug>/requests/<id>.md`; `research` explores the actual project,
 writes `loop/db/<slug>/research/<id>.md` as context for `scope`, and rewrites
 the shared `loop/db/<slug>/memory.md`; `scope` writes
-`loop/db/<slug>/scope/<id>.md`; `plan` writes `loop/db/<slug>/plan/<id>.md`. A
+`loop/db/<slug>/scope/<id>.md`; `plan` writes `loop/db/<slug>/plan/<id>.md`;
+`implement` builds one tracer group — test-first where the project allows it —
+and rewrites `loop/db/<slug>/implement/<id>.md`, a cumulative record whose
+tracer ledger is how the next run and a restarted overseer know what is done.
+A group is the pending `parallel: true` tracers of the lowest unfinished phase,
+or a single tracer when it is not parallel; `loop/bin/tracers --next` computes
+it, so which tracers may run together is a bash rule rather than the overseer's
+judgement, and the overseer learns what is left without reading the plan. The
+group is batched into one run because the implement record is one file per
+request — fanning it out across runs would have them clobber each other's
+ledger. A
 per-slug `running.json` lease surfaces an active overseer session to other
-terminals. The other five steps are spec-only — named and ordered (see
+terminals. The other four steps are spec-only — named and ordered (see
 [`loop/README.md`](../loop/README.md)) but not built. Adding one is a row in
-`bin/lib/db.sh`'s `LOOP_STEPS` table plus a `loop/steps/<step>.md`.
+`bin/lib/db.sh`'s `LOOP_STEPS` table plus a `loop/steps/<step>.md`, and a name
+in `LOOP_EXCLUSIVE_STEPS` if it takes the working tree.
+
+**The tool grant is sized for `implement`, not the overseer.** It is the only
+step that edits the project or runs its tests, and a subagent inherits the
+session's tools — so in-place edits and an unprefixed shell are granted to the
+session, where they were previously denied outright. What bounds it is a deny
+list per bundle for the irreversible verbs (`rm`, `sudo`, `git commit`,
+`git push`), `overseer.md`'s standing rule that only an `implement` subagent may
+change a file under the workspace, and a human watching the whole session.
