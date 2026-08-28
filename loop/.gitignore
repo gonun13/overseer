@@ -7,7 +7,7 @@
 
 # The repo-root .gitignore blanket-ignores any `.claude/` directory anywhere
 # in the tree (container-owned state at the app root). The claude-code
-# provider bundle's `.claude/` is versioned config (slash commands, project
-# settings), not runtime state — un-ignore it here.
+# provider bundle's `.claude/` is versioned config (the session's permissions),
+# not runtime state — un-ignore it here.
 !/providers/claude-code/.claude/
 !/providers/claude-code/.claude/**

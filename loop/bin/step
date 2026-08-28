@@ -1,0 +1,47 @@
+#!/usr/bin/env bash
+# Print the context for one step of one request: every path, ref, and
+# frontmatter value that step needs, named. Pure — the only thing it changes on
+# disk is creating the slug's directories.
+#
+# Usage: loop/bin/step <workspace-name> <request-id> <step>
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$LOOP_BIN_DIR/lib/db.sh"
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: loop/bin/step <workspace-name> <request-id> <step>
+
+Prints, as JSON on stdout, everything needed to run one step of one request:
+the instruction file to follow, the input artifacts to read, the file to
+write, and the exact frontmatter to put in it.
+
+Copy `frontmatter` into the written file verbatim; supply the keys listed in
+`frontmatter_open` yourself. `loop/bin/record` checks the result against the
+same values, so anything altered here is rejected there.
+
+Exit codes: 0 ok, 1 general/validation failure, 2 workspace not found.
+USAGE
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
+
+require_cmd jq
+
+[ $# -eq 3 ] || { usage; exit 1; }
+name=$1
+id=$2
+step=$3
+
+workspace_dir=$(resolve_workspace "$name")
+slug=$(slugify "$name")
+require_step "$step"
+ensure_slug_dirs "$slug"
+
+step_context_json "$name" "$slug" "$id" "$step" "$workspace_dir" "$(iso_now)"

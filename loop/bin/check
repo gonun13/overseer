@@ -1,0 +1,67 @@
+#!/usr/bin/env bash
+# The lint gate for loop/: bash syntax on every script, shellcheck, then the
+# provider-isolation lint.
+#
+# Usage: loop/bin/check
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
+
+SHELLCHECK_IMAGE=koalaman/shellcheck:stable
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: loop/bin/check
+
+Runs every check this tool has: bash syntax over run and bin/, shellcheck,
+and loop/bin/check-providers.
+
+shellcheck runs from PATH when it's installed, otherwise from its official
+container image — the same everything-in-Docker fallback the rest of this
+repo uses. It is skipped, with a warning, only when neither is available.
+Nothing here suppresses a shellcheck rule; the scripts are written to pass
+a stock run.
+
+Exit codes: 0 all clean, 1 something failed.
+USAGE
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
+
+# Paths stay relative to LOOP_DIR so the same list works on the host and inside
+# the container, and so a reported path names the file the same way in both.
+cd "$LOOP_DIR"
+scripts=(run)
+while IFS= read -r f; do
+  scripts+=("${f#./}")
+done < <({ find ./bin -maxdepth 1 -type f
+           find ./bin/lib -type f -name '*.sh'; } | sort)
+
+fail=0
+
+for f in "${scripts[@]}"; do
+  bash -n "$f" || { log_error "bash -n failed: $f"; fail=1; }
+done
+[ "$fail" -eq 0 ] && log_info "syntax: ok (${#scripts[@]} scripts)"
+
+# -x lets shellcheck follow `source` into lib/, so each script is checked with
+# the definitions it actually relies on.
+if command -v shellcheck >/dev/null 2>&1; then
+  shellcheck -x -S warning "${scripts[@]}" || fail=1
+  [ "$fail" -eq 0 ] && log_info "shellcheck: ok"
+elif command -v docker >/dev/null 2>&1; then
+  log_info "shellcheck: not on PATH — using $SHELLCHECK_IMAGE"
+  docker run --rm -v "$LOOP_DIR:/loop" -w /loop "$SHELLCHECK_IMAGE" \
+    -x -S warning "${scripts[@]}" || fail=1
+  [ "$fail" -eq 0 ] && log_info "shellcheck: ok"
+else
+  log_error "shellcheck: neither shellcheck nor docker found — SKIPPED"
+fi
+
+"$LOOP_BIN_DIR/check-providers" || fail=1
+
+exit "$fail"
