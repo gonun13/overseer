@@ -45,14 +45,37 @@ Layers = map; tracers = routes; phases = waves.
 3. Name the implicated horizontal layers; list vertical layers only if they
    constrain order.
 4. Split into 1..N phases, then tracers per phase with a goal, owned paths, and
-   a verify check. Same-phase `parallel: true` only when file ownership is
-   disjoint. Parallelism is declared, never assumed.
+   a verify check.
+
+   **Parallelism is the single most expensive judgement in this document.**
+   `loop/bin/tracers --next` hands `implement` exactly one group, so a phase of
+   N tracers you mark sequential is N laps of implement → verify → decide where
+   one would have done — N times the cost, for the same diff.
+
+   The test is file ownership and nothing else: **within a phase, every tracer
+   whose `Files/areas` is disjoint from all its siblings must be
+   `parallel: true`.** Writing `false` is a claim that two tracers touch the
+   same path, so name that path in `## Risks / Sequencing Notes`. If you cannot
+   name one, the answer is `true`.
+
+   What is *not* a reason for `false`: that one tracer is easier to check once
+   another exists, that they read naturally in an order, or that a later one
+   documents an earlier one. Ordering is what **phases** are for. Reach for a
+   second phase when a tracer genuinely cannot be built until another is done;
+   inside a phase, disjoint means parallel.
+
+   `loop/bin/record` reads the plan back and says so on stderr when a phase
+   serializes tracers whose owned paths do not overlap.
 5. **If `output_file` already exists, this is a re-plan.** `decide` sent the
    request back here, so read the plan that is there and keep the ids of every
    tracer you are carrying over — only genuinely new work gets a new id. The
    implement record's ledger is matched to the plan by tracer id, so renumbering
    silently re-opens finished work.
-6. Score **impact** (integer >= 1, lower = smaller blast radius):
+6. Keep `phase_count` at the number of real dependencies, not the number of
+   steps you can imagine. A change of `impact` 3 or below touching fewer than
+   about six files is almost always one phase — its tracers can be built
+   together and checked together.
+7. Score **impact** (integer >= 1, lower = smaller blast radius):
    - 1 docs/audit/matrix-only, no product source edits
    - 2 single leaf file / pure additive local change
    - 3 one feature vertical; few coordinated files
@@ -99,9 +122,10 @@ user-visible surface>
 ### Phase 1 — <name>
 #### Tracer `p1.t1`
 - Goal: <one line>
-- Files/areas: <owned paths; disjoint from parallel siblings>
+- Files/areas: <owned paths, backticked; disjoint from parallel siblings>
 - Verify: <test, script, or observable acceptance item from scope>
-- Parallel: false
+- Parallel: <true unless a same-phase sibling owns one of these paths — then
+  false, and name the shared path under Risks / Sequencing Notes>
 
 <repeat tracers; add Phase 2… only when needed>
 

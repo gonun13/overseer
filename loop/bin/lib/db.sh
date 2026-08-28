@@ -50,18 +50,29 @@
 #                     written into the workspace's .git/config when the request
 #                     takes the working tree and read back unchanged, so bash
 #                     still holds the exact value when `record` runs.
+#  12 model_hint      the model a subagent running this step should be spawned
+#                     on, surfaced as `model` in the step context. Empty — the
+#                     usual case — means "inherit whatever the session is on",
+#                     which is what every step that has to explore or judge
+#                     wants. It is named only for a step that reads a fixed set
+#                     of inputs and writes a fixed shape from them, where a
+#                     smaller model is not a downgrade. Advisory in both
+#                     directions: whoever spawns may not be able to honour it,
+#                     and must fall back to the session default if the named
+#                     model is unavailable, so nothing here is ever validated
+#                     against a written record.
 LOOP_STEPS=(
-  "raw|raw|txt||||||||"
-  "signoff|signoff|txt||||||||"
-  "request|requests|md|requested|submitted_at|raw|||kind:feature,fix,change,epic||"
-  "research|research|md|researched|researched_at|request|||||"
-  "scope|scope|md|scoped|scoped_at|request research|questions_asked||||"
-  "plan|plan|md|planned|planned_at|request research scope||impact phase_count|||"
-  "implement|implement|md|implemented|implemented_at|request research scope plan|tracers|||decide|"
-  "verify|verify|md|verified|verified_at|scope plan implement|checks_run||verdict:pass,fail,blocked||"
-  "decide|decide|md|decided|decided_at|plan implement verify||decisions|route:implement,rework,plan,scope,commit||"
-  "commit|commit|md|committed|committed_at|request implement decide|pr_title||||branch base_branch"
-  "review|review|md|reviewed|reviewed_at|request scope commit signoff|findings||outcome:approved,followups,rejected||branch base_branch"
+  "raw|raw|txt|||||||||"
+  "signoff|signoff|txt|||||||||"
+  "request|requests|md|requested|submitted_at|raw|||kind:feature,fix,change,epic|||haiku"
+  "research|research|md|researched|researched_at|request||||||"
+  "scope|scope|md|scoped|scoped_at|request research|questions_asked|||||"
+  "plan|plan|md|planned|planned_at|request research scope||impact phase_count||||"
+  "implement|implement|md|implemented|implemented_at|scope plan|tracers|||decide||"
+  "verify|verify|md|verified|verified_at|scope plan implement|checks_run||verdict:pass,fail,blocked|||"
+  "decide|decide|md|decided|decided_at|plan implement verify||decisions|route:implement,rework,plan,scope,commit|||"
+  "commit|commit|md|committed|committed_at|request implement decide|pr_title||||branch base_branch|haiku"
+  "review|review|md|reviewed|reviewed_at|request scope commit signoff|findings||outcome:approved,followups,rejected||branch base_branch|"
 )
 
 # `signoff` carries no done_status for the same reason `raw` does not: it is the
@@ -75,6 +86,102 @@ LOOP_STEPS=(
 # ref is one more frontmatter value a step can mis-copy into a rejected record,
 # and nothing is lost, because every earlier artifact stays reachable by
 # following the chain (verify_ref -> implement_ref -> plan_ref -> scope_ref).
+#
+# `implement` is the sharpest case, and the reason the rule is worth stating
+# twice. It used to name `request research scope plan`, which handed every run
+# the whole history: the raw ask, the exploration of the codebase, the bounds,
+# and the decomposition. But by the time it runs, the plan *is* the distillation
+# of the first two — that is what `plan` was for — so research and the request
+# record were ~1.3K tokens of restatement in front of every implement subagent,
+# on every lap. It now names `scope plan`: the authority on what is in bounds,
+# and the authority on how. Both remain reachable through plan_ref for the run
+# that genuinely needs them.
+
+# --- Plan parallelism advice ----------------------------------------------
+#
+# `plan` declares which tracers of a phase may be built in one `implement`
+# run, and `loop/bin/tracers --next` hands out exactly what it declared. A
+# tracer that owns files nobody else in its phase touches costs nothing to
+# group, so a phase that serializes disjoint tracers turns one lap of
+# implement -> verify -> decide into N laps of it, at no benefit — the most
+# expensive mistake a plan can make, and an invisible one, because every
+# individual record still looks right.
+#
+# So `record` says so. This is advice, on stderr, and never a refusal: the
+# owned-path sets are prose written by a model, and a heuristic reading of
+# prose must not be able to block a plan from being recorded. A false
+# positive costs the reader one line; a false refusal would cost them the
+# step. When the tracers really do share a path, the plan says so and this
+# stays quiet.
+#
+# plan_parallelism_warn <plan-file> — always returns 0.
+plan_parallelism_warn() {
+  local file=$1
+  [ -f "$file" ] || return 0
+
+  awk '
+    # Owned paths, as a set. Backticked spans first — that is the template
+    # shape — falling back to comma-separated tokens that look like paths, so
+    # a plan that wrote them bare is still read rather than silently skipped.
+    function paths(s,   out, n, i, tok, arr) {
+      out = ""
+      n = split(s, arr, "`")
+      if (n >= 3) {
+        for (i = 2; i < n; i += 2) if (arr[i] != "") out = out arr[i] "\n"
+        return out
+      }
+      n = split(s, arr, ",")
+      for (i = 1; i <= n; i++) {
+        tok = arr[i]
+        gsub(/^[ \t]+|[ \t]+$/, "", tok)
+        if (tok ~ /[\/.]/ && tok !~ / /) out = out tok "\n"
+      }
+      return out
+    }
+    function disjoint(a, b,   na, nb, i, j, x, y) {
+      na = split(a, x, "\n"); nb = split(b, y, "\n")
+      for (i = 1; i <= na; i++) {
+        if (x[i] == "") continue
+        for (j = 1; j <= nb; j++) {
+          if (y[j] == "") continue
+          # Prefix either way, so `app/` and `app/pages/index.vue` collide.
+          if (x[i] == y[j] || index(x[i], y[j]) == 1 || index(y[j], x[i]) == 1) return 0
+        }
+      }
+      return 1
+    }
+
+    /^### Phase/          { phase = $0; sub(/^### +/, "", phase); n = 0; delete id; delete fl; delete par; started = 1 }
+    /^#### Tracer/        { if (!started) next
+                            t = $0; gsub(/^[^`]*`|`.*$/, "", t); n++; id[n] = t; fl[n] = ""; par[n] = "" }
+    /^- *Files\/areas:/   { if (n) { s = $0; sub(/^- *Files\/areas: */, "", s); fl[n] = paths(s) } }
+    /^- *Parallel:/       { if (n) { s = $0; sub(/^- *Parallel: */, "", s); gsub(/[ \t]+$/, "", s); par[n] = s } }
+
+    # A phase ends where the next one begins, or at the section after the
+    # last. Evaluate there, so `## Out of Plan` does not swallow phase N.
+    /^## /                { if (started) { flush(); started = 0 } }
+    END                   { if (started) flush() }
+
+    function flush(   i, j, allseq, ok) {
+      if (n < 2) { n = 0; return }
+      allseq = 1
+      for (i = 1; i <= n; i++) if (par[i] ~ /true/) allseq = 0
+      if (!allseq) { n = 0; return }
+      ok = 1
+      for (i = 1; i <= n && ok; i++)
+        for (j = i + 1; j <= n && ok; j++)
+          if (!disjoint(fl[i], fl[j])) ok = 0
+      if (ok) {
+        printf "plan advice: %s serializes %d tracers that own disjoint files\n", phase, n > "/dev/stderr"
+        for (i = 1; i <= n; i++) printf "  %s — Parallel: false\n", id[i] > "/dev/stderr"
+        print  "  Nothing in the files forces the order, so this is N laps of implement -> verify -> decide" > "/dev/stderr"
+        print  "  where one would do. If the order is real, name the shared path; otherwise mark them parallel." > "/dev/stderr"
+      }
+      n = 0
+    }
+  ' "$file"
+  return 0
+}
 
 # --- The exclusive-phase lock ------------------------------------------------
 #
@@ -847,6 +954,10 @@ step_context_json() {
     open=$(jq -c --argjson acc "$open" --arg k "$key" --arg v "$val" -n '$acc + {($k): $v}')
   done < <(open_frontmatter "$step")
 
+  # `model` is advisory and always present, null where the row names nothing.
+  # Present-but-null rather than absent so whoever reads the context never has
+  # to distinguish "this step has no hint" from "this bash is too old to emit
+  # one" — both mean the same thing, and both mean the session default.
   ctx=$(jq -n \
     --arg step "$step" \
     --arg id "$id" \
@@ -855,11 +966,13 @@ step_context_json() {
     --arg workspace_dir "$workspace_dir" \
     --arg instructions "$LOOP_DIR/steps/$step.md" \
     --arg output_file "$(artifact_path "$slug" "$step" "$id")" \
+    --arg model "$(step_field "$step" 12)" \
     --argjson inputs "$inputs" \
     --argjson frontmatter "$front" \
     --argjson frontmatter_open "$open" \
     '{step:$step, id:$id, workspace:$workspace, slug:$slug,
       workspace_dir:$workspace_dir, instructions:$instructions,
+      model:(if $model == "" then null else $model end),
       inputs:$inputs, output_file:$output_file,
       frontmatter:$frontmatter, frontmatter_open:$frontmatter_open}')
 

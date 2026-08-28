@@ -47,6 +47,7 @@ loop/bin/step <workspace-name> <request-id> <step> [--tracer <ids>]
 loop/bin/record <workspace-name> <request-id> <step>
 loop/bin/tracers <workspace-name> <request-id> [--json | --next | --last]
 loop/bin/phase <workspace-name> [--release] [--yes] [--force]
+loop/bin/memory <workspace-name> --show | --merge [--id <id>] | --decision
 loop/bin/land <workspace-name> <request-id> [--dry-run]
 loop/bin/publish <workspace-name> <request-id> [--dry-run] [--force]
 loop/bin/train <workspace-name> [--json | --tip] [--id <request-id>]
@@ -73,6 +74,7 @@ loop/bin/check
 | `signoff` | Writes the human's review decision to `db/<slug>/signoff/<id>.txt`, verbatim. The mirror of `new`, for the other end of the loop and for the same reason. Nothing is recorded in `index.jsonl`. |
 | `close` | Ends a request whose pull request has landed: prunes the loop's metadata from its branch so it leaves the train, deletes the local branch, and appends a `closed` event. `--merge` merges it first; `--abandon` drops the work. |
 | `clear` | Deletes a request's artifacts and appends a `cleared` event. Requires `--id` or `--all`, prints what it's about to delete, and asks for confirmation unless `--yes` (mandatory in a non-interactive shell). `index.jsonl` is never rewritten; `memory.md` is never touched. Releases the lock if the cleared request held it. |
+| `memory` | The workspace's accumulated knowledge at `db/<slug>/memory.md`, which every step is handed and none writes directly. `--show` prints it. `--merge` takes a sectioned delta on stdin: each `## Section` it names replaces that section's body, every section it does not name is kept untouched, and bash writes the title and provenance line itself. `--decision` appends one entry under `## Past Decisions & Rationale`. Reports the document's size, and which sections to prune when it is over budget. |
 | `provider` | Lists bundles under `providers/` and writes the chosen id to `loop/.provider`. `LOOP_PROVIDER` still overrides at runtime. |
 | `check` | The lint gate: bash syntax, shellcheck (from PATH, or its container image), and `check-providers`. |
 
@@ -178,9 +180,22 @@ Three files are still "everything else" `.md` but do not flow forward to just
 *the next* step, because the inner loop runs more than once:
 
 - `db/<slug>/memory.md` flows forward to *every* future step and *every* future
-  request for that slug. It's a living document `research` reads and rewrites
-  each run, not a per-request artifact, so it has no frontmatter and `clear`
-  never touches it.
+  request for that slug. It's a living document, not a per-request artifact, so
+  it has no frontmatter and `clear` never touches it.
+
+  Because it is read that widely — once per subagent, on every step, of every
+  lap, of every request — its size is a tax on the whole loop and its accuracy
+  is a shortcut for the whole loop. A `## Commands` block naming the project's
+  test command saves `verify` from going and finding one, every run, forever;
+  a paragraph recording that a fact was re-confirmed on some date is paid for
+  on every run and can be acted on by none of them. So no step writes it
+  directly. `research` sends `loop/bin/memory --merge` a **delta** — only the
+  sections that changed, each replacing its old body — and `decide` and `review`
+  append to `## Past Decisions & Rationale` through `--decision`. Bash owns the
+  title, the provenance line, the section order, and the size budget it reports
+  when the document has outgrown being useful. Left to a full rewrite each pass,
+  memory accretes: the same fact restated with a newer date, sections that only
+  ever grow, and every step paying for the accretion.
 - `implement/<id>.md` is **rewritten** each run, cumulatively: its tracer ledger
   must always describe the whole plan, so the newest write is the whole truth.
 - `decide/<id>.md` is **appended** to, once per lap: each `## Decision` block
@@ -254,16 +269,23 @@ Everything but `scope` and `commit` keeps the request inside the cycle. Every
 other step-to-step handoff in the loop is a straight, one-directional pass.
 
 **Who runs a step.** Only one thing decides this: whether the step needs the
-human — with one addition, because routing is the overseer's own job. `scope` is
-a real conversation, so the overseer runs it in its own session; the human is
-already talking to that session, and no subagent can take over the conversation.
-`decide` it also runs itself: the decision of what happens next is the one thing
-the overseer must not delegate, and the two records it reads are telegraphic by
-design and bounded by `steps/decide.md`. `request`, `research`, `plan`,
-`implement`, `verify` and `commit` need nobody, so each goes to a subagent that
-reads its instruction file, does the work, and reports one line back. That is
-what keeps the overseer's window on the state of the loop instead of on the
-contents of the artifacts.
+human. `scope` is a real conversation, so the overseer runs it in its own
+session; the human is already talking to that session, and no subagent can take
+over the conversation. Every other step but `review` needs nobody, so each goes
+to a subagent that reads its instruction file, does the work, and reports one
+line back. That is what keeps the overseer's window on the state of the loop
+instead of on the contents of the artifacts.
+
+`decide` used to be the exception — the overseer ran it itself, on the argument
+that routing is its own job and must not be delegated. That argument confused
+*authority* with *context*. The overseer still acts on every route, without
+asking; what it does not need is the reading behind one. `decide` opens the
+verify and implement records, weighs them, and picks from a five-value set that
+`record` validates and `list --json` hands straight back — so a route survives
+the overseer being restarted mid-cycle without it ever having held the record.
+Running it in-session cost roughly ten turns and several thousand tokens of
+permanently resident context per lap, in the most expensive window in the
+system, to learn one word the loop was about to be told anyway.
 
 `review` is the one step that splits: the overseer runs it, because it ends in
 the human's decision, but delegates the audit of the whole request's diff to a
@@ -473,13 +495,24 @@ A plan evaluates the scoped work and writes **one** `db/<slug>/plan/<id>.md`:
 | **Phase** | Ordered batch that should be done/verified before the next depends on it. |
 | **Vertical tracer** | Thin end-to-end slice through horizontals; independently implementable/verifiable (`p1.t1` ids). |
 
-Layers = map; tracers = routes; phases = waves. Prefer few phases. Same-phase
-tracers may set `parallel: true` only with disjoint file ownership — `plan`
-does not act on it, but `implement` does: `loop/bin/tracers --next` batches a
-phase's parallel tracers into one run, so a wrongly-declared `parallel: true`
-is what puts two colliding tracers in the same run. Frontmatter includes
-planner-owned `impact` (integer >= 1, lower = smaller blast radius) and
-`phase_count`.
+Layers = map; tracers = routes; phases = waves. Prefer few phases. Frontmatter
+includes planner-owned `impact` (integer >= 1, lower = smaller blast radius)
+and `phase_count`.
+
+**`parallel` is the expensive field, in both directions.** `plan` does not act
+on it; `implement` does, through `loop/bin/tracers --next`, which batches a
+phase's parallel tracers into a single run. Declare it `true` for two tracers
+that touch the same file and they collide inside one run. Declare it `false`
+for tracers that touch nothing in common and the phase becomes N laps of
+`implement` → `verify` → `decide` where one would have produced the same diff —
+the quieter mistake, because every individual record still looks correct.
+
+So the test is file ownership and nothing else: within a phase, disjoint means
+parallel. A dependency that is only about the order things are easiest to check
+in is what **phases** are for. `loop/bin/record` re-reads the plan it just
+validated and says so on stderr when a phase serializes tracers whose owned
+paths do not overlap — advice, never a refusal, because owned-path sets are
+prose and a heuristic reading of prose must not be able to block a record.
 
 ## Providers
 

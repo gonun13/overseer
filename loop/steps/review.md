@@ -156,6 +156,22 @@ anything else across — no parent id, no priority, no special casing.
 Capture their decision with `loop/bin/signoff` as above, **then** ask for this
 step's context, **then** write the record.
 
+## When a review is worth remembering
+
+A `rejected` outcome, and a follow-up the human approved, both say something
+about this project that the code does not: a standard it is held to, a
+constraint nobody wrote down, a shape of change that turns out not to be
+wanted. Append one line for each, after recording:
+
+```sh
+loop/bin/memory {{frontmatter.workspace}} --decision <<'LOOP_MEMORY_EOF'
+<one line: what the review objected to, and what to do instead next time>
+LOOP_MEMORY_EOF
+```
+
+Nothing for a plain `approved` with no findings — that the loop worked is not
+knowledge about the project, and memory is read by every step of every request.
+
 ## Output
 
 Reminder before you write: one Write to `output_file` only — no code fences, no

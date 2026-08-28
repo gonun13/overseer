@@ -1,0 +1,239 @@
+#!/usr/bin/env bash
+# The workspace memory document: read it, merge a delta into it, append a
+# decision to it.
+#
+# db/<slug>/memory.md is the one artifact that is not per-request. Every step
+# is handed its path, and `research` keeps it current, so it is read far more
+# often than anything else in db/ — once per subagent, on every step, of every
+# lap, of every request. That makes its size a tax on the whole loop, and its
+# accuracy a shortcut for the whole loop: a memory that states the project's
+# test command outright saves `verify` the archaeology of finding one, on every
+# run, forever.
+#
+# Which is why this command exists rather than steps writing the file directly.
+# Left to a full rewrite each pass, the document accretes — the same fact
+# restated with a newer date, a section that grows and never shrinks — and
+# every step pays for the accretion. Here, a step sends only what changed,
+# bash owns the shape and the provenance line, and the size budget is checked
+# where it can actually be reported.
+#
+# Usage: loop/bin/memory <workspace-name> --show
+#        loop/bin/memory <workspace-name> --merge [--id <request-id>]   (delta on stdin)
+#        loop/bin/memory <workspace-name> --decision                    (entry on stdin)
+set -euo pipefail
+
+SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+# shellcheck disable=SC1091
+source "$SCRIPT_DIR/lib/common.sh"
+# shellcheck disable=SC1091
+source "$LOOP_BIN_DIR/lib/db.sh"
+
+# The document's sections, in the order they are written. A section the delta
+# names but this list does not is kept and emitted after these, so a workspace
+# that needs one more heading is not blocked on editing this file — but the
+# five below are the shape every step is told to expect.
+MEMORY_SECTIONS=(
+  "Commands"
+  "Codebase Overview"
+  "Established Conventions & Patterns"
+  "Known Issues / Gotchas"
+  "Past Decisions & Rationale"
+)
+
+# Bytes. Not a limit — nothing is truncated — but the number at which the
+# document has stopped being a shortcut and started being a cost, reported so
+# the next `research` pass prunes rather than appends.
+MEMORY_BUDGET=6144
+
+usage() {
+  cat >&2 <<'USAGE'
+usage: loop/bin/memory <workspace-name> --show
+       loop/bin/memory <workspace-name> --merge [--id <request-id>]   (delta on stdin)
+       loop/bin/memory <workspace-name> --decision                    (entry on stdin)
+
+The workspace's accumulated knowledge, at db/<slug>/memory.md. It is not tied
+to a request: every step is handed its path, and it is read more often than any
+other file in db/.
+
+--show       Print the document on stdout, or nothing at all when it does not
+             exist yet. Never fails on a missing file — a first request for a
+             workspace legitimately has no memory.
+
+--merge      Read a delta on stdin and merge it in. The delta is the same
+             sectioned markdown as the document itself, and carries ONLY the
+             sections that changed: each `## Section` in it REPLACES that
+             section's body, and every section it does not name is left exactly
+             as it was. A section the document does not have yet is added.
+             Bash writes the title and the provenance line, so neither is a
+             value a step can get wrong. Prints the new size, and says which
+             sections to prune when the document is over budget.
+
+--decision   Append one entry, from stdin, under `## Past Decisions & Rationale`.
+             For the steps that learn why something is the way it is — `decide`
+             when it routes back to `plan` or `scope`, `review` when the human
+             rejects or asks for a follow-up. That section is what lets a later
+             `scope` or `plan` skip re-litigating a question this workspace has
+             already answered.
+
+Exit codes: 0 ok, 1 general failure, 2 workspace not found, 3 empty input.
+USAGE
+}
+
+case "${1:-}" in
+  -h|--help) usage; exit 0 ;;
+esac
+
+[ $# -ge 2 ] || { usage; exit 1; }
+name=$1; shift
+mode=""
+req_id=""
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --show|--merge|--decision)
+      [ -z "$mode" ] || die "give exactly one of --show, --merge, --decision" 1
+      mode=${1#--}; shift ;;
+    --id) [ $# -ge 2 ] || { usage; exit 1; }; req_id=$2; shift 2 ;;
+    *) usage; exit 1 ;;
+  esac
+done
+[ -n "$mode" ] || { usage; exit 1; }
+
+validate_workspace_name "$name"
+slug=$(slugify "$name")
+file=$(memory_path "$slug")
+
+if [ "$mode" = show ]; then
+  [ -f "$file" ] && cat "$file"
+  exit 0
+fi
+
+ensure_slug_dirs "$slug"
+
+# read_stdin_or_die <what> — the human-or-agent input both mutating modes take.
+read_stdin_or_die() {
+  local text
+  text=$(cat)
+  if [ -z "$(printf '%s' "$text" | tr -d '[:space:]')" ]; then
+    die "no $1 on stdin — nothing to write" 3
+  fi
+  printf '%s\n' "$text"
+}
+
+# report_size <file> — the size line every mutation ends with, plus the prune
+# advice when the document has outgrown its budget. Advice only: a memory over
+# budget is still a memory, and refusing the write would lose the update that
+# was actually correct.
+report_size() {
+  local f=$1 bytes
+  bytes=$(wc -c < "$f")
+  if [ "$bytes" -le "$MEMORY_BUDGET" ]; then
+    log_info "memory for '$name' is now ${bytes}B (budget ${MEMORY_BUDGET}B)"
+    return 0
+  fi
+  log_info "memory for '$name' is now ${bytes}B — over the ${MEMORY_BUDGET}B budget"
+  log_info "every step reads this file on every run, so the overrun is paid on every run."
+  log_info "largest sections:"
+  # Sizes go to stdout so they can be sorted and trimmed; the whole pipeline
+  # is redirected to stderr at the end, because this is advice and stdout
+  # belongs to whatever the caller is actually reading.
+  awk '
+    /^## / { if (name != "") printf "  %6d B  %s\n", n, name; name = substr($0, 4); n = 0; next }
+    { n += length($0) + 1 }
+    END { if (name != "") printf "  %6d B  %s\n", n, name }
+  ' "$f" | sort -rn | head -3 >&2 || true
+  log_info "the next research pass should prune, not append — memory states what is true now,"
+  log_info "not the history of when each fact was confirmed."
+  return 0
+}
+
+case "$mode" in
+  decision)
+    entry=$(read_stdin_or_die "decision entry")
+    [ -f "$file" ] || die "no memory for '$name' yet — a decision has nothing to attach to.
+Research writes the document first:
+  $LOOP_BIN_DIR/step $name <request-id> research" 1
+    # One entry, one line, flattened: the section is a list of answers already
+    # settled, and an entry that sprawls is one a later step will skip reading.
+    line=$(printf '%s' "$entry" | tr '\n' ' ' | sed -E 's/[[:space:]]+/ /g; s/^ //; s/ $//')
+    tmp=$(mktemp)
+    awk -v line="- $line" -v want="Past Decisions & Rationale" '
+      # Land the entry at the end of the section, which is the line before the
+      # next heading, or the end of the file when it is the last section.
+      /^## / {
+        if (inwant) { print line; inwant = 0 }
+        if (substr($0, 4) == want) { inwant = 1; found = 1 }
+      }
+      { print }
+      END {
+        if (inwant) print line
+        else if (!found) { print ""; print "## " want; print line }
+      }
+    ' "$file" > "$tmp"
+    # A section that had only the placeholder now has a real entry; drop it.
+    sed -i -E '/^_?\(?none recorded yet.*$/d' "$tmp"
+    mv "$tmp" "$file"
+    log_info "decision recorded in memory for '$name'"
+    report_size "$file"
+    ;;
+
+  merge)
+    delta=$(read_stdin_or_die "memory delta")
+    dfile=$(mktemp); printf '%s' "$delta" > "$dfile"
+    tmp=$(mktemp)
+    [ -f "$file" ] || : > "$file"
+
+    stamp="_Last updated: $(iso_now)"
+    if [ -n "$req_id" ]; then
+      stamp="$stamp (research on $req_id)_"
+    else
+      stamp="${stamp}_"
+    fi
+
+    printf '# Memory — %s\n\n%s\n' "$name" "$stamp" > "$tmp"
+
+    # Two files in, one out. The delta wins for any section it names; the
+    # document keeps every section the delta is silent about. Canonical order
+    # first, then anything either file has that the canon does not — so a
+    # section is never dropped for being unrecognised.
+    awk -v canon="$(printf '%s\n' "${MEMORY_SECTIONS[@]}")" '
+      function stash(f, n, b) { if (n != "") { if (f == 1) dbody[n] = b; else obody[n] = b } }
+      # Stash before resetting. The file boundary is also the end of the last
+      # section in the delta, and without this that section is silently lost.
+      FNR == 1 { stash(fileno, name, body); fileno++; name = ""; body = "" }
+      /^## / {
+        stash(fileno, name, body)
+        name = substr($0, 4); body = ""
+        gsub(/[ \t]+$/, "", name)
+        if (fileno == 1) { dseen[name] = 1; dorder[++dn] = name }
+        else             { oseen[name] = 1; oorder[++on] = name }
+        next
+      }
+      # Everything before the first heading is the title and provenance line;
+      # bash has already written those, so it is dropped rather than merged.
+      { if (name != "") body = body $0 "\n" }
+      END {
+        stash(fileno, name, body)
+        nc = split(canon, c, "\n")
+        for (i = 1; i <= nc; i++) emit(c[i])
+        for (i = 1; i <= on; i++) if (!printed[oorder[i]]) emit(oorder[i])
+        for (i = 1; i <= dn; i++) if (!printed[dorder[i]]) emit(dorder[i])
+      }
+      function emit(n,   b) {
+        if (!(n in dseen) && !(n in oseen)) return
+        if (printed[n]) return
+        printed[n] = 1
+        b = (n in dseen) ? dbody[n] : obody[n]
+        gsub(/^\n+/, "", b); gsub(/\n+$/, "", b)
+        if (b == "") return
+        print ""
+        print "## " n
+        print b
+      }
+    ' "$dfile" "$file" >> "$tmp"
+
+    rm -f "$dfile"
+    mv "$tmp" "$file"
+    log_info "memory merged for '$name' at $(printf 'db/%s/memory.md' "$slug")"
+    report_size "$file"
+    ;;
+esac

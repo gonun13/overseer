@@ -72,6 +72,25 @@ Rules that bound the choice:
 - **`blocked` is not `fail`.** Nothing could be checked; that is a fact about
   the project's surface, not about the work. Route on the implement record.
 
+## When a route is worth remembering
+
+A `plan` or `scope` route means this request hit something the plan or the
+scope got wrong — a decomposition that could not be built, a bound that turned
+out not to hold. That is the one thing this step learns that outlives the
+request, and the next request to come near the same code should not have to
+rediscover it. After recording, append one line:
+
+```sh
+loop/bin/memory {{frontmatter.workspace}} --decision <<'LOOP_MEMORY_EOF'
+<one line: what turned out to be wrong, and what holds instead>
+LOOP_MEMORY_EOF
+```
+
+Only for `plan` and `scope`. A `rework` is a bug in one run, an `implement` is
+the loop working, and a `commit` is the request ending — none of them is
+knowledge about the project, and writing them down would fill memory with the
+loop's own history, which every later step then pays to read.
+
 ## Output
 
 Reminder before you write: one Write to `output_file` only — no code fences, no
