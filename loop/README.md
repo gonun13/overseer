@@ -43,8 +43,10 @@ to inspect or repair state without starting a session.
 ```sh
 loop/bin/list [<workspace-name>] [--json]
 loop/bin/new <workspace-name>                     # raw request text on stdin
-loop/bin/step <workspace-name> <request-id> <step>
+loop/bin/step <workspace-name> <request-id> <step> [--tracer <ids>]
 loop/bin/record <workspace-name> <request-id> <step>
+loop/bin/tracers <workspace-name> <request-id> [--json | --next]
+loop/bin/phase <workspace-name> [--release] [--yes] [--force]
 loop/bin/clear <workspace-name> (--id <request-id> | --all) [--yes]
 loop/bin/provider [<id>]
 loop/bin/check
@@ -52,11 +54,13 @@ loop/bin/check
 
 | Command | What it does |
 |---|---|
-| `list` | Open (not yet cleared) requests and their current step/status, for one workspace or every slug under `db/`. Read-only, derived from `index.jsonl`. `--json` adds the session lease and is the form the overseer reads. |
+| `list` | Open (not yet cleared) requests and their current step/status, for one workspace or every slug under `db/`. Read-only, derived from `index.jsonl`. `--json` adds the session lease and the exclusive-phase lock, and is the form the overseer reads. |
 | `new` | Allocates a request id, writes the raw human text to `db/<slug>/raw/<id>.txt` verbatim, and prints the `request` step context. Nothing is recorded until `record` runs, so a failed structuring pass can't lose what the human said. |
-| `step` | Prints one step's context: the instruction file to follow, the inputs to read, the file to write, and the exact frontmatter to put in it. Refuses if an input artifact is missing. |
-| `record` | Validates what the step wrote against the frontmatter `step` handed out, then appends the step's event to `index.jsonl`. On failure it records nothing and prints which keys are wrong. |
-| `clear` | Deletes a request's artifacts and appends a `cleared` event. Requires `--id` or `--all`, prints what it's about to delete, and asks for confirmation unless `--yes` (mandatory in a non-interactive shell). `index.jsonl` is never rewritten; `memory.md` is never touched. |
+| `step` | Prints one step's context: the instruction file to follow, the inputs to read, the file to write, and the exact frontmatter to put in it. Refuses if an input artifact is missing. For a step that takes the working tree it also claims the exclusive-phase lock, and refuses if another request holds it; `--tracer` names which slice of the plan to work. |
+| `record` | Validates what the step wrote against the frontmatter `step` handed out, then appends the step's event to `index.jsonl`. On failure it records nothing and prints which keys are wrong. A step that takes the working tree must still hold the lock. |
+| `tracers` | That request's tracers, from its plan, with the phase they belong to, whether the plan declared them parallel, and their status from the implement record's ledger. `--next` prints just the group to implement next, comma-separated and ready for `step --tracer`. Read-only, and the only place plan markdown is parsed. |
+| `phase` | Reports who holds the exclusive phase, whether they have already recorded a run under that claim, and which tracers are pending. `--release` hands the phase back — an administrative hatch for a human cleaning up outside a session, refused while the holder still has pending tracers unless `--force`, and never a statement that a run was good. Changes nothing else — no artifact, no status, no `index.jsonl` line. |
+| `clear` | Deletes a request's artifacts and appends a `cleared` event. Requires `--id` or `--all`, prints what it's about to delete, and asks for confirmation unless `--yes` (mandatory in a non-interactive shell). `index.jsonl` is never rewritten; `memory.md` is never touched. Releases the lock if the cleared request held it. |
 | `provider` | Lists bundles under `providers/` and writes the chosen id to `loop/.provider`. `LOOP_PROVIDER` still overrides at runtime. |
 | `check` | The lint gate: bash syntax, shellcheck (from PATH, or its container image), and `check-providers`. |
 
@@ -135,9 +139,14 @@ files:
 Concretely, per request: `db/<slug>/raw/<id>.txt` (human), `db/<slug>/index.jsonl`
 (automation log), and one `.md` per completed step —
 `db/<slug>/requests/<id>.md`, `research/<id>.md`, `scope/<id>.md`,
-`plan/<id>.md`. A per-slug `db/<slug>/running.json` lease (automation state, not
-a fourth taxonomy kind — the overseer session's pid and start time) lets
-concurrent terminals see that a workspace is being driven.
+`plan/<id>.md`, `implement/<id>.md`. Two per-slug files are automation state
+rather than a fourth taxonomy kind: `db/<slug>/running.json` (the overseer
+session's pid and start time) lets concurrent terminals see that a workspace is
+being driven, and `db/<slug>/implement.lock` (two lines: the request id that
+owns the working tree, and which exclusive steps have recorded under that
+claim) says who holds the phase and whether their last run still needs judging.
+Neither is a record of anything that happened — that is what `index.jsonl` is
+for.
 
 One deliberate partial exception: `db/<slug>/memory.md` is also "everything
 else" `.md`, but it doesn't flow forward to just *the next* step — it flows
@@ -173,7 +182,9 @@ The loop is made of nine **steps**, in order:
 4. **plan** — decide how to do it: decompose scope into layers, phases, and
    independently verifiable vertical tracers; write one `plan/<id>.md` with an
    `impact` score. *(built)*
-5. **implement** — do it. *(spec-only — not built)*
+5. **implement** — do it: build one vertical tracer of the plan, test-first
+   where the project allows it, and write one cumulative record whose tracer
+   ledger says what is done. *(built)*
 6. **verify** — check it. *(spec-only — not built)*
 7. **decide** — judge the result of `verify` and route: back to `plan`, out to
    `scope` for more scoping, or forward to `commit`. *(spec-only — not built)*
@@ -188,10 +199,63 @@ step-to-step handoff is a straight, one-directional pass.
 **Who runs a step.** Only one thing decides this: whether the step needs the
 human. `scope` is a real conversation, so the overseer runs it in its own
 session — the human is already talking to that session, and no subagent can
-take over the conversation. `request`, `research`, and `plan` need nobody, so
-each goes to a subagent that reads its instruction file, does the work, and
-reports one line back. That is what keeps the overseer's window on the state of
-the loop instead of on the contents of the artifacts.
+take over the conversation. `request`, `research`, `plan`, and `implement` need
+nobody, so each goes to a subagent that reads its instruction file, does the
+work, and reports one line back. That is what keeps the overseer's window on
+the state of the loop instead of on the contents of the artifacts.
+
+**The exclusive phase.** `implement`, `verify` and `decide` take the project's
+working tree, so one request may be in there at a time — two of them editing
+the same tree produces a conflict nobody can untangle afterwards. Bash owns
+that rule rather than the overseer's good intentions: `loop/bin/step` claims
+`db/<slug>/implement.lock` before handing over the context and refuses when
+another request holds it, and `loop/bin/record` refuses to record a step whose
+claim has gone. The lock is one line of plain text — the holding request's id —
+and it deliberately outlives the session, so a restarted overseer finds the
+request still holding the tree. Nothing automatic releases it, because the step
+that would (`decide`) is not built: today `loop/bin/phase --release` or
+clearing the request are the ways out. That means the loop parks after one run, which is the
+intended shape until the rest of the inner loop exists — not a bug to route
+around.
+
+**A run that nothing has judged blocks the next one.** `plan` → `implement` →
+`verify` → `decide` is a cycle, so starting the next group before the last one
+is judged would stack a second unjudged change on the first in the same working
+tree. `loop/bin/step` refuses it, exit 3: `loop/bin/record` notes each exclusive
+step it commits on the lock's second line, and a claim that has already
+recorded a step cannot start it again. The marker lives on the *claim*, not on
+the request, so a run whose `record` failed — nothing committed, so nothing
+marked — is still retryable, and releasing the phase clears the slate. With
+`decide` unbuilt, the judgement is the human's — nobody does, and that is the point. Only `decide`
+routes a request out of the phase; with `decide` unbuilt, the first request to
+reach `implemented` keeps the working tree and the workspace **halts**. The
+overseer's job at that point is to say why and offer to exit — not to judge the
+run itself, not to start the next tracer group, and not to go find other work.
+The operator is not asked to adjudicate either: `plan` → `implement` → `verify`
+→ `decide` is a closed automated cycle, so a human standing in for `verify` is
+just the missing step wearing a hat. `loop/bin/phase --release` and
+`loop/bin/clear` exist for cleaning up outside a session; neither makes the
+work verified.
+
+**One tracer *group* per `implement` run.** The plan already decomposed the
+work into tracers that are independently implementable and verifiable, so that
+is the slice — but a plan also declares which same-phase tracers are
+`parallel: true`, meaning it checked that they own disjoint files. Those go to
+one run together: a phase of seven parallel tracers is one dispatch, not seven.
+A tracer that is not parallel runs alone, and a group never spans phases —
+phases exist precisely because the later one depends on the earlier being
+finished.
+
+`loop/bin/tracers <ws> <id> --next` computes the group: every pending parallel
+tracer of the lowest unfinished phase, or the single next pending tracer when
+it is not parallel. That rule lives in bash rather than in the overseer's
+judgement, and it is what the overseer passes to `loop/bin/step --tracer`.
+
+`implement/<id>.md` is cumulative: it is rewritten each run with a ledger of
+every tracer in the plan and its status, which is how the next run — or a
+restarted overseer — knows what is already done. It is one file per request, so
+one run writes it; that is why a parallel group is batched into a single run
+rather than fanned out across several that would clobber each other's ledger.
 
 **Adding a step.** Two things: a row in the `LOOP_STEPS` table at the top of
 `bin/lib/db.sh` (its directory, the status it lands in, its timestamp key, which
@@ -199,6 +263,9 @@ earlier artifacts it must reference, and any extra frontmatter it owns) and a
 `steps/<step>.md` next to the others. Paths, refs, the step context, validation,
 `ensure_slug_dirs`, and `clear`'s deletion list all derive from that row.
 `loop/bin/check` fails if a step has no instructions, or instructions no step.
+A step that takes the project's working tree is also named in
+`LOOP_EXCLUSIVE_STEPS`, one line below the table — that is the whole of what
+makes `verify` and `decide` share `implement`'s lock when they are built.
 
 ### Plan decomposition (inside a `plan`)
 
@@ -212,8 +279,10 @@ A plan evaluates the scoped work and writes **one** `db/<slug>/plan/<id>.md`:
 | **Vertical tracer** | Thin end-to-end slice through horizontals; independently implementable/verifiable (`p1.t1` ids). |
 
 Layers = map; tracers = routes; phases = waves. Prefer few phases. Same-phase
-tracers may set `parallel: true` only with disjoint file ownership (for a later
-`implement` — not executed by `plan` itself). Frontmatter includes
+tracers may set `parallel: true` only with disjoint file ownership — `plan`
+does not act on it, but `implement` does: `loop/bin/tracers --next` batches a
+phase's parallel tracers into one run, so a wrongly-declared `parallel: true`
+is what puts two colliding tracers in the same run. Frontmatter includes
 planner-owned `impact` (integer >= 1, lower = smaller blast radius) and
 `phase_count`.
 
@@ -259,11 +328,21 @@ Today `cursor` is the thinner one:
   resume, which scope to plan, a scoping question with discrete options — fall
   back to a numbered list answered with a number.
 
-**The overseer's tool grant is wider than the old per-step calls.** It runs the
-loop's own commands, spawns subagents, and asks the human questions — so shell,
-subagent, and question tools are all granted, bounded by prefix to `loop/bin`
-where the provider supports that, with a deny list in the bundle's config as
-defense in depth. `Edit` stays denied for both providers: every built step
-writes whole artifacts, none modifies a file in place, and none may touch the
-project. The real bound is that a human is watching the whole session — which
-was not true of the headless per-step calls this replaced.
+**The tool grant is sized for the widest step, not the overseer.** The overseer
+itself only runs the loop's own commands, spawns subagents, and asks the human
+questions. `implement` edits the project in place and runs the project's own
+test command, and a subagent inherits whatever the session holds — so there is
+no narrower way to grant it those tools than to grant them to the session. In-
+place edits and an unprefixed shell are therefore allowed, where they used to
+be denied.
+
+Three things bound that, and none of them is the permission system. A deny list
+in each bundle's config keeps the irreversible verbs out (`rm`, `sudo`,
+`git commit`, `git push`) — committing is a later step, and a human wants to see
+an uncommitted diff. `overseer.md` states, as a standing rule, that only an
+`implement` subagent may change a file under the workspace; the overseer never
+writes code itself. And a human watches the entire session — which was not true
+of the headless per-step calls this replaced, and is the reason the widened
+grant is acceptable at all. The `cursor` bundle's config carries no deny list
+today, because its CLI's deny syntax is not something this repo has confirmed;
+`--force` plus the watching human is all that bounds it there.

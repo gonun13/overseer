@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Print the context for one step of one request: every path, ref, and
-# frontmatter value that step needs, named. Pure — the only thing it changes on
-# disk is creating the slug's directories.
+# frontmatter value that step needs, named. Nearly pure — it creates the slug's
+# directories, and for a step that takes the working tree it claims the
+# workspace's exclusive-phase lock before handing the context over.
 #
-# Usage: loop/bin/step <workspace-name> <request-id> <step>
+# Usage: loop/bin/step <workspace-name> <request-id> <step> [--tracer <ids>]
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -14,7 +15,7 @@ source "$LOOP_BIN_DIR/lib/db.sh"
 
 usage() {
   cat >&2 <<'USAGE'
-usage: loop/bin/step <workspace-name> <request-id> <step>
+usage: loop/bin/step <workspace-name> <request-id> <step> [--tracer <ids>]
 
 Prints, as JSON on stdout, everything needed to run one step of one request:
 the instruction file to follow, the input artifacts to read, the file to
@@ -24,24 +25,76 @@ Copy `frontmatter` into the written file verbatim; supply the keys listed in
 `frontmatter_open` yourself. `loop/bin/record` checks the result against the
 same values, so anything altered here is rejected there.
 
-Exit codes: 0 ok, 1 general/validation failure, 2 workspace not found.
+--tracer  the slice of the plan to work, for a step that takes the working
+          tree (implement, verify, decide). Takes one tracer id, a
+          comma-separated list, or the flag repeated — several ids mean the
+          plan declared them parallel, so one run does the whole group.
+          `loop/bin/tracers <ws> <id> --next` prints exactly what to pass.
+          Omit it and the step picks the next pending group itself. Those
+          steps also claim the workspace's exclusive-phase lock here: one
+          request owns the working tree at a time, and loop/bin/phase
+          hands it on.
+
+Exit codes: 0 ok, 1 general/validation failure, 2 workspace not found,
+3 the exclusive phase is unavailable — another request holds it, or this
+  request's last run of this step has not been judged yet.
 USAGE
 }
 
-case "${1:-}" in
-  -h|--help) usage; exit 0 ;;
-esac
-
 require_cmd jq
 
-[ $# -eq 3 ] || { usage; exit 1; }
-name=$1
-id=$2
-step=$3
+name="" id="" step="" tracers="" held=""
+args=()
+while [ $# -gt 0 ]; do
+  case "$1" in
+    --tracer)
+      [ $# -ge 2 ] || die "--tracer needs a tracer id" 1
+      # Repeatable and comma-separated both land in the same list, so the
+      # caller can use whichever reads better where it is written.
+      tracers="${tracers:+$tracers,}$2"
+      shift 2
+      ;;
+    -h|--help) usage; exit 0 ;;
+    -*) die "unknown option: $1" 1 ;;
+    *) args+=("$1"); shift ;;
+  esac
+done
+
+[ ${#args[@]} -eq 3 ] || { usage; exit 1; }
+name=${args[0]}
+id=${args[1]}
+step=${args[2]}
 
 workspace_dir=$(resolve_workspace "$name")
 slug=$(slugify "$name")
 require_step "$step"
 ensure_slug_dirs "$slug"
 
-step_context_json "$name" "$slug" "$id" "$step" "$workspace_dir" "$(iso_now)"
+if step_is_exclusive "$step"; then
+  # A finished run of this step, still holding the phase, is waiting to be
+  # judged: plan -> implement -> verify -> decide is a cycle, and starting the
+  # next run would stack a second unjudged change on the first in the same
+  # working tree. `decide` would hand the phase back; until it is built the
+  # judgement belongs to `verify`/`decide`; until they exist there is none, and
+  # the loop halts here rather than building on an unjudged run.
+  # Only a run that actually recorded trips this: the marker is written by
+  # loop/bin/record and lives on the claim, so a run whose record failed can
+  # still be retried, and releasing the phase clears the slate.
+  if [ "$(impl_lock_holder "$slug")" = "$id" ] && impl_lock_recorded "$slug" "$step"; then
+    die "'$step' has already run for $id and nothing has judged the result
+'verify' and 'decide' are not built, so nothing can judge that run or route
+this request onward — the loop for '$name' is halted here by design, not
+blocked on something you can retry. $LOOP_BIN_DIR/phase $name reports the
+state; clearing the request is what ends it." 3
+  fi
+  if ! held=$(impl_lock_claim "$slug" "$id" 2>&1); then
+    die "request $held already holds the exclusive phase for '$name'
+Only one request at a time may run $LOOP_EXCLUSIVE_STEPS, so two of them
+cannot edit the same working tree. Finish or hand the phase on first:
+  $LOOP_BIN_DIR/phase $name --release" 3
+  fi
+elif [ -n "$tracers" ]; then
+  die "--tracer applies only to $LOOP_EXCLUSIVE_STEPS, not '$step'" 1
+fi
+
+step_context_json "$name" "$slug" "$id" "$step" "$workspace_dir" "$(iso_now)" "$tracers"

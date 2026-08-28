@@ -29,7 +29,25 @@ LOOP_STEPS=(
   "research|research|md|researched|researched_at|request||"
   "scope|scope|md|scoped|scoped_at|request research|questions_asked|"
   "plan|plan|md|planned|planned_at|request research scope||impact phase_count"
+  "implement|implement|md|implemented|implemented_at|request research scope plan|tracers|"
 )
+
+# --- The exclusive-phase lock ------------------------------------------------
+#
+# Steps that take the workspace's working tree. One request may hold it at a
+# time: two of them editing the same tree is exactly the conflict this prevents.
+# It is claimed by `loop/bin/step` and, unlike the session lease, deliberately
+# outlives the session — a restarted overseer must find the request still
+# holding it. `loop/bin/phase` and `loop/bin/clear` are what release it.
+LOOP_EXCLUSIVE_STEPS="implement verify decide"
+
+# step_is_exclusive <step> — 0 if that step takes the working tree.
+step_is_exclusive() {
+  case " $LOOP_EXCLUSIVE_STEPS " in
+    *" $1 "*) return 0 ;;
+  esac
+  return 1
+}
 
 # step_field <step> <field-number> — one field of that step's row. Returns 1
 # for an unknown step, so callers can validate a step name by calling this.
@@ -85,8 +103,12 @@ artifact_ref() {
 
 memory_path()  { printf '%s/memory.md' "$(slug_dir "$1")"; }
 index_path()   { printf '%s/index.jsonl' "$(slug_dir "$1")"; }
+# The slug's flock mutex — every mutator serializes on this one file.
 lock_path()    { printf '%s/.lock' "$(slug_dir "$1")"; }
 running_path() { printf '%s/running.json' "$(slug_dir "$1")"; }
+# The exclusive-phase lock (see LOOP_EXCLUSIVE_STEPS) — not a mutex, a holder
+# record: one line naming the request that owns the working tree.
+impl_lock_path() { printf '%s/implement.lock' "$(slug_dir "$1")"; }
 
 ensure_slug_dirs() {
   local slug=$1 row dir
@@ -121,6 +143,70 @@ record_frontmatter_get() {
 record_title() {
   local file=$1
   grep -m1 '^# ' "$file" | sed 's/^# *//'
+}
+
+# plan_tracers <plan-file> — one `id<TAB>phase<TAB>parallel<TAB>phase_label<TAB>goal`
+# line per tracer, in plan order, from the `#### Tracer` blocks steps/plan.md
+# writes. Phase is a 1-based index over the `### Phase` headings, so ordering
+# never depends on how a planner numbered or named them.
+#
+# This is the only place plan markdown is parsed. Nothing else — least of all
+# the overseer — should be grepping an artifact to work out what is left to do.
+plan_tracers() {
+  local file=$1
+  [ -f "$file" ] || return 0
+  awk '
+    function flush(   g) {
+      if (id != "") {
+        g = goal
+        gsub(/\t/, " ", g)
+        printf "%s\t%d\t%s\t%s\t%s\n", id, phase, par, label, g
+      }
+      id = ""; goal = ""; par = "false"
+    }
+    /^###[[:space:]]+Phase[[:space:]]/ {
+      flush()
+      phase++
+      label = $0
+      sub(/^###[[:space:]]+Phase[[:space:]]+/, "", label)
+      gsub(/\t/, " ", label)
+      next
+    }
+    /^####[[:space:]]+Tracer/ {
+      flush()
+      if (match($0, /`[^`]+`/)) id = substr($0, RSTART + 1, RLENGTH - 2)
+      next
+    }
+    id != "" && /^-[[:space:]]*Goal:/ && goal == "" {
+      goal = $0
+      sub(/^-[[:space:]]*Goal:[[:space:]]*/, "", goal)
+      next
+    }
+    id != "" && /^-[[:space:]]*Parallel:/ {
+      par = $0
+      sub(/^-[[:space:]]*Parallel:[[:space:]]*/, "", par)
+      gsub(/[[:space:]]/, "", par)
+      if (par != "true") par = "false"
+      next
+    }
+    END { flush() }
+  ' "$file"
+}
+
+# ledger_statuses <implement-file> — one `tracer<TAB>status` line per row of the
+# implement record's tracer ledger table. Empty (not an error) when no record
+# exists yet: nothing has been implemented, so nothing is done.
+ledger_statuses() {
+  local file=$1
+  [ -f "$file" ] || return 0
+  awk -F'|' '
+    /^\|[[:space:]]*p[0-9]+\.t[0-9]+[[:space:]]*\|/ {
+      t = $2; s = $3
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", t)
+      gsub(/^[[:space:]]+|[[:space:]]+$/, "", s)
+      print t "\t" s
+    }
+  ' "$file"
 }
 
 # expected_frontmatter <slug> <workspace> <id> <step> <at> — prints the
@@ -300,6 +386,128 @@ running_release() {
   ) 9>>"$lock"
 }
 
+# --- The exclusive-phase lock ------------------------------------------------
+#
+# db/<slug>/implement.lock is two lines of plain text — no JSON, no pid, so
+# nothing here needs jq and, unlike the session lease, there is no holder
+# process to reap:
+#
+#   1. the id of the request that owns the workspace's working tree
+#   2. the exclusive steps that have already *recorded* under this claim
+#
+# loop/bin/step claims it; only loop/bin/phase and loop/bin/clear drop it, so
+# a request stays in the implement/verify/decide phase across overseer restarts
+# until a human says otherwise.
+#
+# Line 2 is what stops a request building on its own unjudged work: once
+# `implement` has recorded under this claim, the next run needs a fresh claim,
+# and a fresh claim is what releasing the phase grants. It is scoped to the
+# claim rather than derived from the request's status precisely so that a run
+# whose `record` failed — nothing recorded, so nothing marked — can still be
+# retried.
+
+# impl_lock_holder <slug> — the holding request id, or nothing.
+impl_lock_holder() {
+  local path
+  path=$(impl_lock_path "$1")
+  [ -f "$path" ] || return 0
+  sed -n 1p "$path"
+}
+
+# impl_lock_recorded <slug> <step> — 0 if that step has already recorded under
+# the current claim.
+impl_lock_recorded() {
+  local path marked
+  path=$(impl_lock_path "$1")
+  [ -f "$path" ] || return 1
+  marked=$(sed -n 2p "$path")
+  case " $marked " in
+    *" $2 "*) return 0 ;;
+  esac
+  return 1
+}
+
+# pending_tracers <slug> <id> — tracer ids from that request's plan its
+# implement ledger does not mark done, one per line. Empty when the plan is
+# fully implemented, and when there is no plan at all.
+pending_tracers() {
+  local slug=$1 id=$2 plan_file t s
+  declare -A done_of=()
+  plan_file=$(artifact_path "$slug" plan "$id")
+  [ -f "$plan_file" ] || return 0
+  while IFS=$'\t' read -r t s; do
+    [ "$s" = "done" ] && done_of["$t"]=1
+  done < <(ledger_statuses "$(artifact_path "$slug" implement "$id")")
+  while IFS=$'\t' read -r t _; do
+    [ -n "$t" ] || continue
+    [ -n "${done_of[$t]:-}" ] || printf '%s\n' "$t"
+  done < <(plan_tracers "$plan_file")
+}
+
+# impl_lock_mark <slug> <step> — note that <step> has recorded under the
+# current claim. Called by loop/bin/record, after the event is committed.
+impl_lock_mark() {
+  local slug=$1 step=$2 lock path id marked
+  lock=$(lock_path "$slug")
+  path=$(impl_lock_path "$slug")
+  (
+    flock -x 9
+    [ -f "$path" ] || exit 0
+    id=$(sed -n 1p "$path")
+    marked=$(sed -n 2p "$path")
+    case " $marked " in
+      *" $step "*) exit 0 ;;
+    esac
+    printf '%s\n%s\n' "$id" "${marked:+$marked }$step" > "$path"
+  ) 9>>"$lock"
+}
+
+# _impl_lock_release <slug> — raw, unlocked removal. Callers must already hold
+# the slug's flock (see impl_lock_release and clear_request below) — this never
+# locks itself, so it must never be called outside one.
+_impl_lock_release() {
+  rm -f "$(impl_lock_path "$1")"
+}
+
+# impl_lock_claim <slug> <id> — take the exclusive phase for that request.
+# Returns 1, printing the current holder, when a *different* request holds it.
+# Re-claiming for the same id succeeds and leaves the file untouched: that is
+# how one request moves implement -> verify -> decide and retries a run whose
+# record failed — and leaving it untouched is what keeps line 2's memory of
+# what this claim already recorded.
+impl_lock_claim() {
+  local slug=$1 id=$2 lock path held
+  lock=$(lock_path "$slug")
+  path=$(impl_lock_path "$slug")
+  ensure_slug_dirs "$slug"
+  (
+    flock -x 9
+    if [ -f "$path" ]; then
+      held=$(sed -n 1p "$path")
+      if [ -n "$held" ]; then
+        if [ "$held" != "$id" ]; then
+          printf '%s\n' "$held" >&2
+          exit 1
+        fi
+        exit 0
+      fi
+    fi
+    printf '%s\n' "$id" > "$path"
+  ) 9>>"$lock"
+}
+
+# impl_lock_release <slug> — drop the lock, whoever holds it. The release valve
+# behind loop/bin/phase --release: a human decides when the phase is over, because the
+# step that would decide it (`decide`) is not built yet.
+impl_lock_release() {
+  local slug=$1 lock
+  lock=$(lock_path "$slug")
+  (
+    flock -x 9
+    _impl_lock_release "$slug"
+  ) 9>>"$lock"
+}
+
 # --- index.jsonl -------------------------------------------------------------
 
 # _append_line <slug> <line> — raw, unlocked append. Callers must already hold
@@ -364,7 +572,9 @@ request_event() {
 # never is (append-only, per the taxonomy) — the cleared event is the permanent
 # record that this request existed and was removed. memory.md is deliberately
 # NOT touched: it's cumulative and shared across every request for the slug,
-# and must outlive any single request's clear.
+# and must outlive any single request's clear. The exclusive-phase lock IS
+# dropped when this request holds it — a request that no longer exists must not
+# keep the working tree hostage.
 clear_request() {
   local slug=$1 id=$2 step=$3 title=$4 raw_ref=$5 record_ref=$6
   local lock line row
@@ -374,6 +584,9 @@ clear_request() {
     for row in "${LOOP_STEPS[@]}"; do
       rm -f "$(artifact_path "$slug" "${row%%|*}" "$id")"
     done
+    if [ "$(impl_lock_holder "$slug")" = "$id" ]; then
+      _impl_lock_release "$slug"
+    fi
     line=$(jq -nc \
       --arg at "$(iso_now)" \
       --arg id "$id" \
@@ -390,17 +603,25 @@ clear_request() {
 
 # --- The step context --------------------------------------------------------
 
-# step_context_json <workspace> <slug> <id> <step> <workspace_dir> <at>
+# step_context_json <workspace> <slug> <id> <step> <workspace_dir> <at> [tracers]
 # The single hand-off shape between bash and whoever runs a step. Everything is
 # named: there are no positional arguments for a step to miscount, and the
 # `frontmatter` block is the literal, complete set of values to copy — not
 # prose describing which argument maps to which key.
 #
+# <tracers> applies to exclusive steps only, where that comma-separated list
+# becomes a top-level `tracers` array: the slice of the plan to work in this
+# run, or null for "pick the next pending group yourself". More than one id
+# means the plan declared them parallel, so one run does the whole group. It
+# stays out of `frontmatter` on purpose — bash does not hold it across the
+# later `loop/bin/record` call, so there would be nothing to compare a copied
+# value against.
+#
 # Dies if a required input artifact is missing, so a step is never started
 # against a half-finished request.
 step_context_json() {
-  local workspace=$1 slug=$2 id=$3 step=$4 workspace_dir=$5 at=$6
-  local ref_step file inputs='{}' front='{}' open='{}' key val
+  local workspace=$1 slug=$2 id=$3 step=$4 workspace_dir=$5 at=$6 tracers=${7:-}
+  local ref_step file inputs='{}' front='{}' open='{}' key val ctx
 
   for ref_step in $(step_field "$step" 6); do
     file=$(artifact_path "$slug" "$ref_step" "$id")
@@ -422,7 +643,7 @@ step_context_json() {
     open=$(jq -c --argjson acc "$open" --arg k "$key" --arg v "$val" -n '$acc + {($k): $v}')
   done < <(open_frontmatter "$step")
 
-  jq -n \
+  ctx=$(jq -n \
     --arg step "$step" \
     --arg id "$id" \
     --arg workspace "$workspace" \
@@ -436,5 +657,14 @@ step_context_json() {
     '{step:$step, id:$id, workspace:$workspace, slug:$slug,
       workspace_dir:$workspace_dir, instructions:$instructions,
       inputs:$inputs, output_file:$output_file,
-      frontmatter:$frontmatter, frontmatter_open:$frontmatter_open}'
+      frontmatter:$frontmatter, frontmatter_open:$frontmatter_open}')
+
+  # Only an exclusive step gets a `tracers` key, so every other step's context
+  # is exactly the shape it has always been.
+  if step_is_exclusive "$step"; then
+    ctx=$(printf '%s' "$ctx" | jq --arg t "$tracers" \
+      '. + {tracers: (if $t == "" then null else ($t / ",") end)}')
+  fi
+
+  printf '%s\n' "$ctx"
 }

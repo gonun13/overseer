@@ -16,21 +16,23 @@ provider_check_available() {
 # Open a foreground interactive session, inheriting this terminal, and return
 # when the human exits it. The prompt is the overseer's kickoff.
 #
-# The grant is wider than the old per-step calls needed, because the overseer
-# is a different kind of thing: it runs the loop's own commands (Bash, limited
-# by prefix to loop/bin), delegates steps (Task), and talks to the human
-# (AskUserQuestion) — all in front of a human who is watching it work.
+# The grant covers the widest thing that runs in this session, which is the
+# `implement` step: it edits the project in place and runs the project's own
+# test command, so Edit and an unprefixed Bash are both required. A subagent
+# inherits what the session holds, so there is no narrower way to give an
+# implement subagent tools the overseer does not have.
 #
-# Edit stays denied. Every built step writes whole artifacts with Write; none
-# of them modifies a file in place, and none of them may touch the project.
+# What still bounds it: the deny list below, one human watching the whole
+# session, and overseer.md's standing rule that only an `implement` subagent
+# may change a file under the workspace. The overseer itself never writes code.
 provider_session() {
   local prompt=$1 workspace_dir=$2 status=0
 
   (cd "$PROVIDER_ROOT" && claude "$prompt" \
     --add-dir "$LOOP_DIR" \
     --add-dir "$workspace_dir" \
-    --allowedTools "Read,Write,Glob,Grep,Task,AskUserQuestion,WebFetch,WebSearch,Bash($LOOP_DIR/bin/*)" \
-    --disallowedTools "Edit,NotebookEdit" \
+    --allowedTools "Read,Write,Edit,Glob,Grep,Task,AskUserQuestion,WebFetch,WebSearch,Bash" \
+    --disallowedTools "NotebookEdit" \
     --permission-mode acceptEdits \
     --setting-sources project) || status=$?
 
