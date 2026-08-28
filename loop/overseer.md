@@ -355,6 +355,12 @@ context JSON, and nothing else you have added:
 > Report back one line: the title you gave it, or what went wrong. Do not
 > report the file's contents.
 
+**Subagent model:** do not pin a fast or premium model on subagent spawns.
+Omit the model parameter so the subagent inherits Auto from this session. If a
+spawn fails with a usage-limit error on a named model, retry once with no model
+set (Auto). Only fall back to running the step yourself when subagents are
+unavailable entirely — not when a specific model pool is exhausted.
+
 Run one step at a time and wait for it. Two steps on the same request would
 race on the same files.
 
