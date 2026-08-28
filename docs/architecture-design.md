@@ -518,20 +518,24 @@ reading `db/`.
 
 **Terminology.** The loop is made of nine **steps**, in order: `request` →
 `research` → `scope` → `plan` → `implement` → `verify` → `decide` → `commit` →
-`review`. `plan` → `implement` → `verify` → `decide` (4-7) is meant to be a
-closed automated loop with no human in it; the only two ways out are `decide`
-routing back to `scope` (3, for extra scoping) or forward to `commit` (8) —
-every other handoff is a straight, one-directional pass. Inside a `plan`, work
+`review`. `plan` → `implement` → `verify` → `decide` (4-7) is a closed automated
+loop with no human in it. `decide` is the only thing that says where a request
+goes next, writing it as a `route` on its record: `implement` (the next tracer
+group), `rework` (the same group, with a directive), `plan`, `scope` (3, the one
+route that puts the human back in) or `commit` (8). Every other handoff is a
+straight, one-directional pass. Inside a `plan`, work
 is decomposed into **horizontal/vertical layers**, **phases**, and **vertical
 tracers** (see [`loop/README.md`](../loop/README.md)); the plan file also
 carries an `impact` score.
 
-**Who runs a step.** One question decides it: whether the step needs the human.
-`scope` is a conversation, so the overseer runs it in its own session.
-`request`, `research`, `plan`, and `implement` need nobody, so each is delegated
-to a subagent that reads its instruction file and reports one line back. The
-same rule extends to the unbuilt steps: `commit` and `review` are
-human-in-the-loop; `verify` and `decide` are not.
+**Who runs a step.** One question decides it: whether the step needs the human —
+plus one addition, because routing is the overseer's own job. `scope` is a
+conversation, so the overseer runs it in its own session; it runs `decide`
+itself too, since deciding what happens next is the one thing an orchestrator
+must not delegate, and `steps/decide.md` bounds what it may read to keep that
+cheap. `request`, `research`, `plan`, `implement` and `verify` need nobody, so
+each is delegated to a subagent that reads its instruction file and reports one
+line back. `commit` and `review`, both unbuilt, are human-in-the-loop.
 
 **The exclusive phase.** `implement`, `verify` and `decide` take the project's
 working tree, so exactly one request may be in that phase per workspace — two
@@ -541,24 +545,26 @@ rather than the overseer: `loop/bin/step` claims `db/<slug>/implement.lock`
 handing over a context and refuses
 when another request holds it, and `loop/bin/record` refuses a step whose claim
 has lapsed. Unlike the session lease it outlives the session on purpose, so a
-restarted overseer finds the tree still owned. Nothing automatic releases it
-while `decide` is unbuilt, so the loop parks after one run — `loop/bin/phase`
-or clearing the request are the ways out. The lock also enforces the cycle
-within a request: `loop/bin/step` turns away a request that still holds the
-phase and has already recorded that step — `record` marks each one it commits
-on the lock's second line — because a run nothing has judged must not be built
-on. The marker is scoped to the claim, so a failed `record` is still
-retryable. With `decide` unbuilt nothing can make that judgement, and nothing
-is asked to: the inner loop is closed and automated, so a human standing in for
-`verify` would just be the missing step wearing a hat. A request occupies the
-phase until `decide` routes it out, so today the first one to reach
-`implemented` **halts** that workspace — the overseer reports why and offers to
-exit, rather than offering other work in front of a change nobody has checked.
+restarted overseer finds the tree still owned. A request holds it for its whole
+stay in the cycle, not for one lap: `decide` turns the cycle without handing the
+tree back, because the changes are still there and still that request's. Only
+`commit` would end the phase, and `commit` is unbuilt, so a request `decide`
+routes there **halts** that workspace — the overseer reports why and offers to
+exit, rather than offering other work in front of a change nobody has
+committed. The lock also enforces order within a lap: `loop/bin/step` turns
+away a request that has already recorded that step under its current claim —
+`record` marks each one it commits on the lock's second line — and tells it
+which step comes next instead, because a run nothing has checked must not be
+built on. `decide` then clears that line, which is what lets the same request
+take another lap. The marker is scoped to the claim, so a failed `record` is
+still retryable. The exception is a `decide` that routed to `commit`: its marks
+stay, since re-running it would only re-judge work already judged.
 `loop/bin/phase --release` and `loop/bin/clear` are administrative cleanup
 outside a session; neither marks anything verified.
 
-**Current scope.** `request`, `research`, `scope`, `plan`, and `implement` are
-implemented: `request` captures raw text via `loop/bin/new` and structures it
+**Current scope.** Everything up to `decide` is implemented — `request`,
+`research`, `scope`, `plan`, `implement`, `verify`, `decide`: `request`
+captures raw text via `loop/bin/new` and structures it
 into `loop/db/<slug>/requests/<id>.md`; `research` explores the actual project,
 writes `loop/db/<slug>/research/<id>.md` as context for `scope`, and rewrites
 the shared `loop/db/<slug>/memory.md`; `scope` writes
@@ -572,16 +578,26 @@ it, so which tracers may run together is a bash rule rather than the overseer's
 judgement, and the overseer learns what is left without reading the plan. The
 group is batched into one run because the implement record is one file per
 request — fanning it out across runs would have them clobber each other's
-ledger. A
+ledger.
+`verify` then runs the project's own tests and lints and drives the change the
+way a user would, writing `loop/db/<slug>/verify/<id>.md` — a linear record
+that never judges and never stops at the first red result, since a failure is
+what the next step most needs to see. `decide` reads that plus the implement
+record and appends one decision block to `loop/db/<slug>/decide/<id>.md`,
+carrying a `route` that bash validates against a fixed set and `loop/bin/list`
+surfaces, so the next action survives the overseer being restarted mid-cycle.
+That record is appended to rather than rewritten: the sequence of decisions is
+how `decide` sees it has already sent the same group back twice, which is the
+rule that escalates a stuck group to a re-plan instead of a third rework. A
 per-slug `running.json` lease surfaces an active overseer session to other
-terminals. The other four steps are spec-only — named and ordered (see
+terminals. `commit` and `review` are spec-only — named and ordered (see
 [`loop/README.md`](../loop/README.md)) but not built. Adding one is a row in
 `bin/lib/db.sh`'s `LOOP_STEPS` table plus a `loop/steps/<step>.md`, and a name
 in `LOOP_EXCLUSIVE_STEPS` if it takes the working tree.
 
 **The tool grant is sized for `implement`, not the overseer.** It is the only
-step that edits the project or runs its tests, and a subagent inherits the
-session's tools — so in-place edits and an unprefixed shell are granted to the
+step that edits the project, `verify` is the other that runs it, and a subagent
+inherits the session's tools — so in-place edits and an unprefixed shell are granted to the
 session, where they were previously denied outright. What bounds it is a deny
 list per bundle for the irreversible verbs (`rm`, `sudo`, `git commit`,
 `git push`), `overseer.md`'s standing rule that only an `implement` subagent may

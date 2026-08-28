@@ -23,14 +23,32 @@
 #                     is that artifact's canonical relative path
 #   7 extra_required  further required keys, value not predictable by bash
 #   8 int_keys        further required keys that must be integers >= 1
+#   9 enum_keys       further required keys constrained to a fixed set of
+#                     values, written `key:v1,v2,...` — the row separator is
+#                     '|', so the value set is comma-separated. Bash validating
+#                     these is what stops `record` committing a routing
+#                     decision the overseer would then have no way to act on.
+#  10 opt_ref_steps   steps handed over as `inputs.<step>_file` *when they
+#                     exist* — no frontmatter key, no existence check. Same
+#                     treatment as memory.md: available if there, never a
+#                     precondition. This is how a `decide` directive reaches
+#                     the next `implement` run without making the first one
+#                     impossible to start.
 LOOP_STEPS=(
-  "raw|raw|txt|||||"
-  "request|requests|md|requested|submitted_at|raw|kind|"
-  "research|research|md|researched|researched_at|request||"
-  "scope|scope|md|scoped|scoped_at|request research|questions_asked|"
-  "plan|plan|md|planned|planned_at|request research scope||impact phase_count"
-  "implement|implement|md|implemented|implemented_at|request research scope plan|tracers|"
+  "raw|raw|txt|||||||"
+  "request|requests|md|requested|submitted_at|raw|kind||||"
+  "research|research|md|researched|researched_at|request|||||"
+  "scope|scope|md|scoped|scoped_at|request research|questions_asked||||"
+  "plan|plan|md|planned|planned_at|request research scope||impact phase_count|||"
+  "implement|implement|md|implemented|implemented_at|request research scope plan|tracers|||decide"
+  "verify|verify|md|verified|verified_at|scope plan implement|checks_run||verdict:pass,fail,blocked|"
+  "decide|decide|md|decided|decided_at|plan implement verify||decisions|route:implement,rework,plan,scope,commit|"
 )
+
+# A step's ref_steps are what it actually reads, not everything before it: each
+# ref is one more frontmatter value a step can mis-copy into a rejected record,
+# and nothing is lost, because every earlier artifact stays reachable by
+# following the chain (verify_ref -> implement_ref -> plan_ref -> scope_ref).
 
 # --- The exclusive-phase lock ------------------------------------------------
 #
@@ -38,7 +56,14 @@ LOOP_STEPS=(
 # time: two of them editing the same tree is exactly the conflict this prevents.
 # It is claimed by `loop/bin/step` and, unlike the session lease, deliberately
 # outlives the session — a restarted overseer must find the request still
-# holding it. `loop/bin/phase` and `loop/bin/clear` are what release it.
+# holding it.
+#
+# The order is the order they run in. `decide` does not release the lock — it
+# clears the claim's recorded marks so the cycle can turn again (see
+# impl_lock_clear_marks) — so the holder keeps the working tree until the work
+# is committed. `commit` is what would end the phase; it is not built, which is
+# where the loop halts today. `loop/bin/phase --release` and `loop/bin/clear`
+# are the administrative ways out.
 LOOP_EXCLUSIVE_STEPS="implement verify decide"
 
 # step_is_exclusive <step> — 0 if that step takes the working tree.
@@ -47,6 +72,23 @@ step_is_exclusive() {
     *" $1 "*) return 0 ;;
   esac
   return 1
+}
+
+# next_exclusive_step <step> — the step that follows it inside the phase, or
+# `commit` at the end of the list: the phase runs to a commit, and that is the
+# step that would hand the working tree back. Prints nothing for a step that is
+# not exclusive.
+next_exclusive_step() {
+  local step=$1 s take=0
+  for s in $LOOP_EXCLUSIVE_STEPS; do
+    if [ "$take" -eq 1 ]; then
+      printf '%s' "$s"
+      return 0
+    fi
+    [ "$s" = "$step" ] && take=1
+  done
+  [ "$take" -eq 1 ] && printf 'commit'
+  return 0
 }
 
 # step_field <step> <field-number> — one field of that step's row. Returns 1
@@ -237,13 +279,27 @@ expected_frontmatter() {
 # open_frontmatter <step> — the required keys whose values bash cannot predict,
 # one `key<TAB>constraint` line each. The step itself must supply them.
 open_frontmatter() {
-  local step=$1 key
+  local step=$1 key spec
   for key in $(step_field "$step" 7); do
     printf '%s\ttext\n' "$key"
   done
   for key in $(step_field "$step" 8); do
     printf '%s\tinteger >= 1\n' "$key"
   done
+  # An enum's allowed values are handed over with the key, so a step is told
+  # the set it will be judged against rather than having to guess it.
+  for spec in $(step_field "$step" 9); do
+    key=${spec%%:*}
+    printf '%s\tone of: %s\n' "$key" "$(printf '%s' "${spec#*:}" | tr ',' ' ' | sed 's/ /, /g')"
+  done
+}
+
+# enum_allows <spec> <value> — 0 if <value> is in the `key:v1,v2` spec's set.
+enum_allows() {
+  case ",${1#*:}," in
+    *",$2,"*) return 0 ;;
+  esac
+  return 1
 }
 
 # --- Validation --------------------------------------------------------------
@@ -256,7 +312,7 @@ open_frontmatter() {
 # Prints a per-key actual-vs-expected dump to stderr on failure.
 artifact_validate() {
   local slug=$1 workspace=$2 id=$3 step=$4
-  local file at_key key want got ok=0
+  local file at_key key spec want got ok=0
   file=$(artifact_path "$slug" "$step" "$id")
   at_key=$(step_field "$step" 5)
 
@@ -304,6 +360,16 @@ artifact_validate() {
     [ "$ok" -eq 0 ] && printf '%s: frontmatter is not valid\n' "$file" >&2
     ok=1
     printf '  %-14s expected an integer >= 1                got %s\n' "$key:" "${got:-<empty>}" >&2
+  done
+
+  for spec in $(step_field "$step" 9); do
+    key=${spec%%:*}
+    got=$(record_frontmatter_get "$file" "$key")
+    enum_allows "$spec" "$got" && continue
+    [ "$ok" -eq 0 ] && printf '%s: frontmatter is not valid\n' "$file" >&2
+    ok=1
+    printf '  %-14s expected one of %-40s got %s\n' \
+      "$key:" "$(printf '%s' "${spec#*:}" | tr ',' ' ' | sed 's/ /, /g')" "${got:-<empty>}" >&2
   done
 
   if ! grep -q '^# ' "$file"; then
@@ -395,16 +461,17 @@ running_release() {
 #   1. the id of the request that owns the workspace's working tree
 #   2. the exclusive steps that have already *recorded* under this claim
 #
-# loop/bin/step claims it; only loop/bin/phase and loop/bin/clear drop it, so
-# a request stays in the implement/verify/decide phase across overseer restarts
-# until a human says otherwise.
+# loop/bin/step claims it; nothing in the loop drops it, so a request holds the
+# working tree across overseer restarts until its work is committed.
+# loop/bin/phase --release and loop/bin/clear are the administrative ways out.
 #
-# Line 2 is what stops a request building on its own unjudged work: once
-# `implement` has recorded under this claim, the next run needs a fresh claim,
-# and a fresh claim is what releasing the phase grants. It is scoped to the
-# claim rather than derived from the request's status precisely so that a run
-# whose `record` failed — nothing recorded, so nothing marked — can still be
-# retried.
+# Line 2 is what keeps the phase's steps in order and stops a request building
+# on its own unjudged work: once `implement` has recorded under this claim, the
+# next thing that may run is `verify`, then `decide`. `decide` then clears the
+# line (impl_lock_clear_marks), which is what lets the same request take
+# another lap. It is scoped to the claim rather than derived from the request's
+# status precisely so that a run whose `record` failed — nothing recorded, so
+# nothing marked — can still be retried.
 
 # impl_lock_holder <slug> — the holding request id, or nothing.
 impl_lock_holder() {
@@ -459,6 +526,25 @@ impl_lock_mark() {
       *" $step "*) exit 0 ;;
     esac
     printf '%s\n%s\n' "$id" "${marked:+$marked }$step" > "$path"
+  ) 9>>"$lock"
+}
+
+# impl_lock_clear_marks <slug> — wipe line 2, keeping the holder. This is how
+# `decide` turns the cycle: implement -> verify -> decide have each recorded
+# under this claim, and clearing their marks lets the same request run them
+# again on the next lap without ever letting go of the working tree. The
+# holder is untouched on purpose — a request owns the tree from its first
+# `implement` until the work is committed, not until it has been judged once.
+impl_lock_clear_marks() {
+  local slug=$1 lock path id
+  lock=$(lock_path "$slug")
+  path=$(impl_lock_path "$slug")
+  (
+    flock -x 9
+    [ -f "$path" ] || exit 0
+    id=$(sed -n 1p "$path")
+    [ -n "$id" ] || exit 0
+    printf '%s\n' "$id" > "$path"
   ) 9>>"$lock"
 }
 
@@ -634,6 +720,18 @@ step_context_json() {
   # yet, so its path is handed over without an existence check.
   inputs=$(jq -c --argjson acc "$inputs" --arg v "$(memory_path "$slug")" \
     -n '$acc + {memory_file: $v}')
+
+  # Optional refs get the same treatment: handed over when they exist, silently
+  # absent when they do not. They carry no frontmatter key, so a step is never
+  # blocked from starting by an artifact a later step writes — which is exactly
+  # the case for `decide`, whose directive an `implement` rerun needs but whose
+  # first run necessarily precedes.
+  for ref_step in $(step_field "$step" 10); do
+    file=$(artifact_path "$slug" "$ref_step" "$id")
+    [ -f "$file" ] || continue
+    inputs=$(jq -c --argjson acc "$inputs" --arg k "${ref_step}_file" --arg v "$file" \
+      -n '$acc + {($k): $v}')
+  done
 
   while IFS=$'\t' read -r key val; do
     front=$(jq -c --argjson acc "$front" --arg k "$key" --arg v "$val" -n '$acc + {($k): $v}')

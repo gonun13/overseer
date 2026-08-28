@@ -47,7 +47,12 @@ Layers = map; tracers = routes; phases = waves.
 4. Split into 1..N phases, then tracers per phase with a goal, owned paths, and
    a verify check. Same-phase `parallel: true` only when file ownership is
    disjoint. Parallelism is declared, never assumed.
-5. Score **impact** (integer >= 1, lower = smaller blast radius):
+5. **If `output_file` already exists, this is a re-plan.** `decide` sent the
+   request back here, so read the plan that is there and keep the ids of every
+   tracer you are carrying over — only genuinely new work gets a new id. The
+   implement record's ledger is matched to the plan by tracer id, so renumbering
+   silently re-opens finished work.
+6. Score **impact** (integer >= 1, lower = smaller blast radius):
    - 1 docs/audit/matrix-only, no product source edits
    - 2 single leaf file / pure additive local change
    - 3 one feature vertical; few coordinated files

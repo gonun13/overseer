@@ -23,14 +23,29 @@ without one, lists every slug under db/.
         `session` is the overseer session currently driving that workspace
         (null if none); `lock` is the id of the request that owns the working
         tree while it runs implement/verify/decide (null if none) — no other
-        request may enter that phase until it is released. This is the form to
-        read from a script or an agent.
+        request may enter that phase until it is released. A request whose
+        latest step is `decide` also carries `route`: where that decision sent
+        it, which is the whole of how the next action survives a restart. This
+        is the form to read from a script or an agent.
 
 Exit codes: 0 ok, 1 general failure.
 USAGE
 }
 
 require_cmd jq
+
+# event_route <slug> <event-json> — the route a `decide` event sent the request
+# on, read from that record's frontmatter. Empty for every other step. This is
+# the one place `list` opens an artifact: the route is a routing instruction,
+# not content, and reading it here is what keeps the overseer from having to
+# open the decision record itself.
+event_route() {
+  local slug=$1 event=$2 step id
+  step=$(printf '%s' "$event" | jq -r '.step')
+  [ "$step" = decide ] || return 0
+  id=$(printf '%s' "$event" | jq -r '.id')
+  record_frontmatter_get "$(artifact_path "$slug" decide "$id")" route
+}
 
 name="" as_json=0
 while [ $# -gt 0 ]; do
@@ -61,7 +76,11 @@ if [ "$as_json" -eq 1 ]; then
     session=$(running_get "$slug" || true)
     [ -n "$session" ] || session=null
     held=$(impl_lock_holder "$slug" || true)
-    open_request_events "$slug" \
+    while IFS= read -r event; do
+      [ -n "$event" ] || continue
+      printf '%s' "$event" | jq -c --arg route "$(event_route "$slug" "$event")" \
+        '. + {route: (if $route == "" then null else $route end)}'
+    done < <(open_request_events "$slug") \
       | jq -s --arg slug "$slug" --argjson session "$session" --arg lock "$held" \
           '{slug:$slug, session:$session,
             lock:(if $lock == "" then null else $lock end),
@@ -88,14 +107,15 @@ for slug in "${slugs[@]}"; do
   while IFS= read -r event; do
     [ -n "$event" ] || continue
     if [ "$found" -eq 0 ]; then
-      printf '%-32s %-14s %-10s %-12s %-21s %s\n' ID SLUG STEP STATUS UPDATED TITLE
+    printf '%-32s %-14s %-10s %-22s %-21s %s\n' ID SLUG STEP STATUS UPDATED TITLE
     fi
     found=1
-    printf '%-32s %-14s %-10s %-12s %-21s %s\n' \
+    route=$(event_route "$slug" "$event")
+    printf '%-32s %-14s %-10s %-22s %-21s %s\n' \
       "$(printf '%s' "$event" | jq -r '.id')" \
       "$slug" \
       "$(printf '%s' "$event" | jq -r '.step')" \
-      "$(printf '%s' "$event" | jq -r '.status')" \
+      "$(printf '%s' "$event" | jq -r '.status')${route:+ (→$route)}" \
       "$(printf '%s' "$event" | jq -r '.at')" \
       "$(printf '%s' "$event" | jq -r '.title')"
   done < <(open_request_events "$slug")

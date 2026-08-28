@@ -26,7 +26,9 @@ step, then run this again.
 For a step that takes the working tree (implement, verify, decide) the
 request must still hold the workspace's exclusive-phase lock — the lock is
 what loop/bin/step granted it. Recording does not release it: the rest of
-that phase inherits the same claim.
+that phase inherits the same claim. Recording a `decide` whose route is not
+`commit` clears the claim's recorded steps, so the request may take another
+implement/verify/decide lap on the same tree.
 
 Exit codes: 0 recorded, 1 validation/general failure, 2 workspace not found,
 3 the exclusive phase is not held by this request.
@@ -82,15 +84,26 @@ event=completed
 
 append_event "$slug" "$id" "$at" "$step" "$event" "$status" "$title" "$raw_ref" "$record_ref"
 
-# Note it against the claim, so the next run of the same step needs a fresh
-# one. That is how `plan -> implement -> verify -> decide` stays a cycle while
-# the steps that would close it do not exist: the phase has to be handed back
-# before more work goes into the same working tree.
+# Note it against the claim, so the same step cannot run twice under it: that
+# is what keeps implement -> verify -> decide in order inside one lap.
+route=""
 if step_is_exclusive "$step"; then
   impl_lock_mark "$slug" "$step"
 fi
 
+# `decide` is what turns the cycle. Every route but `commit` sends this request
+# back into the phase for another lap, so the claim's marks are wiped and the
+# same steps may run again — while the holder stays, because the working tree
+# is still dirty and still this request's. `commit` keeps the marks: the phase
+# is being handed on, and until `commit` exists a rerun of `decide` must stay
+# refused rather than quietly re-judging work already judged.
+if [ "$step" = decide ]; then
+  route=$(record_frontmatter_get "$file" route)
+  [ "$route" = commit ] || impl_lock_clear_marks "$slug"
+fi
+
 jq -n \
   --arg id "$id" --arg step "$step" --arg status "$status" \
-  --arg title "$title" --arg ref "$record_ref" \
-  '{recorded:true, id:$id, step:$step, status:$status, title:$title, ref:$ref}'
+  --arg title "$title" --arg ref "$record_ref" --arg route "$route" \
+  '{recorded:true, id:$id, step:$step, status:$status, title:$title, ref:$ref}
+   + (if $route == "" then {} else {route:$route} end)'

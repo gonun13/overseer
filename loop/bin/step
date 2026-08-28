@@ -37,13 +37,13 @@ same values, so anything altered here is rejected there.
 
 Exit codes: 0 ok, 1 general/validation failure, 2 workspace not found,
 3 the exclusive phase is unavailable — another request holds it, or this
-  request's last run of this step has not been judged yet.
+  request has already recorded this step on the current lap of the cycle.
 USAGE
 }
 
 require_cmd jq
 
-name="" id="" step="" tracers="" held=""
+name="" id="" step="" tracers="" held="" onward=""
 args=()
 while [ $# -gt 0 ]; do
   case "$1" in
@@ -71,21 +71,29 @@ require_step "$step"
 ensure_slug_dirs "$slug"
 
 if step_is_exclusive "$step"; then
-  # A finished run of this step, still holding the phase, is waiting to be
-  # judged: plan -> implement -> verify -> decide is a cycle, and starting the
-  # next run would stack a second unjudged change on the first in the same
-  # working tree. `decide` would hand the phase back; until it is built the
-  # judgement belongs to `verify`/`decide`; until they exist there is none, and
-  # the loop halts here rather than building on an unjudged run.
+  # This step has already recorded under the claim this request still holds, so
+  # the phase has moved on: implement -> verify -> decide runs in that order,
+  # and running one of them twice on the same lap would either stack a second
+  # unjudged change on the first or re-judge work already judged. `decide`
+  # clears the marks when it routes the request back for another lap, which is
+  # what makes the next `implement` legal again.
   # Only a run that actually recorded trips this: the marker is written by
   # loop/bin/record and lives on the claim, so a run whose record failed can
   # still be retried, and releasing the phase clears the slate.
   if [ "$(impl_lock_holder "$slug")" = "$id" ] && impl_lock_recorded "$slug" "$step"; then
-    die "'$step' has already run for $id and nothing has judged the result
-'verify' and 'decide' are not built, so nothing can judge that run or route
-this request onward — the loop for '$name' is halted here by design, not
-blocked on something you can retry. $LOOP_BIN_DIR/phase $name reports the
-state; clearing the request is what ends it." 3
+    onward=$(next_exclusive_step "$step")
+    if [ "$onward" = commit ]; then
+      die "'$step' has already run for $id, and it routed the request to 'commit'
+'commit' is not built, so nothing can take the work from here — the loop for
+'$name' is halted at the end of the cycle by design, not blocked on something
+you can retry. $LOOP_BIN_DIR/phase $name reports the state; clearing the
+request is what ends it." 3
+    fi
+    die "'$step' has already recorded for $id — '$onward' is what comes next
+Each of $LOOP_EXCLUSIVE_STEPS runs once per lap of the cycle, in that order:
+  $LOOP_BIN_DIR/step $name $id $onward
+Rerun '$step' only after 'decide' has routed this request back for another
+lap. $LOOP_BIN_DIR/phase $name reports the state." 3
   fi
   if ! held=$(impl_lock_claim "$slug" "$id" 2>&1); then
     die "request $held already holds the exclusive phase for '$name'

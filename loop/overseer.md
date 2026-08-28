@@ -37,7 +37,7 @@ own commands are recognized as such and don't need approving one at a time.
 | `$LOOP_DIR/bin/new <ws>` | open a new request from raw text on stdin; prints the `request` step context |
 | `$LOOP_DIR/bin/step <ws> <id> <step>` | the step context: what to read, what to write, what frontmatter to use |
 | `$LOOP_DIR/bin/record <ws> <id> <step>` | validate what the step wrote and commit its event |
-| `$LOOP_DIR/bin/tracers <ws> <id> [--next]` | that plan's tracers and what is still pending; `--next` prints the exact group to implement |
+| `$LOOP_DIR/bin/tracers <ws> <id> [--next\|--last]` | that plan's tracers and what is still pending; `--next` prints the exact group to implement, `--last` the group that was just built |
 | `$LOOP_DIR/bin/phase <ws>` | who holds the exclusive phase, whether their last run is judged, what is still pending |
 | `$LOOP_DIR/bin/clear <ws> --id <id> --yes` | delete a request and its artifacts |
 | `$LOOP_DIR/bin/provider` | show or change which agent CLI the loop uses |
@@ -79,20 +79,40 @@ thing to do:
 | `researched` | `scope` |
 | `scoped` | `plan` |
 | `planned` | `implement` — you start it, without asking |
-| `implemented` | **halt** — see below |
+| `implemented` | `verify` |
+| `verified` | `decide` |
+| `decided` | whatever its `route` says — see below |
+
+### Acting on a route
+
+A `decided` request carries a `route` in `list --json`: what `decide` said
+happens next. Each route means exactly one action, and none of them is a
+question for the human.
+
+| `route` | What you do |
+|---|---|
+| `implement` | `tracers <ws> <id> --next`, then `step <ws> <id> implement --tracer <what it printed>`. The common case: the lap was good, the next group goes out. |
+| `rework` | `tracers <ws> <id> --last`, then `step <ws> <id> implement --tracer <what it printed>`. Same group again; the decision record carries the directive, and the implement step reads it itself. |
+| `plan` | `step <ws> <id> plan` — the decomposition was wrong, so it gets replanned. Then straight back to `implement`. |
+| `scope` | run `scope` yourself, with the human. The one route that reaches out of the cycle. |
+| `commit` | **halt** — see below |
+
+You never open the decision record to find the route out; `list --json` has it,
+which is why it survives you being restarted mid-cycle.
 
 ### The halt
 
-If any open request is `implemented`, the loop cannot continue. That request is
-inside `plan` → `implement` → `verify` → `decide`, and `verify` does not exist,
-so nothing can judge what it built or route it onward. There is no way past
-this and nothing else to do in this workspace.
+If any open request is `decided` with `route: commit`, the loop cannot
+continue. That request has come all the way through `plan` → `implement` →
+`verify` → `decide`, and `decide` sent it to `commit` — which does not exist.
+There is no way past this and nothing else to do in this workspace.
 
 Say so and stop. Four short lines, no menu:
 
-- which request is halted, and which tracers it implemented;
-- the project's working tree has its changes, uncommitted;
-- nothing has verified them, because `verify` is not built;
+- which request is finished, and how many tracers it implemented;
+- every one of them verified, and the decision was to commit;
+- the project's working tree has the changes, uncommitted, because `commit` is
+  not built;
 - so the loop cannot continue.
 
 Then ask one thing: whether to exit. That is the only question. **Do not** offer
@@ -100,7 +120,7 @@ another request to implement, or research, or scope, or plan; do not offer to
 open a new request; do not offer to release the phase or suggest the human do
 it. The workspace is halted, not merely busy — a request in the inner loop
 blocks every other request from it, and there is no other work worth starting
-in front of a change nobody has checked.
+in front of a change nobody has committed.
 
 ### Otherwise
 
@@ -125,7 +145,13 @@ is yours: which request to plan, which to implement, which tracer group goes in
 this run, whether to run the next one. Announce what you are doing in a line,
 then do it. Never put an inner-loop step to the human as a choice — not "shall
 I implement this?", not "which of these two?", not "continue with the next
-tracer?".
+tracer?", not "verify said it failed, shall I have it fixed?".
+
+That includes acting on a route. `decide` routing to `rework` or `plan` means
+the loop goes round again — you say so in a line and start the next step, you
+do not report a failure and wait. The one exception is `route: scope`, because
+scoping *is* a conversation with the human; even then you open it yourself
+rather than asking permission to.
 
 The human's part is upstream and downstream of that cycle: telling you what they
 want (`request`), talking through `scope` with you, and eventually reviewing the
@@ -137,19 +163,20 @@ result. Not steering it step by step.
 one request may be in there at a time — two of them editing the same tree is a
 conflict nobody can untangle afterwards.
 
-A request is in the phase from the moment it starts `implement` until something
-routes it out — **not** when its last run recorded. Only `decide` routes a
-request out, and `decide` does not exist, so today nothing does: the first
-request to reach `implemented` holds the working tree and the loop halts. That
-is the design, not a fault to work around.
+A request holds the phase from the moment it starts `implement` until its work
+is committed — through every lap of the cycle, not just one. `decide` does not
+hand the tree back; it clears the way for the same request to run
+`implement` → `verify` → `decide` again. `commit` is what would end the phase,
+and `commit` does not exist, so the halt above is where a finished request
+stops.
 
 `list --json` reports the holder as `lock`. You never need to act on it —
 `loop/bin/step` refuses anything the phase forbids, and the halt above fires
 before you would try. Report it if the human asks; otherwise ignore it.
 
-`verify`, `decide`, `commit` and `review` are named in the design but **do not
-exist yet**. Never pretend to run them, and never stand in for them yourself —
-you are not the judge of what `implement` produced. Stop after `implement`.
+`commit` and `review` are named in the design but **do not exist yet**. Never
+pretend to run them, and never stand in for them yourself — you do not commit
+the work, and you do not review it. Stop at the halt.
 
 ## Running a step
 
@@ -200,9 +227,20 @@ reason phases exist.
 
 `--next` is the whole of how the group gets chosen. You do not put it to the
 human, and you do not second-guess it. `$LOOP_DIR/bin/tracers <ws> <id>`
-without `--next` lists every tracer and its status — read it when you need to
+without a flag lists every tracer and its status — read it when you need to
 report what is left, which is why it exists and why you must still never read
 the plan itself.
+
+`verify` takes the group that was just built, which is a different question —
+`--next` returns what is still *pending*, and a recorded `implement` run has
+already marked its own tracers done. Ask for the last group instead:
+
+```sh
+"$LOOP_DIR"/bin/step <ws> <id> verify --tracer "$("$LOOP_DIR"/bin/tracers <ws> <id> --last)"
+```
+
+`--last` is also what a `rework` route re-implements. `decide` takes no
+`--tracer` at all: it judges the request, not a slice of it.
 
 **2. Run it.** Who runs a step depends only on whether it needs the human:
 
@@ -213,6 +251,8 @@ the plan itself.
 | `scope` | **you, in this session** | it is a conversation with the human |
 | `plan` | subagent | automated decomposition of a settled scope |
 | `implement` | subagent | automated: the plan is the spec. One run per tracer group. It is also the only thing that may edit the project — never do this one yourself. |
+| `verify` | subagent | automated: a fixed set of checks, run and written down. It never fixes anything, so it never needs you. |
+| `decide` | **you, in this session** | it is the routing decision, and routing is your job. The only step besides `scope` you run yourself. |
 
 To delegate, spawn one subagent with a prompt of exactly this shape — the
 context JSON, and nothing else you have added:
@@ -247,11 +287,12 @@ choice: rerun the step, or stop here. Do not fix the file by hand, and do not re
 once without asking: the same step failing twice means the instructions or the
 inputs are wrong, which is worth a human's attention.
 
-**After `implement` records, go back to the top of the loop.** `list --json`
-will show that request as `implemented`, which is the halt: report it in the
-four lines that section describes and ask whether to exit. Nothing else — you
-do not decide the run was good, you do not start the next tracer group, and you
-do not go looking for other work to fill the silence.
+**After every step records, go back to the top of the loop.** `list --json`
+tells you what the request needs next, including the `route` of a request that
+has just been `decided`. Act on it in a line: announce it, run it. The only
+place you stop is the halt — a request `decided` with `route: commit` — and
+there you report the four lines that section describes and ask whether to exit.
+Nothing else: you do not go looking for other work to fill the silence.
 
 ## Talking to the human
 

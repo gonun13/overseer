@@ -3,12 +3,13 @@
 # in which one request owns the project's working tree — and, as a recovery
 # hatch, hand it back.
 #
-# This is an administrative command, not a part of the loop. Only `decide`
-# routes a request out of the phase, and `decide` is not built, so a workspace
-# whose request reached `implemented` stays there: the overseer halts and says
-# so. --release exists for a human cleaning up outside a session, never as a
-# stand-in for the judgement `verify` and `decide` would make. Nothing here
-# says a run was good.
+# This is an administrative command, not a part of the loop. A request holds the
+# phase until its work is committed — `decide` turns the cycle without handing
+# the tree back — and `commit` is not built, so a workspace whose request was
+# decided onto `commit` stays there: the overseer halts and says so. --release
+# exists for a human cleaning up outside a session, never as a stand-in for the
+# judgement `verify` and `decide` already make. Nothing here says a run was
+# good.
 #
 # Usage: loop/bin/phase <workspace-name> [--release] [--yes] [--force]
 set -euo pipefail
@@ -28,14 +29,16 @@ whether its last run has already recorded, and which of its tracers are still
 pending. With no --release it only reports.
 
 An administrative command, not a step. Nothing here judges a run: that is what
-`verify` and `decide` are for, and until they exist a request that reached
-`implemented` halts the loop for that workspace.
+`verify` and `decide` are for. A request keeps the phase across every lap of
+the cycle and is only meant to leave it by being committed, so until `commit`
+exists a request `decide` routed there halts the loop for that workspace.
 
 --release  hand the phase back, for a human cleaning up outside a session.
            Refused while the holding request still has pending tracers, since
            letting another request in would put two unfinished sets of changes
-           in the same tree — pass --force to do it anyway. The overseer will
-           still halt on that request until it is cleared.
+           in the same tree — pass --force to do it anyway. A request already
+           decided onto `commit` will still halt the overseer until it is
+           cleared.
 --yes      skip the confirmation prompt (required in non-interactive shells)
 
 Exit codes: 0 ok (including when nothing is held), 1 general failure,
@@ -77,8 +80,15 @@ while IFS= read -r t; do
 done < <(pending_tracers "$slug" "$held")
 
 log_info "request $held holds the exclusive phase for '$name'"
-if impl_lock_recorded "$slug" implement; then
-  log_info "it has already recorded an implement run under this claim"
+# Line 2 of the lock is what the current lap has already recorded, so it says
+# where in implement -> verify -> decide this request stands right now.
+recorded=""
+for s in $LOOP_EXCLUSIVE_STEPS; do
+  impl_lock_recorded "$slug" "$s" && recorded="${recorded:+$recorded }$s"
+done
+if [ -n "$recorded" ]; then
+  log_info "recorded on this lap of the cycle: $recorded"
+  log_info "next in the cycle: $(next_exclusive_step "${recorded##* }")"
 fi
 if [ ${#pending[@]} -gt 0 ]; then
   log_info "tracers still pending: ${pending[*]}"
@@ -93,8 +103,8 @@ if [ ${#pending[@]} -gt 0 ] && [ "$force" -ne 1 ]; then
 Letting another request in now would leave two unfinished sets of changes in
 the same working tree. If you mean to do it anyway:
   $LOOP_BIN_DIR/phase $name --release --force
-Note this does not make the request's work verified, and the overseer will
-still halt on it until it is cleared." 3
+Note this does not make the request's work verified, and it drops the record of
+where in the cycle that request had got to." 3
 fi
 
 if [ "$yes" -ne 1 ]; then

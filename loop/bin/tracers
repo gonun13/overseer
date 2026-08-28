@@ -6,7 +6,7 @@
 # This exists so the overseer can decide what to implement next without reading
 # the plan into its own window. Read-only — it writes nothing.
 #
-# Usage: loop/bin/tracers <workspace-name> <request-id> [--json | --next]
+# Usage: loop/bin/tracers <workspace-name> <request-id> [--json | --next | --last]
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,7 +17,7 @@ source "$LOOP_BIN_DIR/lib/db.sh"
 
 usage() {
   cat >&2 <<'USAGE'
-usage: loop/bin/tracers <workspace-name> <request-id> [--json | --next]
+usage: loop/bin/tracers <workspace-name> <request-id> [--json | --next | --last]
 
 Lists the vertical tracers in that request's plan, in plan order, with the
 phase they belong to, whether the plan declared them parallel, and their
@@ -30,6 +30,11 @@ status from the implement record's ledger (pending until it says otherwise).
         parallel tracer of the lowest phase with work left, or the single next
         pending tracer when it is not parallel. Prints nothing when the plan
         is fully implemented.
+--last  print the group the last implement run actually built, from that
+        record's own `tracers` frontmatter. This is what `verify` checks and
+        what a reworked `implement` run redoes — `--next` is the wrong answer
+        for both, because a recorded run has already marked its tracers done.
+        Prints nothing when there is no implement record yet.
 
 Exit codes: 0 ok, 1 general failure, 2 workspace not found.
 USAGE
@@ -37,11 +42,12 @@ USAGE
 
 require_cmd jq
 
-name="" id="" as_json=0 next_only=0
+name="" id="" as_json=0 next_only=0 last_only=0
 while [ $# -gt 0 ]; do
   case "$1" in
     --json) as_json=1; shift ;;
     --next) next_only=1; shift ;;
+    --last) last_only=1; shift ;;
     -h|--help) usage; exit 0 ;;
     -*) die "unknown option: $1" 1 ;;
     *)
@@ -55,10 +61,23 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$name" ] && [ -n "$id" ] || { usage; exit 1; }
-[ "$as_json" -eq 1 ] && [ "$next_only" -eq 1 ] && die "pass either --json or --next, not both" 1
+[ $((as_json + next_only + last_only)) -le 1 ] \
+  || die "pass at most one of --json, --next, --last" 1
 
 validate_workspace_name "$name"
 slug=$(slugify "$name")
+
+# --last reads the implement record, not the plan, so it answers even for a
+# request whose plan was rewritten under it — the group that was built is a
+# fact about the run, not about the current decomposition.
+if [ "$last_only" -eq 1 ]; then
+  impl_file=$(artifact_path "$slug" implement "$id")
+  [ -f "$impl_file" ] || exit 0
+  last=$(record_frontmatter_get "$impl_file" tracers)
+  [ -n "$last" ] || exit 0
+  printf '%s\n' "$last"
+  exit 0
+fi
 
 plan_file=$(artifact_path "$slug" plan "$id")
 [ -f "$plan_file" ] || die "no plan for $id — $(artifact_ref "$slug" plan "$id") does not exist" 1

@@ -15,6 +15,10 @@ need is named in it:
 - `inputs.research_file` — the research report (read-only)
 - `inputs.memory_file` — this workspace's accumulated knowledge (read-only; may
   not exist). It often already names the project's test command.
+- `inputs.decide_file` — the decisions taken on earlier laps of this request
+  (read-only; absent on the first run). **Read its last `## Decision` block
+  before anything else** — if it routed `rework`, that block's `Directive` is
+  this run's spec.
 - `tracers` — the tracer ids to work in this run, or `null` for "pick the next
   group yourself"
 - `workspace_dir` — the project. **This is the one step that changes it.**
@@ -50,30 +54,37 @@ an altered one is rejected and the step has to be redone.
 2. **Carry the ledger forward.** Read `output_file` when it exists. Tracers
    already marked `done` are done — do not redo them, and reproduce their rows
    unchanged in the record you write.
-3. **Read before you write.** Each tracer's block in `inputs.plan_file`, then
+3. **Unless this is a rework.** When `inputs.decide_file` exists and its last
+   `## Decision` block routes `rework`, that block's `Directive` overrides the
+   rule above: the tracers it names are redone even though the ledger marks
+   them `done`, and doing what the directive says is this run's whole job. Keep
+   their rows `done` when the rework lands; mark one `blocked` and say why
+   under `## Deviations` when it does not. A directive that names no tracer
+   applies to the whole group you were handed.
+4. **Read before you write.** Each tracer's block in `inputs.plan_file`, then
    `inputs.scope_file` for the in/out bounds and `inputs.request_file` for what
    was actually asked. Read `inputs.memory_file` if it exists. Read
    `inputs.research_file` only when the plan leaves a concrete path unclear.
    Then read the code the tracers name, in `workspace_dir`, before changing any
    of it. Look up a library's own documentation online when its behaviour
    matters and you are not sure of it.
-4. **Where they conflict, scope wins.** The plan says how; the scope says what
+5. **Where they conflict, scope wins.** The plan says how; the scope says what
    is in and out. A plan step that reaches outside the scope is not done — it
    is recorded under `## Deviations`.
-5. **One tracer at a time, even in a group.** Finish one before starting the
+6. **One tracer at a time, even in a group.** Finish one before starting the
    next, and keep each one's changes inside its own `Files/areas`. The group is
    parallel because those file sets are disjoint; writing across them is what
    would break that guarantee. If two tracers in your group turn out to want
    the same file, do the first, leave the second `blocked` in the ledger, and
    say why under `## Deviations` — the plan was wrong about them.
-6. **Test-first when the project lets you.** Find the test setup: a test script
+7. **Test-first when the project lets you.** Find the test setup: a test script
    in `package.json`, `pyproject.toml`, a `Makefile`, or an existing test
    directory next to the code the tracer touches. Then, per tracer:
    - Write a failing test that expresses the tracer's `Verify` line.
    - Run it. Confirm it fails, and for the right reason.
    - Make the smallest change that passes it. Run it again.
    Run the wider suite for the areas you touched once, at the end of the run.
-7. **Never get stuck on testing.** Write the code either way. Skip the
+8. **Never get stuck on testing.** Write the code either way. Skip the
    test-first path, and say so under `## Tests`, when any of these is true:
    - the project has no test setup;
    - the tracer has no testable surface — documentation, an audit, a matrix, a
@@ -82,11 +93,11 @@ an altered one is rejected and the step has to be redone.
    Do not build test infrastructure the plan did not ask for, and do not stall
    on a red suite you did not cause. `verify` and `review` exist to catch what
    you leave; an unwritten change is what they cannot catch.
-8. **Stay inside the group.** Only the `Files/areas` of the tracers you were
+9. **Stay inside the group.** Only the `Files/areas` of the tracers you were
    given. Everything under the plan's `Out of Plan` stays undone. If you
    genuinely must touch a file no tracer in the group owns, make the smallest
    possible change and record it under `## Deviations`.
-9. **Do not touch version control.** No commit, no branch, no stash, no revert,
+10. **Do not touch version control.** No commit, no branch, no stash, no revert,
    no reset. Leave the working tree dirty — committing is a later step, and the
    human wants to see what you did. Write nothing under the loop's own `db/`
    except `output_file`.
