@@ -24,9 +24,9 @@ stderr, and the artifact is left on disk to inspect or overwrite — rerun the
 step, then run this again.
 
 For a step that takes the working tree (implement, verify, decide, commit)
-the request must still hold the workspace's exclusive-phase lock — the lock
+the request must still hold the workspace's stint — the lock
 is what loop/bin/step granted it. Recording never releases it: the rest of
-that phase inherits the same claim, and the tree stays owned until
+that stint inherits the same claim, and the tree stays owned until
 loop/bin/land has actually committed the work. Recording a `decide` whose
 route is not `commit` clears the claim's recorded steps, so the request may
 take another implement/verify/decide lap on the same tree.
@@ -35,7 +35,7 @@ Recording a `review` requires the human's sign-off to already be on disk
 (loop/bin/signoff) and takes down that request's QA worktree.
 
 Exit codes: 0 recorded, 1 validation/general failure, 2 workspace not found,
-3 the exclusive phase is not held by this request,
+3 the stint is not held by this request,
 6 the review has no sign-off from the human yet.
 USAGE
 }
@@ -57,12 +57,12 @@ require_step "$step"
 
 # A step that takes the working tree must still hold the claim loop/bin/step
 # granted it. Without that, this artifact was not produced by the loop's own
-# dispatch — or another request has since been let into the phase — and either
+# dispatch — or another request has since been let into the stint — and either
 # way it must not become the record of what happened.
 if step_is_exclusive "$step"; then
   held=$(impl_lock_holder "$slug")
   if [ "$held" != "$id" ]; then
-    die "'$step' for $id was not recorded: ${held:-nobody} holds the exclusive phase for '$name'
+    die "'$step' for $id was not recorded: ${held:-nobody} holds the stint for '$name'
 Start it properly first:
   $LOOP_BIN_DIR/step $name $id $step" 3
   fi
@@ -120,9 +120,9 @@ if step_is_exclusive "$step"; then
 fi
 
 # `decide` is what turns the cycle. Every route but `commit` sends this request
-# back into the phase for another lap, so the claim's marks are wiped and the
+# back into the stint for another lap, so the claim's marks are wiped and the
 # same steps may run again — while the holder stays, because the working tree
-# is still dirty and still this request's. `commit` keeps the marks: the phase
+# is still dirty and still this request's. `commit` keeps the marks: the stint
 # is being handed on, and until `commit` exists a rerun of `decide` must stay
 # refused rather than quietly re-judging work already judged.
 if [ "$step" = decide ]; then
@@ -130,7 +130,7 @@ if [ "$step" = decide ]; then
   [ "$route" = commit ] || impl_lock_clear_marks "$slug"
 fi
 
-# A recorded commit does not end the phase — `loop/bin/land` does, once the
+# A recorded commit does not end the stint — `loop/bin/land` does, once the
 # work is actually committed and pushed. Letting another request in here would
 # cut its branch off a tree still holding uncommitted changes.
 outcome=""

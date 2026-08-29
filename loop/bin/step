@@ -2,7 +2,7 @@
 # Print the context for one step of one request: every path, ref, and
 # frontmatter value that step needs, named. Nearly pure — it creates the slug's
 # directories, and for a step that takes the working tree it claims the
-# workspace's exclusive-phase lock and puts the tree on that request's own
+# workspace's stint and puts the tree on that request's own
 # branch before handing the context over.
 #
 # Usage: loop/bin/step <workspace-name> <request-id> <step> [--tracer <ids>]
@@ -38,21 +38,21 @@ that model unavailable, falls back to the session default.
           plan declared them parallel, so one run does the whole group.
           `loop/bin/tracers <ws> <id> --next` prints exactly what to pass.
           Omit it and the step picks the next pending group itself. Those
-          steps also claim the workspace's exclusive-phase lock here: one
+          steps also claim the workspace's stint here: one
           request owns the working tree at a time, and loop/bin/land
           hands it back when the work is committed.
 
-Taking the exclusive phase also puts the working tree on the branch that
+Taking the stint also puts the working tree on the branch that
 request owns, cutting it off the tip of the train (loop/bin/train) the first
 time. That is why a request is refused entry with a dirty tree: its branch is
 cut at that moment, and anything uncommitted would ride along into it and into
 its pull request.
 
 Exit codes: 0 ok, 1 general/validation failure, 2 workspace not found,
-3 the exclusive phase is unavailable — another request holds it, or this
+3 the stint is unavailable — another request holds it, or this
   request has already recorded this step on the current lap of the cycle,
 4 the workspace is not a git repository, or has no origin remote,
-5 the working tree is not clean, so the request cannot enter the phase.
+5 the working tree is not clean, so the request cannot enter the stint.
 USAGE
 }
 
@@ -88,20 +88,20 @@ ensure_slug_dirs "$slug"
 
 if step_is_exclusive "$step"; then
   # This step has already recorded under the claim this request still holds, so
-  # the phase has moved on: implement -> verify -> decide runs in that order,
+  # the stint has moved on: implement -> verify -> decide runs in that order,
   # and running one of them twice on the same lap would either stack a second
   # unjudged change on the first or re-judge work already judged. `decide`
   # clears the marks when it routes the request back for another lap, which is
   # what makes the next `implement` legal again.
   # Only a run that actually recorded trips this: the marker is written by
   # loop/bin/record and lives on the claim, so a run whose record failed can
-  # still be retried, and releasing the phase clears the slate.
+  # still be retried, and releasing the stint clears the slate.
   if [ "$(impl_lock_holder "$slug")" = "$id" ] && impl_lock_recorded "$slug" "$step"; then
     onward=$(next_exclusive_step "$step")
     if [ -z "$onward" ]; then
-      # `commit` recorded but the phase is still held, so `land` has not run:
+      # `commit` recorded but the stint is still held, so `land` has not run:
       # the artifact is committed and the repo has not moved. Say the recovery
-      # rather than the refusal — this is the one half-failure in the phase
+      # rather than the refusal — this is the one half-failure in the stint
       # that leaves a request stranded with nothing obvious to type.
       die "'commit' has already recorded for $id, but its work has not been pushed
 The record is committed; the repository has not moved. Committing, pushing,
@@ -113,19 +113,19 @@ so that a failed push leaves a retryable state rather than an unlogged one:
 Each of $LOOP_EXCLUSIVE_STEPS runs once per lap of the cycle, in that order:
   $LOOP_BIN_DIR/step $name $id $onward
 Rerun '$step' only after 'decide' has routed this request back for another
-lap. $LOOP_BIN_DIR/phase $name reports the state." 3
+lap. $LOOP_BIN_DIR/stint $name reports the state." 3
   fi
   # Whether this request already owned the tree decides one thing only: a dirty
-  # tree is expected of a request mid-phase and refused of one entering it.
+  # tree is expected of a request mid-stint and refused of one entering it.
   already_held=0
   [ "$(impl_lock_holder "$slug")" = "$id" ] && already_held=1
 
   if ! held=$(impl_lock_claim "$slug" "$id" 2>&1); then
-    die "request $held already holds the exclusive phase for '$name'
+    die "request $held already holds the stint for '$name'
 Only one request at a time may run $LOOP_EXCLUSIVE_STEPS, so two of them
-cannot edit the same working tree. Finish or hand the phase on first:
+cannot edit the same working tree. Finish or hand the stint on first:
   $LOOP_BIN_DIR/land $name $held        # if its work is ready to commit
-  $LOOP_BIN_DIR/phase $name --release   # to take it back by hand" 3
+  $LOOP_BIN_DIR/stint $name --release   # to take it back by hand" 3
   fi
 
   # Put the tree on this request's branch, cutting it off the train's tip the
@@ -135,7 +135,7 @@ cannot edit the same working tree. Finish or hand the phase on first:
   kind=$(record_frontmatter_get "$(artifact_path "$slug" request "$id")" kind)
   title=$(record_title "$(artifact_path "$slug" request "$id")")
   set +e
-  git_phase_enter "$workspace_dir" "$name" "$id" "$kind" "$title" "$already_held" >/dev/null
+  git_stint_enter "$workspace_dir" "$name" "$id" "$kind" "$title" "$already_held" >/dev/null
   rc=$?
   set -e
   if [ "$rc" -ne 0 ]; then

@@ -1,16 +1,16 @@
 #!/usr/bin/env bash
-# Report the workspace's exclusive phase — the implement/verify/decide stretch
+# Report the workspace's stint — the implement/verify/decide stretch
 # in which one request owns the project's working tree — and, as a recovery
 # hatch, hand it back.
 #
 # This is an administrative command, not a part of the loop. A request holds the
-# phase from its first `implement` until `loop/bin/land` commits and pushes its
+# stint from its first `implement` until `loop/bin/land` commits and pushes its
 # work — `decide` turns the cycle without handing the tree back, because the
 # changes are still there and still that request's. --release exists for a
 # human cleaning up outside a session, never as a stand-in for the judgement
 # `verify` and `decide` already make. Nothing here says a run was good.
 #
-# Usage: loop/bin/phase <workspace-name> [--release] [--yes] [--force]
+# Usage: loop/bin/stint <workspace-name> [--release] [--yes] [--force]
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -21,19 +21,19 @@ source "$LOOP_BIN_DIR/lib/db.sh"
 
 usage() {
   cat >&2 <<'USAGE'
-usage: loop/bin/phase <workspace-name> [--release] [--yes] [--force]
+usage: loop/bin/stint <workspace-name> [--release] [--yes] [--force]
 
-Shows which request holds the exclusive phase on workspace/<workspace-name>,
+Shows which request holds the stint on workspace/<workspace-name>,
 whether its last run has already recorded, and which of its tracers are still
 pending. With no --release it only reports.
 
 An administrative command, not a step. Nothing here judges a run: that is what
-`verify` and `decide` are for. A request keeps the phase across every lap of
+`verify` and `decide` are for. A request keeps the stint across every lap of
 the cycle and leaves it by being committed:
 
   loop/bin/land <workspace-name> <request-id>
 
---release  hand the phase back without committing, for a human cleaning up
+--release  hand the stint back without committing, for a human cleaning up
            outside a session. Refused while the holding request still has
            pending tracers, since letting another request in would put two
            unfinished sets of changes in the same tree — pass --force to do it
@@ -69,7 +69,7 @@ slug=$(slugify "$name")
 
 held=$(impl_lock_holder "$slug")
 if [ -z "$held" ]; then
-  log_info "no request holds the exclusive phase for '$name'"
+  log_info "no request holds the stint for '$name'"
   exit 0
 fi
 
@@ -79,7 +79,7 @@ while IFS= read -r t; do
   pending+=("$t")
 done < <(pending_tracers "$slug" "$held")
 
-log_info "request $held holds the exclusive phase for '$name'"
+log_info "request $held holds the stint for '$name'"
 # Line 2 of the lock is what the current lap has already recorded, so it says
 # where in implement -> verify -> decide this request stands right now.
 recorded=""
@@ -92,7 +92,7 @@ if [ -n "$recorded" ]; then
   if [ -n "$onward" ]; then
     log_info "next in the cycle: $onward"
   else
-    # `commit` recorded and the phase is still held, so `land` has not run.
+    # `commit` recorded and the stint is still held, so `land` has not run.
     log_info "commit is recorded but not pushed — $LOOP_BIN_DIR/land $name $held"
   fi
 fi
@@ -108,7 +108,7 @@ if [ ${#pending[@]} -gt 0 ] && [ "$force" -ne 1 ]; then
   die "refusing to release: $held still has ${#pending[@]} tracer(s) to implement
 Letting another request in now would leave two unfinished sets of changes in
 the same working tree. If you mean to do it anyway:
-  $LOOP_BIN_DIR/phase $name --release --force
+  $LOOP_BIN_DIR/stint $name --release --force
 Note this does not make the request's work verified, and it drops the record of
 where in the cycle that request had got to." 3
 fi
@@ -117,7 +117,7 @@ if [ "$yes" -ne 1 ]; then
   if [ ! -t 0 ]; then
     die "refusing to release without --yes in a non-interactive shell" 1
   fi
-  read -r -p "loop: release the phase, letting another request edit this project? [y/N] " reply
+  read -r -p "loop: release the stint, letting another request edit this project? [y/N] " reply
   case "$reply" in
     y|Y|yes|YES) ;;
     *) log_info "aborted — nothing changed"; exit 0 ;;
@@ -125,4 +125,4 @@ if [ "$yes" -ne 1 ]; then
 fi
 
 impl_lock_release "$slug"
-log_info "released — $held no longer holds the exclusive phase for '$name'"
+log_info "released — $held no longer holds the stint for '$name'"

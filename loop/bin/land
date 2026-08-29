@@ -34,7 +34,7 @@ usage() {
 usage: loop/bin/land <workspace-name> <request-id> [--dry-run]
 
 Stages everything in the workspace, commits it to that request's branch with
-the message its commit record carries, and releases the exclusive phase so the
+the message its commit record carries, and releases the stint so the
 next request can take the working tree.
 
 Local only. The branch is not pushed and no pull request is opened — that is
@@ -42,7 +42,7 @@ loop/bin/publish, which runs after `review` and only when the human approved
 the work. Nothing about this request is public until then.
 
 Run it after `loop/bin/record <ws> <id> commit`. The request must still hold
-the phase and must have recorded its commit step.
+the stint and must have recorded its commit step.
 
 The commit is skipped when it has already happened — nothing to commit and
 HEAD already carrying this message — so an interrupted run is retried by
@@ -52,7 +52,7 @@ record was written" from "the work is committed" after a crash between the two.
 --dry-run  print the exact commands and change nothing
 
 Exit codes: 0 ok, 1 general/validation failure, 2 workspace not found,
-3 this request does not hold the phase, or has not recorded `commit`,
+3 this request does not hold the stint, or has not recorded `commit`,
 4 not a git repository, or no origin remote.
 USAGE
 }
@@ -83,7 +83,7 @@ slug=$(slugify "$name")
 git_require_repo "$repo" "$name"
 
 held=$(impl_lock_holder "$slug")
-[ "$held" = "$id" ] || die "$id does not hold the exclusive phase for '$name' (${held:-nobody} does)
+[ "$held" = "$id" ] || die "$id does not hold the stint for '$name' (${held:-nobody} does)
 Only the request that owns the working tree may commit it." 3
 impl_lock_recorded "$slug" commit || die "$id has not recorded its commit step
 The commit record is what carries the message and the pull-request body, and
@@ -95,7 +95,7 @@ file=$(artifact_path "$slug" commit "$id")
 [ -f "$file" ] || die "no commit record at $(artifact_ref "$slug" commit "$id")" 1
 
 branch=$(git_request_branch "$repo" "$id")
-[ -n "$branch" ] || die "request $id has no branch — it never entered the phase properly" 1
+[ -n "$branch" ] || die "request $id has no branch — it never entered the stint properly" 1
 base=$(git_base_ref "$repo" "$branch")
 pr_title=$(record_frontmatter_get "$file" pr_title)
 message=$(record_section "$file" "Commit message")
@@ -117,7 +117,7 @@ if [ "$dry" -eq 1 ]; then
   log_info "would run, in workspace/$name (on branch $branch, base $base):"
   printf '  git add -A\n'
   printf '  git commit -F -   # %s\n' "$subject"
-  printf '  # then: release the exclusive phase for %s\n' "$name"
+  printf '  # then: release the stint for %s\n' "$name"
   printf '  # nothing is pushed here — %s/publish %s %s does that, after review\n' \
     "$LOOP_BIN_DIR" "$name" "$id"
   exit 0
@@ -174,7 +174,7 @@ append_event "$slug" "$id" "$(iso_now)" commit landed landed "$title" \
   "$(artifact_ref "$slug" raw "$id")" "$(artifact_ref "$slug" commit "$id")"
 
 impl_lock_release "$slug"
-log_info "exclusive phase released — the next request may take the working tree"
+log_info "stint released — the next request may take the working tree"
 
 jq -n --arg id "$id" --arg branch "$branch" --arg base "$base" --arg sha "$sha" \
   '{landed:true, id:$id, branch:$branch, base:$base, sha:$sha}'

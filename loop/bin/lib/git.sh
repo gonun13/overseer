@@ -7,7 +7,7 @@
 # --- Why the loop writes branch metadata into the workspace's .git/config ----
 #
 # A request's branch and the branch it was cut from have to survive an overseer
-# restart, a released phase, and a machine reboot — the train outlives all
+# restart, a released stint, and a machine reboot — the train outlives all
 # three. They live in the workspace repo's own config:
 #
 #   branch.<branch>.looprequest   the request id that owns this branch
@@ -52,9 +52,9 @@ git_has_origin() {
 }
 
 # git_require_repo <repo> <workspace-name> — die unless the workspace is a git
-# repo with an origin. Both are hard preconditions for the commit phase: a
+# repo with an origin. Both are hard preconditions for the commit step: a
 # request's work has to go onto a branch and out to a pull request, and neither
-# is possible without them. Exit 4, distinct from the phase's own refusals, so
+# is possible without them. Exit 4, distinct from the stint's own refusals, so
 # a caller can tell "this project is not set up for it" from "not right now".
 git_require_repo() {
   local repo=$1 name=$2
@@ -346,13 +346,13 @@ git_diff_range() {
   printf '%s...%s' "$(git_base_ref "$repo" "$branch")" "$branch"
 }
 
-# --- Entering the exclusive phase --------------------------------------------
+# --- Entering the stint -------------------------------------------------
 
-# git_phase_enter <repo> <workspace-name> <id> <kind> <title> <already-held>
+# git_stint_enter <repo> <workspace-name> <id> <kind> <title> <already-held>
 #
 # Put the working tree on the branch this request owns, cutting it first if it
 # does not have one. Called by loop/bin/step the moment a request takes the
-# exclusive phase, which is what makes "a request starts from the correct
+# stint, which is what makes "a request starts from the correct
 # branch" a precondition bash enforces rather than something the overseer is
 # trusted to remember.
 #
@@ -362,9 +362,9 @@ git_diff_range() {
 # rebase nobody asked for. Cutting first makes the request's diff exactly its
 # own work, against exactly the tree it was written on.
 #
-# <already-held> is `1` when this request held the phase before this claim.
+# <already-held> is `1` when this request held the stint before this claim.
 # It gates the clean-tree check and nothing else — see below.
-git_phase_enter() {
+git_stint_enter() {
   local repo=$1 name=$2 id=$3 kind=$4 title=$5 already_held=$6
   local branch base current
 
@@ -376,13 +376,13 @@ git_phase_enter() {
 
   if [ -n "$branch" ]; then
     # Re-entry: the request already owns a branch. Being dirty *on it* is the
-    # normal state of a request mid-phase — that is what the phase is for — so
+    # normal state of a request mid-stint — that is what the stint is for — so
     # only a tree parked on some other branch has to be clean before we move it.
     if [ "$current" = "$branch" ]; then
       printf '%s' "$branch"
       return 0
     fi
-    git_tree_clean "$repo" || git_phase_die_dirty "$repo" "$name" "$id" "$branch"
+    git_tree_clean "$repo" || git_stint_die_dirty "$repo" "$name" "$id" "$branch"
     git_ws "$repo" checkout --quiet "$branch"
     printf '%s' "$branch"
     return 0
@@ -390,13 +390,13 @@ git_phase_enter() {
 
   # First entry. A dirty tree here would ride somebody else's uncommitted work
   # into this request's branch and into its pull request, so it is refused —
-  # *unless* this request already held the phase, which is the one case where
+  # *unless* this request already held the stint, which is the one case where
   # the changes in the tree are known to be its own. That happens to a request
-  # that entered the phase before branches existed: it holds the lock, its work
+  # that entered the stint before branches existed: it holds the lock, its work
   # is on whatever it was checked out on, and the right thing is to cut its
   # branch from HEAD and carry the changes over, not to demand it be clean.
   if [ "$already_held" != "1" ]; then
-    git_tree_clean "$repo" || git_phase_die_dirty "$repo" "$name" "$id" ""
+    git_tree_clean "$repo" || git_stint_die_dirty "$repo" "$name" "$id" ""
   fi
 
   branch=$(git_branch_name "$kind" "$id" "$title")
@@ -432,9 +432,9 @@ git_phase_enter() {
   printf '%s' "$branch"
 }
 
-# git_phase_die_dirty <repo> <workspace-name> <id> <branch> — the one refusal
+# git_stint_die_dirty <repo> <workspace-name> <id> <branch> — the one refusal
 # a human is most likely to hit, so it says what to run.
-git_phase_die_dirty() {
+git_stint_die_dirty() {
   local repo=$1 name=$2 id=$3 branch=$4 where
   where="its own branch"
   [ -n "$branch" ] && where="'$branch'"

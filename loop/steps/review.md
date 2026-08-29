@@ -12,9 +12,9 @@ makes this review the gate rather than a formality after the fact. A rejected
 review pushes nothing at all.
 
 **You run this step yourself, in this session**, like `scope` — it ends in a
-conversation and a human's decision, and no subagent can take that over. The
-one part you delegate is the audit, because reading a whole request's diff is
-exactly the kind of bulk content that must never enter your window.
+conversation and a human's decision. The one part you delegate is the audit,
+because reading a whole request's diff is exactly the kind of bulk content
+that must never enter your window.
 
 This is the last step. Nothing routes out of it back into the cycle: findings
 become new requests, they are not repaired here.
@@ -124,8 +124,7 @@ criteria first, then the audit's risk areas. Name the worktree path so they
 know where to run it.
 
 Then take what they observed, one item at a time or all at once, however they
-want to give it. Every choice you put to them is a pick from a list, with your
-recommendation first and a way out, exactly as everywhere else.
+want to give it.
 
 ## Step 4 — The decision, and the follow-ups
 

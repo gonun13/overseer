@@ -46,7 +46,7 @@ loop/bin/new <workspace-name>                     # raw request text on stdin
 loop/bin/step <workspace-name> <request-id> <step> [--tracer <ids>]
 loop/bin/record <workspace-name> <request-id> <step>
 loop/bin/tracers <workspace-name> <request-id> [--json | --next | --last]
-loop/bin/phase <workspace-name> [--release] [--yes] [--force]
+loop/bin/stint <workspace-name> [--release] [--yes] [--force]
 loop/bin/memory <workspace-name> --show | --merge [--id <id>] | --decision
 loop/bin/land <workspace-name> <request-id> [--dry-run]
 loop/bin/publish <workspace-name> <request-id> [--dry-run] [--force]
@@ -61,13 +61,13 @@ loop/bin/check
 
 | Command | What it does |
 |---|---|
-| `list` | Open (not yet cleared) requests and their current step/status, for one workspace or every slug under `db/`. Read-only, derived from `index.jsonl` plus, for a request that has been `decided`, the `route` from its decision record. `--json` adds the session lease and the exclusive-phase lock, and is the form the overseer reads. |
+| `list` | Open (not yet cleared) requests and their current step/status, for one workspace or every slug under `db/`. Read-only, derived from `index.jsonl` plus, for a request that has been `decided`, the `route` from its decision record. `--json` adds the session lease and the stint's lock, and is the form the overseer reads. |
 | `new` | Allocates a request id, writes the raw human text to `db/<slug>/raw/<id>.txt` verbatim, and prints the `request` step context. Nothing is recorded until `record` runs, so a failed structuring pass can't lose what the human said. |
-| `step` | Prints one step's context: the instruction file to follow, the inputs to read, the file to write, and the exact frontmatter to put in it. Refuses if an input artifact is missing. For a step that takes the working tree it also claims the exclusive-phase lock, and refuses if another request holds it; `--tracer` names which slice of the plan to work. |
+| `step` | Prints one step's context: the instruction file to follow, the inputs to read, the file to write, and the exact frontmatter to put in it. Refuses if an input artifact is missing. For a step that takes the working tree it also claims the stint, and refuses if another request holds it; `--tracer` names which slice of the plan to work. |
 | `record` | Validates what the step wrote against the frontmatter `step` handed out, then appends the step's event to `index.jsonl`. On failure it records nothing and prints which keys are wrong. A step that takes the working tree must still hold the lock. Recording a `decide` whose route is not `commit` also clears that lock's record of the lap just finished, which is what lets the cycle turn again. |
 | `tracers` | That request's tracers, from its plan, with the phase they belong to, whether the plan declared them parallel, and their status from the implement record's ledger. `--next` prints just the group to implement next, comma-separated and ready for `step --tracer`; `--last` prints the group the implement record says was actually built, which is what `verify` checks and what a rework redoes. Read-only, and the only place plan markdown is parsed. |
-| `phase` | Reports who holds the exclusive phase, how far through the current lap of the cycle they are, and which tracers are pending. `--release` hands the phase back — an administrative hatch for a human cleaning up outside a session, refused while the holder still has pending tracers unless `--force`, and never a statement that a run was good. Changes nothing else — no artifact, no status, no `index.jsonl` line. |
-| `land` | The irreversible half of `commit`, run after `record`: stages everything, commits it to the request's branch with the message the commit record carries, appends a `landed` event, and releases the exclusive phase. **Local only** — nothing is pushed. Skipped when it has already happened, so an interrupted run is retried by running it again. |
+| `stint` | Reports who holds the stint, how far through the current lap of the cycle they are, and which tracers are pending. `--release` hands the stint back — an administrative hatch for a human cleaning up outside a session, refused while the holder still has pending tracers unless `--force`, and never a statement that a run was good. Changes nothing else — no artifact, no status, no `index.jsonl` line. |
+| `land` | The irreversible half of `commit`, run after `record`: stages everything, commits it to the request's branch with the message the commit record carries, appends a `landed` event, and releases the stint. **Local only** — nothing is pushed. Skipped when it has already happened, so an interrupted run is retried by running it again. |
 | `publish` | Pushes the branch and opens the pull request, using the title and body the commit record carries. Refused until a recorded `review` says the human approved the work. This is the first moment anything about a request leaves the machine, and the only command that makes it public. Requires `gh`. |
 | `train` | The stacked branches this workspace's requests own — each one's base, its pull request, whether it has landed, and which is the tip a new request would be cut from. Read-only, and the only place branch metadata is read outside the libs. |
 | `worktree` | Stands up, tears down, or locates the throwaway checkout a `review` is QA'd in — detached at that request's branch, under `db/<slug>/worktrees/<id>/`. `--create` is idempotent, so a review abandoned mid-way costs the next one nothing. |
@@ -167,7 +167,7 @@ Three per-slug things are automation state rather than a fourth taxonomy kind:
 concurrent terminals see that a workspace is being driven, and
 `db/<slug>/implement.lock` (two lines: the request id that owns the working
 tree, and which exclusive steps have recorded on the current lap of the cycle)
-says who holds the phase and how far through a lap they are; and
+says who holds the stint and how far through a lap they are; and
 `db/<slug>/worktrees/<id>/` is the throwaway checkout a `review` is QA'd in.
 None is a record of anything that happened — that is what `index.jsonl` is for.
 
@@ -292,7 +292,7 @@ the human's decision, but delegates the audit of the whole request's diff to a
 subagent — bulk content that must never enter the overseer's window. It is
 therefore the second `steps/*.md` the overseer reads, alongside `scope.md`.
 
-**The exclusive phase.** `implement`, `verify`, `decide` and `commit` take the
+**The stint.** `implement`, `verify`, `decide` and `commit` take the
 project's working tree, so one request may be in there at a time — two of them
 editing the same tree produces a conflict nobody can untangle afterwards. Bash
 owns that rule rather than the overseer's good intentions: `loop/bin/step`
@@ -304,13 +304,13 @@ overseer finds the request still holding the tree.
 A request holds it for the whole of its stay in the cycle, not for one lap:
 `decide` turns the cycle without ever handing the tree back, because the
 changes are still there and still that request's. `loop/bin/land` is what ends
-the phase — not `record commit`. Recording a commit means the artifact was
+the stint — not `record commit`. Recording a commit means the artifact was
 written and validated; the repository has not moved, and letting another
 request in at that point would cut its branch off a tree still holding
 uncommitted work. `land` is local: it commits and releases, and nothing is
 pushed until a review has approved it.
 
-`review` is deliberately outside the phase. It reads a throwaway worktree at
+`review` is deliberately outside the stint. It reads a throwaway worktree at
 the request's own branch, so a request under review never blocks the next one
 from starting — which is the whole point of handing the tree back at `land`.
 
@@ -322,11 +322,11 @@ line, and a claim that has already recorded a step cannot start it again — it
 is told which step comes next instead. `decide` then clears that line, and the
 same request may run `implement` → `verify` → `decide` again. The marker lives
 on the *claim*, not on the request, so a run whose `record` failed — nothing
-committed, so nothing marked — is still retryable, and releasing the phase
+committed, so nothing marked — is still retryable, and releasing the stint
 clears the slate.
 
 The one thing that does not clear is a `decide` that routed to `commit`: the
-phase is on its last step, and re-running `decide` would only re-judge work
+stint is on its last step, and re-running `decide` would only re-judge work
 already judged. The operator is never asked to adjudicate a lap either — the
 cycle is closed and automated, so a human standing in for `verify` or `decide`
 would just be a built step wearing a hat.
@@ -413,7 +413,7 @@ A train of requests, a train of stacked branches. A request's changes were
 written on top of everything before it, so that is the only base against which
 its diff means anything.
 
-**The branch is cut at phase entry, not at commit.** `loop/bin/step` resolves
+**The branch is cut at stint entry, not at commit.** `loop/bin/step` resolves
 the tip and checks out a new branch the moment a request takes the working
 tree. Deciding the base later would mean either a checkout carrying changes
 somewhere they were never built against, or a rebase nobody asked for. Cutting

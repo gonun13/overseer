@@ -8,10 +8,12 @@ the work yourself.
 `loop/run` started you with two values: the **workspace** name and `LOOP_DIR`
 (the absolute path to `loop/`). Everything below assumes those.
 
-Background — why the loop is shaped this way, how the train and the exclusive
-phase work, what each step is for — is in `$LOOP_DIR/README.md`. You do not
+Background — why the loop is shaped this way, how the train and the stint
+work, what each step is for — is in `$LOOP_DIR/README.md`. You do not
 need it to run the loop, and reading it costs you context you will want later.
 Go there when the human asks a question this file does not answer.
+`$LOOP_DIR/CONTEXT.md` is the short vocabulary lookup if a term's meaning is
+ever unclear; same rule, only go there if you need it.
 
 ## Keep your own context clean
 
@@ -37,12 +39,12 @@ own commands are recognized as such and don't need approving one at a time.
 
 | Command | Purpose |
 |---|---|
-| `$LOOP_DIR/bin/list <ws> --json` | every open request: step, status, `route`, `outcome`, and who holds the phase |
+| `$LOOP_DIR/bin/list <ws> --json` | every open request: step, status, `route`, `outcome`, and who holds the stint |
 | `$LOOP_DIR/bin/new <ws>` | open a request from raw text on stdin; prints the `request` context |
 | `$LOOP_DIR/bin/step <ws> <id> <step>` | the step context: inputs, output file, frontmatter |
 | `$LOOP_DIR/bin/record <ws> <id> <step>` | validate what the step wrote and log its event |
 | `$LOOP_DIR/bin/tracers <ws> <id> [--next\|--last]` | the plan's tracers; `--next` the group to implement, `--last` the one just built |
-| `$LOOP_DIR/bin/phase <ws>` | who holds the exclusive phase, and what is still pending in it |
+| `$LOOP_DIR/bin/stint <ws>` | who holds the stint, and what is still pending in it |
 | `$LOOP_DIR/bin/land <ws> <id>` | commit to the branch and release the tree. Local; nothing is pushed |
 | `$LOOP_DIR/bin/publish <ws> <id>` | push and open the pull request. Only after a review approved it |
 | `$LOOP_DIR/bin/memory <ws> --show` | the workspace's accumulated knowledge. Steps maintain it; you rarely need it |
@@ -145,7 +147,7 @@ every other step:
 - **The sign-off comes first.** `step <ws> <id> review` refuses until `signoff`
   has put the human's words on disk. So: audit, QA, capture the decision, *then*
   ask for the context.
-- **It does not take the phase.** QA happens in a throwaway worktree at this
+- **It does not take the stint.** QA happens in a throwaway worktree at this
   request's branch, because the next request may already own the tree.
 
 | `outcome` | What you do |
@@ -173,7 +175,7 @@ off the one in front of it. `loop/bin/step` arranges that; you do not.
 - A request leaves the train only when `close` says its PR landed — true of a
   rejected request too, whose branch is never published but is still what the
   next one was built on.
-- A request cannot enter the phase with a dirty tree: `step` exits 5 and names
+- A request cannot enter the stint with a dirty tree: `step` exits 5 and names
   the files. The previous request's work was never committed, so the fix is to
   finish it (`land`), not to clean the tree.
 
@@ -205,7 +207,7 @@ you open it yourself rather than asking permission to.
 The human's part is upstream and downstream: telling you what they want,
 talking through `scope`, and reviewing the result. Not steering it step by step.
 
-## The exclusive phase
+## The stint
 
 `implement`, `verify`, `decide` and `commit` take the project's working tree,
 and one request holds it from the moment it starts `implement` until `land`
@@ -213,7 +215,7 @@ commits. `decide` does not hand it back, and neither does recording `commit`.
 `review` does not take it at all.
 
 `list --json` reports the holder as `lock`. You never act on it: `step` refuses
-anything the phase forbids and says what to run instead. Report it if asked.
+anything the stint forbids and says what to run instead. Report it if asked.
 
 ## Running a step
 

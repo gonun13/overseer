@@ -62,16 +62,15 @@ and a "tidier" branch name is simply wrong.
 
 ## Steps
 
-1. Read `inputs.request_file` — what was asked for, and in whose words.
-2. Read `inputs.implement_file` — the ledger and the per-tracer changes.
-3. Read the last `## Decision` block of `inputs.decide_file` — the verdict this
-   commit rests on.
-4. Read the diff for the range in rule 2. This is the authority on what
-   actually changed; where it and the implement record disagree, the diff wins.
-5. Write the commit message: an imperative subject under 72 characters, a blank
+1. Read `inputs.request_file`, `inputs.implement_file`, and the last
+   `## Decision` block of `inputs.decide_file`.
+2. Read the diff for the range named in `frontmatter` (`base_branch...branch`).
+   This is the authority on what actually changed; where it and the implement
+   record disagree, the diff wins.
+3. Write the commit message: an imperative subject under 72 characters, a blank
    line, then a body wrapped at 72 saying what changed and why.
-6. Write `pr_title` — one line, under 72 characters. It may be the subject.
-7. Write the pull-request body: what changed, how it was verified, and what a
+4. Write `pr_title` — one line, under 72 characters. It may be the subject.
+5. Write the pull-request body: what changed, how it was verified, and what a
    reviewer should look hardest at. Name the risky parts; a reviewer's
    attention is the scarce thing here, and this body is what the `review` step
    reads before deciding whether any of this becomes public.

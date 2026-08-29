@@ -183,7 +183,7 @@ plan_parallelism_warn() {
   return 0
 }
 
-# --- The exclusive-phase lock ------------------------------------------------
+# --- The stint ---------------------------------------------------------------
 #
 # Steps that take the workspace's working tree. One request may hold it at a
 # time: two of them editing the same tree is exactly the conflict this prevents.
@@ -194,11 +194,11 @@ plan_parallelism_warn() {
 # The order is the order they run in. `decide` does not release the lock — it
 # clears the claim's recorded marks so the cycle can turn again (see
 # impl_lock_clear_marks) — so the holder keeps the working tree until the work
-# is committed. `commit` is the last of them and the one that ends the phase,
+# is committed. `commit` is the last of them and the one that ends the stint,
 # though it is `loop/bin/land` that actually releases it: `record` writing a
 # commit artifact does not move the repo, and letting another request in before
 # the changes are committed would put its branch on top of a tree still full of
-# uncommitted work. `loop/bin/phase --release` and `loop/bin/clear` remain the
+# uncommitted work. `loop/bin/stint --release` and `loop/bin/clear` remain the
 # administrative ways out.
 #
 # `review` is deliberately NOT here. It reads a throwaway worktree at the
@@ -215,8 +215,8 @@ step_is_exclusive() {
   return 1
 }
 
-# next_exclusive_step <step> — the step that follows it inside the phase.
-# Prints nothing for `commit`, because nothing follows it: the phase ends there
+# next_exclusive_step <step> — the step that follows it inside the stint.
+# Prints nothing for `commit`, because nothing follows it: the stint ends there
 # rather than being handed on. (It used to print the literal string `commit`
 # here, back when `commit` was outside the list and unbuilt. Leaving that in
 # once `commit` joined the list would have made next_exclusive_step commit
@@ -291,7 +291,7 @@ index_path()   { printf '%s/index.jsonl' "$(slug_dir "$1")"; }
 # The slug's flock mutex — every mutator serializes on this one file.
 lock_path()    { printf '%s/.lock' "$(slug_dir "$1")"; }
 running_path() { printf '%s/running.json' "$(slug_dir "$1")"; }
-# The exclusive-phase lock (see LOOP_EXCLUSIVE_STEPS) — not a mutex, a holder
+# The stint (see LOOP_EXCLUSIVE_STEPS) — not a mutex, a holder
 # record: one line naming the request that owns the working tree.
 impl_lock_path() { printf '%s/implement.lock' "$(slug_dir "$1")"; }
 
@@ -659,7 +659,7 @@ running_release() {
   ) 9>>"$lock"
 }
 
-# --- The exclusive-phase lock ------------------------------------------------
+# --- The stint -----------------------------------------------------------
 #
 # db/<slug>/implement.lock is two lines of plain text — no JSON, no pid, so
 # nothing here needs jq and, unlike the session lease, there is no holder
@@ -670,9 +670,9 @@ running_release() {
 #
 # loop/bin/step claims it; nothing in the loop drops it, so a request holds the
 # working tree across overseer restarts until its work is committed.
-# loop/bin/phase --release and loop/bin/clear are the administrative ways out.
+# loop/bin/stint --release and loop/bin/clear are the administrative ways out.
 #
-# Line 2 is what keeps the phase's steps in order and stops a request building
+# Line 2 is what keeps the stint's steps in order and stops a request building
 # on its own unjudged work: once `implement` has recorded under this claim, the
 # next thing that may run is `verify`, then `decide`. `decide` then clears the
 # line (impl_lock_clear_marks), which is what lets the same request take
@@ -762,7 +762,7 @@ _impl_lock_release() {
   rm -f "$(impl_lock_path "$1")"
 }
 
-# impl_lock_claim <slug> <id> — take the exclusive phase for that request.
+# impl_lock_claim <slug> <id> — take the stint for that request.
 # Returns 1, printing the current holder, when a *different* request holds it.
 # Re-claiming for the same id succeeds and leaves the file untouched: that is
 # how one request moves implement -> verify -> decide and retries a run whose
@@ -791,7 +791,7 @@ impl_lock_claim() {
 
 # impl_lock_release <slug> — drop the lock, whoever holds it. Called by
 # loop/bin/land once the work is actually committed and pushed, which is the
-# normal end of the phase, and by loop/bin/phase --release, which is the hatch
+# normal end of the stint, and by loop/bin/stint --release, which is the hatch
 # for a human cleaning up outside a session.
 impl_lock_release() {
   local slug=$1 lock
@@ -866,7 +866,7 @@ request_event() {
 # never is (append-only, per the taxonomy) — the cleared event is the permanent
 # record that this request existed and was removed. memory.md is deliberately
 # NOT touched: it's cumulative and shared across every request for the slug,
-# and must outlive any single request's clear. The exclusive-phase lock IS
+# and must outlive any single request's clear. The stint IS
 # dropped when this request holds it — a request that no longer exists must not
 # keep the working tree hostage.
 clear_request() {

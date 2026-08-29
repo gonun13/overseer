@@ -103,12 +103,9 @@ back up in another scoping pass.
 **Always propose a recommendation when you ask.** Come in with a position —
 your best-judgment answer and why — not a blank "what do you want?".
 
-When a question reduces to a discrete set of choices, put it to them as a pick
-from a list rather than as prose: use a structured question tool if you have
-one, otherwise print the options as a numbered list and say a number is what
-you want back (accept the number, or the option's own words). Either way the
-recommended option comes first and is marked "(Recommended)", and each option
-carries enough description to make the tradeoff legible at a glance.
+When a question reduces to a discrete set of choices, offer it per the
+overseer's "Offering a choice" rule (`$LOOP_DIR/overseer.md`) — accept either
+the number back or the option's own words.
 
 When a question is genuinely open-ended — no fixed set of options fits — ask it
 as plain conversational text, but still lead with your own recommendation so

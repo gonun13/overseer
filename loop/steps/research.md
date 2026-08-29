@@ -25,10 +25,9 @@ an altered one is rejected and the step has to be redone.
 1. Read `inputs.request_file` to understand what's being requested (title,
    summary, description, kind, acceptance criteria).
 2. If `inputs.memory_file` exists, read it — prior accumulated knowledge about
-   this codebase. Use it as context; don't restate what it already says, and
-   don't re-verify what it already establishes unless this request touches it.
-   Confirming a fact that is already written down produces no new knowledge and
-   costs a full exploration pass.
+   this codebase. Use it as context; don't restate or re-verify what it already
+   establishes unless this request touches it. Re-confirming a known fact costs
+   a full exploration pass for no new knowledge.
 3. Explore `workspace_dir` with Read/Grep/Glob. This is real, open-ended
    exploration — go as broad as you need to find the files and areas relevant
    to the request, the conventions that should be followed, and the risks or
@@ -92,11 +91,10 @@ LOOP_MEMORY_EOF
 
 Send **only the sections this pass actually changes.** Each `## Section` you
 send replaces that section's body outright, so write the whole body you want it
-to have. Every section you leave out is kept exactly as it was. That is the
-point: the parts of memory this request did not touch cost you nothing to
-preserve, and rewriting them is how the document doubles in size without
-gaining a fact. The command writes the title and the `_Last updated:_` line
-itself, so do not send them.
+to have — sections you leave out are kept exactly as they were, at no cost to
+you. Resending an untouched section is how the document doubles in size
+without gaining a fact. The command writes the title and the
+`_Last updated:_` line itself, so do not send them.
 
 It prints the new size. If it says the document is over budget, your next pass
 prunes — the sections it names have grown past being useful.

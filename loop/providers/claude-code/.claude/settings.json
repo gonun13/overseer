@@ -18,6 +18,12 @@
       "Bash(sudo:*)",
       "Bash(git commit:*)",
       "Bash(git push:*)",
+      "Bash(git reset --hard:*)",
+      "Bash(git clean -f:*)",
+      "Bash(git clean -fd:*)",
+      "Bash(git branch -D:*)",
+      "Bash(git checkout .:*)",
+      "Bash(git restore .:*)",
       "Bash(curl:*)"
     ]
   }

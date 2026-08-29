@@ -23,7 +23,7 @@ without one, lists every slug under db/.
         `session` is the overseer session currently driving that workspace
         (null if none); `lock` is the id of the request that owns the working
         tree while it runs implement/verify/decide/commit (null if none) — no
-        other request may enter that phase until loop/bin/land hands it back.
+        other request may enter that stint until loop/bin/land hands it back.
         A request whose latest step is `decide` also carries `route`: where
         that decision sent it, and one whose latest step is `review` carries
         `outcome` — which is the whole of how the next action survives a
@@ -154,7 +154,7 @@ for slug in "${slugs[@]}"; do
   fi
   held=$(impl_lock_holder "$slug" || true)
   if [ -n "$held" ]; then
-    log_info "exclusive phase on [$slug]: held by $held"
+    log_info "stint on [$slug]: held by $held"
   fi
   while IFS= read -r event; do
     [ -n "$event" ] || continue

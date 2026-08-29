@@ -113,8 +113,7 @@ were written down.
 
 Reminder before you write: one Write to `output_file` only — no code fences, no
 commentary before or after. Every `{{…}}` is a value from the step context;
-substitute it verbatim. `verdict` is mechanical (any failure → `fail`; nothing
-runnable at all → `blocked`; otherwise `pass`); `checks_run` is the
+substitute it verbatim. `verdict` follows Standing rule 3; `checks_run` is the
 comma-separated list of the checks that actually ran.
 
 **Write telegraphically.** Every line is a fragment, not a sentence. No
