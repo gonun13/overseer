@@ -51,6 +51,11 @@ an altered one is rejected and the step has to be redone.
 4. **Report commands, not logs.** Every check names the exact command, runnable
    as written. Failure output is trimmed to the lines that show the failure, at
    most about twenty per failure. Never paste a whole log into the record.
+5. **Observe, do not assert.** Every line under `Observed` is something you
+   watched happen. Quote the output — a claim about ordering, position or
+   wording is only true if the lines printed in that order, so show them. Never
+   restate a plan's intent, a scope line, or an implement record's claim as an
+   observation; if you did not see it, it belongs in `## Not checked`.
 
 ## The checks
 
@@ -103,6 +108,12 @@ real surface over a re-run of the tests: the tests are check 1, and simulation
 exists to catch what they do not. When the surface genuinely cannot be driven —
 no entry point, needs credentials you do not have, needs a device — say which
 and why. That is a skip, with a reason, not a failure.
+
+A surface the run itself disables counts as un-driven, however green the run
+looks: `--auto`, a headless flag, a stubbed transport. Say which surface, which
+flag, and that it went unchecked — in `## Not checked`, as its own row. Never
+park it in a parenthetical inside `Observed`; the next step reads
+`## Not checked` and does not read around your prose.
 
 **4. Carry-forward.** The implement record lists what it deviated on
 (`## Deviations`) and what it left untested (`Skipped`). Take each one and say
@@ -159,11 +170,12 @@ checks_run: <of tests, lints, simulation, carry-forward: the ones that ran>
 ## Simulation
 - Attempted: <yes | no — why not>
 - How: <what you drove, and with what>
-- Observed: <what actually happened>
+- Observed: <what actually printed — quoted, in the order it appeared>
 - Against: <the tracer's Verify line, and whether it is satisfied>
 
 ## Not checked
 - <tracer or surface> — <what could not be checked, and why>
+- <surface> — disabled by <flag> during this run, not exercised
 (omit if everything was checked)
 
 ## Carried from implement

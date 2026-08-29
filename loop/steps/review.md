@@ -80,6 +80,11 @@ LOOP_SIGNOFF_EOF
 5. **Never fix a finding.** Every finding worth acting on becomes its own
    request, approved by the human, and goes through the loop like anything
    else. That is the whole mechanism.
+6. **Attest only what was witnessed.** A QA row records what the operator
+   actually observed. You never mark a row from a verify record, from the
+   scope's acceptance criteria, or from your own reading of the diff — those are
+   not QA. A row nobody ran is `not run`, and that is a normal, publishable
+   result; a table of invented passes is not.
 
 ## Step 1 — Stand up the QA checkout
 
@@ -123,8 +128,20 @@ seven — of things to actually try. Build it from the scope's acceptance
 criteria first, then the audit's risk areas. Name the worktree path so they
 know where to run it.
 
+Read the last `verify` record's `## Not checked` before you build the list.
+Anything there is un-driven by machine, so it is the first thing worth a human
+in the worktree — put those items at the top of the checklist and say why they
+are there. A surface `verify` could not reach and QA does not cover is a hole in
+the review, and the record has to show it as one.
+
 Then take what they observed, one item at a time or all at once, however they
 want to give it.
+
+Most operators answer in bulk — "all good", one line for the whole list. That is
+a valid answer and you record it as one: every row that answer covers is marked
+with it, verbatim, so the record shows one blanket observation rather than seven
+independent ones. Ask which items they actually exercised only when the answer
+changes the outcome; do not manufacture per-row detail they did not give you.
 
 ## Step 4 — The decision, and the follow-ups
 
@@ -213,7 +230,9 @@ findings: <none, or `<n> (<n> high, <n> medium, <n> low)`>
 ## QA
 | # | Checked | Result |
 |---|---|---|
-| 1 | <what the operator was asked to try> | <what they saw> |
+| 1 | <what the operator was asked to try> | <what they saw — their words> |
+| 2 | <…> | not run — <why> |
+| 3 | <…> | covered by blanket sign-off: "<their words>" |
 
 ## Delivered
 - Against scope: <in bounds | what went outside it>
