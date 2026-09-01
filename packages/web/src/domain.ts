@@ -40,6 +40,11 @@ export interface Session {
   cost: string;
   /** One line on what it is doing right now, for the overseer space. */
   doing: string;
+  /** Set when this is a dev-loop run. Such a session lives in a console PTY,
+   * not a chat window, and must never be resumed. */
+  origin?: "loop";
+  /** Workspace the loop run belongs to. Only set with `origin: "loop"`. */
+  loopWorkspace?: string;
 }
 
 export interface Approval {

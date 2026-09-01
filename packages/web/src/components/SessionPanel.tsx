@@ -53,19 +53,25 @@ export function SessionPanel({
           >
             <StatusLight activity={session.activity} />
             <span className="session-row-name">{session.name}</span>
+            {/* The name already says `loop · <ws>`, so this stays the branch
+                for every row rather than repeating it. */}
             <span className="session-row-note">
               {session.branch || "branch unknown"}
             </span>
-            <button
-              className="session-row-delete"
-              aria-label={`delete ${session.name}`}
-              onClick={(e) => {
-                e.stopPropagation();
-                onDelete(session.id);
-              }}
-            >
-              <TrashIcon />
-            </button>
+            {/* A loop's transcript belongs to a live CLI — deleting it from
+                under that process is not offered here either. */}
+            {session.origin !== "loop" && (
+              <button
+                className="session-row-delete"
+                aria-label={`delete ${session.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onDelete(session.id);
+                }}
+              >
+                <TrashIcon />
+              </button>
+            )}
           </div>
         ))}
 

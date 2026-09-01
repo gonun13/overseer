@@ -12,6 +12,14 @@
 # The manifest's `loop` field says which: "bundle" means runnable here,
 # "none" means the app knows about it but the loop does not. Orchestration
 # never references a specific CLI or config layout.
+#
+# Contract inputs, beyond provider_session's two arguments:
+#   LOOP_SESSION_ID  the session id this run should open under, already in the
+#                    lease. A bundle whose CLI accepts one maps it onto the
+#                    right flag; a bundle whose CLI does not simply ignores it,
+#                    and readers see a lease with a null session_id. Stated as
+#                    an environment variable rather than a third argument so
+#                    adding it did not change the contract's arity.
 
 # PROVIDERS_DIR — stated by the environment in the container (the image owns
 # where code lives), derived from the repo layout otherwise.

@@ -64,6 +64,11 @@ interface WindowStackHostProps {
   onOpenSessionContext: (sessionId: string) => void;
   send: (message: ClientMessage) => void;
   subscribeConsole: (listener: (message: ServerMessage) => void) => () => void;
+  /** True when the next loop console to mount should end the run currently
+   * holding the workspace's lease. Consumed once, on that mount. */
+  loopTakeover: boolean;
+  /** A loop row goes to its console, never to a chat window. */
+  onOpenLoopSession: (session: Session) => void;
 }
 
 /** Renders window frames and dispatches each window kind to its content. */
@@ -93,6 +98,8 @@ export function WindowStackHost({
   onOpenSessionContext,
   send,
   subscribeConsole,
+  loopTakeover,
+  onOpenLoopSession,
 }: WindowStackHostProps) {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const models = sessionOptions.find((o) => o.key === "model")?.values ?? [];
@@ -158,6 +165,13 @@ export function WindowStackHost({
             provider={provider}
             models={models}
             onOpenSession={(id) => {
+              // A loop run lives in a console, not a conversation — routed
+              // before `chatFor`, which would otherwise resume it.
+              const session = sessions.find((s) => s.id === id);
+              if (session?.origin === "loop") {
+                onOpenLoopSession(session);
+                return;
+              }
               const chat = chatFor(id);
               if (chat) openChat(chat.session);
             }}
@@ -168,6 +182,7 @@ export function WindowStackHost({
         {chat && (
           <SessionWindow
             turns={chat.turns}
+            note={chat.note}
             busy={chat.session.activity === "working"}
             // A row this session has said nothing about falls back to what is
             // armed, which is seeded from the provider's own defaults — so the
@@ -231,6 +246,8 @@ export function WindowStackHost({
             send={send}
             subscribe={subscribeConsole}
             onProcessExit={() => closeWindow(windowState.id)}
+            mode={windowState.payload === "loop" ? "loop" : undefined}
+            takeover={windowState.payload === "loop" && loopTakeover}
           />
         )}
         {windowState.kind === "help" && <HelpWindow provider={provider} />}

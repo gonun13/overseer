@@ -118,6 +118,9 @@ function resetFailure(error: unknown): string {
 export function attachWebSocketServer(httpServer: Server): {
   wss: WebSocketServer;
   broadcast: (message: ServerMessage) => void;
+  /** Rebuild and broadcast the sessions list — for monitors that notice
+   * sessions the supervisor did not start (transcript-monitor.ts). */
+  refreshSessions: () => Promise<unknown>;
 } {
   const wss = new WebSocketServer({ noServer: true });
 
@@ -489,8 +492,22 @@ export function attachWebSocketServer(httpServer: Server): {
           return;
         }
         case "console.open": {
-          const result = await consoleSession.open(parsed.cols, parsed.rows);
-          if (!result.ok) send(consoleError("console.open", result.reason));
+          const result = await consoleSession.open(
+            parsed.cols,
+            parsed.rows,
+            parsed.mode,
+            parsed.takeover,
+          );
+          // Suffix the mode so a refusal lands in the window that asked —
+          // a socket can hold both a raw CLI console and a loop console.
+          if (!result.ok) {
+            send(
+              consoleError(
+                parsed.mode === "loop" ? "console.open.loop" : "console.open",
+                result.reason,
+              ),
+            );
+          }
           return;
         }
         case "console.input": {
@@ -588,5 +605,9 @@ export function attachWebSocketServer(httpServer: Server): {
     });
   });
 
-  return { wss, broadcast };
+  return {
+    wss,
+    broadcast,
+    refreshSessions: () => sessionSupervisor.list(),
+  };
 }

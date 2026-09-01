@@ -69,10 +69,20 @@ workspace_dir=$(resolve_workspace "$name")
 slug=$(slugify "$name")
 load_provider
 
-if ! running_claim "$slug"; then
+# Minted here rather than left to the provider CLI so the session this opens is
+# identifiable from the outside: the lease carries the id, and the app reads it
+# to tell this run's session apart from one a human started in the same project.
+# Minted *before* the claim so the lease is never observable without it.
+session_id=$(uuid_v4)
+
+if ! running_claim "$slug" "$session_id" "$workspace_dir"; then
   die "workspace '$name' already has an overseer session (see the holder above)" 5
 fi
 trap 'running_release "$slug"' EXIT
+
+# Neutral name: orchestration states the id, and each provider bundle decides
+# whether its CLI can be told to use it (providers.sh's contract) or ignores it.
+export LOOP_SESSION_ID="$session_id"
 
 # Point at the instructions rather than inlining them: the overseer re-reads
 # them as it works, and a prompt this short can't stall a CLI on argv size.

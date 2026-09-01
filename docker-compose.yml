@@ -29,6 +29,9 @@ services:
       args:
         OVERSEER_UID: ${OVERSEER_UID:-1000}
         OVERSEER_GID: ${OVERSEER_GID:-1000}
+    # Reap orphans — PTY children (raw console, loop runs) leave <defunct>
+    # entries behind otherwise, since the node entrypoint never calls wait().
+    init: true
     ports:
       - "127.0.0.1:3000:3000" # loopback only — this is RCE-as-a-service (design doc §6)
     volumes:

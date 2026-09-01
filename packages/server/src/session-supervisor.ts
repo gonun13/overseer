@@ -16,6 +16,11 @@ import {
 } from "@overseer/adapter-claude-code";
 import { getAdapter } from "./adapters.js";
 import {
+  loopSessionIndex,
+  loopSessionName,
+  sweepDeadLoopSessions,
+} from "./loop-sessions.js";
+import {
   readSnapshot,
   recordAction,
   type WorldSnapshot,
@@ -49,6 +54,10 @@ export interface SessionSupervisorDeps {
   mintSessionId?: typeof mintSessionId;
   lookupSessionTitle?: typeof lookupSessionTitle;
   deleteSession?: typeof deleteSession;
+  /** Live dev-loop runs, keyed by the session id each one opened. */
+  loopSessionIndex?: typeof loopSessionIndex;
+  /** Delete the transcripts of loop runs that have ended. */
+  sweepDeadLoopSessions?: typeof sweepDeadLoopSessions;
 }
 
 export function createSessionSupervisor(
@@ -68,6 +77,9 @@ export function createSessionSupervisor(
   const lookupSessionTitleFn =
     deps.lookupSessionTitle ?? lookupSessionTitle;
   const deleteSessionFn = deps.deleteSession ?? deleteSession;
+  const loopSessionIndexFn = deps.loopSessionIndex ?? loopSessionIndex;
+  const sweepDeadLoopSessionsFn =
+    deps.sweepDeadLoopSessions ?? sweepDeadLoopSessions;
 
   const idleReapMs = deps.idleReapMs ?? IDLE_REAP_MS;
 
@@ -173,6 +185,30 @@ export function createSessionSupervisor(
       if (entry.meta.projectDir !== projectPath) continue;
       byId.set(id, { ...entry.meta, status: "live" });
     }
+
+    // A dev-loop run writes its transcript into the same directory the app's
+    // own sessions use, so the only thing telling them apart is the loop's
+    // lease. Stamped here rather than in the adapter: which sessions belong to
+    // a loop is not something a provider can know.
+    const loops = await loopSessionIndexFn();
+    if (loops.size > 0) {
+      for (const [id, meta] of byId) {
+        const lease = loops.get(id);
+        if (lease === undefined) continue;
+        byId.set(id, {
+          ...meta,
+          // Named after what it is, not after what was said to it. A title
+          // resolved from the transcript reads as the loop's kickoff prompt
+          // ("Read /app/loop/overseer.md and act…"), which is both unhelpful
+          // and identical for every workspace. This matches the console
+          // window the row opens, so one run reads the same in both places.
+          name: loopSessionName(lease.slug),
+          origin: "loop",
+          loopWorkspace: lease.slug,
+        });
+      }
+    }
+
     return [...byId.values()].sort(
       (a, b) =>
         new Date(b.lastActiveAt).getTime() -
@@ -308,6 +344,9 @@ export function createSessionSupervisor(
     async list(): Promise<SessionResult> {
       const ctx = await adapterContext();
       if (!ctx.ok) return ctx;
+      // Before listing, not after: a finished loop run's transcript is refuse,
+      // and the operator should never be shown a row for one.
+      await sweepDeadLoopSessionsFn(deleteSessionFn);
       const sessions = await mergeList(ctx.projectPath);
       pushList(sessions);
       return { ok: true };
@@ -378,6 +417,19 @@ export function createSessionSupervisor(
     },
 
     async open(sessionId: string): Promise<SessionResult> {
+      // A live loop run owns its transcript through an interactive CLI that is
+      // still writing it. Resuming would put a second CLI on the same JSONL —
+      // there is no lock anywhere to stop that — so refuse before either the
+      // backfill or the spawn. The client routes these to the loop's console.
+      const loops = await loopSessionIndexFn();
+      const lease = loops.get(sessionId);
+      if (lease !== undefined) {
+        return {
+          ok: false,
+          reason: `'${lease.slug}' is a live loop run — open its console instead`,
+        };
+      }
+
       // `ensureOpen` is a no-op once the process is already live, so a second
       // tab — or the same tab after a reconnect — asking to open a session
       // that never got reaped would otherwise never receive its transcript.

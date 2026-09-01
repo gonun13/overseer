@@ -112,6 +112,18 @@ export interface SessionMeta {
   createdAt: string;
   lastActiveAt: string;
   totalCostUsd: number;
+  /**
+   * Set when this session is a dev-loop run rather than one the app started.
+   * The loop mints its own id and records it in its lease, so the *supervisor*
+   * stamps this by cross-referencing that lease — an adapter never learns what
+   * a loop is (docs/architecture-design.md's provider/adapter split).
+   *
+   * A loop session must never be resumed: its transcript belongs to a live
+   * interactive PTY, and a second CLI writing the same JSONL corrupts it.
+   */
+  origin?: "loop";
+  /** Workspace slug whose lease owns this run. Only set with `origin: "loop"`. */
+  loopWorkspace?: string;
 }
 
 export interface UserMessage {
@@ -316,4 +328,12 @@ export interface AgentAdapter {
    * than invent a pipe.
    */
   openConsole?(opts: ConsoleOpts): Promise<ConsoleHandle>;
+  /**
+   * Directory the adapter writes session transcripts under, for the server to
+   * watch so sessions it did not start still reach the list. Absent when the
+   * adapter keeps no such directory, in which case nothing is watched — the
+   * server must not guess a path, because where a CLI keeps its state is the
+   * adapter's business (the same reasoning `CLAUDE_CONFIG_DIR` carries).
+   */
+  sessionsWatchPath?(): string | undefined;
 }

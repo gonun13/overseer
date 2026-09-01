@@ -291,6 +291,12 @@ index_path()   { printf '%s/index.jsonl' "$(slug_dir "$1")"; }
 # The slug's flock mutex — every mutator serializes on this one file.
 lock_path()    { printf '%s/.lock' "$(slug_dir "$1")"; }
 running_path() { printf '%s/running.json' "$(slug_dir "$1")"; }
+# Every provider session this workspace's runs have opened, one JSON object per
+# line. Unlike the lease, this outlives the run — a loop conversation is
+# disposable, and something has to still know which transcripts were ours once
+# the process that made them is gone. The app sweeps it: anything recorded here
+# that no live lease claims is deleted, and the line with it.
+sessions_path() { printf '%s/sessions.jsonl' "$(slug_dir "$1")"; }
 # The stint (see LOOP_EXCLUSIVE_STEPS) — not a mutex, a holder
 # record: one line naming the request that owns the working tree.
 impl_lock_path() { printf '%s/implement.lock' "$(slug_dir "$1")"; }
@@ -617,10 +623,20 @@ running_get() {
   return 0
 }
 
-# running_claim <slug> — exclusive per-slug session lease. Returns 1 (and
-# prints the holder) if another live process already holds it.
+# running_claim <slug> [session_id] [workspace_dir] — exclusive per-slug
+# session lease. Returns 1 (and prints the holder) if another live process
+# already holds it.
+#
+# `session_id` is the provider session this run will open, recorded so a reader
+# can tell that session apart from one a human started. Optional: a provider
+# bundle whose CLI cannot be told which id to use passes nothing, and the field
+# is written as an explicit null so the record shape never varies.
+#
+# `workspace_dir` is stored alongside it in sessions.jsonl, because deleting a
+# transcript later needs the directory the session ran in and the slug does not
+# reliably spell it back (slugify is lossy).
 running_claim() {
-  local slug=$1 lock path existing
+  local slug=$1 session_id=${2:-} workspace_dir=${3:-} lock path existing
   lock=$(lock_path "$slug")
   path=$(running_path "$slug")
   ensure_slug_dirs "$slug"
@@ -639,7 +655,19 @@ running_claim() {
       --argjson pid "$$" \
       --arg started_at "$(iso_now)" \
       --arg tty "${TTY:-${TERM:-unknown}}" \
-      '{slug:$slug, pid:$pid, started_at:$started_at, tty:$tty}' > "$path"
+      --arg session_id "$session_id" \
+      '{slug:$slug, pid:$pid, started_at:$started_at, tty:$tty,
+        session_id:(if $session_id == "" then null else $session_id end)}' > "$path"
+
+    # Recorded under the same lock as the lease, and before the session opens,
+    # so a run killed outright still leaves its transcript accounted for.
+    if [ -n "$session_id" ]; then
+      jq -nc \
+        --arg id "$session_id" \
+        --arg dir "$workspace_dir" \
+        --arg started_at "$(iso_now)" \
+        '{id:$id, dir:$dir, started_at:$started_at}' >> "$(sessions_path "$slug")"
+    fi
   ) 9>>"$lock"
 }
 

@@ -72,9 +72,22 @@ export type ClientMessage =
   /**
    * Open a raw PTY into the attached provider's interactive CLI, in the active
    * project. One console per socket; a second open replaces the first.
-   * `cols`/`rows` are the initial terminal size.
+   * `cols`/`rows` are the initial terminal size. `mode: "loop"` opens the dev
+   * loop's overseer session (`loop/run`) instead of the bare provider CLI.
    */
-  | { type: "console.open"; cols: number; rows: number }
+  | {
+      type: "console.open";
+      cols: number;
+      rows: number;
+      mode?: "loop";
+      /**
+       * End the loop run currently holding this workspace's lease before
+       * starting a new one. Only meaningful with `mode: "loop"`, and only sent
+       * after the operator answered a decision — it destroys a conversation
+       * that may be mid-request, possibly one attached to another terminal.
+       */
+      takeover?: boolean;
+    }
   /** Keystrokes / paste from the browser terminal, opaque to Overseer. */
   | { type: "console.input"; id: string; data: string }
   /** Browser terminal resized — forwarded to the PTY. */
@@ -270,6 +283,10 @@ export interface MemoryResetDoneMessage {
 export interface ConsoleOpenedMessage {
   type: "console.opened";
   id: string;
+  /** Echoes the open request's mode. The raw CLI and the dev loop hold a PTY
+   * slot each, so a socket can have two console windows live at once; without
+   * this each of them would adopt whichever ack landed last. */
+  mode?: "loop";
 }
 
 /** Opaque PTY output chunk for the owning socket only. */

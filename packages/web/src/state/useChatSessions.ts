@@ -41,6 +41,9 @@ export function useChatSessions(
   const pendingCreate = useRef(false);
   const pendingSend = useRef<{ text: string } | undefined>(undefined);
   const pendingSendSession = useRef<string | undefined>(undefined);
+  /** Session whose `session.open` is in flight, so a refusal can be shown in
+   * the window that asked for it. */
+  const pendingOpenSession = useRef<string | undefined>(undefined);
 
   const resetSessionActivity = useCallback((sessionId: string) => {
     setChats((current) =>
@@ -186,13 +189,19 @@ export function useChatSessions(
         return;
       }
       if (message.type === "session.history") {
+        // History means the open got through, so any note a previous refusal
+        // left behind no longer describes this window.
+        if (pendingOpenSession.current === message.sessionId) {
+          pendingOpenSession.current = undefined;
+        }
         setChats((current) =>
           current.map((chat) =>
             chat.session.id === message.sessionId
               ? chat.turns.length > 0
-                ? chat
+                ? { ...chat, note: undefined }
                 : {
                     ...chat,
+                    note: undefined,
                     turns: message.turns.map(turnWireToTurn),
                   }
               : chat,
@@ -216,13 +225,36 @@ export function useChatSessions(
         );
         return;
       }
-      if (
-        message.type === "error" &&
-        message.about?.startsWith("session.") &&
-        pendingSendSession.current !== undefined
-      ) {
-        resetSessionActivity(pendingSendSession.current);
-        pendingSendSession.current = undefined;
+      if (message.type === "error" && message.about?.startsWith("session.")) {
+        // A refused open is the one error with nothing else to show for it:
+        // the window is already up and empty, so without this the refusal —
+        // signed-out provider, a project outside the workspace, a live loop
+        // run — reads as a session that simply had nothing in it.
+        if (message.about === "session.open") {
+          const target = pendingOpenSession.current;
+          pendingOpenSession.current = undefined;
+          if (target !== undefined) {
+            setChats((current) =>
+              current.map((chat) =>
+                chat.session.id === target
+                  ? {
+                      ...chat,
+                      note: message.message,
+                      session: {
+                        ...chat.session,
+                        activity: "attention",
+                        doing: message.message,
+                      },
+                    }
+                  : chat,
+              ),
+            );
+          }
+        }
+        if (pendingSendSession.current !== undefined) {
+          resetSessionActivity(pendingSendSession.current);
+          pendingSendSession.current = undefined;
+        }
       }
     });
     return () => {
@@ -275,6 +307,9 @@ export function useChatSessions(
 
   const focus = useCallback((id: string) => {
     setActiveId(id);
+    // Remembered so a refusal can be attributed to the window that asked —
+    // the error frame names no session.
+    pendingOpenSession.current = id;
     send({ type: "session.open", sessionId: id });
   }, [send]);
 

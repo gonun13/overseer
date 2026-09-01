@@ -1,3 +1,4 @@
+import { join as pathJoin } from "node:path";
 import type {
   AgentAdapter,
   AdapterCapabilities,
@@ -83,6 +84,12 @@ export const claudeCodeAdapter: AgentAdapter = {
   openConsole(opts: ConsoleOpts): Promise<ConsoleHandle> {
     return openConsole(opts);
   },
+  sessionsWatchPath(): string {
+    // One directory above the per-project slugs, so a project the CLI has not
+    // written to before is still covered — the slug directory itself only
+    // appears with the first session in it.
+    return pathJoin(configDir(), "projects");
+  },
 };
 
 async function findProjectDirForSession(sessionId: string): Promise<string> {
@@ -128,12 +135,32 @@ export async function listProjectSessions(
   return listSessionsForProject(configDir(), projectDir);
 }
 
-/** Backfill transcript turns from JSONL — used by the session supervisor. */
+/**
+ * Backfill transcript turns from JSONL — used by the session supervisor.
+ *
+ * `projectDir` is the caller's best guess (the supervisor passes the active
+ * project), and a transcript only lives under the slug for the cwd its process
+ * actually ran in. Those differ whenever a session was started somewhere other
+ * than the active project — a dev-loop run, or a console opened in a
+ * subdirectory — and the miss is silent, because a missing file backfills as an
+ * empty transcript rather than an error. So fall back to locating the session
+ * by id, which is what `resumeSession` already relies on.
+ */
 export async function readSessionHistory(
   projectDir: string,
   sessionId: string,
 ) {
-  return backfillHistory(configDir(), projectDir, sessionId);
+  const turns = await backfillHistory(configDir(), projectDir, sessionId);
+  if (turns.length > 0) return turns;
+  let resolved: string;
+  try {
+    resolved = await findProjectDirForSession(sessionId);
+  } catch {
+    // Genuinely unknown session — an empty transcript is the honest answer.
+    return turns;
+  }
+  if (resolved === projectDir) return turns;
+  return backfillHistory(configDir(), resolved, sessionId);
 }
 
 /** Resolve Claude's display title for a session. */

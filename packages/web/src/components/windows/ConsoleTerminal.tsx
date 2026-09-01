@@ -20,10 +20,17 @@ export interface ConsoleTerminalProps {
   send: (message: ClientMessage) => void;
   subscribe: (listener: (message: ServerMessage) => void) => () => void;
   onProcessExit: () => void;
-  /** True when the provider is signed in — otherwise the open is refused. */
+  /** True when the provider is signed in — otherwise the open is refused.
+   * Ignored when `mode === "loop"`: the loop picks its own provider. */
   authenticated: boolean;
   /** Matches the Overseer surface: dark samaritan, light machine. */
   theme: OverseerTheme;
+  /** "loop" opens `loop/run` for the active project instead of the bare
+   * provider CLI. */
+  mode?: "loop";
+  /** End the run holding this workspace's lease first. Set only after the
+   * operator answered the take-over decision. */
+  takeover?: boolean;
 }
 
 function xtermTheme(theme: OverseerTheme): ITheme {
@@ -83,6 +90,8 @@ export function ConsoleTerminal({
   onProcessExit,
   authenticated,
   theme,
+  mode,
+  takeover,
 }: ConsoleTerminalProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
@@ -96,6 +105,11 @@ export function ConsoleTerminal({
   sendRef.current = send;
   const themeRef = useRef(theme);
   themeRef.current = theme;
+  const modeRef = useRef(mode);
+  modeRef.current = mode;
+  // Read once, at mount: a take-over applies to the run this terminal is
+  // starting, never to a later re-render of the same one.
+  const takeoverRef = useRef(takeover);
 
   const fit = useCallback(() => {
     const addon = fitRef.current;
@@ -148,7 +162,10 @@ export function ConsoleTerminal({
     // a real size — otherwise cols/rows collapse to 1.
     const openTimer = window.setTimeout(() => {
       fitAddon.fit();
-      if (!authenticated) {
+      // The loop picks its own provider (loop/.provider / LOOP_PROVIDER),
+      // independently of whatever Overseer itself has attached — so it opens
+      // regardless of the attached provider's auth state.
+      if (modeRef.current !== "loop" && !authenticated) {
         term.writeln("provider is not signed in");
         return;
       }
@@ -156,6 +173,8 @@ export function ConsoleTerminal({
         type: "console.open",
         cols: term.cols,
         rows: term.rows,
+        ...(modeRef.current ? { mode: modeRef.current } : {}),
+        ...(takeoverRef.current === true ? { takeover: true } : {}),
       });
       opened.current = true;
       term.focus();
@@ -169,6 +188,10 @@ export function ConsoleTerminal({
 
     const unsubscribe = subscribe((message) => {
       if (message.type === "console.opened") {
+        // The socket can hold a raw CLI console and a loop console at once,
+        // and both terminals see every frame. Adopt only the ack for our own
+        // slot, or the two windows steal each other's streams.
+        if ((message.mode ?? undefined) !== modeRef.current) return;
         consoleId.current = message.id;
         // Size may have changed between open request and ack.
         fit();
@@ -176,22 +199,33 @@ export function ConsoleTerminal({
         return;
       }
       if (message.type === "console.output") {
-        if (consoleId.current !== null && message.id !== consoleId.current) {
-          return;
-        }
+        if (message.id !== consoleId.current) return;
         term.write(message.data);
         return;
       }
       if (message.type === "console.exit") {
-        if (consoleId.current !== null && message.id !== consoleId.current) {
-          return;
-        }
+        if (message.id !== consoleId.current) return;
         consoleId.current = null;
         closing.current = true;
-        onProcessExitRef.current();
+        // A clean exit is the operator's own `/exit` or `/quit`, so the window
+        // goes with it. A failure is the opposite: it is the only account of
+        // what went wrong, and a process that dies on startup (a loop refusing
+        // a held lease, a missing binary) used to take the window with it
+        // before anything could be read.
+        if (message.exitCode === 0) {
+          onProcessExitRef.current();
+          return;
+        }
+        const signal =
+          message.signal !== undefined ? ` · signal ${message.signal}` : "";
+        term.writeln(
+          `\r\n[process exited with code ${message.exitCode}${signal}]`,
+        );
         return;
       }
       if (message.type === "error" && message.about?.startsWith("console.")) {
+        const loopError = message.about.endsWith(".loop");
+        if (loopError !== (modeRef.current === "loop")) return;
         term.writeln(`\r\n${message.message}`);
       }
     });

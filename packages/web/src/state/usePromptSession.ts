@@ -14,6 +14,7 @@ interface PromptTerminalActions {
   openSettings: () => void;
   openProjectSelector: () => void;
   toggleTheme: () => void;
+  openLoop: () => void;
 }
 
 /**
@@ -28,6 +29,7 @@ export function usePromptSession({
   openSettings,
   openProjectSelector,
   toggleTheme,
+  openLoop,
 }: PromptTerminalActions) {
   const [focused, setFocused] = useState(false);
 
@@ -60,6 +62,9 @@ export function usePromptSession({
           case "close-all":
             closeAllWindows();
             return true;
+          case "loop":
+            openLoop();
+            return true;
         }
         return true;
       }
@@ -67,6 +72,7 @@ export function usePromptSession({
     },
     [
       closeAllWindows,
+      openLoop,
       openProjectSelector,
       openSettings,
       openWindow,

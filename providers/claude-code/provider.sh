@@ -68,8 +68,18 @@ provider_session() {
 
   provider_interactive_ready "$workspace_dir"
 
+  # LOOP_SESSION_ID is the loop's neutral way of saying "use this id". This CLI
+  # can be told (`--session-id`, valid interactively, not just under --print),
+  # so the transcript lands at a path the app can identify. Built as an array so
+  # an unset id expands to nothing at all under `set -u`.
+  local -a session_args=()
+  if [ -n "${LOOP_SESSION_ID:-}" ]; then
+    session_args=(--session-id "$LOOP_SESSION_ID")
+  fi
+
   # --add-dir covers the loop itself; the project needs none, being the cwd.
   (cd "$workspace_dir" && claude "$prompt" \
+    "${session_args[@]}" \
     --add-dir "$LOOP_DIR" \
     --settings "$PROVIDER_CONFIG_ROOT/settings.json" \
     --setting-sources "" \

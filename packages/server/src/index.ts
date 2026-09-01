@@ -4,6 +4,7 @@ import { fileURLToPath } from "node:url";
 import express from "express";
 import { attachWebSocketServer } from "./ws.js";
 import { listAdapters } from "./adapters.js";
+import { startTranscriptMonitor } from "./transcript-monitor.js";
 import { startUsageRefresh } from "./usage-refresh.js";
 import { startWorkspaceMonitor } from "./workspace-monitor.js";
 
@@ -46,9 +47,12 @@ if (process.env.NODE_ENV === "production") {
 }
 
 const httpServer = createServer(app);
-const { broadcast } = attachWebSocketServer(httpServer);
+const { broadcast, refreshSessions } = attachWebSocketServer(httpServer);
 startUsageRefresh(broadcast);
 startWorkspaceMonitor(broadcast);
+// Sessions the app did not start — a dev loop, a raw console — only exist on
+// disk until something notices them.
+startTranscriptMonitor(refreshSessions);
 
 httpServer.listen(port, host, () => {
   console.log(`overseer server listening on http://${host}:${port}`);

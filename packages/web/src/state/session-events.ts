@@ -43,6 +43,10 @@ export function metaToSession(
     cost:
       meta.totalCostUsd > 0 ? `$${meta.totalCostUsd.toFixed(4)}` : "",
     doing: meta.status === "live" ? "live" : "",
+    ...(meta.origin !== undefined ? { origin: meta.origin } : {}),
+    ...(meta.loopWorkspace !== undefined
+      ? { loopWorkspace: meta.loopWorkspace }
+      : {}),
   };
 }
 
@@ -69,6 +73,9 @@ export interface Chat {
   session: Session;
   turns: Turn[];
   settings: SessionSettings;
+  /** Why this conversation is empty, when it is empty for a reason — a refused
+   * `session.open`. Cleared by the next successful open. */
+  note?: string;
 }
 
 /**

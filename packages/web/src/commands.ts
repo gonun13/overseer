@@ -10,7 +10,8 @@ export interface Command {
     | { type: "settings" }
     | { type: "selector" }
     | { type: "theme" }
-    | { type: "close-all" };
+    | { type: "close-all" }
+    | { type: "loop" };
 }
 
 export const COMMANDS: Command[] = [
@@ -49,6 +50,11 @@ export const COMMANDS: Command[] = [
     aliases: ["term", "terminal", "shell"],
     help: "raw terminal into the provider cli",
     action: { type: "open", kind: "console" },
+  },
+  {
+    name: "loop",
+    help: "run the dev loop for the active project",
+    action: { type: "loop" },
   },
   {
     name: "settings",

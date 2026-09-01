@@ -79,6 +79,23 @@ random_hex() {
   od -An -N"$n" -tx1 /dev/urandom | tr -d ' \n'
 }
 
+# uuid_v4 — a RFC-4122 v4 UUID, for a provider that wants to be told which
+# session id to use rather than minting its own.
+#
+# `uuidgen` is deliberately not relied on: it ships in uuid-runtime, which the
+# image does not install (the Dockerfile takes util-linux for flock alone). The
+# kernel's generator needs no process at all; node is the fallback because the
+# image is guaranteed to carry it, and python3 is not — the runtime stage purges
+# it after npm ci.
+uuid_v4() {
+  if [ -r /proc/sys/kernel/random/uuid ]; then
+    cat /proc/sys/kernel/random/uuid
+    return 0
+  fi
+  node -e 'console.log(crypto.randomUUID())' 2>/dev/null && return 0
+  die "cannot generate a uuid: no /proc/sys/kernel/random/uuid and no node"
+}
+
 iso_now() {
   date -u +%Y-%m-%dT%H:%M:%SZ
 }

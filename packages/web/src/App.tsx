@@ -73,12 +73,22 @@ export default function App() {
     [],
   );
 
+  const openLoop = useCallback(() => {
+    // Basename of the active project path, not a lookup into `shell.projects`
+    // — that list isn't computed until useShellPresentation, further down,
+    // and the loop targets whatever workspace/<name>/ directory is active
+    // regardless of whether the project panel has resolved its display name.
+    const name = wizard.activeProjectPath?.split("/").filter(Boolean).pop();
+    open("console", "loop", `loop · ${name ?? "workspace"}`);
+  }, [open, wizard.activeProjectPath]);
+
   const prompt = usePromptSession({
     openWindow: open,
     closeAllWindows: closeAll,
     openSettings,
     openProjectSelector,
     toggleTheme,
+    openLoop,
   });
   const focusPrompt = prompt.focus;
   const submitCommand = prompt.submit;
@@ -277,7 +287,65 @@ export default function App() {
 
   const openHelp = useCallback(() => open("help"), [open]);
 
-  const deciding = wizard.reset === "confirm";
+  // Workspace whose loop run the operator is being asked to take over, and the
+  // one-shot flag the next loop console consumes once they say yes.
+  const [loopTakeoverFor, setLoopTakeoverFor] = useState<string | null>(null);
+  const [loopTakeover, setLoopTakeover] = useState(false);
+  const loopConsoleOpen = windows.some(
+    (w) => w.kind === "console" && w.payload === "loop",
+  );
+
+  // Clear the flag once the console that consumes it has mounted. Effects run
+  // after that mount, and ConsoleTerminal latches the value in a ref, so the
+  // run it started keeps its take-over while the next one starts clean.
+  useEffect(() => {
+    if (loopConsoleOpen && loopTakeover) setLoopTakeover(false);
+  }, [loopConsoleOpen, loopTakeover]);
+
+  /**
+   * A loop row does not open a chat: that session belongs to a live
+   * interactive PTY, and resuming it would put a second CLI on one transcript.
+   * If this tab already has the console, raise it. Otherwise the run is
+   * attached somewhere this tab cannot reach — another tab, or a host terminal
+   * — and the only way to get it here is to end it and start again, which is a
+   * decision rather than a click.
+   */
+  const openLoopSession = useCallback(
+    (session: Session) => {
+      const name = session.loopWorkspace ?? wizard.activeProjectPath ?? "";
+      if (loopConsoleOpen) {
+        // The server already named this row `loop · <ws>`; reusing it means
+        // the tab and the row cannot disagree.
+        open("console", "loop", session.name);
+        return;
+      }
+      setLoopTakeoverFor(name);
+    },
+    [loopConsoleOpen, open, wizard.activeProjectPath],
+  );
+
+  /** Every list of sessions routes through here: a loop row goes to its
+   * console, anything else opens as a conversation. */
+  const openSessionRow = useCallback(
+    (session: Session) => {
+      if (session.origin === "loop") {
+        openLoopSession(session);
+        return;
+      }
+      openChat(session);
+    },
+    [openLoopSession, openChat],
+  );
+
+  const confirmLoopTakeover = useCallback(() => {
+    const name = loopTakeoverFor;
+    setLoopTakeoverFor(null);
+    if (name === null) return;
+    setLoopTakeover(true);
+    open("console", "loop", `loop · ${name}`);
+  }, [loopTakeoverFor, open]);
+
+  const deciding = wizard.reset === "confirm" || loopTakeoverFor !== null;
 
   useShellKeyboard({
     blocked: deciding,
@@ -433,7 +501,7 @@ export default function App() {
             activeId={projectActive?.id}
             open={sessionsOpen}
             onToggle={toggleSessions}
-            onSelect={openChat}
+            onSelect={openSessionRow}
             onNew={startChat}
             onDelete={onDeleteSession}
           />
@@ -484,6 +552,8 @@ export default function App() {
           onOpenSessionContext={openSessionContext}
           send={wizard.send}
           subscribeConsole={wizard.subscribeConsole}
+          loopTakeover={loopTakeover}
+          onOpenLoopSession={openLoopSession}
         />
 
         <SettingsPanel
@@ -505,7 +575,27 @@ export default function App() {
         />
       </div>
 
-      {deciding && (
+      {loopTakeoverFor !== null && (
+        <DecisionWindow
+          title="take over loop"
+          confirmLabel="take over"
+          declineLabel="leave it"
+          onConfirm={confirmLoopTakeover}
+          onDecline={() => setLoopTakeoverFor(null)}
+        >
+          <p className="w-note">
+            the loop on {loopTakeoverFor} is running in another terminal or
+            tab. this ends that run — including whatever request it is part way
+            through — and starts a new one here.
+          </p>
+          <p className="w-note">
+            recorded work is kept; the conversation is not. &gt; there is no
+            undo &lt;
+          </p>
+        </DecisionWindow>
+      )}
+
+      {wizard.reset === "confirm" && (
         <DecisionWindow
           title="reset overseer"
           confirmLabel="erase"

@@ -61,6 +61,95 @@ describe("session-supervisor", () => {
     }
   });
 
+  it("marks only the session a live loop run owns", async () => {
+    const frames: ServerMessage[] = [];
+    const meta = (id: string): SessionMeta => ({
+      id,
+      adapterId: "claude-code",
+      projectDir: "/workspace/demo",
+      model: "",
+      status: "dormant",
+      createdAt: "2026-01-01T00:00:00.000Z",
+      lastActiveAt: "2026-01-01T00:00:00.000Z",
+      totalCostUsd: 0,
+    });
+    const supervisor = createSessionSupervisor((msg) => frames.push(msg), {
+      readSnapshot: async () => ({
+        attached_provider: "claude-code",
+        last_active_project: "/workspace/demo",
+      }),
+      isInsideWorkspace: async () => true,
+      getAdapter: () =>
+        ({
+          id: "claude-code",
+          getStatus: async () => ({ authenticated: true }),
+        }) as AgentAdapter,
+      listProjectSessions: async () => [meta("loop-sid"), meta("mine")],
+      loopSessionIndex: async () =>
+        new Map([
+          ["loop-sid", { slug: "demo", pid: 7, startedAt: "", sessionId: "loop-sid" }],
+        ]),
+    });
+
+    await supervisor.list();
+    const list = frames.find((f) => f.type === "session.list");
+    assert.ok(list && list.type === "session.list");
+    if (list.type === "session.list") {
+      const loop = list.sessions.find((s) => s.id === "loop-sid");
+      const mine = list.sessions.find((s) => s.id === "mine");
+      assert.equal(loop?.origin, "loop");
+      assert.equal(loop?.loopWorkspace, "demo");
+      // Named for what it is. Left to the transcript, every loop row would
+      // read "Read /app/loop/overseer.md and act…" — the same string in every
+      // workspace, and not the name the console window uses.
+      assert.equal(loop?.name, "loop · demo");
+      assert.equal(mine?.origin, undefined);
+      assert.equal(mine?.name, undefined);
+    }
+  });
+
+  it("refuses to open a live loop run rather than resuming it", async () => {
+    // Two CLIs on one transcript corrupts it, and nothing else locks against
+    // that — so the refusal has to come before both backfill and spawn.
+    const frames: ServerMessage[] = [];
+    let resumed = 0;
+    let backfilled = 0;
+    const supervisor = createSessionSupervisor((msg) => frames.push(msg), {
+      readSnapshot: async () => ({
+        attached_provider: "claude-code",
+        last_active_project: "/workspace/demo",
+      }),
+      isInsideWorkspace: async () => true,
+      getAdapter: () =>
+        ({
+          id: "claude-code",
+          getStatus: async () => ({ authenticated: true }),
+          resumeSession: async () => {
+            resumed += 1;
+            throw new Error("must not resume a loop run");
+          },
+        }) as unknown as AgentAdapter,
+      readSessionHistory: async () => {
+        backfilled += 1;
+        return [];
+      },
+      loopSessionIndex: async () =>
+        new Map([
+          ["loop-sid", { slug: "demo", pid: 7, startedAt: "", sessionId: "loop-sid" }],
+        ]),
+    });
+
+    const result = await supervisor.open("loop-sid");
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.match(result.reason, /live loop run/);
+    assert.equal(resumed, 0);
+    assert.equal(backfilled, 0);
+    assert.equal(
+      frames.some((f) => f.type === "session.history"),
+      false,
+    );
+  });
+
   it("creates a session and broadcasts meta", async () => {
     const frames: ServerMessage[] = [];
     const init: AgentEvent = {

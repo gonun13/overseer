@@ -83,6 +83,10 @@ services:
   server:
     build: *app-build
     command: npm run dev --workspace packages/server
+    # Reap orphans. This service spawns PTY children (the raw console, a loop
+    # run) whose own children outlive them; PID 1 here is `npm`, which never
+    # calls wait(), so every killed console left a <defunct> claude behind.
+    init: true
     ports:
       # Loopback only — this is RCE-as-a-service (design doc §6).
       # Host :3001 so the dev API can run alongside production on :3000.

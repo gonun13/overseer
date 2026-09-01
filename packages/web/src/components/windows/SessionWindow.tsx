@@ -37,9 +37,14 @@ export function SessionWindow({
   onOpenSessionContext,
   onSubmit,
   onInspect,
+  note,
 }: {
   turns: Turn[];
   busy: boolean;
+  /** Why this session has nothing to show — a refused open, most often.
+   * Without it a session that failed to open is indistinguishable from a new
+   * one, which is how a refusal used to read as "nothing happened". */
+  note?: string;
   settings: SessionSettings;
   options: SessionOption[];
   openSessionControl: SessionOptionKey | null;
@@ -64,7 +69,7 @@ export function SessionWindow({
     <div className="session-window">
       <div className="transcript-panel">
         {turns.length === 0 ? (
-          <p className="session-empty">nothing said yet</p>
+          <p className="session-empty">{note ?? "nothing said yet"}</p>
         ) : (
           <Transcript turns={turns} models={models} onInspect={onInspect} />
         )}

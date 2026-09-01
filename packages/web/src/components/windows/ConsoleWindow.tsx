@@ -23,22 +23,34 @@ export function ConsoleWindow({
   send,
   subscribe,
   onProcessExit,
+  mode,
+  takeover,
 }: {
   provider: ProviderInfo;
   theme: OverseerTheme;
   send: (message: ClientMessage) => void;
   subscribe: (listener: (message: ServerMessage) => void) => () => void;
   onProcessExit: () => void;
+  /** "loop" opens the dev loop's overseer session instead of the attached
+   * provider's bare CLI — it picks its own provider, so the attached one's
+   * auth state below is irrelevant to it. */
+  mode?: "loop";
+  /** End the run currently holding the workspace's lease first. */
+  takeover?: boolean;
 }) {
   return (
     <div className="console">
-      {!provider.authenticated && <WProviderNote provider={provider} />}
+      {mode !== "loop" && !provider.authenticated && (
+        <WProviderNote provider={provider} />
+      )}
       <ConsoleTerminal
         send={send}
         subscribe={subscribe}
         onProcessExit={onProcessExit}
         authenticated={provider.authenticated}
         theme={theme}
+        mode={mode}
+        takeover={takeover}
       />
     </div>
   );

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
+import { afterEach, describe, it } from "node:test";
 import type {
   AgentAdapter,
   ConsoleExit,
@@ -7,6 +7,10 @@ import type {
   ServerMessage,
 } from "@overseer/protocol";
 import { createConsoleSession } from "../src/console.js";
+import {
+  setLoopConsoleSpawner,
+  type PtyProcess as LoopPtyProcess,
+} from "../src/loop-console.js";
 import type { WorldSnapshot } from "../src/memory/internal.js";
 
 /**
@@ -142,6 +146,40 @@ function makeAdapter(opts: {
   };
 }
 
+function fakeLoopPty(): {
+  spawnArgs: { file: string; args: string[] } | null;
+  emitExit: (exitCode: number) => void;
+} {
+  let spawnArgs: { file: string; args: string[] } | null = null;
+  let exitListener:
+    | ((event: { exitCode: number; signal?: number }) => void)
+    | undefined;
+  const proc: LoopPtyProcess = {
+    pid: 1234,
+    write() {},
+    resize() {},
+    kill() {},
+    onData() {},
+    onExit(listener) {
+      exitListener = listener;
+    },
+  };
+  setLoopConsoleSpawner((opts) => {
+    spawnArgs = { file: opts.file, args: opts.args };
+    return proc;
+  });
+  return {
+    get spawnArgs() {
+      return spawnArgs;
+    },
+    emitExit: (exitCode) => exitListener?.({ exitCode }),
+  };
+}
+
+afterEach(() => {
+  setLoopConsoleSpawner(undefined);
+});
+
 describe("createConsoleSession", () => {
   it("refuses when no provider is attached", async () => {
     const { send, frames } = recorder();
@@ -261,7 +299,64 @@ describe("createConsoleSession", () => {
     assert.equal(fake2.kills, 1);
   });
 
-  it("a second open replaces the first process", async () => {
+  it("a loop console opens alongside the CLI console, killing neither", async () => {
+    const cli = fakeHandle();
+    const loop = fakeLoopPty();
+    const { send, ofType } = recorder();
+    const session = createConsoleSession(send, {
+      readSnapshot: async () => baseSnapshot(),
+      isInsideWorkspace: async () => true,
+      getAdapter: () => makeAdapter({ openConsole: async () => cli.handle }),
+      recordAction: async () => {},
+    });
+
+    assert.equal((await session.open(80, 24)).ok, true);
+    const cliId = ofType("console.opened")[0]!.id;
+    assert.equal((await session.open(80, 24, "loop")).ok, true);
+
+    // The CLI console survives the loop opening on the other slot.
+    assert.equal(cli.kills, 0);
+    assert.deepEqual(loop.spawnArgs, { file: "/app/loop/run", args: ["demo"] });
+
+    const acks = ofType("console.opened");
+    assert.equal(acks.length, 2);
+    const loopAck = acks[1]!;
+    assert.equal(loopAck.mode, "loop");
+    assert.equal(acks[0]!.mode, undefined);
+    assert.notEqual(cliId, loopAck.id);
+
+    // Both remain addressable by their own ids.
+    assert.equal(session.input(cliId, "a").ok, true);
+    assert.deepEqual(cli.writes, ["a"]);
+    assert.equal(session.input(loopAck.id, "b").ok, true);
+
+    // Closing the loop leaves the CLI console alone.
+    assert.equal(session.close(loopAck.id).ok, true);
+    // Settle the killed PTY so its SIGKILL grace timer does not outlive the test.
+    loop.emitExit(0);
+    assert.equal(cli.kills, 0);
+    assert.equal(session.input(cliId, "c").ok, true);
+  });
+
+  it("dispose tears down both slots", async () => {
+    const cli = fakeHandle();
+    const loop = fakeLoopPty();
+    const { send } = recorder();
+    const session = createConsoleSession(send, {
+      readSnapshot: async () => baseSnapshot(),
+      isInsideWorkspace: async () => true,
+      getAdapter: () => makeAdapter({ openConsole: async () => cli.handle }),
+      recordAction: async () => {},
+    });
+
+    assert.equal((await session.open(80, 24)).ok, true);
+    assert.equal((await session.open(80, 24, "loop")).ok, true);
+    session.dispose();
+    loop.emitExit(0);
+    assert.equal(cli.kills, 1);
+  });
+
+  it("a second open in the same slot replaces the first process", async () => {
     const first = fakeHandle();
     const second = fakeHandle();
     let calls = 0;
@@ -288,5 +383,38 @@ describe("createConsoleSession", () => {
     assert.equal(session.input(firstId, "x").ok, false);
     assert.equal(session.input(secondId, "y").ok, true);
     assert.deepEqual(second.writes, ["y"]);
+  });
+
+  it("loop mode skips the attached-provider check and spawns loop/run with the project's basename", async () => {
+    const fake = fakeLoopPty();
+    const { send, ofType } = recorder();
+    const session = createConsoleSession(send, {
+      readSnapshot: async () =>
+        baseSnapshot({ attached_provider: undefined }),
+      isInsideWorkspace: async () => true,
+      getAdapter: () => {
+        throw new Error("loop mode must not look up an adapter");
+      },
+      recordAction: async () => {},
+    });
+
+    const result = await session.open(80, 24, "loop");
+    assert.equal(result.ok, true);
+    assert.deepEqual(fake.spawnArgs, { file: "/app/loop/run", args: ["demo"] });
+    assert.equal(ofType("console.opened").length, 1);
+  });
+
+  it("loop mode still requires an active project inside the workspace", async () => {
+    const { send } = recorder();
+    const session = createConsoleSession(send, {
+      readSnapshot: async () =>
+        baseSnapshot({ last_active_project: undefined }),
+      isInsideWorkspace: async () => true,
+      getAdapter: () => makeAdapter({}),
+      recordAction: async () => {},
+    });
+    const result = await session.open(80, 24, "loop");
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.match(result.reason, /no active project/);
   });
 });

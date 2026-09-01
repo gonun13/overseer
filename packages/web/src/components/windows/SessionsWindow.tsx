@@ -37,6 +37,9 @@ export function SessionsWindow({
             // Unset fields are omitted rather than shown blank, so the line
             // never reads as " · · " with the values rubbed out.
             secondary={[
+              // No "loop" marker here: the name already reads `loop · <ws>`,
+              // and repeating it would spend the line on the one thing the
+              // row has already said.
               project?.name,
               s.branch,
               s.model === "" ? undefined : (findOption(models, s.model)?.label ?? s.model),
@@ -48,16 +51,21 @@ export function SessionsWindow({
             actions={
               <>
                 <button className="w-btn" onClick={() => onOpenSession(s.id)}>
-                  open
+                  {s.origin === "loop" ? "console" : "open"}
                 </button>
-                <button
-                  className="w-btn danger"
-                  onClick={() => onDeleteSession(s.id)}
-                  aria-label={`delete ${s.name}`}
-                >
-                  <TrashIcon />
-                  delete
-                </button>
+                {/* No delete for a loop run: its transcript belongs to a live
+                    interactive CLI, and removing it out from under that
+                    process is not something to offer as a row action. */}
+                {s.origin !== "loop" && (
+                  <button
+                    className="w-btn danger"
+                    onClick={() => onDeleteSession(s.id)}
+                    aria-label={`delete ${s.name}`}
+                  >
+                    <TrashIcon />
+                    delete
+                  </button>
+                )}
               </>
             }
           />

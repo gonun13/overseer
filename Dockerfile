@@ -59,9 +59,16 @@ RUN arch="$(dpkg --print-architecture)" \
 # The user runs as the host's uid so bind mounts are writable and git does not
 # refuse the workspace as dubiously owned. ./bin/_lib.sh fills these from
 # `id -u` / `id -g`; a bare `docker compose` gets the 1000 default.
+#
+# A host GID this common (e.g. 20 — macOS's default "staff" group) can already
+# belong to a system group in the base image (Debian's "dialout" owns 20).
+# Downstream `chown -R overseer:overseer` needs that name to resolve, so an
+# existing claimant is renamed rather than left in place with the GID we want.
 ARG OVERSEER_UID=1000
 ARG OVERSEER_GID=1000
-RUN if ! getent group "$OVERSEER_GID" >/dev/null; then \
+RUN if getent group "$OVERSEER_GID" >/dev/null; then \
+      groupmod -n overseer "$(getent group "$OVERSEER_GID" | cut -d: -f1)"; \
+    else \
       groupadd -g "$OVERSEER_GID" overseer; \
     fi \
     && useradd -u "$OVERSEER_UID" -g "$OVERSEER_GID" -m -d /home/overseer -s /bin/bash overseer
