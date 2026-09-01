@@ -1,4 +1,0 @@
-# Sourced by bin/lib/providers.sh after resolving this bundle.
-PROVIDER_ID=claude-code
-PROVIDER_CLI=claude
-PROVIDER_CONFIG_DIR=.claude

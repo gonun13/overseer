@@ -1,0 +1,73 @@
+#!/usr/bin/env sh
+# Run the dev loop, in the container the app already runs in. The loop and the
+# app are two front-ends onto one workspace, one provider registry, and one set
+# of signed-in CLIs — so there is no separate loop stack to start.
+#
+#   ./bin/loop <workspace>          open an overseer session on that workspace
+#   ./bin/loop <command> [args...]  any loop/bin/<command> — list, train, stint…
+#   ./bin/loop sh                   a shell in the loop's container
+#   ./bin/loop --prod <...>         against the production stack
+#
+# The first argument is a loop/bin command when a file of that name exists
+# there, and a workspace name otherwise: `./bin/loop personal` opens a session,
+# `./bin/loop list personal` reads its state without starting one. Same shape as
+# ./bin/sh — the common case takes no keyword.
+. "$(dirname -- "$0")/_lib.sh"
+
+# The header comment above is the usage text — printed by stripping the leading
+# `#` from every comment line after the shebang, so the two cannot drift.
+usage() {
+  awk 'NR > 1 && /^#/ { sub(/^# ?/, ""); print; next } NR > 1 { exit }' "$0" >&2
+}
+
+case "${1:-}" in
+  -h | --help)
+    usage
+    exit 0
+    ;;
+esac
+
+SERVICE=server
+STACK=dev
+if [ "${1:-}" = "--prod" ]; then
+  shift
+  SERVICE=overseer
+  STACK=prod
+fi
+
+loop_compose() {
+  if [ "$STACK" = "prod" ]; then
+    prod_compose "$@"
+  else
+    dev_compose "$@"
+  fi
+}
+
+if [ $# -eq 0 ]; then
+  usage
+  exit 1
+fi
+
+first=$1
+if [ "$first" = "sh" ] || [ "$first" = "bash" ]; then
+  shift
+  set -- bash "$@"
+elif [ -f "$REPO_ROOT/loop/bin/$first" ]; then
+  shift
+  set -- "/app/loop/bin/$first" "$@"
+else
+  # A workspace name. loop/run validates it and lists what does exist.
+  set -- /app/loop/run "$@"
+fi
+
+require_docker
+
+# `exec` into the running stack when there is one, so the session shares the
+# container the app is already using. Otherwise a throwaway — with its deps, not
+# --no-deps, because a `verify` step needs the dind sidecar to build a project.
+if loop_compose ps --status running --services 2>/dev/null | grep -qx "$SERVICE"; then
+  loop_compose exec "$SERVICE" "$@"
+else
+  echo "overseer: $SERVICE is not running; starting a throwaway container" >&2
+  loop_compose run --rm "$SERVICE" "$@"
+fi

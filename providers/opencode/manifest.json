@@ -1,0 +1,8 @@
+{
+  "id": "opencode",
+  "cli": "opencode",
+  "configDir": ".config/opencode",
+  "install": { "kind": "npm", "spec": "opencode-ai@1.18.18" },
+  "app": "stub",
+  "loop": "none"
+}

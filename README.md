@@ -1,8 +1,10 @@
 # Overseer
 
 A single-page web console for driving CLI coding agents. Claude Code is the first
-fully wired provider; `codex`, `opencode`, and `github-copilot` appear in the
-provider catalog (CLIs installed in the image; adapters not implemented yet).
+fully wired provider; `cursor`, `codex`, `opencode`, and `github-copilot` appear
+in the provider catalog (CLIs installed in the image; adapters not implemented
+yet). `cursor` is a real provider for the dev loop, which runs sessions on it
+today — the same registry entry, two different levels of support.
 
 Built sandboxed, with the paranoid in mind: protect the host from runaway LLMs.
 Agents run in Docker, not on your desktop — they cannot wipe your home directory or
@@ -27,9 +29,16 @@ Nothing else. Node, npm, and the agent CLIs all live inside the container.
 ## This never runs on the host
 
 Overseer and the agents it spawns always run **inside Docker**. They cannot reach
-your machine except through the `./workspace` bind mount; Claude auth lives in a
+your machine except through the `./workspace` bind mount; provider auth lives in a
 container volume, not your real `~/.claude`
 ([architecture §6](docs/architecture-design.md#6-security)).
+
+That covers the dev loop too. `./bin/loop <workspace>` opens its session in the
+same container the app runs in — same workspace, same provider registry, same
+sign-in — and `loop/run` refuses to start one on the host. It is the widest tool
+grant in the project, so it is the last thing that should run on your desktop.
+Workspace projects whose test command is itself `docker compose` get a
+Docker-in-Docker sidecar rather than a bind of your host's daemon socket.
 
 > **Warning.** Do not start the Node server or agent CLI with host `npm` / Node —
 > that skips the container entirely. `npm run dev` and `npm run dev:web` refuse
@@ -76,6 +85,7 @@ the source tree is bind-mounted and watched.
 | `./bin/check`      | Typecheck + lint                                                             |
 | `./bin/test`       | Run all unit and integration tests                                           |
 | `./bin/test-e2e`   | Playwright acceptance tests (args pass through to `playwright test`)         |
+| `./bin/loop <ws>`  | Open a dev-loop session on `workspace/<ws>`, inside the running stack        |
 | `./bin/reset`      | Tear down the dev stack and discard volumes, including agent auth            |
 
 Three services: `deps` builds `protocol` + `claude-code` under `tsc --watch`, `server`
@@ -98,14 +108,16 @@ A [Playwright MCP server](https://github.com/microsoft/playwright-mcp) is regist
 
 ```
 bin/                  docker shortcuts — the only supported way to run anything
+providers/            one directory per agent CLI, read by the app and the loop alike
+                      (claude-code, cursor, codex, opencode, github-copilot)
 packages/
   protocol/           shared TS types — the frontend/backend/adapter contract
   web/                React + Vite + Tailwind SPA
   server/             Node: WS + REST, static SPA host, adapter registry
-                      (catalog stubs: codex, opencode, github-copilot)
   adapters/
     claude-code/      Claude Code adapter (raw PTY console live; stream-json sessions not yet)
   e2e/                Playwright acceptance tests (container-only)
+loop/                 the dev-loop CLI — bash, a provider CLI, and plain files
 workspace/            host-shared dir — git projects live here, mounted into the container
 ```
 
@@ -138,9 +150,11 @@ then mounts furniture as capabilities resolve. Details:
 
 Auth status for `claude-code` comes from `claude auth status --json`. The raw OPEN
 CONSOLE path spawns an interactive `claude` PTY in the active project when that
-provider is signed in. Catalog stubs (`codex`, `opencode`, `github-copilot`) list
-in the providers window and their CLIs ship in the image, but have no login,
-console, or session wiring yet.
+provider is signed in. Catalog stubs (`cursor`, `codex`, `opencode`,
+`github-copilot`) list in the providers window and their CLIs ship in the image,
+but have no login, console, or session wiring yet. Which providers exist at all
+is one declaration, `providers/<id>/manifest.json`, read by the app's catalog,
+by the dev loop, and by the image's install list.
 
 `claude-code` stream-json sessions are live: sessions spawn, stream, resume from
 their transcript, and can be deleted. A session window's control rows list what the
@@ -149,7 +163,7 @@ its six permission modes ([architecture §1.1.1](docs/architecture-design.md)).
 
 Still missing:
 
-- Full adapters for catalog stubs (`codex`, `opencode`, `github-copilot`)
+- Full adapters for catalog stubs (`cursor`, `codex`, `opencode`, `github-copilot`)
 - Approvals queue and structured tool/diff windows backed by live session events
   (permission requests are auto-denied with a visible error for now)
 - Changing model, mode, or agent on a session already running — a pick arms the

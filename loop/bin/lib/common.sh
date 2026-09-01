@@ -3,12 +3,16 @@
 
 # LOOP_LIB_DIR   loop/bin/lib   — this file's own directory
 # LOOP_BIN_DIR   loop/bin       — implementation root (scripts + lib/)
-# LOOP_DIR       loop/          — tool data/config root (db/, .provider, providers/)
+# LOOP_DIR       loop/          — tool data/config root (db/, .provider)
+# REPO_ROOT      loop/..        — parent of both loop/ and the shared providers/
 LOOP_LIB_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 LOOP_BIN_DIR="$(CDPATH='' cd -- "$LOOP_LIB_DIR/.." && pwd)"
 LOOP_DIR="$(CDPATH='' cd -- "$LOOP_BIN_DIR/.." && pwd)"
 REPO_ROOT="$(CDPATH='' cd -- "$LOOP_DIR/.." && pwd)"
-WORKSPACE_ROOT="$REPO_ROOT/workspace"
+# The app states this in the container (packages/server/src/workspace.ts reads
+# the same variable), so both sides resolve a project to one path. Derived from
+# the repo layout when it is unset, which is how the loop used to find it.
+WORKSPACE_ROOT="${OVERSEER_WORKSPACE:-$REPO_ROOT/workspace}"
 export LOOP_LIB_DIR LOOP_BIN_DIR LOOP_DIR REPO_ROOT WORKSPACE_ROOT
 
 log_info() { printf 'loop: %s\n' "$*" >&2; }

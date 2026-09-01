@@ -5,4 +5,12 @@ node_modules
 docs
 workspace
 *.md
+# …except the loop's, which are not documentation: overseer.md is the session's
+# instructions and steps/*.md are what each step is told to do. The blanket rule
+# above would strip exactly the files that make the loop work.
+!loop/**/*.md
 .DS_Store
+
+# The loop's file store is runtime state for one machine's workspaces, and it
+# holds full project worktrees. Never bake it into an image.
+loop/db

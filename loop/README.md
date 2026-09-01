@@ -12,7 +12,7 @@ changing what it already does.
 ## Usage
 
 ```sh
-loop/run <workspace-name>
+./bin/loop <workspace-name>
 ```
 
 That opens an **overseer** — an interactive session on the configured provider
@@ -21,13 +21,29 @@ open for that workspace, resumes a request that is mid-flight, offers to plan
 one already scoped, or asks you for a new one when nothing is pending, and
 keeps going until you stop it. You talk to it; it runs the steps.
 
+**It runs in Overseer's container, not on your machine.** The session holds
+`Write`, `Edit` and an unprefixed shell, and the `implement` step uses all
+three on your project — so `loop/run` refuses to start on the host and points
+you at `./bin/loop`, which opens the session inside the running stack. The loop
+and the app share that container deliberately: one workspace, one provider
+registry, one set of signed-in CLIs. The `loop/bin/*` commands below are not
+guarded — they read and record state and open no session, so they work from a
+host terminal too.
+
 - `<workspace-name>` must already exist as a directory under `workspace/`.
-- Prereqs: `jq` on PATH, plus the active provider's CLI authenticated
-  (`claude` for `claude-code`, `agent` for `cursor`).
+- Prereqs: Docker, and the active provider's CLI signed in. Everything else the
+  loop needs — `jq`, `flock`, `git`, `gh`, the provider CLIs — is in the image.
+  Sign in once, from either the app or here; they share the auth volume.
 - An interactive terminal is required — the overseer needs to talk to you.
 - One overseer per workspace at a time. `loop/run` takes a session lease so a
   second terminal is told who holds it rather than racing; `loop/bin/list`
   shows it too.
+- `loop/bin/publish` pushes and opens a pull request, which needs a GitHub
+  token the container does not have by default. `land` commits locally and
+  nothing leaves the machine; set `GH_TOKEN` in `.env` to change that.
+
+Anything under `loop/bin/` can be run the same way — `./bin/loop list personal`
+reads what is open without starting a session.
 
 Which provider runs the overseer is controlled by `loop/.provider` (local,
 gitignored; defaults to `claude-code` when absent) or a one-off
@@ -516,26 +532,38 @@ prose and a heuristic reading of prose must not be able to block a record.
 
 ## Providers
 
-The tool must not hardcode a specific CLI. `bin/lib/providers.sh` loads a
-self-contained bundle from `providers/<id>/` (a manifest, `provider.sh`, and
-that provider's own config tree), mirroring Overseer's own `AgentAdapter` split
-(`packages/protocol/src/adapter.ts`) — an id string plus a function contract.
-Here the contract is two functions, because a provider's whole job is to open
-one session:
+The tool must not hardcode a specific CLI. `bin/lib/providers.sh` loads a bundle
+from the registry at `providers/<id>/` — the repo's top-level one, shared with
+the app rather than the loop's own. A bundle is `manifest.json`, `provider.sh`,
+and that provider's own config tree; the manifest's `loop` field says whether
+the loop can run it (`"bundle"`) or the app carries it alone (`"none"`), and its
+`app` field says the same in the other direction. See
+[architecture-design.md §1.1.2](../docs/architecture-design.md) for the whole
+shape. The session contract is two functions, because a provider's whole job is
+to open one session:
 
 ```
 provider_check_available
 provider_session <prompt> <workspace_dir>
 ```
 
-**Invariant:** when a provider is active, the session's config discovery sees
-only that bundle's config root (`PROVIDER_ROOT`) — never `loop/` root, never the
-repo's own config, never another provider's tree.
+**Invariant:** when a provider is active, the only config the session sees is
+that bundle's own — never `loop/` root, never the repo's own, never another
+provider's tree. How that is enforced is the bundle's business, because it
+depends on what its CLI offers: `claude-code` is handed its settings file by
+name with discovery switched off entirely, while `cursor` has no config-path
+flag, so its bundle keeps the process's working directory on itself.
+
+**The session's workspace is the project**, `workspace/<name>/` — the directory
+the operator named and the one `implement` edits. Only the weaker of the two
+CLIs ties config to that same directory, and it is the one whose cwd therefore
+stays on the bundle; neither opens the operator onto a config folder.
 
 Real providers today: `claude-code` (`providers/claude-code/`, CLI `claude`) and
-`cursor` (`providers/cursor/`, CLI `agent`). Overseer's own "currently attached
-provider" state lives inside a Docker-only volume unreachable from a host-side
-tool, so this tool keeps its own default in `loop/.provider` instead.
+`cursor` (`providers/cursor/`, CLI `agent`). Which one the *loop* runs stays its
+own choice, in `loop/.provider`: Overseer's "currently attached provider" is
+about the app's own sessions, and the two are deliberately not the same setting
+even though the registry and the sign-in behind them now are.
 
 Adding another provider means filling out `providers/<id>/` to that contract —
 no changes to `loop/run`, to `bin/`, or to any step's instructions.

@@ -1,11 +1,17 @@
 #!/usr/bin/env bash
-# Isolation lint for loop/ provider bundles. The tool must never hardcode one
-# provider: orchestration and the shared prompts have to read the same whichever
-# bundle is active, and a bundle must not reach into another one.
+# Isolation lint for the shared provider registry. The tool must never hardcode
+# one provider: orchestration and the shared prompts have to read the same
+# whichever bundle is active, and a bundle must not reach into another one.
 #
-# What counts as "provider-specific" is derived from the bundles themselves —
-# each manifest's PROVIDER_CLI and PROVIDER_CONFIG_DIR — so adding a provider
-# extends this lint automatically.
+# What counts as "provider-specific" is derived from the registry itself —
+# each manifest.json's `cli` and `configDir` — so adding a provider extends
+# this lint automatically.
+#
+# The registry at providers/ is shared with the app, so it carries entries the
+# loop cannot run (`loop: "none"`). Those still take part in the isolation
+# rules — orchestration naming *any* provider's CLI is the coupling this
+# exists to catch — but only a `loop: "bundle"` entry is held to the session
+# contract.
 #
 # Run from anywhere; resolves paths via common.sh.
 set -euo pipefail
@@ -15,8 +21,12 @@ SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 # shellcheck disable=SC1091
 source "$LOOP_BIN_DIR/lib/db.sh"
+# shellcheck disable=SC1091
+source "$LOOP_BIN_DIR/lib/providers.sh"
 
 CONTRACT_FNS=(provider_check_available provider_session)
+
+require_cmd jq
 
 fail=0
 err() {
@@ -24,13 +34,18 @@ err() {
   fail=1
 }
 
-bundles() {
-  find "$LOOP_DIR/providers" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort
+warn() {
+  printf 'check-providers: %s\n' "$*" >&2
 }
 
-# manifest_field <bundle> <key>
-manifest_field() {
-  sed -nE "s/^$2=(.+)\$/\\1/p" "$1/manifest" 2>/dev/null
+# provider_ids — every id in the registry, runnable here or not.
+provider_ids() {
+  local d id
+  while IFS= read -r d; do
+    id=$(basename "$d")
+    [ -f "$d/manifest.json" ] || continue
+    printf '%s\n' "$id"
+  done < <(find "$PROVIDERS_DIR" -mindepth 1 -maxdepth 1 -type d 2>/dev/null | sort)
 }
 
 # Strip the paths of Overseer's own packages/adapters/<id> directories, so
@@ -72,10 +87,9 @@ done < <({ find "$LOOP_BIN_DIR" -maxdepth 1 -type f
            find "$LOOP_BIN_DIR/lib" -type f -name '*.sh'
            find "$LOOP_DIR/steps" -type f -name '*.md'; } 2>/dev/null | sort)
 
-while IFS= read -r bundle; do
-  id=$(basename "$bundle")
-  cli=$(manifest_field "$bundle" PROVIDER_CLI)
-  config_dir=$(manifest_field "$bundle" PROVIDER_CONFIG_DIR)
+while IFS= read -r id; do
+  cli=$(manifest_field "$id" cli)
+  config_dir=$(manifest_field "$id" configDir)
   for f in "${orchestration[@]}"; do
     [ -f "$f" ] || continue
     if [ -n "$cli" ] && cli_invoked "$f" "$cli"; then
@@ -85,52 +99,78 @@ while IFS= read -r bundle; do
       err "'$id' config dir ($config_dir) named in orchestration: ${f#"$LOOP_DIR"/}"
     fi
   done
-done < <(bundles)
+done < <(provider_ids)
 
-# --- 2. A bundle must not reach into another bundle -------------------------
-while IFS= read -r bundle; do
-  id=$(basename "$bundle")
-  while IFS= read -r other; do
-    other_id=$(basename "$other")
+# --- 2. A bundle must not reach into another provider -----------------------
+while IFS= read -r id; do
+  bundle="$PROVIDERS_DIR/$id"
+  while IFS= read -r other_id; do
     [ "$other_id" = "$id" ] && continue
-    other_cli=$(manifest_field "$other" PROVIDER_CLI)
-    other_config=$(manifest_field "$other" PROVIDER_CONFIG_DIR)
+    other_cli=$(manifest_field "$other_id" cli)
+    other_config=$(manifest_field "$other_id" configDir)
     while IFS= read -r f; do
       if [ -n "$other_cli" ] && cli_invoked "$f" "$other_cli"; then
-        err "'$id' invokes '$other_id' CLI ($other_cli): ${f#"$LOOP_DIR"/}"
+        err "'$id' invokes '$other_id' CLI ($other_cli): ${f#"$PROVIDERS_DIR"/}"
       fi
       if [ -n "$other_config" ] && scrub "$f" | grep -Fq "$other_config"; then
-        err "'$id' names '$other_id' config dir ($other_config): ${f#"$LOOP_DIR"/}"
+        err "'$id' names '$other_id' config dir ($other_config): ${f#"$PROVIDERS_DIR"/}"
       fi
-    done < <(find "$bundle" -type f 2>/dev/null | sort)
-  done < <(bundles)
-done < <(bundles)
+    done < <(find "$bundle" -type f ! -name 'manifest.json' 2>/dev/null | sort)
+  done < <(provider_ids)
+done < <(provider_ids)
 
-# --- 3. Every bundle is complete: manifest, contract, config ----------------
-found_bundle=0
-while IFS= read -r bundle; do
-  found_bundle=1
-  id=$(basename "$bundle")
-  [ -f "$bundle/manifest" ] || err "provider '$id' missing manifest"
+# --- 3. Every manifest is complete, and a bundle carries the contract --------
+found=0
+while IFS= read -r id; do
+  found=1
+  manifest="$PROVIDERS_DIR/$id/manifest.json"
+  bundle="$PROVIDERS_DIR/$id"
+
+  jq -e . "$manifest" >/dev/null 2>&1 || { err "provider '$id' manifest.json is not valid JSON"; continue; }
+
+  [ "$(manifest_field "$id" id)" = "$id" ] \
+    || err "provider '$id' manifest id does not match its directory name"
+  [ -n "$(manifest_field "$id" cli)" ] || err "provider '$id' manifest must set 'cli'"
+  [ -n "$(manifest_field "$id" configDir)" ] || err "provider '$id' manifest must set 'configDir'"
+
+  app=$(manifest_field "$id" app)
+  case "$app" in
+    adapter | stub | none) ;;
+    *) err "provider '$id' manifest 'app' must be adapter, stub or none (got '${app:-unset}')" ;;
+  esac
+
+  loop_role=$(manifest_field "$id" loop)
+  case "$loop_role" in
+    bundle | none) ;;
+    *) err "provider '$id' manifest 'loop' must be bundle or none (got '${loop_role:-unset}')" ;;
+  esac
+
+  if [ "$loop_role" != "bundle" ]; then
+    # An app-only entry must not carry a half-written session bundle: that
+    # would run if someone flipped the field, without ever having been linted.
+    [ -f "$bundle/provider.sh" ] \
+      && err "provider '$id' is loop: $loop_role but carries provider.sh — set loop: bundle or remove it"
+    continue
+  fi
+
   if [ ! -f "$bundle/provider.sh" ]; then
-    err "provider '$id' missing provider.sh"
+    err "provider '$id' is loop: bundle but has no provider.sh"
     continue
   fi
   for fn in "${CONTRACT_FNS[@]}"; do
     grep -Eq "^${fn}\\(\\)" "$bundle/provider.sh" || err "provider '$id' missing function $fn"
   done
 
-  config_dir=$(manifest_field "$bundle" PROVIDER_CONFIG_DIR)
-  if [ -z "$config_dir" ]; then
-    err "provider '$id' manifest must set PROVIDER_CONFIG_DIR"
-  elif [ ! -d "$bundle/$config_dir" ]; then
-    err "provider '$id' declares PROVIDER_CONFIG_DIR=$config_dir, which does not exist"
-  elif [ -z "$(find "$bundle/$config_dir" -type f -print -quit)" ]; then
-    err "provider '$id' config dir $config_dir is empty — it must carry the bundle's permissions"
+  config_dir=$(manifest_field "$id" configDir)
+  if [ -n "$config_dir" ]; then
+    if [ ! -d "$bundle/$config_dir" ]; then
+      err "provider '$id' declares configDir=$config_dir, which does not exist"
+    elif [ -z "$(find "$bundle/$config_dir" -type f -print -quit)" ]; then
+      err "provider '$id' config dir $config_dir is empty — it must carry the bundle's permissions"
+    fi
   fi
-  [ -n "$(manifest_field "$bundle" PROVIDER_CLI)" ] || err "provider '$id' manifest must set PROVIDER_CLI"
-done < <(bundles)
-[ "$found_bundle" -eq 1 ] || err "no provider bundles found under $LOOP_DIR/providers"
+done < <(provider_ids)
+[ "$found" -eq 1 ] || err "no providers found under $PROVIDERS_DIR"
 
 # --- 4. Every step has instructions, and every instruction file is a step ----
 for step in $(step_names); do
@@ -141,6 +181,57 @@ while IFS= read -r f; do
   step_field "$step" 4 >/dev/null 2>&1 \
     || err "steps/$step.md has no matching step in db.sh's LOOP_STEPS table"
 done < <(find "$LOOP_DIR/steps" -type f -name '*.md' 2>/dev/null | sort)
+
+# --- 5. The image installs exactly what the registry declares ----------------
+#
+# The registry says which providers exist; the Dockerfile says which CLIs the
+# image carries. Neither can derive the other — a Dockerfile that parsed JSON
+# at build time would be worse to debug than this lint — so they are kept in
+# step by a marker comment per install, `# provider-cli: <id>`, plus the
+# literal spec or URL from the manifest.
+#
+# The Dockerfile is not in the runtime image, so this is a no-op there rather
+# than a failure; the dev tree bind-mounts it and lints for real.
+dockerfile="$REPO_ROOT/Dockerfile"
+if [ ! -f "$dockerfile" ]; then
+  warn "no Dockerfile at $dockerfile — skipping the image/registry parity check"
+else
+  declared=""
+  while IFS= read -r id; do
+    install_kind=$(jq -r '.install.kind // empty' "$PROVIDERS_DIR/$id/manifest.json")
+    [ -n "$install_kind" ] || continue
+    declared="$declared $id"
+
+    grep -Fq "provider-cli: $id" "$dockerfile" \
+      || err "provider '$id' declares an install but the Dockerfile has no '# provider-cli: $id' marker"
+
+    case "$install_kind" in
+      npm)
+        spec=$(jq -r '.install.spec // empty' "$PROVIDERS_DIR/$id/manifest.json")
+        [ -n "$spec" ] || { err "provider '$id' install.kind=npm needs an install.spec"; continue; }
+        grep -Fq "$spec" "$dockerfile" \
+          || err "provider '$id' declares $spec, which the Dockerfile does not install"
+        ;;
+      script)
+        url=$(jq -r '.install.url // empty' "$PROVIDERS_DIR/$id/manifest.json")
+        [ -n "$url" ] || { err "provider '$id' install.kind=script needs an install.url"; continue; }
+        grep -Fq "$url" "$dockerfile" \
+          || err "provider '$id' declares $url, which the Dockerfile does not fetch"
+        ;;
+      *)
+        err "provider '$id' has an unknown install.kind '$install_kind' (want npm or script)"
+        ;;
+    esac
+  done < <(provider_ids)
+
+  # The other direction: a marker with no declaration behind it.
+  while IFS= read -r marked; do
+    case " $declared " in
+      *" $marked "*) ;;
+      *) err "Dockerfile marks '# provider-cli: $marked', which no manifest declares an install for" ;;
+    esac
+  done < <(sed -nE 's/^.*provider-cli:[[:space:]]*([A-Za-z0-9._-]+).*$/\1/p' "$dockerfile" | sort -u)
+fi
 
 if [ "$fail" -ne 0 ]; then
   printf 'check-providers: FAILED\n' >&2

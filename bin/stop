@@ -1,7 +1,7 @@
 #!/usr/bin/env sh
-# Stop the production stack. Named volumes (claude-home, overseer-memory)
-# survive — there is no reset equivalent for prod, since it holds nothing a
-# dev rebuild would invalidate.
+# Stop the production stack. Named volumes (agent-home, overseer-memory,
+# loop-db, dind-storage) survive — there is no reset equivalent for prod, since
+# it holds nothing a dev rebuild would invalidate.
 . "$(dirname -- "$0")/_lib.sh"
 
 require_docker

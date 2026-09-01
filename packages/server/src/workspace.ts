@@ -90,7 +90,7 @@ export async function scanWorkspace(
   for (const entry of entries) {
     // Symlinks are still followed — a symlinked project is a normal way to
     // expose one repo — but only as far as the workspace. A link the host
-    // wrote pointing at `/app/.overseer` or `claude-home` would otherwise be
+    // wrote pointing at `/app/.overseer` or `agent-home` would otherwise be
     // listed as an ordinary project, which is exactly the reachability the
     // rest of the design says these volumes do not have.
     if (!entry.isDirectory() && !entry.isSymbolicLink()) continue;

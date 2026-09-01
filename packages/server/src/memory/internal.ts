@@ -20,7 +20,7 @@ import type {
  * Internal memory — the overseer's own record of itself.
  *
  * Lives at `/app/.overseer`, backed by a named Docker volume that is declared
- * in both compose files and bind-mounted in neither, exactly like `claude-home`.
+ * in both compose files and bind-mounted in neither, exactly like `agent-home`.
  * That is the load-bearing property, not an implementation detail: nothing here
  * is reachable from the host or from any workspace project, which is the only
  * reason "internal memory takes precedence over `overseer-personality`"

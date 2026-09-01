@@ -71,7 +71,7 @@ async function pickNeutralTone(tonePick: Locator) {
 /**
  * A prompt no earlier run can collide with.
  *
- * The stack is stateful: sessions survive between runs in the `claude-home`
+ * The stack is stateful: sessions survive between runs in the `agent-home`
  * volume, and a session's title is derived from its first user message. A spec
  * that sends a fixed prompt therefore leaves a row carrying that exact text on
  * the field for every later run, and `getByText(prompt)` starts matching the

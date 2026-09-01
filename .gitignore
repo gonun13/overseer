@@ -21,5 +21,12 @@ packages/e2e/test-results/
 .overseer/
 .claude/
 
+# The claude-code bundle's `.claude/` is versioned config — the permissions a
+# loop session runs under — not container-owned runtime state. The blanket rule
+# above ignores `.claude/` at any depth, so un-ignore this one. Lived in
+# loop/.gitignore until the provider bundles moved to the shared providers/.
+!providers/claude-code/.claude/
+!providers/claude-code/.claude/**
+
 # Keep provider instructions like CLAUDE.md or other provider-specific files on host away from repos.
 CLAUDE.md

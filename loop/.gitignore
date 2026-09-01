@@ -4,10 +4,3 @@
 # Local provider selection (loop/bin/provider). Default without this file is
 # claude-code; LOOP_PROVIDER still overrides at runtime when set.
 /.provider
-
-# The repo-root .gitignore blanket-ignores any `.claude/` directory anywhere
-# in the tree (container-owned state at the app root). The claude-code
-# provider bundle's `.claude/` is versioned config (the session's permissions),
-# not runtime state — un-ignore it here.
-!/providers/claude-code/.claude/
-!/providers/claude-code/.claude/**

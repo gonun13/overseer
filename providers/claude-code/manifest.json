@@ -1,0 +1,8 @@
+{
+  "id": "claude-code",
+  "cli": "claude",
+  "configDir": ".claude",
+  "install": { "kind": "npm", "spec": "@anthropic-ai/claude-code@2.1.226" },
+  "app": "adapter",
+  "loop": "bundle"
+}

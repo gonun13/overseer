@@ -15,8 +15,9 @@ usage() {
   cat >&2 <<'EOF'
 usage: loop/bin/provider [<id>]
 
-Lists available providers under loop/providers/ and the currently selected
-one (from loop/.provider, ignoring LOOP_PROVIDER).
+Lists the providers the loop can run — the shared providers/ registry, minus
+any bundle the app carries alone — and the currently selected one (from
+loop/.provider, ignoring LOOP_PROVIDER).
 
 With no <id> and a TTY, prompts for a numbered selection and writes
 loop/.provider. With <id>, sets that provider directly. Without a TTY and
@@ -38,7 +39,7 @@ while IFS= read -r id; do
 done < <(list_provider_ids)
 
 if [ ${#ids[@]} -eq 0 ]; then
-  die "no providers found under $LOOP_DIR/providers" 1
+  die "no providers the loop can run under $PROVIDERS_DIR" 1
 fi
 
 # Current tracked default only — not LOOP_PROVIDER, so the menu reflects

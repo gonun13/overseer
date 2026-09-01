@@ -30,7 +30,8 @@ loop/bin/provider to choose which agent CLI runs it, loop/bin/list to see
 what is open without starting a session.
 
 Exit codes: 0 ok, 1 general/provider failure, 2 workspace not found,
-4 no terminal attached, 5 another overseer session holds this workspace.
+4 no terminal attached, 5 another overseer session holds this workspace,
+6 run from the host instead of the container.
 USAGE
 }
 
@@ -40,6 +41,24 @@ esac
 
 [ $# -eq 1 ] || { usage; exit 1; }
 name=$1
+
+# The session this opens holds Write, Edit and an unprefixed Bash, and a
+# subagent of it inherits all three — the widest grant anywhere in this repo.
+# It belongs in the container with the workspace, not on the machine that owns
+# it. OVERSEER_IN_CONTAINER is set only by the image, so this fails on the host
+# no matter what is installed there; bin/_in-container.sh guards the app's own
+# npm scripts the same way. The loop/bin/* commands are deliberately not
+# guarded: they read and record state, they open no session.
+if [ "${OVERSEER_IN_CONTAINER:-}" != "1" ]; then
+  die "refusing to open an overseer session on the host — use ./bin/loop $name
+
+  The loop runs in the same container the app does, with the same workspace,
+  the same provider registry, and the same signed-in CLIs. Running it here
+  would put an agent with edit and shell access on your own machine.
+
+    ./bin/loop $name          open the session
+    ./bin/loop list $name     read what is open, without starting one" 6
+fi
 
 if [ ! -t 0 ] || [ ! -t 1 ]; then
   die "loop/run requires an interactive terminal — the overseer needs to talk to you" 4

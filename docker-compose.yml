@@ -1,28 +1,80 @@
+# Production stack. The compiled SPA is served by the Node server; the repo is
+# not here — only what the runtime stage COPYed, plus /workspace.
+name: overseer
+
 services:
+  # The Docker daemon the *workspace projects* build and test against. See the
+  # long note in docker-compose.dev.yml: a sidecar rather than a bind of the
+  # host's /var/run/docker.sock, and /workspace and /app/loop/db mounted at the
+  # same paths the app container sees so project bind mounts resolve.
+  dind:
+    image: docker:28-dind
+    privileged: true
+    environment:
+      # Plain tcp, which is only acceptable because 2375 is never published and
+      # is reachable on this compose network alone.
+      - DOCKER_TLS_CERTDIR=
+    volumes:
+      # Named, not a bind: overlayfs will not run on a bind mount.
+      - dind-storage:/var/lib/docker
+      - ./workspace:/workspace
+      - loop-db:/app/loop/db
+
   overseer:
     build:
       context: .
-      # Explicit: the Dockerfile has a `dev` stage after this one, and the
-      # default target is the last stage.
+      # Explicit: the Dockerfile has `dev` and `test` stages after this one, and
+      # the default target is the last stage.
       target: runtime
+      args:
+        OVERSEER_UID: ${OVERSEER_UID:-1000}
+        OVERSEER_GID: ${OVERSEER_GID:-1000}
     ports:
       - "127.0.0.1:3000:3000" # loopback only — this is RCE-as-a-service (design doc §6)
     volumes:
-      - claude-home:/home/node/.claude # container-owned; never bound to the host
-      - overseer-memory:/app/.overseer # same: the overseer's internal memory (docs/overseer.md §6.2)
+      # Every provider CLI's config and auth, for the app and the loop alike.
+      # Container-owned; never bound to the host. Nothing from the image lives
+      # under this path, because a volume shadows what it mounts over.
+      - agent-home:/home/overseer
+      - overseer-memory:/app/.overseer # the overseer's internal memory (docs/overseer.md §6.2)
+      - loop-db:/app/loop/db # the dev loop's file store
       - ./workspace:/workspace # the only shared surface
     environment:
-      - CLAUDE_CONFIG_DIR=/home/node/.claude
-      - OVERSEER_INTERNAL_DIR=/app/.overseer
-      - DISABLE_AUTOUPDATER=1
-      - DISABLE_UPDATES=1
+      # Where code, state and the workspace live is stated by the image
+      # (CLAUDE_CONFIG_DIR, OVERSEER_WORKSPACE, OVERSEER_PROVIDERS_DIR,
+      # OVERSEER_INTERNAL_DIR). Repeating a path here is how the two drift.
+      #
+      # This one is a fact about *this file's* topology, not the image's:
+      - DOCKER_HOST=tcp://dind:2375
       # From project .env (see .env.example). Unset → UTC.
       - TZ=${TZ:-UTC}
+      # Optional, from .env: authorship on the commits loop/bin/land writes,
+      # and the token loop/bin/publish needs before it can push anything.
+      - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME:-}
+      - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL:-}
+      - GIT_COMMITTER_NAME=${GIT_COMMITTER_NAME:-}
+      - GIT_COMMITTER_EMAIL=${GIT_COMMITTER_EMAIL:-}
+      - GH_TOKEN=${GH_TOKEN:-}
+    depends_on:
+      dind:
+        condition: service_started
 
 volumes:
-  claude-home:
+  # Every provider's config and auth — Claude's subscription token, Cursor's,
+  # and whatever the next CLI writes. One volume rather than one per provider:
+  # adding a provider should not mean editing two compose files. A named volume
+  # and never a bind mount — the argument in docs/architecture-design.md §6
+  # against mounting the operator's own ~/.claude. Discarded by ./bin/reset.
+  agent-home:
   # Internal memory: logs, the action register, the world snapshot. A named
   # volume and never a bind mount — the precedence rule in docs/overseer.md §6.1
   # only holds because nothing here is reachable from the host or from
-  # /workspace. Discarded by ./bin/reset along with the agent's auth.
+  # /workspace.
   overseer-memory:
+  # The dev loop's file store — request records, plans, verify records, the
+  # append-only index, and each workspace's accumulated memory. In dev this is
+  # the repo's own loop/db/ through the bind mount; here it has nowhere else to
+  # live, and none of it is regenerable.
+  loop-db:
+  # The workspace projects' own images and layers, built by the dind sidecar.
+  dind-storage:

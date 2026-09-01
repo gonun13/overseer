@@ -5,8 +5,15 @@
 # file — orchestration and the step instructions never see a flag or a binary
 # name.
 #
-# --workspace pins config discovery to this bundle's .cursor/ — never loop/
-# root, never the repo's own config, never another provider's tree.
+# Config discovery follows the process's cwd, not --workspace, so cwd stays on
+# this bundle and its .cursor/ is the only config the session sees — never
+# loop/ root, never the repo's own, never another provider's. (--workspace only
+# *defaults* to cwd; setting it moves the agent's workspace and nothing else.
+# Verified by pointing the two at different directories, each with a malformed
+# config: the CLI reported the cwd one both times.)
+#
+# The workspace itself is the project, which is what the operator asked for and
+# what the `implement` step edits.
 
 provider_check_available() {
   require_cmd agent
@@ -27,9 +34,8 @@ provider_session() {
   local prompt=$1 workspace_dir=$2 status=0
 
   (cd "$PROVIDER_ROOT" && agent \
-    --workspace "$PROVIDER_ROOT" \
+    --workspace "$workspace_dir" \
     --add-dir "$LOOP_DIR" \
-    --add-dir "$workspace_dir" \
     --force --trust \
     --sandbox disabled \
     "$prompt") || status=$?

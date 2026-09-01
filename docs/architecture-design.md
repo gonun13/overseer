@@ -121,6 +121,48 @@ a control row). The server single-flights it so two tabs cannot spawn two childr
 
 Normalized event union: `session.init`, `text.delta`, `thinking.delta`, `tool.start` / `tool.delta` / `tool.end`, `permission.request`, `todo.update`, `subagent.start` / `subagent.text` / `subagent.end`, `turn.end` (usage + cumulative process cost), `usage.limit`, `error`, `exit`.
 
+### 1.1.2 The provider registry
+
+`providers/<id>/` is the one declaration of what a provider is, read by both
+sides of this repo. A directory carries `manifest.json`, and — when the loop can
+open a session on it — `provider.sh` plus that provider's own config tree.
+
+```json
+{
+  "id": "claude-code",
+  "cli": "claude",
+  "configDir": ".claude",
+  "install": { "kind": "npm", "spec": "@anthropic-ai/claude-code@2.1.226" },
+  "app": "adapter",
+  "loop": "bundle"
+}
+```
+
+A provider can be implemented on one side, the other, or both, which is what the
+two role fields say. `app` is `adapter` when this server has real wiring,
+`stub` when the CLI is in the image but sessions/auth/console are not built yet,
+`none` when the app should not list it at all. `loop` is `bundle` when the
+directory carries `provider.sh`, `none` otherwise. `cursor` today is
+`stub`/`bundle`: the loop runs on it, the app only lists it.
+
+Three consumers, no duplication between them:
+
+| Consumer | Reads | For |
+|---|---|---|
+| `packages/server/src/provider-registry.ts` | every manifest | the adapter catalog — `adapter` gets its real implementation, `stub` gets a catalog-only adapter |
+| `loop/bin/lib/providers.sh` | manifests with `loop: "bundle"` | which bundles a session can be opened on |
+| `Dockerfile` (stage `agents`) | `install` | which CLIs the image carries |
+
+The Dockerfile is the one that cannot read JSON at build time without becoming
+unreadable, so it is kept in step by a lint rather than by generation:
+`loop/bin/check-providers` requires a `# provider-cli: <id>` marker and the
+literal spec or URL for every manifest with a non-null `install`, and fails on a
+marker no manifest backs. Adding a provider is a directory plus one line in the
+image.
+
+Where the registry lives is a deployment fact, `OVERSEER_PROVIDERS_DIR`, for the
+same reason `CLAUDE_CONFIG_DIR` and the workspace root are.
+
 ### 1.2 Process model — one long-lived process per session
 
 The `claude-code` adapter keeps one process open per active session in bidirectional streaming mode:
@@ -172,7 +214,7 @@ A raw file editor remains optional.
 
 ## 2. Auth & Config
 
-The container owns `~/.claude` in a named volume. Host config is never mounted.
+The container owns the agent's home in a named volume, `agent-home` — every provider CLI's config and auth, not Claude's alone (§6.2). Host config is never mounted.
 
 **Login from the frontend.** The system zone runs `claude auth login`, renders the emitted verification URL, and writes the returned code to the same subprocess. Account status comes from `claude auth status` JSON, never from inspecting credential files.
 
@@ -288,7 +330,7 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Command palette                   | global       | keyboard-first jump to any session, zone, or action                 |
 | Desktop notifications             | global       | on approval request or turn completion                              |
 | Additional providers              | —            | catalog stubs (`codex`, `opencode`, `github-copilot`) land early; full adapter runtime still later |
-| Dev-loop CLI                      | —            | incubating outside `packages/*` as `loop/`; bash + a provider CLI + files only (§9) |
+| Dev-loop CLI                      | —            | incubating outside `packages/*` as `loop/`; bash + a provider CLI + files only, in the app's container (§9) |
 
 ---
 
@@ -312,27 +354,36 @@ JSONL is undocumented and may drift. Use it only for history backfill, pin the C
 
 ```yaml
 services:
+  dind: # the daemon workspace projects build against (§6.3) — never the host's
+    image: docker:28-dind
+    privileged: true
+    volumes:
+      - dind-storage:/var/lib/docker
+      - ./workspace:/workspace # same path the app sees, or bind mounts break
+      - loop-db:/app/loop/db
   overseer:
     build: .
     ports: ["127.0.0.1:3000:3000"]
     volumes:
-      - claude-home:/home/node/.claude # container-owned; never bound to host
+      - agent-home:/home/overseer # every provider's auth; never bound to host
       - overseer-memory:/app/.overseer
+      - loop-db:/app/loop/db
       - ./workspace:/workspace # the only shared surface
     environment:
-      - CLAUDE_CONFIG_DIR=/home/node/.claude
-      - OVERSEER_INTERNAL_DIR=/app/.overseer
+      - DOCKER_HOST=tcp://dind:2375
 volumes:
-  claude-home:
+  agent-home:
   overseer-memory:
+  loop-db:
+  dind-storage:
 ```
 
-One service: the Node server serves the built SPA and handles `/api/*` + `/ws` on the same port. Agent and auth CLIs run as child processes; no reverse proxy is needed locally.
+Two services. The Node server serves the built SPA and handles `/api/*` + `/ws` on the same port; agent and auth CLIs run as child processes, and so does the dev loop (§9), so no reverse proxy is needed locally. The sidecar exists only so a workspace project's own `docker compose` test command has a daemon that is not the host's — see §6.3, and §6.2 for why paths are stated by the image rather than repeated here.
 
 - `/workspace/<project>/` — one git project per directory. Session creation picks one; it becomes the process `cwd`.
 - `/workspace/_overseer/` — import/export staging only.
 - `/app/.overseer/` — internal memory plus SQLite usage history, session index, and search index.
-- Image needs `git`, `ripgrep`, and a shell alongside Node; the CLI shells out to all three. Auth login uses plain pipes (§2). The raw OPEN CONSOLE escape hatch uses `node-pty` (native module), so image builds include a short-lived native toolchain for that dependency. Run as non-root.
+- The image is a plain Debian base with Node copied in from the pinned official image, not a `node:` base: this container is an agent host, and Node is one runtime among several — the provider CLIs between them ship npm globals and a self-contained bundle with its own node. Alongside Node it needs `git`, `ripgrep` and a shell, which the CLIs shell out to; `jq`, `flock`, GNU `find`/`sed`/`awk` and `shellcheck`, which the dev loop's bash does (§9); `gh`, which the loop's `publish` does; and the Docker client (§6.3). Auth login uses plain pipes (§2). The raw OPEN CONSOLE escape hatch uses `node-pty` (native module), so image builds include a short-lived native toolchain for that dependency. Run as non-root, at the host user's uid (§6.2).
 - The remaining shared-write risk is host-side git activity while an agent edits the same project. Show each session's branch and dirty state so conflicts are visible.
 
 ---
@@ -343,7 +394,7 @@ One service: the Node server serves the built SPA and handles `/api/*` + `/ws` o
 
 - This is **remote code execution as a service**. Publish the host port on `127.0.0.1`. LAN access requires authentication.
 - Check `Origin` on WebSocket upgrades and mutating HTTP requests; otherwise another page can drive the local server.
-- The container holds a live subscription token in `claude-home`. Any RCE inside it exfiltrates that token — which is also the argument for not mounting the host's `~/.claude`.
+- The container holds a live subscription token in `agent-home` — one per signed-in provider, since the app and the dev loop share it (§6.2). Any RCE inside it exfiltrates all of them, which is also the argument for not mounting the host's own config.
 - `bypassPermissions` removes the last guard. Gate it behind an explicit server-side opt-in mirroring the CLI's own `--allow-dangerously-skip-permissions` gesture, and render it in `--danger` whenever active. It is the one `permissionModes` entry carrying `danger`, so the control row already accents it; the server-side opt-in is still to build.
 
 The modes themselves are the CLI's own six — `acceptEdits`, `auto`, `bypassPermissions`,
@@ -356,6 +407,60 @@ UI never offers two words for one mode.
 In streaming-input mode, permission prompts arrive as `control_request` messages and are resolved with matching `control_response` messages. Re-initialization can redeliver pending requests, so the server deduplicates them by request ID. A `PreToolUse` hook is for policy that must inspect every tool call, not for ordinary user approval.
 
 ---
+
+### 6.2 Where things live
+
+One container runs the app and the loop, and the split between what an image
+rebuild replaces and what survives it is load-bearing:
+
+| Path | What | Persistence |
+|---|---|---|
+| `/app` | code — `packages/`, `loop/`, `providers/` | image; a bind mount of the repo in dev |
+| `/home/overseer` | every provider CLI's config and auth | the `agent-home` volume |
+| `/workspace` | the one surface shared with the host | host bind mount |
+| `/app/.overseer` | internal memory (docs/overseer.md §6.2) | the `overseer-memory` volume |
+| `/app/loop/db` | the dev loop's file store | the repo in dev, the `loop-db` volume in prod |
+
+**Nothing that an image rebuild must be able to replace may live under
+`/home/overseer`.** A named volume mounts there and shadows the image's copy
+from the first mount onward, so anything baked in is frozen at that moment. It
+is why Cursor's bundle is installed to `/opt` and symlinked onto `PATH` rather
+than left where its installer puts it, under `$HOME`.
+
+One volume for every provider rather than one per provider is deliberate:
+adding a provider should not mean editing two compose files, and a CLI that
+invents its own config path still persists. The cost is that `agent-home` holds
+every provider's token at once — the exposure §6 already names for Claude's,
+now plural.
+
+The container runs as the host user's uid/gid (`OVERSEER_UID`/`OVERSEER_GID`,
+filled by `bin/_lib.sh` from `id`). Without that, bind mounts owned by any user
+other than 1000 are unwritable and git refuses the workspace as dubiously owned.
+
+### 6.3 The daemon that builds workspace projects
+
+`loop/steps/verify.md` runs each project's own commands, and some of those are
+`docker compose` — `workspace/design-patterns/bin/test` is. So the stack ships a
+`dind` sidecar, and the app container gets the Docker client plus
+`DOCKER_HOST=tcp://dind:2375`.
+
+**Not a bind of the host's `/var/run/docker.sock`.** That socket is
+root-equivalent on the host; handing it to a container running an agent with an
+unprefixed `Bash` would let a `docker run -v /:/host` undo the entire boundary
+this section exists to draw. The sidecar's daemon has no view of the host's
+images, containers or filesystem. It is `privileged`, which is a real grant, but
+a scoped one.
+
+`/workspace` and the loop's `db/` are mounted into `dind` at the **same absolute
+paths** the app container sees. A project's compose file says
+`volumes: [.:/app]`; compose resolves `.` client-side and hands the daemon an
+absolute path, which the daemon then resolves in its own namespace. Without path
+parity every project bind mount silently mounts an empty directory. `db/` is in
+there because a `review` QA run happens in a worktree under it and runs the
+project's test command from there.
+
+2375 is never published; it is reachable on the compose network alone, which is
+the only reason plain tcp is acceptable.
 
 ## 7. Sizing
 
@@ -442,15 +547,31 @@ capability → `MINOR`; fix or internal cleanup → `PATCH`.
 
 ## 9. Dev Loop CLI (`loop/`)
 
-A standalone command-line tool, at `loop/` in this repo, that runs development
-loops — feature requests, fixes, changes — against a project under
-`workspace/<name>/`. It is **not** a `packages/*` workspace: it uses only bash
-scripts, a provider CLI, and plain files, runs directly on the host (not inside
-Docker), and is versioned/released independently of the §8.1 package table.
-It's incubating — see §3's Feature Map row — with the intent to fold into the
-main app later, at which point it would gain a real `packages/` entry and join
-the lockstep-versioned set. Usage lives in [`loop/README.md`](../loop/README.md);
-this section is the spec-level summary.
+A command-line tool, at `loop/` in this repo, that runs development loops —
+feature requests, fixes, changes — against a project under `workspace/<name>/`.
+It is **not** a `packages/*` workspace: it uses only bash scripts, a provider
+CLI, and plain files, and is versioned/released independently of the §8.1
+package table. It's incubating — see §3's Feature Map row — with the intent to
+fold into the main app, at which point it would gain a real `packages/` entry
+and join the lockstep-versioned set. Usage lives in
+[`loop/README.md`](../loop/README.md); this section is the spec-level summary.
+
+**It runs in the app's container, not on the host.** The `implement` step edits
+a project in place and runs that project's own test command, on a session
+granted `Write`, `Edit` and an unprefixed `Bash` — the widest grant anywhere in
+this repo, and a subagent inherits all of it. That belongs behind the same
+boundary as everything else here (§6), so `./bin/loop <workspace>` opens the
+session inside the running stack and `loop/run` refuses to start one on the
+host, keyed on `OVERSEER_IN_CONTAINER` exactly as `bin/_in-container.sh` guards
+the app's own npm scripts. The `loop/bin/*` commands are deliberately not
+guarded: they read and record state and open no session.
+
+Sharing the container is not only about the sandbox. The app and the loop are
+two front-ends onto the same three things — a workspace, a provider CLI, and a
+project's toolchain — and they used to disagree about all three. Now they do
+not: one `/workspace` (both read `OVERSEER_WORKSPACE`), one provider registry
+(§1.1.2), one `agent-home` volume holding every CLI's auth, and one Docker
+daemon for project builds (§6.2).
 
 **The overseer.** `loop/run <workspace>` opens one interactive session on the
 configured provider agent and hands it the terminal. That session is the
@@ -490,20 +611,26 @@ frontmatter and isn't per-request — it's a living document per workspace, read
 and rewritten on every `research` run, flowing forward to every future
 step/request for that workspace rather than just the next one.
 
-**Provider abstraction.** `loop/bin/lib/providers.sh` loads a self-contained
-bundle from `loop/providers/<id>/` (manifest + `provider.sh` + that provider's
-config tree). It mirrors the shape of the `AgentAdapter` split in §1.1 — an id
-string plus a small function contract — but is defined independently in bash,
-because the tool cannot read Overseer's own `attached_provider` state (§2's
-`state.json` lives inside a Docker-only volume, unreachable from a host-side
-script). The contract is two functions, `provider_check_available` and
-`provider_session <prompt> <workspace_dir>`, because a provider's whole job is
-to open one session. **Invariant:** the session's config discovery sees only
-that bundle's `PROVIDER_ROOT` — never `loop/` root, never another provider.
-Both `claude-code` (`providers/claude-code/`, CLI `claude`) and `cursor`
-(`providers/cursor/`, CLI `agent`) are real implementations.
-`loop/bin/check` lints that a provider's CLI name and config directory stay
-inside its own bundle, deriving what to look for from the manifests themselves.
+**Provider abstraction.** `loop/bin/lib/providers.sh` loads a bundle from the
+shared registry at `providers/<id>/` (§1.1.2) — `manifest.json` plus
+`provider.sh` plus that provider's config tree. The contract is two functions,
+`provider_check_available` and `provider_session <prompt> <workspace_dir>`,
+because a provider's whole job is to open one session. **Invariant:** the only
+config a session sees is its own bundle's — never `loop/` root, never another
+provider. Each bundle enforces that with whatever its CLI gives it, and the two
+differ: `claude-code` takes `--settings <file>` with `--setting-sources ""`, so
+no discovery runs at all, while `cursor` has no config-path flag and pins the
+process's working directory to the bundle instead. Stating the mechanism per
+bundle rather than as one sentence matters, because the weaker form is only as
+good as the CLI's preference for the nearest config — and the repo root is
+itself a git root carrying `.claude/`. **The session's workspace is always the
+project**, never the bundle: the operator asked for a project, and `implement`
+edits one. Both `claude-code` (CLI `claude`) and
+`cursor` (CLI `agent`) are real implementations; which one runs is the loop's
+own choice, in `loop/.provider`, and stays separate from the app's
+`attached_provider` (§2). `loop/bin/check-providers` lints that a provider's
+CLI name and config directory stay inside its own bundle, deriving what to look
+for from the manifests themselves.
 
 **Step instructions are provider-neutral.** Each step's behavior is one file,
 `loop/steps/<step>.md`, read by whichever agent runs that step — so it counts

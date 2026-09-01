@@ -204,7 +204,7 @@ workspace path.
 - **`index.sqlite`** stores application indexes and estimates; it is not billing truth.
 - The server owns all access; current log/state access lives in
   `packages/server/src/memory/internal.ts`.
-- `./bin/reset` discards this volume and `claude-home`. `reset overseer` in the settings panel empties the
+- `./bin/reset` discards this volume and `agent-home`. `reset overseer` in the settings panel empties the
   store from inside the running server and leaves auth alone (§6.5).
 
 ### 6.3 External memory — `overseer-personality`
@@ -266,7 +266,7 @@ nothing else in the field can be clicked or tabbed to.
 | `personality.json`                            | Yes    | The name and tone were given to this instance (§6.3).            |
 | The `overseer-personality` project around it  | No     | An ordinary git project with the operator's own history in it.   |
 | Workspace projects                            | No     | Never the overseer's to remove.                                  |
-| Provider auth (`claude-home`)                 | No     | Sign-in is not memory. `./bin/reset` is what discards that.      |
+| Provider auth (`agent-home`)                  | No     | Sign-in is not memory. `./bin/reset` is what discards that.      |
 
 The order is `personality.json` → run logs → action register → snapshot (`erasing memory`). The snapshot
 goes last so the operations window ends on memory itself; the register is still cleared before that so the

@@ -1,5 +1,5 @@
 #!/usr/bin/env sh
-# Stop the dev stack. Named volumes (claude-home, overseer-memory,
+# Stop the dev stack. Named volumes (agent-home, overseer-memory, dind-storage,
 # node_modules) survive — use ./bin/reset to discard them.
 . "$(dirname -- "$0")/_lib.sh"
 
