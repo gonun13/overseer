@@ -28,6 +28,22 @@ export function usageRetrieveLabel(secondsLeft: number | null): string {
 }
 
 /**
+ * Widget copy while a manual check runs. Counts up rather than down: this is a
+ * real CLI turn (~1 minute for cursor), not a race against a server deadline.
+ */
+export function usageCheckLabel(elapsed: number): string {
+  return `reading usage... ${elapsed}s`;
+}
+
+/**
+ * A check came back that no gauge could be read out of — the provider
+ * answered in a shape the adapter's parser did not recognise. Said plainly
+ * rather than left as a blank where the numbers should be, which would read
+ * as "nothing used".
+ */
+export const USAGE_UNREADABLE_LABEL = "usage check found no figures";
+
+/**
  * Provider light: green when signed in, red when the runtime is down, amber
  * when it answered but is not signed in.
  */

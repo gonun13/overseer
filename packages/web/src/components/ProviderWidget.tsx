@@ -1,11 +1,17 @@
 import type { AdapterUsageWindow } from "@overseer/protocol";
 import type { ProviderInfo } from "../domain";
-import { useUsageRetrieveCountdown } from "../state/useUsageRetrieveCountdown";
+import {
+  useUsageCheckElapsed,
+  useUsageRetrieveCountdown,
+} from "../state/useUsageRetrieveCountdown";
+import type { UsageCheckState } from "../state/useUsageCheck";
 import {
   providerAuthActivity,
   providerAuthLabel,
   providerUsageDisplay,
+  usageCheckLabel,
   usageRetrieveLabel,
+  USAGE_UNREADABLE_LABEL,
 } from "./usageDisplay";
 import { StatusLight } from "./StatusLight";
 
@@ -17,30 +23,56 @@ import { StatusLight } from "./StatusLight";
  * instrument sitting on the field (design-system.md §6.2). The readout opens
  * the provider picker; when a provider is signed in, OPEN CONSOLE sits under it.
  *
- * Usage gauges stay hidden until the provider has a real reading. While a
- * refresh is in flight the instrument counts down; after a miss it says usage is
- * unavailable rather than leaving a blank that looks like "not asked yet".
+ * Usage gauges stay hidden until the provider has a real reading, from either
+ * of two paths that never both apply to one provider:
+ *
+ * - automatic (`refreshUsage`, claude-code) — the widget counts down while a
+ *   refresh is in flight and says so after a miss, because something is
+ *   genuinely happening on its own;
+ * - on demand (`checkUsage`, cursor) — nothing happens until the operator
+ *   presses CHECK USAGE, so there is no "retrieving…" to show and no miss to
+ *   report; the button is the whole story until a reading comes back.
  *
  * The light is auth + reachability: green signed in, red when the CLI is down,
  * amber when it answered but is not signed in.
  */
 export function ProviderWidget({
   provider,
+  usageCheck,
   onOpenProviders,
   onOpenConsole,
 }: {
   provider: ProviderInfo;
+  usageCheck: UsageCheckState;
   onOpenProviders: () => void;
   onOpenConsole: () => void;
 }) {
   const activity = providerAuthActivity(provider);
   const attached = provider.name !== "";
-  const { state: usageState, windows } = providerUsageDisplay(provider);
+  const { state: usageState, windows: reported } =
+    providerUsageDisplay(provider);
   const { secondsLeft, timedOut } = useUsageRetrieveCountdown(
     usageState === "pending",
   );
-  const showPending = usageState === "pending" && !timedOut;
-  const showUnavailable = usageState === "unavailable" || timedOut;
+  const elapsed = useUsageCheckElapsed(usageCheck.checking);
+
+  // On-demand providers own the usage block outright: their status carries no
+  // automatic reading to wait on or to mourn, so the countdown and the "not
+  // available" line would both be describing a path that does not exist here.
+  const manual = provider.usageCheck && provider.authenticated;
+  const showPending = !manual && usageState === "pending" && !timedOut;
+  const showUnavailable =
+    !manual && (usageState === "unavailable" || timedOut);
+
+  const windows = manual ? usageCheck.windows : reported;
+  const spend = usageCheck.spend ?? provider.spend;
+  // A check came back that no gauge could be read out of — say so rather than
+  // leaving a blank where the numbers should be.
+  const unreadable =
+    manual &&
+    !usageCheck.checking &&
+    usageCheck.checked &&
+    usageCheck.windows.length === 0;
 
   return (
     <div className="widget settles-in">
@@ -71,11 +103,18 @@ export function ProviderWidget({
               <span className="widget-dim">{providerAuthLabel(provider)}</span>
             </span>
 
-            {usageState === "ready" && windows.length > 0 && (
+            {windows.length > 0 && (
               <span className="widget-usage">
                 <span className="widget-kicker">usage</span>
-                {windows.map((window) => (
-                  <UsageMeter key={window.id} window={window} />
+                {windows.map((window, index) => (
+                  <UsageMeter
+                    key={window.id}
+                    window={window}
+                    // Claude's windows each reset on their own clock and each
+                    // say so; cursor's pools all turn over with one billing
+                    // cycle, and three copies of the same date is noise.
+                    showResets={window.resets !== windows[index - 1]?.resets}
+                  />
                 ))}
               </span>
             )}
@@ -96,11 +135,27 @@ export function ProviderWidget({
               </span>
             )}
 
-            {(provider.spend || provider.context) && (
+            {usageCheck.checking && (
               <span className="widget-row">
-                {provider.spend && (
-                  <span className="widget-num">{provider.spend}</span>
-                )}
+                <span className="widget-dim">{usageCheckLabel(elapsed)}</span>
+              </span>
+            )}
+
+            {unreadable && (
+              <span className="widget-row">
+                <span className="widget-dim">{USAGE_UNREADABLE_LABEL}</span>
+              </span>
+            )}
+
+            {manual && !usageCheck.checking && usageCheck.error && (
+              <span className="widget-row">
+                <span className="widget-dim">{usageCheck.error}</span>
+              </span>
+            )}
+
+            {(spend || provider.context) && (
+              <span className="widget-row">
+                {spend && <span className="widget-num">{spend}</span>}
                 {provider.context && (
                   <span className="widget-num">{provider.context} ctx</span>
                 )}
@@ -109,6 +164,19 @@ export function ProviderWidget({
           </>
         )}
       </button>
+
+      {manual && (
+        <button
+          type="button"
+          className="widget-action"
+          disabled={usageCheck.checking}
+          onClick={usageCheck.check}
+        >
+          {usageCheck.checking ? "reading" : "check"}{" "}
+          <span className="widget-action-word">usage</span>
+          {!usageCheck.checking && windows.length > 0 ? " again" : ""}
+        </button>
+      )}
 
       {provider.authenticated && (
         <button
@@ -123,7 +191,13 @@ export function ProviderWidget({
   );
 }
 
-function UsageMeter({ window }: { window: AdapterUsageWindow }) {
+function UsageMeter({
+  window,
+  showResets,
+}: {
+  window: AdapterUsageWindow;
+  showResets: boolean;
+}) {
   const percent = Math.round(window.used * 100);
   const color =
     window.used >= 0.95
@@ -144,7 +218,7 @@ function UsageMeter({ window }: { window: AdapterUsageWindow }) {
           style={{ width: `${percent}%`, background: color }}
         />
       </span>
-      {window.resets && (
+      {showResets && window.resets && (
         <span className="widget-row">
           <span className="widget-dim">resets {window.resets}</span>
         </span>

@@ -122,8 +122,11 @@
 }
 
 /* Same register as the old footer console link — a word you can click, with
-   CONSOLE in --ok. Only mounted when the provider is signed in. */
-.widget-console {
+   the noun in --ok. CONSOLE is mounted when the provider is signed in; CHECK
+   USAGE only for a provider whose adapter answers on demand rather than on a
+   timer (AdapterCapabilities.usageCheck). */
+.widget-console,
+.widget-action {
   margin: 0;
   padding: 0 2px;
   border: 0;
@@ -137,12 +140,25 @@
   cursor: pointer;
 }
 
-.widget-console:hover {
+.widget-console:hover,
+.widget-action:not(:disabled):hover {
   color: var(--text);
 }
 
-.widget-console-word {
+.widget-console-word,
+.widget-action-word {
   color: var(--ok);
+}
+
+/* The ask is in flight — pressing again would only queue a second minute of
+   waiting behind the first, which the server would refuse anyway. */
+.widget-action:disabled {
+  cursor: default;
+  color: var(--text-faint);
+}
+
+.widget-action:disabled .widget-action-word {
+  color: var(--text-faint);
 }
 
 .gauge {

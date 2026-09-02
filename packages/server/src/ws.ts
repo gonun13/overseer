@@ -11,6 +11,7 @@ import { listAdapters } from "./adapters.js";
 import { consoleError, createConsoleSession } from "./console.js";
 import { runDiscovery } from "./discovery.js";
 import { createProviderOptions } from "./provider-options.js";
+import { createUsageCheck } from "./usage-check.js";
 import {
   readLoopConfig,
   readLoopModels,
@@ -139,6 +140,7 @@ export function attachWebSocketServer(httpServer: Server): {
 
   const sessionSupervisor = createSessionSupervisor(broadcast);
   const providerOptions = createProviderOptions();
+  const usageCheck = createUsageCheck();
 
   httpServer.on("upgrade", (req: IncomingMessage, socket, head) => {
     if (
@@ -554,6 +556,26 @@ export function attachWebSocketServer(httpServer: Server): {
             providerId: result.providerId,
             projectDir: result.projectDir,
             options: result.options,
+          });
+          return;
+        }
+        case "provider.checkUsage": {
+          const result = await usageCheck.check();
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "provider.checkUsage",
+              benign: true,
+              message: result.reason,
+            });
+            return;
+          }
+          broadcast({
+            type: "provider.usageCheck",
+            id: result.providerId,
+            report: result.report,
+            windows: result.windows,
+            ...(result.spend !== undefined ? { spend: result.spend } : {}),
           });
           return;
         }

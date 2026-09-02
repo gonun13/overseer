@@ -33,3 +33,29 @@ export function useUsageRetrieveCountdown(pending: boolean): {
     timedOut: pending && secondsLeft === 0,
   };
 }
+
+/**
+ * Seconds spent so far on a manual `provider.checkUsage`.
+ *
+ * Counts *up*, unlike the automatic path above: that one races a deadline the
+ * server guarantees, this one is a real CLI turn whose honest answer to "how
+ * long?" is "about a minute, and it is still going". A countdown here would
+ * expire while the ask was still perfectly healthy.
+ */
+export function useUsageCheckElapsed(checking: boolean): number {
+  const [elapsed, setElapsed] = useState(0);
+
+  useEffect(() => {
+    if (!checking) {
+      setElapsed(0);
+      return;
+    }
+    const started = Date.now();
+    const tick = () => setElapsed(Math.floor((Date.now() - started) / 1000));
+    tick();
+    const id = window.setInterval(tick, 1000);
+    return () => window.clearInterval(id);
+  }, [checking]);
+
+  return elapsed;
+}

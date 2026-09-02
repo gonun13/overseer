@@ -17,6 +17,13 @@ export interface AdapterCapabilities {
    * UI grows no login controls at all — an adapter that authenticates some
    * other way must not be handed a dead button. */
   login: boolean;
+  /**
+   * Whether this adapter offers `checkUsage` — an on-demand, operator-
+   * triggered usage report, distinct from `costReporting`'s automatic
+   * gauges. False means the UI grows no "check usage" button, rather than
+   * offering one that always fails.
+   */
+  usageCheck: boolean;
 }
 
 /**
@@ -188,6 +195,26 @@ export interface AdapterUsageWindow {
 export type AdapterUsageState = "pending" | "ready" | "unavailable";
 
 /**
+ * Result of an on-demand `checkUsage` ask (see `AgentAdapter.checkUsage`).
+ *
+ * `report` is the adapter's own prose, kept verbatim — it is the receipt for
+ * `windows`, and the only thing to show when nothing could be read out of it.
+ * `windows` is a best-effort parse of that prose: the shape is not guaranteed
+ * stable across runs (an adapter may be reading a model's own write-up), so
+ * an unreadable report yields an empty list rather than a placeholder 0%.
+ */
+export type AdapterUsageCheck =
+  | {
+      ok: true;
+      report: string;
+      /** Gauges read out of `report`. Empty when its shape defeated the parse. */
+      windows: AdapterUsageWindow[];
+      /** Spend for the cycle, in the provider's own words (e.g. `$45.13`). */
+      spend?: string;
+    }
+  | { ok: false; reason: string };
+
+/**
  * Whether this adapter could actually start a session right now. Asked before
  * any session exists — the wizard's auth-check step calls this, so it must not
  * assume a session, a project or a running process.
@@ -351,6 +378,16 @@ export interface AgentAdapter {
    * Resolves to `usageState: "ready" | "unavailable"`; never throws.
    */
   refreshUsage?(): Promise<AdapterStatus>;
+  /**
+   * On-demand usage report as the CLI's own prose, for an adapter whose only
+   * usage surface is a real agent turn rather than a free deterministic
+   * command (cursor's `/usage` is an ordinary prompt the model answers, not a
+   * client-intercepted report — real tokens, real latency, no fixed shape).
+   * Never scheduled automatically and never parsed into `AdapterUsageWindow`
+   * gauges the way `refreshUsage` is — only asked when the operator asks.
+   * Absent when the adapter has no such path. Never throws.
+   */
+  checkUsage?(opts: { projectDir: string }): Promise<AdapterUsageCheck>;
   /**
    * What this provider offers a session in one project — models, permission
    * modes, subagents. Absent when the adapter cannot enumerate them, in which

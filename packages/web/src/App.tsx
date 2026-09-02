@@ -19,6 +19,7 @@ import { usePromptSession } from "./state/usePromptSession";
 import { useProviderOptions } from "./state/useProviderOptions";
 import { useShellKeyboard } from "./state/useShellKeyboard";
 import { useShellPresentation } from "./state/useShellPresentation";
+import { useUsageCheck } from "./state/useUsageCheck";
 import { useWindows } from "./state/useWindows";
 
 /** Tab label for a chat window: session name + project as dim detail. */
@@ -114,6 +115,8 @@ export default function App() {
     optionsProviderId,
     wizard.activeProjectPath,
   );
+
+  const usageCheck = useUsageCheck(wizard.send, wizard.subscribeSession);
 
   const {
     config: loopConfig,
@@ -524,6 +527,7 @@ export default function App() {
             shell.furniture.providerWidget ? (
               <ProviderWidget
                 provider={shell.provider}
+                usageCheck={usageCheck}
                 onOpenProviders={() => open("providers")}
                 onOpenConsole={() => open("console")}
               />

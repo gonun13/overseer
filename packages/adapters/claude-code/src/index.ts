@@ -35,6 +35,9 @@ const capabilities: AdapterCapabilities = {
   checkpoints: false,
   backgroundAgents: false,
   login: true,
+  // No checkUsage: refreshUsage already covers this adapter's usage surface
+  // with a free, deterministic report — a second, manual path is redundant.
+  usageCheck: false,
 };
 
 function configDir(): string {

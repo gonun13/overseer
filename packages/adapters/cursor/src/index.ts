@@ -3,6 +3,7 @@ import type {
   AgentAdapter,
   AdapterCapabilities,
   AdapterStatus,
+  AdapterUsageCheck,
   ConsoleHandle,
   ConsoleOpts,
   ProviderOptions,
@@ -22,6 +23,7 @@ import {
   readSessionHistory,
   sessionsWatchPath,
 } from "./transcripts.js";
+import { checkUsage as runUsageCheck } from "./usage.js";
 
 /**
  * Cursor's own capabilities, honestly scoped to what this adapter actually
@@ -42,6 +44,11 @@ import {
  * - `costReporting: false` — `result`'s `usage` is token counts only, no
  *   dollar figure; reporting a permanent `$0.00` would be a false zero, not
  *   an honest "unavailable".
+ * - `usageCheck: true` — no `refreshUsage` (see `getStatus` below), but
+ *   `checkUsage` (`usage.ts`) is real: `/usage` is not a client-intercepted
+ *   command here, it is a plain prompt the model answers with a real turn —
+ *   verified live, ~46s and ~37k tokens for one ask. Manual and unscheduled
+ *   for exactly that reason.
  */
 const capabilities: AdapterCapabilities = {
   streamingDeltas: true,
@@ -55,6 +62,7 @@ const capabilities: AdapterCapabilities = {
   checkpoints: false,
   backgroundAgents: false,
   login: true,
+  usageCheck: true,
 };
 
 export const cursorAdapter: AgentAdapter = {
@@ -73,11 +81,22 @@ export const cursorAdapter: AgentAdapter = {
     return [];
   },
   async getStatus(): Promise<AdapterStatus> {
-    return readAuthStatus();
+    const status = await readAuthStatus();
+    // No refreshUsage exists below — cursor exposes no subscription-window
+    // reading this adapter could ask for (unlike claude-code's `/usage`).
+    // Stamp `unavailable` up front, signed in or not, rather than leaving
+    // `usageState` undefined: the widget's fallback reads an absent state on
+    // an authenticated status as "pending" and shows a countdown for a
+    // refresh that will never run.
+    return status.authenticated
+      ? { ...status, usageState: "unavailable" }
+      : status;
   },
-  // No refreshUsage: cursor exposes no subscription-window reading this
-  // adapter could ask for (unlike claude-code's `/usage`) — omitted rather
-  // than reporting a `usageState` that never resolves to anything.
+  // No refreshUsage: see the `usageState: "unavailable"` stamp in getStatus
+  // above — there is nothing for a refresh to move it on to.
+  checkUsage(opts: { projectDir: string }): Promise<AdapterUsageCheck> {
+    return runUsageCheck(opts);
+  },
   listOptions(opts: { projectDir: string }): Promise<ProviderOptions> {
     return readProviderOptions(opts);
   },

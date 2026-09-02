@@ -1,5 +1,6 @@
 import type {
   AdapterStatus,
+  AdapterUsageWindow,
   LoginPhase,
   PermissionMode,
   ProviderOption,
@@ -54,6 +55,15 @@ export type ClientMessage =
    * connect time: the answer costs a subprocess, and only a client with the
    * controls on screen needs it. */
   | { type: "provider.options" }
+  /**
+   * Ask the attached provider for an on-demand usage report (`AgentAdapter
+   * .checkUsage`) — the operator's own request, never sent automatically.
+   * Unlike `provider.options`, some adapters answer this with a real,
+   * possibly slow, possibly costly CLI turn (cursor's `/usage` is an ordinary
+   * prompt the model answers, not a free deterministic command), so it is
+   * gated behind an explicit ask rather than run on any timer.
+   */
+  | { type: "provider.checkUsage" }
   /** Start the provider's login. Single-flight on the server: a second asker
    * joins the flow already running rather than spawning a second one, because
    * each spawn mints its own PKCE challenge and the operator would be holding
@@ -217,6 +227,24 @@ export interface ProviderStatusMessage {
   type: "provider.status";
   id: string;
   status: AdapterStatus;
+}
+
+/**
+ * Reply to `provider.checkUsage` (see `AdapterUsageCheck`): `windows` are the
+ * gauges the widget draws, `report` the prose they were read out of — kept so
+ * an unreadable report still has something to show, and so the numbers on the
+ * instrument always have a receipt behind them.
+ *
+ * Broadcast, same reasoning as `ProviderOptionsMessage`: the ask can be slow
+ * and costly, so a second tab must not trigger a second one just to see the
+ * answer that is already on its way.
+ */
+export interface ProviderUsageCheckMessage {
+  type: "provider.usageCheck";
+  id: string;
+  report: string;
+  windows: AdapterUsageWindow[];
+  spend?: string;
 }
 
 /**
@@ -413,6 +441,7 @@ export type ServerMessage =
   | ThemeSelectedMessage
   | ProviderConnectedMessage
   | ProviderStatusMessage
+  | ProviderUsageCheckMessage
   | ProviderOptionsMessage
   | AuthStateMessage
   | WorkspaceProjectsMessage
@@ -493,6 +522,7 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     return typeof (value as { id?: unknown }).id === "string";
   }
   if (type === "provider.options") return true;
+  if (type === "provider.checkUsage") return true;
   if (type === "auth.start" || type === "auth.signout") {
     return typeof (value as { providerId?: unknown }).providerId === "string";
   }

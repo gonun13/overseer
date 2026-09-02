@@ -117,10 +117,14 @@ export function useDiscovery(): DiscoveryController {
         message.type === "session.event" ||
         message.type === "session.meta" ||
         // What the provider offers a session is a session-control concern, and
-        // its refusals are benign the same way the console's are.
+        // its refusals are benign the same way the console's are. A manual
+        // usage check is the same kind of ask — on-demand, provider-scoped,
+        // a refusal that must not tear the wizard down.
         message.type === "provider.options" ||
+        message.type === "provider.usageCheck" ||
         (message.type === "error" && message.about?.startsWith("session.")) ||
-        (message.type === "error" && message.about === "provider.options")
+        (message.type === "error" && message.about === "provider.options") ||
+        (message.type === "error" && message.about === "provider.checkUsage")
       ) {
         for (const listener of sessionListeners.current) listener(message);
         return;

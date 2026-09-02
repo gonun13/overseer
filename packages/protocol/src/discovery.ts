@@ -50,6 +50,9 @@ export interface DiscoveredProvider {
    * not be handed a dead Claude-shaped sign-in surface.
    */
   login: boolean;
+  /** Mirrors `AdapterCapabilities.usageCheck` — gates the "check usage"
+   * button the same way `login` gates the sign-in controls. */
+  usageCheck: boolean;
   /**
    * True when this provider was signed in on a previous run and now is not.
    *

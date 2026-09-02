@@ -18,6 +18,7 @@ const stubCapabilities: AdapterCapabilities = {
   checkpoints: false,
   backgroundAgents: false,
   login: false,
+  usageCheck: false,
 };
 
 /**
