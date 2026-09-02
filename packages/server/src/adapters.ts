@@ -1,5 +1,6 @@
 import type { AgentAdapter } from "@overseer/protocol";
 import { claudeCodeAdapter } from "@overseer/adapter-claude-code";
+import { cursorAdapter } from "@overseer/adapter-cursor";
 import { readProviderManifests } from "./provider-registry.js";
 import { stubAdapter } from "./stub-adapters.js";
 
@@ -25,6 +26,7 @@ const register = (adapter: AgentAdapter) => registry.set(adapter.id, adapter);
 /** Adapters this build has real wiring for, keyed by the id they claim. */
 const implemented = new Map<string, AgentAdapter>([
   [claudeCodeAdapter.id, claudeCodeAdapter],
+  [cursorAdapter.id, cursorAdapter],
 ]);
 
 for (const manifest of readProviderManifests()) {

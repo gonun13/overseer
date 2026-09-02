@@ -72,6 +72,10 @@ export interface DiscoveryController extends WizardState {
   subscribeSession: (
     listener: (message: ServerMessage) => void,
   ) => () => void;
+  /** Subscribe to loop.config and its error frames. */
+  subscribeLoop: (
+    listener: (message: ServerMessage) => void,
+  ) => () => void;
 }
 
 export function useDiscovery(): DiscoveryController {
@@ -81,6 +85,9 @@ export function useDiscovery(): DiscoveryController {
     new Set<(message: ServerMessage) => void>(),
   );
   const sessionListeners = useRef(
+    new Set<(message: ServerMessage) => void>(),
+  );
+  const loopListeners = useRef(
     new Set<(message: ServerMessage) => void>(),
   );
 
@@ -116,6 +123,18 @@ export function useDiscovery(): DiscoveryController {
         (message.type === "error" && message.about === "provider.options")
       ) {
         for (const listener of sessionListeners.current) listener(message);
+        return;
+      }
+      if (
+        message.type === "loop.config" ||
+        message.type === "loop.models" ||
+        (message.type === "error" && message.about?.startsWith("loop."))
+      ) {
+        // The loop's own config, independent of the app's attached provider —
+        // its refusals are benign the same way console/session ones are, and
+        // must reach the loop tab rather than fall into the generic benign-
+        // error return below, which would just drop them silently.
+        for (const listener of loopListeners.current) listener(message);
         return;
       }
       if (message.type === "connected") {
@@ -367,6 +386,16 @@ export function useDiscovery(): DiscoveryController {
     [],
   );
 
+  const subscribeLoop = useCallback(
+    (listener: (message: ServerMessage) => void) => {
+      loopListeners.current.add(listener);
+      return () => {
+        loopListeners.current.delete(listener);
+      };
+    },
+    [],
+  );
+
   // Welcome already required a live socket, so discovery always starts with
   // one — and only after name, tone and the greet presentation have finished.
   // Re-check readyState in case the connection dropped between phases.
@@ -401,6 +430,7 @@ export function useDiscovery(): DiscoveryController {
       send,
       subscribeConsole,
       subscribeSession,
+      subscribeLoop,
     }),
     [
       state,
@@ -420,6 +450,7 @@ export function useDiscovery(): DiscoveryController {
       send,
       subscribeConsole,
       subscribeSession,
+      subscribeLoop,
     ],
   );
 }

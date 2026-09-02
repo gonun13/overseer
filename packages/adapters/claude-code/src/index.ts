@@ -1,5 +1,6 @@
 import { join as pathJoin } from "node:path";
 import type {
+  AdapterSessionStore,
   AgentAdapter,
   AdapterCapabilities,
   AdapterStatus,
@@ -90,6 +91,23 @@ export const claudeCodeAdapter: AgentAdapter = {
     // appears with the first session in it.
     return pathJoin(configDir(), "projects");
   },
+  sessions: {
+    listProjectSessions,
+    readSessionHistory,
+    // Wrapped async — the interface accommodates a provider whose open must
+    // itself be a CLI round-trip (cursor's); claude's own is synchronous.
+    async openSession(sessionId: string, opts: SessionOpts): Promise<SessionHandle> {
+      return openSession(sessionId, opts);
+    },
+    // Wrapped async — the interface accommodates a provider whose id must
+    // come from a CLI round-trip (cursor's `create-chat`); claude's own is
+    // synchronous and just needs the shape.
+    async mintSessionId(): Promise<string> {
+      return mintSessionId();
+    },
+    lookupSessionTitle,
+    deleteSession,
+  } satisfies AdapterSessionStore,
 };
 
 async function findProjectDirForSession(sessionId: string): Promise<string> {

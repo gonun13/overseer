@@ -12,6 +12,7 @@ import type {
 } from "../session";
 import type { Chat } from "../state/useChatSessions";
 import type { DiscoveryController } from "../state/useDiscovery";
+import type { LoopConfigState, LoopModelsEntry } from "../state/useLoopConfig";
 import type { OpenWindow, WindowKind } from "../windows";
 import { Window } from "./Window";
 import { ApprovalsWindow } from "./windows/ApprovalsWindow";
@@ -21,6 +22,7 @@ import { ConsoleWindow } from "./windows/ConsoleWindow";
 import { ContextWindow } from "./windows/ContextWindow";
 import { DiffWindow } from "./windows/DiffWindow";
 import { HelpWindow } from "./windows/HelpWindow";
+import { LoopModelsWindow } from "./windows/LoopModelsWindow";
 import { OverseerWindow } from "./windows/OverseerWindow";
 import { ProvidersWindow } from "./windows/ProvidersWindow";
 import { SessionWindow } from "./windows/SessionWindow";
@@ -69,6 +71,16 @@ interface WindowStackHostProps {
   loopTakeover: boolean;
   /** A loop row goes to its console, never to a chat window. */
   onOpenLoopSession: (session: Session) => void;
+  /** The loop's own provider/model configuration — independent of `provider`
+   * above, which is the app's single attached one. */
+  loopConfig: LoopConfigState;
+  onSetLoopProvider: (id: string) => void;
+  onSetLoopModel: (providerId: string, slot: string, model: string) => void;
+  /** Model lists per loop-runnable provider, fetched on demand
+   * (`onReadLoopModels`) straight from that provider's own CLI — independent
+   * of which provider (if any) the app has attached. */
+  loopModelsByProvider: Record<string, LoopModelsEntry>;
+  onReadLoopModels: (providerId: string) => void;
 }
 
 /** Renders window frames and dispatches each window kind to its content. */
@@ -100,6 +112,11 @@ export function WindowStackHost({
   subscribeConsole,
   loopTakeover,
   onOpenLoopSession,
+  loopConfig,
+  onSetLoopProvider,
+  onSetLoopModel,
+  loopModelsByProvider,
+  onReadLoopModels,
 }: WindowStackHostProps) {
   const [approvals, setApprovals] = useState<Approval[]>([]);
   const models = sessionOptions.find((o) => o.key === "model")?.values ?? [];
@@ -156,6 +173,20 @@ export function WindowStackHost({
             onSubmitCode={wizard.submitAuthCode}
             onCancelLogin={wizard.cancelLogin}
             onSignOut={wizard.signOut}
+            loopConfig={loopConfig}
+            onSetLoopProvider={onSetLoopProvider}
+            onOpenLoopModels={(id) => openWindow("loopModels", id, id)}
+          />
+        )}
+        {windowState.kind === "loopModels" && (
+          <LoopModelsWindow
+            providerId={String(windowState.payload ?? "")}
+            loopConfig={loopConfig}
+            entry={loopModelsByProvider[String(windowState.payload ?? "")]}
+            onReadModels={onReadLoopModels}
+            onSetModel={(slot, model) =>
+              onSetLoopModel(String(windowState.payload ?? ""), slot, model)
+            }
           />
         )}
         {windowState.kind === "sessions" && (

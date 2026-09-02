@@ -12,6 +12,12 @@ import { consoleError, createConsoleSession } from "./console.js";
 import { runDiscovery } from "./discovery.js";
 import { createProviderOptions } from "./provider-options.js";
 import {
+  readLoopConfig,
+  readLoopModels,
+  setLoopModel,
+  setLoopProvider,
+} from "./loop-config.js";
+import {
   cancelLogin,
   currentAuthState,
   signOut as runSignOut,
@@ -599,6 +605,60 @@ export function attachWebSocketServer(httpServer: Server): {
         case "session.delete": {
           const result = await sessionSupervisor.delete(parsed.sessionId);
           if (!result.ok) send(sessionError("session.delete", result.reason));
+          return;
+        }
+        // The loop's own provider/model config — independent of the app's
+        // attached provider above. Broadcast, not sent to one socket: a
+        // change from any tab has to land in every tab's loop window.
+        case "loop.config.read": {
+          try {
+            broadcast(await readLoopConfig());
+          } catch (error) {
+            send({
+              type: "error",
+              about: "loop.config.read",
+              benign: true,
+              message: error instanceof Error ? error.message : "could not read loop config",
+            });
+          }
+          return;
+        }
+        case "loop.provider.set": {
+          try {
+            await setLoopProvider(parsed.id);
+          } catch (error) {
+            send({
+              type: "error",
+              about: "loop.provider.set",
+              benign: true,
+              message: error instanceof Error ? error.message : "could not set loop provider",
+            });
+            return;
+          }
+          broadcast(await readLoopConfig());
+          return;
+        }
+        case "loop.model.set": {
+          try {
+            await setLoopModel(parsed.providerId, parsed.slot, parsed.model);
+          } catch (error) {
+            send({
+              type: "error",
+              about: "loop.model.set",
+              benign: true,
+              message: error instanceof Error ? error.message : "could not set loop model",
+            });
+            return;
+          }
+          broadcast(await readLoopConfig());
+          return;
+        }
+        case "loop.models.read": {
+          // Never refuses — readLoopModels reports an empty list rather than
+          // throwing, so there is no error path to send here (an unreachable
+          // or signed-out CLI is a legitimate, displayable answer: "nothing
+          // to pick from yet", not a broken request).
+          broadcast(await readLoopModels(parsed.providerId));
           return;
         }
       }

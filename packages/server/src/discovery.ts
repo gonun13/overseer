@@ -45,6 +45,31 @@ import {
 
 type Emit = (event: DiscoveryEvent) => void;
 
+/**
+ * Which provider counts as attached: the operator's own previous pick, if it
+ * is still registered — restored, never re-guessed. Only when nothing was
+ * ever picked (or that pick is gone — the adapter was uninstalled, or memory
+ * was reset) does this look further, and even then only for a provider that
+ * is *already signed in*: auto-attaching an unauthenticated one would
+ * surprise the operator with a login flow they did not ask for, which is
+ * exactly what "never auto-attach" was guarding against before this existed.
+ * A container whose CLI is already logged in should not sit with an empty
+ * widget waiting for a click that would only confirm what is already true.
+ *
+ * One function so the mid-pass status line and the final snapshot/event
+ * cannot independently reach different answers.
+ */
+export function pickAttachedProvider(
+  previousId: string | undefined,
+  results: DiscoveredProvider[],
+): DiscoveredProvider | undefined {
+  if (previousId !== undefined) {
+    const remembered = results.find((p) => p.id === previousId);
+    if (remembered !== undefined) return remembered;
+  }
+  return results.find((p) => p.status.authenticated);
+}
+
 type StepResult<T> = {
   value: T;
   outcome: DiscoveryOutcome;
@@ -249,8 +274,11 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
     },
   );
 
-  // 5. Providers — list what is registered and their auth status. Never
-  // auto-attach: only restore a previously connected id if it is still here.
+  // 5. Providers — list what is registered and their auth status. Restores a
+  // previously connected id if it is still here; failing that, auto-attaches
+  // the first one already signed in (pickAttachedProvider) rather than
+  // leaving the widget empty for a provider that needs no operator action at
+  // all to be usable.
   const providers = await step<DiscoveredProvider[]>(
     "providers",
     "checking provider auth",
@@ -286,15 +314,14 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
         }),
       );
 
-      const remembered = previous?.attached_provider;
-      const attached =
-        remembered !== undefined
-          ? results.find((p) => p.id === remembered)
-          : undefined;
+      const attached = pickAttachedProvider(previous?.attached_provider, results);
 
       // Registered alone is not success — the operator still needs to connect
       // (and sign in). Maps to [BLOCKED] so the operations line matches the
-      // "no provider is attached" signal.
+      // "no provider is attached" signal. `attached` is only ever
+      // unauthenticated here when it is the *remembered* one and its
+      // credential has since stopped working — pickAttachedProvider's
+      // auto-attach branch never returns anything but a signed-in provider.
       const outcome =
         attached?.status.authenticated === true ? "ok" : "blocked";
       const detail =
@@ -303,25 +330,24 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
           : attached === undefined
             ? `${results.length} registered · none attached`
             : attached.status.authenticated
-              ? `attached ${remembered}`
-              : `attached ${remembered} · not authenticated`;
+              ? `attached ${attached.id}`
+              : `attached ${attached.id} · not authenticated`;
 
       return {
         value: results,
         outcome,
         detail,
         providers: results,
-        ...(attached !== undefined ? { attachedProviderId: remembered } : {}),
+        ...(attached !== undefined ? { attachedProviderId: attached.id } : {}),
         reveal: ["providerWidget"],
       };
     },
   );
 
-  const attachedProviderId =
-    previous?.attached_provider !== undefined &&
-    providers.some((p) => p.id === previous.attached_provider)
-      ? previous.attached_provider
-      : undefined;
+  const attachedProviderId = pickAttachedProvider(
+    previous?.attached_provider,
+    providers,
+  )?.id;
 
   // 6. Prompt + footer — last beat. Footer always; prompt slot released so it
   // can mount once an attached provider is signed in (furniture still gates).

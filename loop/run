@@ -84,6 +84,14 @@ trap 'running_release "$slug"' EXIT
 # whether its CLI can be told to use it (providers.sh's contract) or ignores it.
 export LOOP_SESSION_ID="$session_id"
 
+# Same pattern as LOOP_SESSION_ID above: an env var rather than a
+# provider_session argument, so the contract's arity stays untouched. Empty
+# means "provider default" — a bundle maps a non-empty value onto its own
+# CLI's model flag and ignores it otherwise. loop/bin/models is how an
+# operator sets it (loop/models.json); the app writes the same file.
+model=$(overseer_model)
+export LOOP_MODEL="$model"
+
 # Point at the instructions rather than inlining them: the overseer re-reads
 # them as it works, and a prompt this short can't stall a CLI on argv size.
 prompt="Read $LOOP_DIR/overseer.md and act as the overseer for workspace '$name'.

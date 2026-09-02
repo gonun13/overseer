@@ -13,10 +13,12 @@ cd /app
 echo "deps: initial build"
 npm run build --workspace packages/protocol
 npm run build --workspace packages/adapters/claude-code
+npm run build --workspace packages/adapters/cursor
 
 echo "deps: watching"
 npm run dev --workspace packages/protocol &
 npm run dev --workspace packages/adapters/claude-code &
+npm run dev --workspace packages/adapters/cursor &
 
 # Exit if any watcher dies, rather than sitting there looking healthy.
 wait -n

@@ -112,6 +112,7 @@ COPY packages/protocol/package.json packages/protocol/package.json
 COPY packages/server/package.json packages/server/package.json
 COPY packages/web/package.json packages/web/package.json
 COPY packages/adapters/claude-code/package.json packages/adapters/claude-code/package.json
+COPY packages/adapters/cursor/package.json packages/adapters/cursor/package.json
 COPY packages/e2e/package.json packages/e2e/package.json
 RUN npm ci
 
@@ -131,7 +132,7 @@ RUN npm run build
 #   codex           codex    stub     none
 #   opencode        opencode stub     none
 #   github-copilot  copilot  stub     none
-#   cursor          agent    stub     bundle
+#   cursor          agent    adapter  bundle
 #
 # Versions are pinned: session history is an undocumented format that drifts
 # across releases (architecture-design.md §4). Bump deliberately, in the
@@ -172,6 +173,7 @@ COPY packages/protocol/package.json packages/protocol/package.json
 COPY packages/server/package.json packages/server/package.json
 COPY packages/web/package.json packages/web/package.json
 COPY packages/adapters/claude-code/package.json packages/adapters/claude-code/package.json
+COPY packages/adapters/cursor/package.json packages/adapters/cursor/package.json
 COPY packages/e2e/package.json packages/e2e/package.json
 RUN npm ci
 
@@ -210,9 +212,11 @@ COPY package.json package-lock.json ./
 COPY packages/protocol/package.json packages/protocol/package.json
 COPY packages/server/package.json packages/server/package.json
 COPY packages/adapters/claude-code/package.json packages/adapters/claude-code/package.json
+COPY packages/adapters/cursor/package.json packages/adapters/cursor/package.json
 RUN npm ci --omit=dev --workspace packages/server \
       --workspace packages/protocol \
       --workspace packages/adapters/claude-code \
+      --workspace packages/adapters/cursor \
     && apt-get purge -y python3 make g++ \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
@@ -220,6 +224,7 @@ RUN npm ci --omit=dev --workspace packages/server \
 COPY --from=builder /app/packages/protocol/dist packages/protocol/dist
 COPY --from=builder /app/packages/server/dist packages/server/dist
 COPY --from=builder /app/packages/adapters/claude-code/dist packages/adapters/claude-code/dist
+COPY --from=builder /app/packages/adapters/cursor/dist packages/adapters/cursor/dist
 COPY --from=builder /app/packages/web/dist packages/web/dist
 
 # The loop and the registry are code, so they ship with the image. In dev the

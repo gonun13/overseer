@@ -77,9 +77,18 @@ provider_session() {
     session_args=(--session-id "$LOOP_SESSION_ID")
   fi
 
+  # LOOP_MODEL is the same pattern for the overseer's own model — set by
+  # loop/run from loop/models.json (loop/bin/models). Empty means "whatever
+  # this CLI opens on by default".
+  local -a model_args=()
+  if [ -n "${LOOP_MODEL:-}" ]; then
+    model_args=(--model "$LOOP_MODEL")
+  fi
+
   # --add-dir covers the loop itself; the project needs none, being the cwd.
   (cd "$workspace_dir" && claude "$prompt" \
     "${session_args[@]}" \
+    "${model_args[@]}" \
     --add-dir "$LOOP_DIR" \
     --settings "$PROVIDER_CONFIG_ROOT/settings.json" \
     --setting-sources "" \
@@ -92,4 +101,55 @@ provider_session() {
     return 1
   fi
   return 0
+}
+
+# provider_list_models — this account's models, from the same `initialize`
+# control request the app's own adapter probes (packages/adapters/claude-code
+# /src/options.ts) — there is no plain-text `claude models` command. As JSON
+# on stdout: `{"models":[{"value","label"}...],"defaultModel"}`.
+#
+# The request/response shape is undocumented (scraped from the pinned build,
+# same caveat options.ts states) and verified live: write one
+# `control_request` line to `claude -p --input-format stream-json
+# --output-format stream-json --no-session-persistence`'s stdin, read the
+# matching `control_response` off stdout, kill the child (it would otherwise
+# sit waiting for a turn that never comes) — measured well under a second,
+# so `sleep 3` before the outer `timeout 8` kills it is a generous margin,
+# not a tuned deadline.
+#
+# `withVersionInLabel`'s job, in jq: `displayName` alone drops the version
+# claude only states in `description` ("Sonnet" not "Sonnet 5", verified) —
+# stitch the two back together, matching options.ts's own logic, when
+# `description`'s leading word matches `displayName`'s.
+provider_list_models() {
+  local response
+  response=$(
+    (printf '%s\n' '{"type":"control_request","request_id":"loop_models","request":{"subtype":"initialize"}}'; sleep 3) \
+      | timeout 8 claude -p --input-format stream-json --output-format stream-json \
+          --verbose --no-session-persistence 2>/dev/null \
+      | grep -m1 '"loop_models"' \
+      | jq -c '.response.response // empty' 2>/dev/null
+  )
+
+  if [ -z "$response" ]; then
+    printf '{"models":[],"defaultModel":null}'
+    return 0
+  fi
+
+  printf '%s' "$response" | jq '
+    def stitched:
+      (.displayName // .value) as $dn
+      | (.description // "") as $d
+      | ($dn | split(" ")[0] | ascii_downcase) as $lead
+      | ($d | capture("^(?<w>[^\\s]+)\\s+(?<v>[0-9.]+)(?:\\s*·\\s*(?<r>.*))?$")?) as $m
+      | if ($m == null) or (($m.w | ascii_downcase) != $lead) then $dn
+        else "\($dn) \($m.v)" end;
+    {
+      models: [
+        .models[]?
+        | select(.value != null and .value != "")
+        | {value: .value, label: stitched}
+      ],
+      defaultModel: ((.models[]? | select(.value == "default") | .value) // null)
+    }'
 }

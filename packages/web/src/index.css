@@ -221,10 +221,11 @@
   color: var(--stamp-ink);
 }
 
-/* The two things that operate the machine rather than show its content, so
+/* The things that operate the machine rather than show its content, so
    they sit on `--void` instead of stamp or surface (ui-ux-design.md §2). */
 .window-tab,
-.session-ctl-values {
+.session-ctl-values,
+.w-tabs {
   --light-ok: var(--ok);
   --light-warn: var(--warn);
   --light-accent: var(--accent);
@@ -385,7 +386,8 @@ button {
   .session-ctl-values,
   .panel,
   .os-rule,
-  .gauge-fill {
+  .gauge-fill,
+  .w-tab {
     transition: none;
   }
 }

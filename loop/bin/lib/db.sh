@@ -264,6 +264,66 @@ require_step() {
   [ -n "$status" ] || die "'$step' is not a step (it is raw human input)" 1
 }
 
+# --- Per-provider model configuration ----------------------------------------
+#
+# loop/models.json — gitignored, keyed by provider id, holding
+# `{overseer, steps: {<step>: <model>}}`. An operator-facing layer over the
+# `model_hint` column above: absent entirely (the common case until an
+# operator or the app writes to it) falls back to exactly today's behaviour.
+# Callers here need the resolved provider id, from providers.sh — every
+# script that reaches these functions must source both db.sh and providers.sh
+# (loop/run and loop/bin/step and loop/bin/models all do).
+
+# models_file — loop/models.json's path. Existence is never assumed.
+models_file() {
+  printf '%s/models.json' "$LOOP_DIR"
+}
+
+# provider_models_json <id> — that provider's `{overseer, steps}` object, or
+# `{}` when the file, or that id's entry, is absent.
+provider_models_json() {
+  local id=$1 f
+  f=$(models_file)
+  [ -f "$f" ] || { printf '{}'; return 0; }
+  jq -c --arg id "$id" '.[$id] // {}' "$f" 2>/dev/null || printf '{}'
+}
+
+# step_model <step> — the model a subagent running <step> should be spawned
+# on, empty for "session default". models.json, for the resolved provider,
+# takes precedence; the LOOP_STEPS model_hint column (field 12) is the
+# fallback, so an operator who has never touched models.json sees exactly
+# today's behaviour.
+step_model() {
+  local step=$1 id val
+  id=$(resolve_provider_id)
+  val=$(provider_models_json "$id" | jq -r --arg s "$step" '.steps[$s] // empty')
+  [ -n "$val" ] || val=$(step_field "$step" 12)
+  printf '%s' "$val"
+}
+
+# overseer_model — the model the overseer session itself should open on,
+# empty for "provider default". models.json only — the overseer is not a
+# step, so there is no LOOP_STEPS column to fall back to.
+overseer_model() {
+  local id
+  id=$(resolve_provider_id)
+  provider_models_json "$id" | jq -r '.overseer // empty'
+}
+
+# provider_subagents_verified [<id>] — whether the loop should trust the
+# given provider (the resolved one by default) to actually delegate a step to
+# a subagent. A manifest's `loopSubagents` field of exactly "unverified" says
+# no; absent, or any other value, says yes — so every bundle that predates
+# this field (i.e. claude-code) keeps behaving exactly as it does today
+# without its manifest changing. See providers/cursor/manifest.json for the
+# one bundle that currently sets it.
+# shellcheck disable=SC2120 # most callers pass no id and take the resolved
+# default; step_context_json and the test above pass one explicitly.
+provider_subagents_verified() {
+  local id=${1:-$(resolve_provider_id)}
+  [ "$(manifest_field "$id" loopSubagents)" != "unverified" ]
+}
+
 # --- Paths -------------------------------------------------------------------
 
 slug_dir() { printf '%s/db/%s' "$LOOP_DIR" "$1"; }
@@ -982,10 +1042,17 @@ step_context_json() {
     open=$(jq -c --argjson acc "$open" --arg k "$key" --arg v "$val" -n '$acc + {($k): $v}')
   done < <(open_frontmatter "$step")
 
-  # `model` is advisory and always present, null where the row names nothing.
-  # Present-but-null rather than absent so whoever reads the context never has
-  # to distinguish "this step has no hint" from "this bash is too old to emit
+  # `model` is advisory and always present, null where nothing names one —
+  # step_model checks loop/models.json ahead of the LOOP_STEPS hint. Present-
+  # but-null rather than absent so whoever reads the context never has to
+  # distinguish "this step has no hint" from "this bash is too old to emit
   # one" — both mean the same thing, and both mean the session default.
+  #
+  # `subagents_available` gates whether `model` should be acted on at all:
+  # false means this provider's ability to actually delegate a step to a
+  # subagent is not yet confirmed (provider_subagents_verified), and the
+  # overseer's own instructions (overseer.md) say to run the step itself in
+  # that case, regardless of what `model` names.
   ctx=$(jq -n \
     --arg step "$step" \
     --arg id "$id" \
@@ -994,13 +1061,15 @@ step_context_json() {
     --arg workspace_dir "$workspace_dir" \
     --arg instructions "$LOOP_DIR/steps/$step.md" \
     --arg output_file "$(artifact_path "$slug" "$step" "$id")" \
-    --arg model "$(step_field "$step" 12)" \
+    --arg model "$(step_model "$step")" \
+    --argjson subagents_available "$(provider_subagents_verified && printf true || printf false)" \
     --argjson inputs "$inputs" \
     --argjson frontmatter "$front" \
     --argjson frontmatter_open "$open" \
     '{step:$step, id:$id, workspace:$workspace, slug:$slug,
       workspace_dir:$workspace_dir, instructions:$instructions,
       model:(if $model == "" then null else $model end),
+      subagents_available:$subagents_available,
       inputs:$inputs, output_file:$output_file,
       frontmatter:$frontmatter, frontmatter_open:$frontmatter_open}')
 

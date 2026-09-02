@@ -1,4 +1,5 @@
 import type {
+  AdapterSessionStore,
   AgentAdapter,
   AgentEvent,
   PermissionMode,
@@ -6,14 +7,6 @@ import type {
   SessionMeta,
   ServerMessage,
 } from "@overseer/protocol";
-import {
-  deleteSession,
-  listProjectSessions,
-  lookupSessionTitle,
-  mintSessionId,
-  openSession,
-  readSessionHistory,
-} from "@overseer/adapter-claude-code";
 import { getAdapter } from "./adapters.js";
 import {
   loopSessionIndex,
@@ -34,6 +27,11 @@ interface LiveSession {
   meta: SessionMeta;
   pump: Promise<void>;
   lastActivityAt: number;
+  /** The session store this session was opened under — fixed for its
+   * lifetime, so a provider switch mid-session does not redirect its own
+   * title lookups or exit-time list refresh onto a different adapter's
+   * store. */
+  store: AdapterSessionStore;
 }
 
 /** Idle sessions are reaped and resumed with `--resume` on the next message. */
@@ -48,12 +46,6 @@ export interface SessionSupervisorDeps {
   recordAction?: typeof recordAction;
   /** Override the idle window — tests use a few milliseconds. */
   idleReapMs?: number;
-  listProjectSessions?: typeof listProjectSessions;
-  readSessionHistory?: typeof readSessionHistory;
-  openSession?: typeof openSession;
-  mintSessionId?: typeof mintSessionId;
-  lookupSessionTitle?: typeof lookupSessionTitle;
-  deleteSession?: typeof deleteSession;
   /** Live dev-loop runs, keyed by the session id each one opened. */
   loopSessionIndex?: typeof loopSessionIndex;
   /** Delete the transcripts of loop runs that have ended. */
@@ -68,15 +60,6 @@ export function createSessionSupervisor(
   const getAdapterFn = deps.getAdapter ?? getAdapter;
   const isInsideWorkspaceFn = deps.isInsideWorkspace ?? isInsideWorkspace;
   const recordActionFn = deps.recordAction ?? recordAction;
-  const listProjectSessionsFn =
-    deps.listProjectSessions ?? listProjectSessions;
-  const readSessionHistoryFn =
-    deps.readSessionHistory ?? readSessionHistory;
-  const openSessionFn = deps.openSession ?? openSession;
-  const mintSessionIdFn = deps.mintSessionId ?? mintSessionId;
-  const lookupSessionTitleFn =
-    deps.lookupSessionTitle ?? lookupSessionTitle;
-  const deleteSessionFn = deps.deleteSession ?? deleteSession;
   const loopSessionIndexFn = deps.loopSessionIndex ?? loopSessionIndex;
   const sweepDeadLoopSessionsFn =
     deps.sweepDeadLoopSessions ?? sweepDeadLoopSessions;
@@ -115,7 +98,7 @@ export function createSessionSupervisor(
       await entry.handle.close();
       entry.meta.status = "dormant";
       pushMeta({ ...entry.meta });
-      const sessions = await mergeList(entry.meta.projectDir);
+      const sessions = await mergeList(entry.meta.projectDir, entry.store);
       pushList(sessions);
     }
     if (live.size === 0 && reaper !== undefined) {
@@ -138,7 +121,7 @@ export function createSessionSupervisor(
   }
 
   async function adapterContext(): Promise<
-    | { ok: true; adapter: AgentAdapter; projectPath: string }
+    | { ok: true; adapter: AgentAdapter; store: AdapterSessionStore; projectPath: string }
     | { ok: false; reason: string }
   > {
     const snapshot = await readSnapshotFn();
@@ -175,11 +158,17 @@ export function createSessionSupervisor(
     if (!status.authenticated) {
       return { ok: false, reason: "provider is not signed in" };
     }
-    return { ok: true, adapter, projectPath };
+    if (adapter.sessions === undefined) {
+      return { ok: false, reason: `${providerId} cannot manage sessions` };
+    }
+    return { ok: true, adapter, store: adapter.sessions, projectPath };
   }
 
-  async function mergeList(projectPath: string): Promise<SessionMeta[]> {
-    const dormant = await listProjectSessionsFn(projectPath);
+  async function mergeList(
+    projectPath: string,
+    store: AdapterSessionStore,
+  ): Promise<SessionMeta[]> {
+    const dormant = await store.listProjectSessions(projectPath);
     const byId = new Map(dormant.map((s) => [s.id, s]));
     for (const [id, entry] of live) {
       if (entry.meta.projectDir !== projectPath) continue;
@@ -216,7 +205,12 @@ export function createSessionSupervisor(
     );
   }
 
-  function startPump(sessionId: string, handle: SessionHandle, meta: SessionMeta) {
+  function startPump(
+    sessionId: string,
+    handle: SessionHandle,
+    meta: SessionMeta,
+    store: AdapterSessionStore,
+  ) {
     const pump = (async () => {
       try {
         for await (const event of handle.events) {
@@ -243,7 +237,7 @@ export function createSessionSupervisor(
             // total rather than resetting the session's cost to nothing.
             if (event.totalCostUsd > 0) meta.totalCostUsd = event.totalCostUsd;
             meta.lastActiveAt = event.timestamp;
-            const title = await lookupSessionTitleFn(
+            const title = await store.lookupSessionTitle(
               meta.projectDir,
               sessionId,
             );
@@ -272,7 +266,7 @@ export function createSessionSupervisor(
             meta.status = "closed";
             pushMeta({ ...meta });
             const projectPath = meta.projectDir;
-            void mergeList(projectPath).then(pushList);
+            void mergeList(projectPath, store).then(pushList);
           }
           pushEvent(event);
         }
@@ -290,7 +284,7 @@ export function createSessionSupervisor(
     const existing = live.get(sessionId);
     if (existing !== undefined) return { ok: true };
 
-    const turns = await readSessionHistoryFn(ctx.projectPath, sessionId);
+    const turns = await ctx.store.readSessionHistory(ctx.projectPath, sessionId);
     broadcast({ type: "session.history", sessionId, turns });
 
     let handle: SessionHandle;
@@ -304,7 +298,7 @@ export function createSessionSupervisor(
       };
     }
 
-    const dormant = await listProjectSessionsFn(ctx.projectPath);
+    const dormant = await ctx.store.listProjectSessions(ctx.projectPath);
     const found = dormant.find((s) => s.id === sessionId);
     const meta: SessionMeta = found ?? {
       id: sessionId,
@@ -318,8 +312,8 @@ export function createSessionSupervisor(
     };
     meta.status = "live";
 
-    const pump = startPump(sessionId, handle, meta);
-    track(sessionId, { handle, meta, pump, lastActivityAt: Date.now() });
+    const pump = startPump(sessionId, handle, meta, ctx.store);
+    track(sessionId, { handle, meta, pump, lastActivityAt: Date.now(), store: ctx.store });
     pushMeta(meta);
     return { ok: true };
   }
@@ -346,8 +340,8 @@ export function createSessionSupervisor(
       if (!ctx.ok) return ctx;
       // Before listing, not after: a finished loop run's transcript is refuse,
       // and the operator should never be shown a row for one.
-      await sweepDeadLoopSessionsFn(deleteSessionFn);
-      const sessions = await mergeList(ctx.projectPath);
+      await sweepDeadLoopSessionsFn(ctx.store.deleteSession);
+      const sessions = await mergeList(ctx.projectPath, ctx.store);
       pushList(sessions);
       return { ok: true };
     },
@@ -361,11 +355,28 @@ export function createSessionSupervisor(
       const ctx = await adapterContext();
       if (!ctx.ok) return ctx;
 
-      const sessionId = mintSessionIdFn();
+      // A round-trip for a provider whose id must come from its own CLI
+      // (cursor's `create-chat`) rather than an in-process `randomUUID()` —
+      // unlike claude's, this can genuinely fail (the CLI unreachable, a
+      // network error), so it needs the same defensive catch `openSession`
+      // already has below, not a bare `await` that would reject this whole
+      // method and leave the operator's click answered by nothing at all.
+      let sessionId: string;
+      try {
+        sessionId = await ctx.store.mintSessionId();
+      } catch (error) {
+        return {
+          ok: false,
+          reason:
+            error instanceof Error
+              ? error.message
+              : "could not mint a session id",
+        };
+      }
 
       let handle: SessionHandle;
       try {
-        handle = await openSessionFn(sessionId, {
+        handle = await ctx.store.openSession(sessionId, {
           projectDir: ctx.projectPath,
           model: opts.model,
           permissionMode: opts.permissionMode,
@@ -399,11 +410,11 @@ export function createSessionSupervisor(
         totalCostUsd: 0,
       };
 
-      const pump = startPump(sessionId, handle, meta);
-      track(sessionId, { handle, meta, pump, lastActivityAt: Date.now() });
+      const pump = startPump(sessionId, handle, meta, ctx.store);
+      track(sessionId, { handle, meta, pump, lastActivityAt: Date.now(), store: ctx.store });
 
       pushMeta(meta);
-      const sessions = await mergeList(ctx.projectPath);
+      const sessions = await mergeList(ctx.projectPath, ctx.store);
       pushList(sessions);
 
       void recordActionFn({
@@ -437,7 +448,7 @@ export function createSessionSupervisor(
       // a session idempotent instead of "works once per process lifetime".
       const ctx = await adapterContext();
       if (ctx.ok) {
-        const turns = await readSessionHistoryFn(ctx.projectPath, sessionId);
+        const turns = await ctx.store.readSessionHistory(ctx.projectPath, sessionId);
         broadcast({ type: "session.history", sessionId, turns });
       }
       return ensureOpen(sessionId);
@@ -496,7 +507,7 @@ export function createSessionSupervisor(
       await entry.handle.close();
       entry.meta.status = "closed";
       pushMeta(entry.meta);
-      const sessions = await mergeList(entry.meta.projectDir);
+      const sessions = await mergeList(entry.meta.projectDir, entry.store);
       pushList(sessions);
       return { ok: true };
     },
@@ -515,7 +526,7 @@ export function createSessionSupervisor(
       }
 
       try {
-        await deleteSessionFn(ctx.projectPath, sessionId);
+        await ctx.store.deleteSession(ctx.projectPath, sessionId);
       } catch (error) {
         return {
           ok: false,
@@ -526,7 +537,7 @@ export function createSessionSupervisor(
         };
       }
 
-      const sessions = await mergeList(ctx.projectPath);
+      const sessions = await mergeList(ctx.projectPath, ctx.store);
       pushList(sessions);
 
       void recordActionFn({

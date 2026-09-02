@@ -13,6 +13,10 @@ SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 source "$SCRIPT_DIR/lib/common.sh"
 # shellcheck disable=SC1091
 source "$LOOP_BIN_DIR/lib/db.sh"
+# providers.sh, for step_context_json's use of step_model/
+# provider_subagents_verified (resolve_provider_id, manifest_field).
+# shellcheck disable=SC1091
+source "$LOOP_BIN_DIR/lib/providers.sh"
 
 usage() {
   cat >&2 <<'USAGE'
@@ -31,6 +35,10 @@ is null for "whatever the session is already on" — the usual case, and what
 every step that has to explore or judge wants. It is advisory: nothing
 validates it against the record, and a caller that cannot honour it, or finds
 that model unavailable, falls back to the session default.
+
+`subagents_available` is false when this provider's ability to delegate a
+step to a subagent is not yet confirmed working — see overseer.md, which
+treats it as "run this step yourself" regardless of `model`.
 
 --tracer  the slice of the plan to work, for a step that takes the working
           tree (implement, verify, decide). Takes one tracer id, a

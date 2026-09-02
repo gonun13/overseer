@@ -45,7 +45,7 @@ export function useWindows() {
         // fixed mid-field y (design-system.md §6.2).
         if (kind === "providers") {
           const margin = 26;
-          const widgetClearance = 210; // widget + optional console + gap
+          const widgetClearance = 250; // widget + optional console + gap
           const assumedHeight = 260;
           return [
             ...current,
@@ -60,6 +60,43 @@ export function useWindows() {
                 window.innerHeight - widgetClearance - assumedHeight + cascade,
               ),
               w: width,
+              z: ++zSeq,
+              payload,
+            },
+          ];
+        }
+
+        // Loop models opens from a row in the providers window's loop tab —
+        // right-aligned the same way, with its top edge a fixed step above
+        // providers' own (assumed) top edge. A fixed offset rather than
+        // providers' assumed height *plus* this window's own (its `h` is tall
+        // enough, at ~380, that subtracting both pushed the window up near
+        // the very top of the viewport on an ordinary screen height — nowhere
+        // close to "just above").
+        if (kind === "loopModels") {
+          const margin = 26;
+          const widgetClearance = 250; // matches the providers case above
+          const providersAssumedHeight = 260;
+          const stackAbove = 70;
+          const bodyH = height ?? spec.h ?? 380;
+          return [
+            ...current,
+            {
+              id: `${kind}-${++seq}`,
+              kind,
+              title: title ?? spec.title,
+              ...detailFields,
+              x: Math.max(24, window.innerWidth - width - margin),
+              y: Math.max(
+                56,
+                window.innerHeight -
+                  widgetClearance -
+                  providersAssumedHeight -
+                  stackAbove +
+                  cascade,
+              ),
+              w: width,
+              h: bodyH,
               z: ++zSeq,
               payload,
             },

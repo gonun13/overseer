@@ -14,6 +14,7 @@ import { SESSION_CONTROL_KEYS, type SessionOptionKey } from "./session";
 import type { Signal } from "./state/signals";
 import { useChatSessions } from "./state/useChatSessions";
 import { useDiscovery } from "./state/useDiscovery";
+import { useLoopConfig } from "./state/useLoopConfig";
 import { usePromptSession } from "./state/usePromptSession";
 import { useProviderOptions } from "./state/useProviderOptions";
 import { useShellKeyboard } from "./state/useShellKeyboard";
@@ -113,6 +114,14 @@ export default function App() {
     optionsProviderId,
     wizard.activeProjectPath,
   );
+
+  const {
+    config: loopConfig,
+    setProvider: setLoopProvider,
+    setModel: setLoopModel,
+    modelsByProvider: loopModelsByProvider,
+    readModels: readLoopModels,
+  } = useLoopConfig(wizard.send, wizard.subscribeLoop, wizard.connected);
 
   const {
     sessions,
@@ -554,6 +563,11 @@ export default function App() {
           subscribeConsole={wizard.subscribeConsole}
           loopTakeover={loopTakeover}
           onOpenLoopSession={openLoopSession}
+          loopConfig={loopConfig}
+          onSetLoopProvider={setLoopProvider}
+          onSetLoopModel={setLoopModel}
+          loopModelsByProvider={loopModelsByProvider}
+          onReadLoopModels={readLoopModels}
         />
 
         <SettingsPanel

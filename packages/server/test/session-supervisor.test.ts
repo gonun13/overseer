@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type {
+  AdapterSessionStore,
   AgentAdapter,
   AgentEvent,
   SessionHandle,
@@ -23,6 +24,42 @@ function fakeHandle(events: AgentEvent[]): SessionHandle {
   };
 }
 
+/** A minimal `AgentAdapter` whose `sessions` store is entirely overridable —
+ * every real adapter (claude-code, cursor) resolves session storage through
+ * this same interface, so a fake one is what `getAdapter` hands the
+ * supervisor under test. */
+function fakeAdapter(
+  overrides: Partial<AdapterSessionStore> & {
+    resumeSession?: AgentAdapter["resumeSession"];
+  } = {},
+): AgentAdapter {
+  const { resumeSession, ...store } = overrides;
+  return {
+    id: "claude-code",
+    capabilities: {} as AgentAdapter["capabilities"],
+    async createSession(): Promise<SessionHandle> {
+      throw new Error("not used by these tests");
+    },
+    resumeSession:
+      resumeSession ??
+      (async () => {
+        throw new Error("resumeSession not stubbed for this test");
+      }),
+    async listSessions(): Promise<SessionMeta[]> {
+      return [];
+    },
+    getStatus: async () => ({ authenticated: true }),
+    sessions: {
+      listProjectSessions: store.listProjectSessions ?? (async () => []),
+      readSessionHistory: store.readSessionHistory ?? (async () => []),
+      openSession: store.openSession ?? (async () => fakeHandle([])),
+      mintSessionId: store.mintSessionId ?? (async () => "id"),
+      lookupSessionTitle: store.lookupSessionTitle ?? (async () => undefined),
+      deleteSession: store.deleteSession ?? (async () => {}),
+    },
+  };
+}
+
 describe("session-supervisor", () => {
   it("lists sessions for the active project", async () => {
     const frames: ServerMessage[] = [];
@@ -33,22 +70,20 @@ describe("session-supervisor", () => {
       }),
       isInsideWorkspace: async () => true,
       getAdapter: () =>
-        ({
-          id: "claude-code",
-          getStatus: async () => ({ authenticated: true }),
-        }) as AgentAdapter,
-      listProjectSessions: async () => [
-        {
-          id: "s1",
-          adapterId: "claude-code",
-          projectDir: "/workspace/demo",
-          model: "",
-          status: "dormant",
-          createdAt: "2026-01-01T00:00:00.000Z",
-          lastActiveAt: "2026-01-01T00:00:00.000Z",
-          totalCostUsd: 0,
-        },
-      ],
+        fakeAdapter({
+          listProjectSessions: async () => [
+            {
+              id: "s1",
+              adapterId: "claude-code",
+              projectDir: "/workspace/demo",
+              model: "",
+              status: "dormant",
+              createdAt: "2026-01-01T00:00:00.000Z",
+              lastActiveAt: "2026-01-01T00:00:00.000Z",
+              totalCostUsd: 0,
+            },
+          ],
+        }),
     });
 
     const result = await supervisor.list();
@@ -59,6 +94,35 @@ describe("session-supervisor", () => {
       assert.equal(list.sessions.length, 1);
       assert.equal(list.sessions[0]?.id, "s1");
     }
+  });
+
+  it("refuses a provider that cannot manage sessions", async () => {
+    const frames: ServerMessage[] = [];
+    const supervisor = createSessionSupervisor((msg) => frames.push(msg), {
+      readSnapshot: async () => ({
+        attached_provider: "codex",
+        last_active_project: "/workspace/demo",
+      }),
+      isInsideWorkspace: async () => true,
+      getAdapter: () =>
+        ({
+          id: "codex",
+          capabilities: {} as AgentAdapter["capabilities"],
+          createSession: async () => {
+            throw new Error("unused");
+          },
+          resumeSession: async () => {
+            throw new Error("unused");
+          },
+          listSessions: async () => [],
+          getStatus: async () => ({ authenticated: true }),
+          // No `sessions` — a catalog stub's actual shape.
+        }) as AgentAdapter,
+    });
+
+    const result = await supervisor.list();
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.match(result.reason, /cannot manage sessions/);
   });
 
   it("marks only the session a live loop run owns", async () => {
@@ -80,11 +144,9 @@ describe("session-supervisor", () => {
       }),
       isInsideWorkspace: async () => true,
       getAdapter: () =>
-        ({
-          id: "claude-code",
-          getStatus: async () => ({ authenticated: true }),
-        }) as AgentAdapter,
-      listProjectSessions: async () => [meta("loop-sid"), meta("mine")],
+        fakeAdapter({
+          listProjectSessions: async () => [meta("loop-sid"), meta("mine")],
+        }),
       loopSessionIndex: async () =>
         new Map([
           ["loop-sid", { slug: "demo", pid: 7, startedAt: "", sessionId: "loop-sid" }],
@@ -121,18 +183,16 @@ describe("session-supervisor", () => {
       }),
       isInsideWorkspace: async () => true,
       getAdapter: () =>
-        ({
-          id: "claude-code",
-          getStatus: async () => ({ authenticated: true }),
+        fakeAdapter({
           resumeSession: async () => {
             resumed += 1;
             throw new Error("must not resume a loop run");
           },
-        }) as unknown as AgentAdapter,
-      readSessionHistory: async () => {
-        backfilled += 1;
-        return [];
-      },
+          readSessionHistory: async () => {
+            backfilled += 1;
+            return [];
+          },
+        }),
       loopSessionIndex: async () =>
         new Map([
           ["loop-sid", { slug: "demo", pid: 7, startedAt: "", sessionId: "loop-sid" }],
@@ -148,6 +208,33 @@ describe("session-supervisor", () => {
       frames.some((f) => f.type === "session.history"),
       false,
     );
+  });
+
+  it("reports a clean failure, not an unhandled rejection, when mintSessionId throws", async () => {
+    // Unlike claude-code's in-process randomUUID(), a provider whose id must
+    // come from its own CLI (cursor's `create-chat`) can genuinely fail — a
+    // network error, the CLI unreachable. Before this had its own try/catch
+    // (mirroring openSession's), a throw here rejected the whole `create()`
+    // call, which nothing in ws.ts catches: the operator's click got no
+    // response at all, not even a benign error frame.
+    const frames: ServerMessage[] = [];
+    const supervisor = createSessionSupervisor((msg) => frames.push(msg), {
+      readSnapshot: async () => ({
+        attached_provider: "cursor",
+        last_active_project: "/workspace/demo",
+      }),
+      isInsideWorkspace: async () => true,
+      getAdapter: () =>
+        fakeAdapter({
+          mintSessionId: async () => {
+            throw new Error("agent create-chat failed");
+          },
+        }),
+    });
+
+    const result = await supervisor.create({});
+    assert.equal(result.ok, false);
+    if (!result.ok) assert.match(result.reason, /agent create-chat failed/);
   });
 
   it("creates a session and broadcasts meta", async () => {
@@ -169,14 +256,10 @@ describe("session-supervisor", () => {
       }),
       isInsideWorkspace: async () => true,
       getAdapter: () =>
-        ({
-          id: "claude-code",
-          getStatus: async () => ({ authenticated: true }),
-        }) as AgentAdapter,
-      mintSessionId: () => "new-id",
-      openSession: () => fakeHandle([init]),
-      listProjectSessions: async () => [],
-      recordAction: async () => {},
+        fakeAdapter({
+          mintSessionId: async () => "new-id",
+          openSession: async () => fakeHandle([init]),
+        }),
     });
 
     const result = await supervisor.create({});
@@ -211,14 +294,10 @@ describe("session-supervisor", () => {
       }),
       isInsideWorkspace: async () => true,
       getAdapter: () =>
-        ({
-          id: "claude-code",
-          getStatus: async () => ({ authenticated: true }),
-        }) as AgentAdapter,
-      mintSessionId: () => "new-id",
-      openSession: () => handle,
-      listProjectSessions: async () => [],
-      recordAction: async () => {},
+        fakeAdapter({
+          mintSessionId: async () => "new-id",
+          openSession: async () => handle,
+        }),
     });
 
     await supervisor.create({});
@@ -256,14 +335,10 @@ describe("session-supervisor", () => {
       }),
       isInsideWorkspace: async () => true,
       getAdapter: () =>
-        ({
-          id: "claude-code",
-          getStatus: async () => ({ authenticated: true }),
-        }) as AgentAdapter,
-      mintSessionId: () => "new-id",
-      openSession: () => fakeHandle([init, modelSwitch]),
-      listProjectSessions: async () => [],
-      recordAction: async () => {},
+        fakeAdapter({
+          mintSessionId: async () => "new-id",
+          openSession: async () => fakeHandle([init, modelSwitch]),
+        }),
     });
 
     await supervisor.create({});
@@ -288,27 +363,24 @@ describe("session-supervisor", () => {
       }),
       isInsideWorkspace: async () => true,
       getAdapter: () =>
-        ({
-          id: "claude-code",
-          getStatus: async () => ({ authenticated: true }),
+        fakeAdapter({
           resumeSession: async () => {
             resumed = true;
             return handle;
           },
-        }) as AgentAdapter,
-      listProjectSessions: async () => [
-        {
-          id: "s1",
-          adapterId: "claude-code",
-          projectDir: "/workspace/demo",
-          model: "",
-          status: "dormant",
-          createdAt: "2026-01-01T00:00:00.000Z",
-          lastActiveAt: "2026-01-01T00:00:00.000Z",
-          totalCostUsd: 0,
-        },
-      ],
-      readSessionHistory: async () => [],
+          listProjectSessions: async () => [
+            {
+              id: "s1",
+              adapterId: "claude-code",
+              projectDir: "/workspace/demo",
+              model: "",
+              status: "dormant",
+              createdAt: "2026-01-01T00:00:00.000Z",
+              lastActiveAt: "2026-01-01T00:00:00.000Z",
+              totalCostUsd: 0,
+            },
+          ],
+        }),
     });
 
     const result = await supervisor.send("s1", "hello");
@@ -347,15 +419,10 @@ describe("session-supervisor", () => {
       }),
       isInsideWorkspace: async () => true,
       getAdapter: () =>
-        ({
-          id: "claude-code",
-          getStatus: async () => ({ authenticated: true }),
-        }) as AgentAdapter,
-      listProjectSessions: async () => [],
-      recordAction: async () => {},
-      mintSessionId: () => "cost-id",
-      openSession: () => fakeHandle(events),
-      lookupSessionTitle: async () => undefined,
+        fakeAdapter({
+          mintSessionId: async () => "cost-id",
+          openSession: async () => fakeHandle(events),
+        }),
     });
 
     await supervisor.create({});
@@ -384,15 +451,10 @@ describe("session-supervisor", () => {
       }),
       isInsideWorkspace: async () => true,
       getAdapter: () =>
-        ({
-          id: "claude-code",
-          getStatus: async () => ({ authenticated: true }),
-        }) as AgentAdapter,
-      listProjectSessions: async () => [],
-      recordAction: async () => {},
-      mintSessionId: () => "idle-id",
-      openSession: () => handle,
-      lookupSessionTitle: async () => undefined,
+        fakeAdapter({
+          mintSessionId: async () => "idle-id",
+          openSession: async () => handle,
+        }),
       idleReapMs: 20,
     });
 
@@ -422,19 +484,14 @@ describe("session-supervisor", () => {
       }),
       isInsideWorkspace: async () => true,
       getAdapter: () =>
-        ({
-          id: "claude-code",
-          getStatus: async () => ({ authenticated: true }),
-        }) as AgentAdapter,
-      listProjectSessions: async () => [],
-      recordAction: async () => {},
-      mintSessionId: () => "live-id",
-      openSession: () => fakeHandle([]),
-      lookupSessionTitle: async () => undefined,
-      readSessionHistory: async () => {
-        historyReads += 1;
-        return [{ id: "t1", kind: "user", text: "hello" }];
-      },
+        fakeAdapter({
+          mintSessionId: async () => "live-id",
+          openSession: async () => fakeHandle([]),
+          readSessionHistory: async () => {
+            historyReads += 1;
+            return [{ id: "t1", kind: "user", text: "hello" }];
+          },
+        }),
     });
 
     await supervisor.create({});
@@ -472,19 +529,14 @@ describe("session-supervisor", () => {
       }),
       isInsideWorkspace: async () => true,
       getAdapter: () =>
-        ({
-          id: "claude-code",
-          getStatus: async () => ({ authenticated: true }),
-        }) as AgentAdapter,
-      listProjectSessions: async () => [],
-      recordAction: async () => {},
-      mintSessionId: () => "gone-id",
-      openSession: () => handle,
-      lookupSessionTitle: async () => undefined,
-      deleteSession: async (projectDir, sessionId) => {
-        deletedProject = projectDir;
-        deletedId = sessionId;
-      },
+        fakeAdapter({
+          mintSessionId: async () => "gone-id",
+          openSession: async () => handle,
+          deleteSession: async (projectDir, sessionId) => {
+            deletedProject = projectDir;
+            deletedId = sessionId;
+          },
+        }),
     });
 
     await supervisor.create({});
@@ -518,15 +570,11 @@ describe("session-supervisor", () => {
       }),
       isInsideWorkspace: async () => true,
       getAdapter: () =>
-        ({
-          id: "claude-code",
-          getStatus: async () => ({ authenticated: true }),
-        }) as AgentAdapter,
-      listProjectSessions: async () => [],
-      recordAction: async () => {},
-      deleteSession: async (_projectDir, sessionId) => {
-        deletedId = sessionId;
-      },
+        fakeAdapter({
+          deleteSession: async (_projectDir, sessionId) => {
+            deletedId = sessionId;
+          },
+        }),
     });
 
     const result = await supervisor.delete("dormant-id");

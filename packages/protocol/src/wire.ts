@@ -2,6 +2,7 @@ import type {
   AdapterStatus,
   LoginPhase,
   PermissionMode,
+  ProviderOption,
   ProviderOptions,
   SessionMeta,
 } from "./adapter.js";
@@ -119,7 +120,34 @@ export type ClientMessage =
   /** Close a live session process. */
   | { type: "session.close"; sessionId: string }
   /** Stop the process if running and permanently delete the session's transcript. */
-  | { type: "session.delete"; sessionId: string };
+  | { type: "session.delete"; sessionId: string }
+  /**
+   * Read the loop's own provider/model configuration — separate from the
+   * app's single attached provider (`provider.connect`); the loop picks its
+   * own (`loop/.provider`) and is configured independently. Explicit rather
+   * than pushed at connect time: it shells out to `loop/bin/models`, and
+   * only a client with the loop tab of the providers window open needs it.
+   */
+  | { type: "loop.config.read" }
+  /** Select which provider the loop runs on next (`loop/bin/provider`). */
+  | { type: "loop.provider.set"; id: string }
+  /**
+   * Set one model slot for one loop-runnable provider (`loop/bin/models
+   * set`). `slot` is a step name or the literal `"overseer"`; the server
+   * validates it against the live step list, not this frame — the loop's
+   * `db.sh` is the source of truth for what a step is. `model` empty clears
+   * the slot back to inherit.
+   */
+  | { type: "loop.model.set"; providerId: string; slot: string; model: string }
+  /**
+   * The models one loop-runnable provider actually offers — `loop/bin/models
+   * list-models <providerId>`, which asks that provider's own CLI directly
+   * (each bundle's `provider_list_models`). Deliberately independent of the
+   * app's single attached provider: the loop's own provider is configured
+   * separately, so the model list for it must not be limited to whichever
+   * one the app happens to be attached to.
+   */
+  | { type: "loop.models.read"; providerId: string };
 
 export interface ConnectedMessage {
   type: "connected";
@@ -332,6 +360,50 @@ export interface SessionMetaMessage {
   session: SessionMeta;
 }
 
+/** One loop-runnable provider's model allocation, mirroring `loop/bin/models
+ * --json`'s `providers.<id>` entry. */
+export interface LoopProviderInfo {
+  id: string;
+  /** Mirrors `providers/<id>/manifest.json`'s `loopSubagents` field (absent
+   * there reads as verified) — false means this provider runs every step
+   * itself, regardless of any model configured below, until a model is
+   * confirmed to actually delegate. See `loop/overseer.md`'s
+   * `subagents_available` rule, which is what this field describes. */
+  subagentsVerified: boolean;
+  overseer: string | null;
+  steps: Record<string, string | null>;
+}
+
+/** The loop's own provider/model configuration — broadcast, not sent to one
+ * socket, so every tab with the loop tab open stays in sync after another
+ * one changes it. Separate from `DiscoveredProvider`/`provider.status`:
+ * the loop's provider selection and the app's attached provider are
+ * independent (docs/architecture-design.md §9). */
+export interface LoopConfigMessage {
+  type: "loop.config";
+  /** `loop/.provider` — the provider the loop runs on next. */
+  current: string;
+  /** Every provider the loop can run (manifest `loop: "bundle"`). */
+  providers: LoopProviderInfo[];
+  /** Step names in loop order — `loop/bin/lib/db.sh`'s `step_names`, read
+   * once here rather than duplicated in this union. */
+  steps: string[];
+}
+
+/**
+ * The models one loop-runnable provider offers, from `loop/bin/models
+ * list-models <providerId>` — that provider's own CLI, asked directly and
+ * independent of the app's attached provider (unlike `ProviderOptionsMessage`,
+ * which only ever answers for the one the app has attached and authenticated).
+ * Broadcast, so a provider switched from another tab still lands here.
+ */
+export interface LoopModelsMessage {
+  type: "loop.models";
+  providerId: string;
+  models: ProviderOption[];
+  defaultModel?: string;
+}
+
 export type ServerMessage =
   | ConnectedMessage
   | ErrorMessage
@@ -353,6 +425,8 @@ export type ServerMessage =
   | SessionHistoryMessage
   | SessionEventMessage
   | SessionMetaMessage
+  | LoopConfigMessage
+  | LoopModelsMessage
   | DiscoveryEvent;
 
 /** Hard caps so a malformed frame cannot pin memory or a PTY. */
@@ -375,6 +449,7 @@ const PERMISSION_MODES = new Set<string>([
   "manual",
   "dontAsk",
   "plan",
+  "ask",
 ]);
 
 /** A subagent name, as the provider reported it. Empty means "none". */
@@ -518,6 +593,29 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       msg.model.length > 0 &&
       msg.model.length <= SESSION_MAX_MODEL_CHARS
     );
+  }
+  if (type === "loop.config.read") return true;
+  if (type === "loop.provider.set") {
+    const msg = value as { id?: unknown };
+    return typeof msg.id === "string" && msg.id.length > 0 && msg.id.length <= 64;
+  }
+  if (type === "loop.model.set") {
+    const msg = value as { providerId?: unknown; slot?: unknown; model?: unknown };
+    return (
+      typeof msg.providerId === "string" &&
+      msg.providerId.length > 0 &&
+      msg.providerId.length <= 64 &&
+      typeof msg.slot === "string" &&
+      msg.slot.length > 0 &&
+      msg.slot.length <= 64 &&
+      // Model itself may be "" (clears the slot back to inherit).
+      typeof msg.model === "string" &&
+      msg.model.length <= SESSION_MAX_MODEL_CHARS
+    );
+  }
+  if (type === "loop.models.read") {
+    const msg = value as { providerId?: unknown };
+    return typeof msg.providerId === "string" && msg.providerId.length > 0 && msg.providerId.length <= 64;
   }
   return false;
 }

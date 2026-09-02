@@ -1,4 +1,5 @@
 import type { AgentEvent } from "./events.js";
+import type { TurnWire } from "./transcript.js";
 
 /** Flag set the UI renders controls from — an adapter that can't do X doesn't grow an X zone. */
 export interface AdapterCapabilities {
@@ -19,8 +20,12 @@ export interface AdapterCapabilities {
 }
 
 /**
- * The permission modes a provider CLI accepts. These are claude 2.1.226's own
- * six choices, as it prints them when handed a bogus one:
+ * The permission modes a provider CLI accepts, pooled across every adapter —
+ * each offers only its own subset via `listOptions`, so the UI never shows
+ * the operator a mode a different provider's CLI would reject.
+ *
+ * `acceptEdits | auto | bypassPermissions | manual | dontAsk` are claude
+ * 2.1.226's own, as it prints them when handed a bogus one:
  *
  *   error: option '--permission-mode <mode>' argument 'x' is invalid.
  *   Allowed choices are acceptEdits, auto, bypassPermissions, manual, dontAsk, plan.
@@ -29,6 +34,11 @@ export interface AdapterCapabilities {
  * `default`. That asymmetry is the adapter's to absorb (see
  * `normalizePermissionMode` in the claude-code adapter) — it must not leak into
  * the union, or the UI ends up offering the operator two words for one mode.
+ *
+ * `plan` is shared: both claude (`--permission-mode plan`) and cursor
+ * (`--mode plan`) use the same word for the same idea — read-only, propose
+ * only. `ask` is cursor's own (`--mode ask`, verified against
+ * `2026.08.31-4057e58`) — Q&A only, no tool execution.
  */
 export type PermissionMode =
   | "acceptEdits"
@@ -36,7 +46,8 @@ export type PermissionMode =
   | "bypassPermissions"
   | "manual"
   | "dontAsk"
-  | "plan";
+  | "plan"
+  | "ask";
 
 export type PermissionDecision =
   | { decision: "allow-once" }
@@ -297,6 +308,33 @@ export interface ConsoleHandle {
   done: Promise<ConsoleExit>;
 }
 
+/**
+ * Where an adapter's own session transcripts live, for the server to list,
+ * open, title, and delete them without knowing the on-disk format — every
+ * method here used to be a free function the session supervisor imported
+ * directly from `@overseer/adapter-claude-code`, hardcoding that one adapter
+ * regardless of which provider was actually attached. A second real adapter
+ * (`@overseer/adapter-cursor`) made that untenable: the supervisor now
+ * resolves this from whichever adapter is attached, per call.
+ *
+ * `mintSessionId` is `Promise`-returning because not every provider can mint
+ * one locally — cursor's is a CLI round-trip (`agent create-chat`), unlike
+ * claude's in-process `randomUUID()`.
+ */
+export interface AdapterSessionStore {
+  /** Every session this adapter's own transcripts show for one project —
+   * merged by the supervisor with whatever it is tracking live. */
+  listProjectSessions(projectDir: string): Promise<SessionMeta[]>;
+  readSessionHistory(projectDir: string, sessionId: string): Promise<TurnWire[]>;
+  /** Open a *new* session under an id the caller already minted (via
+   * `mintSessionId`) — the supervisor needs the id before the process starts,
+   * to track it. */
+  openSession(sessionId: string, opts: SessionOpts): Promise<SessionHandle>;
+  mintSessionId(): Promise<string>;
+  lookupSessionTitle(projectDir: string, sessionId: string): Promise<string | undefined>;
+  deleteSession(projectDir: string, sessionId: string): Promise<void>;
+}
+
 export interface AgentAdapter {
   id: string;
   capabilities: AdapterCapabilities;
@@ -336,4 +374,11 @@ export interface AgentAdapter {
    * adapter's business (the same reasoning `CLAUDE_CONFIG_DIR` carries).
    */
   sessionsWatchPath?(): string | undefined;
+  /**
+   * Where this adapter's own session transcripts live, for the server to
+   * list/open/title/delete without knowing the on-disk format. Absent for a
+   * catalog stub — `getStatus` always reports `authenticated: false` there,
+   * so the supervisor never reaches past that to ask for a session store.
+   */
+  sessions?: AdapterSessionStore;
 }

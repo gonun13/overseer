@@ -3,6 +3,7 @@
   "cli": "agent",
   "configDir": ".cursor",
   "install": { "kind": "script", "url": "https://cursor.com/install", "version": "2026.08.25-3e8eec8" },
-  "app": "stub",
-  "loop": "bundle"
+  "app": "adapter",
+  "loop": "bundle",
+  "loopSubagents": "unverified"
 }

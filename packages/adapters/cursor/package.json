@@ -1,0 +1,23 @@
+{
+  "name": "@overseer/adapter-cursor",
+  "version": "0.1.0",
+  "description": "Spawns `agent` (Cursor CLI) per turn in stream-json mode; normalizes its NDJSON into the protocol event union.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "test": "tsx --test test/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@overseer/protocol": "*",
+    "node-pty": "^1.0.0"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.7.2"
+  }
+}

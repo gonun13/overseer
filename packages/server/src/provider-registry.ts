@@ -24,6 +24,7 @@ export const PROVIDERS_DIR =
 
 export type ProviderAppRole = "adapter" | "stub" | "none";
 export type ProviderLoopRole = "bundle" | "none";
+export type ProviderLoopSubagentsRole = "verified" | "unverified";
 
 export interface ProviderManifest {
   id: string;
@@ -33,6 +34,17 @@ export interface ProviderManifest {
   configDir: string;
   app: ProviderAppRole;
   loop: ProviderLoopRole;
+  /**
+   * Whether this bundle's ability to delegate a loop step to a subagent is
+   * confirmed working. Absent means `"verified"` — every bundle that
+   * predates this field (`claude-code`) keeps behaving exactly as it does
+   * today without its manifest changing. Mirrors
+   * `loop/bin/lib/db.sh`'s `provider_subagents_verified`, which is the
+   * function that actually gates delegation; this field only exists so the
+   * app can read the same fact (`loop-config.ts`, for the model-setup
+   * window's note).
+   */
+  loopSubagents?: ProviderLoopSubagentsRole;
 }
 
 function isRole<T extends string>(value: unknown, allowed: readonly T[]): value is T {
@@ -60,7 +72,10 @@ function parseManifest(dir: string, raw: string): ProviderManifest | undefined {
     return undefined;
   }
 
-  const { id, cli, configDir, app, loop } = value as Record<string, unknown>;
+  const { id, cli, configDir, app, loop, loopSubagents } = value as Record<
+    string,
+    unknown
+  >;
 
   if (id !== dir) {
     console.error(
@@ -84,8 +99,24 @@ function parseManifest(dir: string, raw: string): ProviderManifest | undefined {
     console.error(`provider-registry: ${dir}/manifest.json "loop" must be bundle or none`);
     return undefined;
   }
+  if (
+    loopSubagents !== undefined &&
+    !isRole(loopSubagents, ["verified", "unverified"] as const)
+  ) {
+    console.error(
+      `provider-registry: ${dir}/manifest.json "loopSubagents" must be verified or unverified when set`,
+    );
+    return undefined;
+  }
 
-  return { id, cli, configDir, app, loop };
+  return {
+    id,
+    cli,
+    configDir,
+    app,
+    loop,
+    loopSubagents: loopSubagents as ProviderLoopSubagentsRole | undefined,
+  };
 }
 
 /**

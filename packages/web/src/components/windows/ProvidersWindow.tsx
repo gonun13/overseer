@@ -1,20 +1,99 @@
 import { useState } from "react";
 import type { DiscoveredProvider } from "@overseer/protocol";
+import type { LoopConfigState } from "../../state/useLoopConfig";
 import type { AuthFlow } from "../../state/wizard";
 import { providerAuthActivity, providerAuthLabel } from "../usageDisplay";
 import { WRow, WTitle } from "./bits";
 
 /**
- * Two steps in one window rather than two windows: pick which registered
- * provider is attached, then sign it in.
- *
- * They are the same focus zone — "which agent runs my work" — and splitting
- * them would put the operator through two summonings for one decision
- * (design-system.md §6). The authenticate step takes over automatically when
- * the attached provider can log in and has not, which is exactly when there is
- * nothing else in this window worth looking at.
+ * Two views in one window: which registered provider the app itself is
+ * attached to (and signing it in), and — a sibling view, switched with the
+ * tab strip — which provider the dev loop runs on. The two are independent
+ * (loop/bin/lib/providers.sh's `resolve_provider_id` never reads the app's
+ * attached provider), so this is not the picker/login split below it: that
+ * split is *within* the providers tab and stays exactly as it was.
  */
 export function ProvidersWindow({
+  providers,
+  attachedId,
+  auth,
+  onConnect,
+  onStartLogin,
+  onSubmitCode,
+  onCancelLogin,
+  onSignOut,
+  loopConfig,
+  onSetLoopProvider,
+  onOpenLoopModels,
+}: {
+  providers: DiscoveredProvider[];
+  attachedId?: string;
+  auth?: AuthFlow;
+  onConnect: (id: string) => void;
+  onStartLogin: (id: string) => void;
+  onSubmitCode: (code: string) => void;
+  onCancelLogin: () => void;
+  onSignOut: (id: string) => void;
+  loopConfig: LoopConfigState;
+  onSetLoopProvider: (id: string) => void;
+  onOpenLoopModels: (providerId: string) => void;
+}) {
+  const [tab, setTab] = useState<"providers" | "loop">("providers");
+
+  if (providers.length === 0) {
+    return <div className="w-empty">no providers registered</div>;
+  }
+
+  return (
+    <div>
+      <div className="w-tabs">
+        <button
+          type="button"
+          className={`w-tab ${tab === "providers" ? "active" : ""}`}
+          onClick={() => setTab("providers")}
+        >
+          providers
+        </button>
+        <button
+          type="button"
+          className={`w-tab ${tab === "loop" ? "active" : ""}`}
+          onClick={() => setTab("loop")}
+        >
+          loop
+        </button>
+      </div>
+      {tab === "providers" ? (
+        <ProvidersTab
+          providers={providers}
+          attachedId={attachedId}
+          auth={auth}
+          onConnect={onConnect}
+          onStartLogin={onStartLogin}
+          onSubmitCode={onSubmitCode}
+          onCancelLogin={onCancelLogin}
+          onSignOut={onSignOut}
+        />
+      ) : (
+        <LoopTab
+          loopConfig={loopConfig}
+          onSetProvider={onSetLoopProvider}
+          onOpenModels={onOpenLoopModels}
+        />
+      )}
+    </div>
+  );
+}
+
+/**
+ * Pick which registered provider is attached, then sign it in.
+ *
+ * The two are the same focus zone — "which agent runs my work" — and
+ * splitting them would put the operator through two summonings for one
+ * decision (design-system.md §6). The authenticate step takes over
+ * automatically when the attached provider can log in and has not, which is
+ * exactly when there is nothing else in this view worth looking at.
+ */
+function ProvidersTab({
   providers,
   attachedId,
   auth,
@@ -35,10 +114,6 @@ export function ProvidersWindow({
 }) {
   const [selected, setSelected] = useState(attachedId ?? providers[0]?.id ?? "");
 
-  if (providers.length === 0) {
-    return <div className="w-empty">no providers registered</div>;
-  }
-
   const attached = providers.find((provider) => provider.id === attachedId);
   const flowing =
     auth !== undefined &&
@@ -46,7 +121,7 @@ export function ProvidersWindow({
     auth.phase !== "idle" &&
     auth.phase !== "success";
 
-  // The login surface owns the window whenever there is something to do here:
+  // The login surface owns the view whenever there is something to do here:
   // an attached provider that can log in and is not signed in, or a flow
   // already running. Catalog stubs (login: false) stay on the picker.
   if (
@@ -109,6 +184,62 @@ export function ProvidersWindow({
           </button>
         )}
       </div>
+    </div>
+  );
+}
+
+/**
+ * Which provider the dev loop runs on, and a way into each one's step model
+ * allocation. No connect/sign-in here — the loop reuses whatever CLI session
+ * each provider bundle already has (loop/README.md §"providers"), it does
+ * not attach or authenticate its own.
+ */
+function LoopTab({
+  loopConfig,
+  onSetProvider,
+  onOpenModels,
+}: {
+  loopConfig: LoopConfigState;
+  onSetProvider: (id: string) => void;
+  onOpenModels: (providerId: string) => void;
+}) {
+  if (loopConfig.providers.length === 0) {
+    return <div className="w-empty">no providers the loop can run</div>;
+  }
+
+  return (
+    <div>
+      <WTitle>loop provider</WTitle>
+      <p className="w-note">
+        the dev loop picks its own provider, independent of the one attached
+        above — connect and sign-in happen there, not here.
+      </p>
+      {loopConfig.providers.map((provider) => (
+        <WRow
+          key={provider.id}
+          activity={provider.id === loopConfig.current ? "done" : "idle"}
+          primary={provider.id}
+          secondary={
+            provider.subagentsVerified
+              ? undefined
+              : "runs every step itself — delegation not yet confirmed"
+          }
+          right={provider.id === loopConfig.current ? "▪" : undefined}
+          onClick={() => onSetProvider(provider.id)}
+          actions={
+            <button
+              type="button"
+              className="w-btn"
+              onClick={(event) => {
+                event.stopPropagation();
+                onOpenModels(provider.id);
+              }}
+            >
+              models
+            </button>
+          }
+        />
+      ))}
     </div>
   );
 }

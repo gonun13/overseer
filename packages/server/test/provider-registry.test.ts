@@ -89,6 +89,28 @@ describe("provider registry", () => {
     assert.equal(ids.includes("alpha"), true);
   });
 
+  it("leaves loopSubagents undefined when absent, and reads it when set", async () => {
+    await bundle(root, "quiet", valid("quiet"));
+    await bundle(
+      root,
+      "loud",
+      valid("loud", { loopSubagents: "unverified" }),
+    );
+
+    const manifests = readProviderManifests(root);
+    assert.equal(manifests.find((m) => m.id === "quiet")?.loopSubagents, undefined);
+    assert.equal(manifests.find((m) => m.id === "loud")?.loopSubagents, "unverified");
+  });
+
+  it("drops a manifest whose loopSubagents is not verified or unverified", async () => {
+    const before = errors.length;
+    await bundle(root, "bad-subagents", valid("bad-subagents", { loopSubagents: "yes" }));
+
+    const ids = readProviderManifests(root).map((m) => m.id);
+    assert.equal(ids.includes("bad-subagents"), false);
+    assert.ok(errors.length > before);
+  });
+
   it("returns nothing when the registry directory is missing", () => {
     assert.deepEqual(readProviderManifests(path.join(root, "nope")), []);
   });

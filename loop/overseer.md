@@ -277,6 +277,13 @@ own tracers done. So:
 Routing stays yours — you act on every route, without asking. What moved into a
 subagent is the *reading* behind it.
 
+**Before any of that, check `subagents_available` in the step context.**
+False means this provider's ability to actually delegate a step to a
+subagent is not yet confirmed working — run the step yourself, following its
+instruction file directly with the same context, regardless of what `model`
+names or which row above says "subagent". True means delegate as this
+section describes.
+
 To delegate, spawn one subagent with a prompt of exactly this shape — the
 context JSON, and nothing you have added:
 
@@ -290,11 +297,13 @@ context JSON, and nothing you have added:
 Hold it to those 15 words. Everything it did is on disk; a paragraph back is a
 paragraph you carry for the rest of the session.
 
-**Model.** The context carries a `model`. Non-null: spawn on it. Null: omit the
-parameter and let the subagent inherit this session. On a usage-limit error for
-a named model, retry once with no model set. Run the step yourself only when
-subagents are unavailable entirely — not when one model pool is exhausted. To
-run one yourself, read its instruction file and follow it with the same context.
+**Model.** The context carries a `model` (only meaningful once
+`subagents_available` is true — see above). Non-null: spawn on it. Null: omit
+the parameter and let the subagent inherit this session. On a usage-limit
+error for a named model, retry once with no model set. Run the step yourself
+only when subagents are unavailable entirely — not when one model pool is
+exhausted. To run one yourself, read its instruction file and follow it with
+the same context.
 
 Run one step at a time and wait for it.
 

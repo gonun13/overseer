@@ -578,9 +578,17 @@ same instructions run everywhere — just less comfortably on a thinner CLI.
 Today `cursor` is the thinner one:
 
 - **Subagents.** The overseer delegates `request`, `research`, `plan`,
-  `implement` and `verify` so their artifacts never enter its window. Without a
-  way to spawn one, it runs the step itself — correct, but it pays the
-  context.
+  `implement` and `verify` so their artifacts never enter its window. Cursor's
+  CLI can spawn subagents (`.cursor/agents/*.md`, close to claude's own
+  `.claude/agents/*.md` format) — but which of its models actually delegate is
+  not yet confirmed in this repo, so it is treated as unverified rather than
+  assumed working. `providers/<id>/manifest.json`'s `loopSubagents` field
+  states that per provider (`"unverified"` for `cursor` today), and the
+  overseer checks it (`subagents_available` in the step context) before
+  attempting to delegate at all — false, it runs the step itself, correct but
+  paying the context, the same fallback as a CLI with no subagent mechanism.
+  Confirming a model that does delegate and flipping the field is a one-line
+  change, not a new mechanism.
 - **Structured questions.** Choices put to the operator — which request to
   resume, which scope to plan, a scoping question with discrete options — fall
   back to a numbered list answered with a number.

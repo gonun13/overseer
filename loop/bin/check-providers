@@ -233,6 +233,38 @@ else
   done < <(sed -nE 's/^.*provider-cli:[[:space:]]*([A-Za-z0-9._-]+).*$/\1/p' "$dockerfile" | sort -u)
 fi
 
+# --- 6. A model literal lives in db.sh's LOOP_STEPS table, nowhere else -----
+#
+# Model ids are provider-specific and have no fixed catalog this lint can
+# check against — they come from each CLI live (e.g. `agent models`), so
+# there is no list of "all valid model names" to grep for. What this can
+# check, and the coupling that actually matters, is narrower: the one place a
+# model hint is declared is the LOOP_STEPS table's model_hint column (column
+# 12, e.g. today's "haiku" on `request` and `commit`). An operator's
+# loop/models.json is a separate, keyed-by-provider file outside this lint's
+# `orchestration` list entirely, so it needs no exemption. A hint copied
+# verbatim into a step's own instructions or into overseer.md is the leak
+# this catches — the same "one declaration, read everywhere" shape as the
+# CLI/config-dir checks above.
+model_hints=""
+for step in $(step_names); do
+  hint=$(step_field "$step" 12)
+  [ -n "$hint" ] || continue
+  case " $model_hints " in
+    *" $hint "*) ;;
+    *) model_hints="$model_hints $hint" ;;
+  esac
+done
+
+for hint in $model_hints; do
+  for f in "${orchestration[@]}"; do
+    [ -f "$f" ] || continue
+    [ "$(basename "$f")" = "db.sh" ] && continue
+    scrub "$f" | grep -Eq "\\b$hint\\b" \
+      && err "model literal '$hint' named outside db.sh's LOOP_STEPS table: ${f#"$LOOP_DIR"/}"
+  done
+done
+
 if [ "$fail" -ne 0 ]; then
   printf 'check-providers: FAILED\n' >&2
   exit 1

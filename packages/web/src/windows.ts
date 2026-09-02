@@ -9,7 +9,8 @@ export type WindowKind =
   | "context"
   | "console"
   | "help"
-  | "diff";
+  | "diff"
+  | "loopModels";
 
 export interface OpenWindow {
   id: string;
@@ -68,4 +69,9 @@ export const WINDOW_SPEC: Record<
   console: { title: "console", x: 9999, y: 9999, w: 720, h: 480 },
   help: { title: "help", x: 380, y: 190, w: 560 },
   diff: { title: "diff", x: 700, y: 260, w: 580 },
+  // Opened from the providers window's loop tab, one per provider (the
+  // payload — a provider id — is also useWindows' dedupe key, so a second
+  // click on the same provider raises the existing window). Height is
+  // operator-resizable: up to ten slot rows can be open at once.
+  loopModels: { title: "loop models", x: 9999, y: 9999, w: 460, h: 380 },
 };

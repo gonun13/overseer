@@ -208,6 +208,111 @@
   padding: 12px 28px;
 }
 
+/* A window with more than one view (providers ↔ loop) switches between them
+   with a tab strip at the top of the body — void material, same reasoning
+   as `.window-tab` / `.session-ctl-values` (index.css): it operates the
+   window rather than showing its content. Not a nav menu — there are never
+   more than a couple of views, and the strip's only job is "which one am I
+   looking at". */
+.w-tabs {
+  display: flex;
+  margin: 0 0 10px;
+}
+
+.w-tab {
+  flex: 1;
+  padding: 6px 8px;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+  text-align: center;
+  cursor: pointer;
+  opacity: 0.6;
+  transition: opacity 0.15s ease-out;
+}
+
+.w-tab:hover {
+  opacity: 0.85;
+}
+
+.w-tab.active {
+  opacity: 1;
+  border-bottom-color: var(--light-accent);
+}
+
+/* ---- loop model slots -------------------------------------------------
+   One row per step (+ overseer) in the loop model setup window. Same
+   button-list idiom as the composer's session controls (prompt.css) — void
+   material, a ▪ mark for the current value, never an <select> — but the
+   options list is a normal flow block rather than `.session-ctl-values`'s
+   absolute upward overlay: that overlay is built for one row anchored to
+   the bottom of a composer, and this is a plain vertical list where several
+   rows can be open on screen at once. */
+.loop-slot {
+  border-bottom: 1px solid var(--ink-rule);
+}
+
+.loop-slot-head {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 7px 0;
+  border: 0;
+  background: transparent;
+  color: var(--ink);
+  font: inherit;
+  font-size: 12px;
+  text-align: left;
+  cursor: pointer;
+}
+
+.loop-slot-name {
+  flex: none;
+  width: 78px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  color: var(--ink-dim);
+}
+
+.loop-slot-head:hover .loop-slot-name,
+.loop-slot.open .loop-slot-name {
+  color: var(--ink);
+}
+
+.loop-slot-value {
+  flex: 1;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.loop-slot-chevron {
+  flex: none;
+  display: flex;
+  color: var(--ink-faint);
+}
+
+.loop-slot-values {
+  display: flex;
+  flex-direction: column;
+  max-height: 220px;
+  overflow-y: auto;
+  margin: 0 0 8px;
+  background: var(--void);
+  color: var(--void-ink);
+  border: 1px solid var(--void-edge);
+}
+
 /* ---- surface content primitives ------------------------------------------ */
 .w-title {
   display: inline-block;
