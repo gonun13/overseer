@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { WInline, WTitle } from "./bits";
+import { WInline, WTitle, WUnavailable } from "./bits";
 import type { CapabilityDraft } from "../../domain";
 
 const BLANK_CAPABILITY_DRAFT: CapabilityDraft = {
@@ -20,6 +20,9 @@ const BLANK_CAPABILITY_DRAFT: CapabilityDraft = {
  * The instructions box is the point of the window: a skill or subagent is
  * mostly prose telling the model how to behave, so it gets the room, and it is
  * an input — dark ground, same material as the composer (§7.1).
+ *
+ * The draft is blank and the actions are inert: no capability is read from the
+ * provider yet, so this is the shape of the editor rather than the editor.
  */
 export function CapabilityWindow({ name }: { name: string }) {
   const draft = BLANK_CAPABILITY_DRAFT;
@@ -36,6 +39,7 @@ export function CapabilityWindow({ name }: { name: string }) {
 
   return (
     <div>
+      <WUnavailable detail="nothing is loaded from disk here, and nothing saves." />
       <WTitle>identity</WTitle>
       <WInline label="name" value={name || draft.name} />
       <WInline label="kind" value={draft.kind} />
@@ -79,9 +83,15 @@ export function CapabilityWindow({ name }: { name: string }) {
       )}
 
       <div className="btn-row">
-        <button className="w-btn">save</button>
-        <button className="w-btn">reveal file</button>
-        <button className="w-btn danger">delete</button>
+        <button className="w-btn" disabled>
+          save
+        </button>
+        <button className="w-btn" disabled>
+          reveal file
+        </button>
+        <button className="w-btn danger" disabled>
+          delete
+        </button>
       </div>
     </div>
   );

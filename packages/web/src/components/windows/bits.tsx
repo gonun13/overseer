@@ -97,3 +97,18 @@ export function WRow({
     </div>
   );
 }
+
+/**
+ * The `w-note` line a window carries when the surface exists but nothing
+ * behind it is built yet — the capabilities inventory, the approvals queue,
+ * turn context, diff rendering. Same placement and same reasoning as
+ * `WProviderNote`: above the content, never instead of it, so the operator can
+ * read the shape of the thing and know it is a shape rather than a state.
+ *
+ * `detail` says *what* is missing in the window's own terms. The "not
+ * available yet" half is fixed here so five windows cannot drift into five
+ * different ways of admitting the same thing.
+ */
+export function WUnavailable({ detail }: { detail: string }) {
+  return <p className="w-note">not available yet · {detail}</p>;
+}

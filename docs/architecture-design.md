@@ -502,6 +502,7 @@ The repo is private and unpublished. Every workspace package stays in **lockstep
 | `@overseer/web`                 | SPA — footer reads root version via `appVersion.ts` |
 | `@overseer/server`              | API / WS                      |
 | `@overseer/adapter-claude-code` | adapter                       |
+| `@overseer/adapter-cursor`      | adapter                       |
 | `@overseer/e2e`                 | Playwright suite              |
 
 On every release bump **all** of those `version` fields and sync `package-lock.json` (`./bin/npm
@@ -517,16 +518,21 @@ the tier already claimed by the current version.
 | --------- | --------------- | -------- |
 | `0.0.x`   | —               | Scaffold only: repo layout, container, no behavioral spec live. |
 | `0.1.x`   | [overseer-behavior.md](overseer-behavior.md) | **Overseer shell** — wizard phases (§4), progressive furniture (§4), internal memory (§6.2), `overseer-personality` (§6.3), workspace discovery, provider status surfacing via `getStatus()`. The overseer path uses real server state; other windows stay empty until live APIs land. |
-| `0.2+`    | TBD             | Reserve the next MINOR for the next coherent pre-MVP tier once it is written into a design doc and listed under README [Status](../README.md#status). Do not invent a number in advance. |
+| `0.2.x`   | §1 (process model), §3 rows 1–2 + 5, §9 | **Live sessions & providers** — stream-json sessions that spawn, stream, resume and delete, for **two** real adapters (`claude-code`, `cursor`), each declaring its own `AdapterCapabilities`; session controls populated from the CLI's own report; runtime `set_model` and `set_permission_mode`; project creation into `/workspace`; the dev loop (§9) driven from inside the app. Approvals, capabilities, turn context and diffs are **not** in this tier — their windows exist and declare themselves unavailable. |
+| `0.3+`    | TBD             | Reserve the next MINOR for the next coherent pre-MVP tier once it is written into a design doc and listed under README [Status](../README.md#status). Do not invent a number in advance. |
 | `1.0.0`   | §3 **MVP**      | **Core loop** — every row in the MVP table (§3) works end-to-end for `claude-code`: spawn/resume sessions, stream transcript + tools, inline approval, model/mode controls, subscription login from the UI, usage surfacing, crash/auth failure handling. |
 | `1.x`     | §3 **Important**| Additive features from the Important tier. Each MINOR should map to a closed subset of that table (call it out in release notes). |
 | `2.x+`    | §3 **Nice to have** + later providers | Major product expansion; breaking protocol or UX contract bumps MAJOR. |
 
-**Explicit non-goals for `0.1.x`:** §3 MVP stream-json sessions / transcript / approvals queue,
-§5 provider-backed querying in [overseer-behavior.md](overseer-behavior.md) ("planned, not built"),
-and credential-file auth checks instead of `claude auth status` — see README
-[Status](../README.md#status). The raw OPEN CONSOLE PTY escape hatch (ui-ux-design.md §5.3) is
-separate from the MVP "Console" zone in §3 and may ship inside `0.1.x`.
+**Explicit non-goals for `0.2.x`:** the §3 MVP approvals queue (`can_use_tool` is answered `deny`
+with a visible error), diff rendering for `Edit` / `Write`, the capabilities inventory and its
+editor, turn context attachment, and §5 provider-backed querying in
+[overseer-behavior.md](overseer-behavior.md) ("planned, not built"). Every one of those has a
+window already; each carries a `WUnavailable` note naming what is missing rather than rendering an
+empty frame that reads as a working-but-idle surface
+(`packages/web/src/components/windows/bits.tsx`). Adapters for the remaining catalog stubs
+(`codex`, `opencode`, `github-copilot`) are also out of tier. The raw OPEN CONSOLE PTY escape hatch
+(ui-ux-design.md §5.3) is separate from the MVP "Console" zone in §3 and shipped in `0.1.x`.
 
 ### 8.3 Release checklist
 

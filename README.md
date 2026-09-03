@@ -1,10 +1,11 @@
 # Overseer
 
-A single-page web console for driving CLI coding agents. Claude Code is the first
-fully wired provider; `cursor`, `codex`, `opencode`, and `github-copilot` appear
-in the provider catalog (CLIs installed in the image; adapters not implemented
-yet). `cursor` is a real provider for the dev loop, which runs sessions on it
-today — the same registry entry, two different levels of support.
+A single-page web console for driving CLI coding agents. `claude-code` and `cursor`
+are fully wired providers — sign-in, sessions, and console; `codex`, `opencode`, and
+`github-copilot` appear in the provider catalog (CLIs installed in the image; adapters
+not implemented yet). Which providers exist at all is one declaration,
+`providers/<id>/manifest.json`, read by the app's catalog, by the dev loop, and by the
+image's install list.
 
 Built sandboxed, with the paranoid in mind: protect the host from runaway LLMs.
 Agents run in Docker, not on your desktop — they cannot wipe your home directory or
@@ -16,9 +17,10 @@ UI: [docs/ui-ux-design.md](docs/ui-ux-design.md) ·
 Behavior: [docs/overseer-behavior.md](docs/overseer-behavior.md) ·
 Versioning: [docs/architecture-design.md §8](docs/architecture-design.md#8-versioning)
 
-> **Early stage.** The UI shell and overseer wizard are live, as are `claude-code`
-> stream-json sessions and the raw OPEN CONSOLE PTY. The approvals queue is not built yet —
-> permission requests are auto-denied. See [Status](#status).
+> **Early stage.** The UI shell, overseer wizard, provider sessions, and the raw OPEN
+> CONSOLE PTY are live for `claude-code` and `cursor`. Approvals, capabilities, turn
+> context, and diff rendering are not built — those windows open and say so.
+> Permission requests are auto-denied. See [Status](#status).
 
 ## Requirements
 
@@ -113,9 +115,10 @@ providers/            one directory per agent CLI, read by the app and the loop 
 packages/
   protocol/           shared TS types — the frontend/backend/adapter contract
   web/                React + Vite + Tailwind SPA
-  server/             Node: WS + REST, static SPA host, adapter registry
+  server/             Node: WS + REST, static SPA host, adapter registry, session supervisor
   adapters/
-    claude-code/      Claude Code adapter (raw PTY console live; stream-json sessions not yet)
+    claude-code/      Claude Code adapter — login, console, stream-json sessions
+    cursor/           Cursor adapter — login, console, stream-json sessions
   e2e/                Playwright acceptance tests (container-only)
 loop/                 the dev-loop CLI — bash, a provider CLI, and plain files
 workspace/            host-shared dir — git projects live here, mounted into the container
@@ -131,16 +134,24 @@ workspace/            host-shared dir — git projects live here, mounted into t
   `overseer-personality` workspace project (advisory only).
 - **Project panel** — persistent status for every project, including work outside the
   active one.
-- **Sessions, approvals, diffs** — summoned as draggable windows, not fixed columns.
-- **Capabilities** — MCP servers, skills, and subagents, with an editor for instructions,
-  model, and tool grants.
+- **Sessions** — spawned, streamed, resumed, and deleted as draggable windows, not fixed
+  columns. Each window's control rows list what the provider actually offers.
+- **Session controls** — model, permission mode, and subagent. Model and mode retarget the
+  running process (`set_model` / `set_permission_mode`); a subagent pick arms the next turn.
+- **Project creation** — a git project scaffolded into `/workspace` from the project panel.
 - **Console** — raw PTY escape hatch into the provider CLI (xterm.js over `/ws`); distinct from
   stream-json agent sessions.
-- **Prompt controls** — model, permission mode, subagent, and context, armed before the
-  next turn.
+- **Dev loop, in-app** — `/loop` runs `loop/` in a console window; the providers window's
+  loop tab sets which provider and which per-step models it uses.
 - **Two themes** — samaritan (default) and machine; choice is remembered in internal memory.
 
+Windows that exist as shape only, and say so when opened: **approvals**, **capabilities**
+(and its editor), **turn context**, **diffs**. See [Status](#status).
+
 ## Status
+
+Current milestone: **`0.2.x` — live sessions & providers**
+([architecture §8.2](docs/architecture-design.md#82-milestone-map)).
 
 In place: Docker tooling, frontend shell, and the overseer wizard. A fresh instance boots
 headline-only and runs discovery over the WebSocket — scanning `/workspace` for git
@@ -148,32 +159,38 @@ projects, checking provider auth via `getStatus()`, and reading `overseer-person
 then mounts furniture as capabilities resolve. Details:
 [docs/overseer-behavior.md](docs/overseer-behavior.md).
 
-Auth status for `claude-code` comes from `claude auth status --json`. The raw OPEN
-CONSOLE path spawns an interactive `claude` PTY in the active project when that
-provider is signed in. Catalog stubs (`cursor`, `codex`, `opencode`,
-`github-copilot`) list in the providers window and their CLIs ship in the image,
-but have no login, console, or session wiring yet. Which providers exist at all
-is one declaration, `providers/<id>/manifest.json`, read by the app's catalog,
-by the dev loop, and by the image's install list.
+Two real adapters: `claude-code` and `cursor`. Both carry sign-in, auth status from the
+CLI's own report, an interactive PTY console in the active project, and stream-json
+sessions that spawn, stream, resume from their transcript, and can be deleted. A session
+window's control rows list what that provider actually offers — models and subagents
+discovered from the CLI, plus its permission modes
+([architecture §1.1.1](docs/architecture-design.md)) — and each adapter declares its own
+capabilities rather than inheriting `claude-code`'s. Model and permission mode change on
+a session already running, through `set_model` / `set_permission_mode` control requests.
 
-`claude-code` stream-json sessions are live: sessions spawn, stream, resume from
-their transcript, and can be deleted. A session window's control rows list what the
-provider actually offers — models and subagents discovered from the CLI itself, plus
-its six permission modes ([architecture §1.1.1](docs/architecture-design.md)).
+Projects can be created from the project panel. The dev loop runs inside the app: `/loop`
+opens it in a console window, and the providers window's loop tab sets the loop's provider
+and its per-step models, independent of the provider attached to the app.
 
-Still missing:
+`codex`, `opencode`, and `github-copilot` remain catalog stubs — they list in the providers
+window and their CLIs ship in the image, but have no login, console, or session wiring.
 
-- Full adapters for catalog stubs (`cursor`, `codex`, `opencode`, `github-copilot`)
-- Approvals queue and structured tool/diff windows backed by live session events
-  (permission requests are auto-denied with a visible error for now)
-- Changing model, mode, or agent on a session already running — a pick arms the
-  next session, not the one in flight
+Still missing — these windows open and mark themselves unavailable rather than pretending:
+
+- **Approvals queue.** Permission requests are auto-denied with a visible error, so
+  nothing ever reaches the queue.
+- **Capabilities.** MCP servers, skills, and subagents are not enumerated from the
+  provider; the inventory is empty and its editor neither loads nor saves.
+- **Turn context.** No file, git diff, or terminal output can be attached to a turn.
+- **Diff rendering.** `Edit` / `Write` tool input is not parsed into a unified diff.
+- **Full adapters** for the remaining catalog stubs (`codex`, `opencode`,
+  `github-copilot`).
 
 ## Versioning
 
-The product version is the root `package.json` `version` field — currently the **overseer shell**
-milestone ([overseer-behavior.md](docs/overseer-behavior.md)). **`1.0.0`** waits on the §3 MVP core
-loop. Versions follow [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`): **MAJOR**
+The product version is the root `package.json` `version` field — currently the **live sessions &
+providers** milestone ([architecture §8.2](docs/architecture-design.md#82-milestone-map)).
+**`1.0.0`** waits on the §3 MVP core loop: approvals, capabilities, turn context, and diffs. Versions follow [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`): **MAJOR**
 when updates break compatibility, **MINOR** when features are added safely, **PATCH** when small
 bugs are fixed. Bump rules and the milestone map live in
 [architecture-design.md §8](docs/architecture-design.md#8-versioning). The footer reads that field

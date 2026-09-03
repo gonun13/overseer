@@ -1,6 +1,9 @@
-import { WProviderNote, WRow } from "./bits";
+import { WProviderNote, WRow, WUnavailable } from "./bits";
 import type { Capability, ProviderInfo } from "../../domain";
 
+/** MCP servers, skills and subagents for the attached provider. Nothing
+ * enumerates them yet — `capabilities` is always empty and the add controls
+ * are inert (architecture-design.md §3, Important tier). */
 export function CapabilitiesWindow({
   capabilities,
   provider,
@@ -13,6 +16,7 @@ export function CapabilitiesWindow({
   return (
     <div>
       <WProviderNote provider={provider} />
+      <WUnavailable detail="mcp servers, skills and subagents are not read from the provider yet." />
       {capabilities.length === 0 && (
         <div className="w-empty">nothing configured</div>
       )}
@@ -34,9 +38,15 @@ export function CapabilitiesWindow({
         />
       ))}
       <div className="btn-row">
-        <button className="w-btn">+ mcp server</button>
-        <button className="w-btn">+ skill</button>
-        <button className="w-btn">+ subagent</button>
+        <button className="w-btn" disabled>
+          + mcp server
+        </button>
+        <button className="w-btn" disabled>
+          + skill
+        </button>
+        <button className="w-btn" disabled>
+          + subagent
+        </button>
       </div>
     </div>
   );

@@ -1,6 +1,6 @@
 {
   "name": "@overseer/adapter-cursor",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Spawns `agent` (Cursor CLI) per turn in stream-json mode; normalizes its NDJSON into the protocol event union.",
   "type": "module",
   "main": "./dist/index.js",
