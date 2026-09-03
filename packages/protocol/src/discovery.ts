@@ -54,6 +54,16 @@ export interface DiscoveredProvider {
    * button the same way `login` gates the sign-in controls. */
   usageCheck: boolean;
   /**
+   * True when this build lists the provider but drives nothing behind it —
+   * the CLI is in the image, sessions/auth/console are not wired (`app:
+   * "stub"` in the provider registry).
+   *
+   * Its status is `authenticated: false` like any signed-out provider, but
+   * for a different reason: nothing the operator can do here would sign it
+   * in. The UI says "not available yet" rather than "not signed in".
+   */
+  catalogOnly?: true;
+  /**
    * True when this provider was signed in on a previous run and now is not.
    *
    * A credential that stopped working is a different event from one that was

@@ -45,23 +45,38 @@ export const USAGE_UNREADABLE_LABEL = "usage check found no figures";
 
 /**
  * Provider light: green when signed in, red when the runtime is down, amber
- * when it answered but is not signed in.
+ * when it answered but is not signed in — grey for a catalog stub, which is
+ * not waiting on the operator for anything.
  */
-export function providerAuthActivity(provider: {
-  authenticated: boolean;
-  reachable?: boolean;
-}): Activity {
+export function providerAuthActivity(
+  provider: {
+    authenticated: boolean;
+    reachable?: boolean;
+  },
+  /** True for a provider this build only lists (`DiscoveredProvider.catalogOnly`). */
+  catalogOnly = false,
+): Activity {
+  if (catalogOnly) return "idle";
   if (provider.authenticated) return "done";
   if (provider.reachable === false) return "attention";
   return "waiting";
 }
 
 /** Short auth row under the provider name. */
-export function providerAuthLabel(provider: {
-  authenticated: boolean;
-  reachable?: boolean;
-  detail?: string;
-}): string {
+export function providerAuthLabel(
+  provider: {
+    authenticated: boolean;
+    reachable?: boolean;
+    detail?: string;
+  },
+  /** True for a provider this build only lists (`DiscoveredProvider.catalogOnly`).
+   * It is unauthenticated like any signed-out provider, but there is no sign-in
+   * to offer — saying "not signed in" would send the operator after a login
+   * that does not exist. */
+  catalogOnly = false,
+): string {
+  // Ahead of the auth read: a stub's status is a placeholder, not a finding.
+  if (catalogOnly) return "not available yet";
   if (provider.authenticated) return "signed in";
   if (provider.reachable === false) {
     return provider.detail?.trim() || "unreachable";

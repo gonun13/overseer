@@ -161,7 +161,17 @@ export type ClientMessage =
    * separately, so the model list for it must not be limited to whichever
    * one the app happens to be attached to.
    */
-  | { type: "loop.models.read"; providerId: string };
+  | { type: "loop.models.read"; providerId: string }
+  /** Create a new project: `mkdir` under the workspace root, `git init`, and
+   * write a README from `name`/`description`. `folder` is what the operator
+   * confirmed in the create-project form — usually a slugified `name`, but
+   * theirs to edit first. */
+  | {
+      type: "project.create";
+      name: string;
+      folder: string;
+      description: string;
+    };
 
 export interface ConnectedMessage {
   type: "connected";
@@ -208,6 +218,17 @@ export interface OperatorTonedMessage {
 export interface ProjectSelectedMessage {
   type: "project.selected";
   path: string;
+}
+
+/** Ack that `/workspace/<folder>` was created, `git init`'d, and README-ed.
+ * The actual project list update follows separately, via the ordinary
+ * `workspace.projects` broadcast the workspace monitor already sends once it
+ * notices the new directory — this frame exists only for immediate feedback
+ * to the create-project form. */
+export interface ProjectCreatedMessage {
+  type: "project.created";
+  path: string;
+  name: string;
 }
 
 /** Ack that the theme was recorded in internal memory. */
@@ -442,6 +463,7 @@ export type ServerMessage =
   | OperatorNamedMessage
   | OperatorTonedMessage
   | ProjectSelectedMessage
+  | ProjectCreatedMessage
   | ThemeSelectedMessage
   | ProviderConnectedMessage
   | ProviderStatusMessage
@@ -487,6 +509,10 @@ const PERMISSION_MODES = new Set<string>([
 
 /** A subagent name, as the provider reported it. Empty means "none". */
 export const SESSION_MAX_AGENT_CHARS = 128;
+
+export const PROJECT_MAX_NAME_CHARS = 200;
+export const PROJECT_MAX_FOLDER_CHARS = 100;
+export const PROJECT_MAX_DESCRIPTION_CHARS = 4_000;
 
 function isConsoleSize(cols: unknown, rows: unknown): boolean {
   return (
@@ -656,6 +682,23 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   if (type === "loop.models.read") {
     const msg = value as { providerId?: unknown };
     return typeof msg.providerId === "string" && msg.providerId.length > 0 && msg.providerId.length <= 64;
+  }
+  if (type === "project.create") {
+    const msg = value as {
+      name?: unknown;
+      folder?: unknown;
+      description?: unknown;
+    };
+    return (
+      typeof msg.name === "string" &&
+      msg.name.length > 0 &&
+      msg.name.length <= PROJECT_MAX_NAME_CHARS &&
+      typeof msg.folder === "string" &&
+      msg.folder.length > 0 &&
+      msg.folder.length <= PROJECT_MAX_FOLDER_CHARS &&
+      typeof msg.description === "string" &&
+      msg.description.length <= PROJECT_MAX_DESCRIPTION_CHARS
+    );
   }
   return false;
 }

@@ -24,6 +24,7 @@ import { DiffWindow } from "./windows/DiffWindow";
 import { HelpWindow } from "./windows/HelpWindow";
 import { LoopModelsWindow } from "./windows/LoopModelsWindow";
 import { OverseerWindow } from "./windows/OverseerWindow";
+import { ProjectCreateWindow } from "./windows/ProjectCreateWindow";
 import { ProvidersWindow } from "./windows/ProvidersWindow";
 import { SessionWindow } from "./windows/SessionWindow";
 import { SessionsWindow } from "./windows/SessionsWindow";
@@ -284,6 +285,12 @@ export function WindowStackHost({
         {windowState.kind === "help" && <HelpWindow provider={provider} />}
         {windowState.kind === "diff" && (
           <DiffWindow target={String(windowState.payload ?? "")} />
+        )}
+        {windowState.kind === "projectCreate" && (
+          <ProjectCreateWindow
+            wizard={wizard}
+            onClose={() => closeWindow(windowState.id)}
+          />
         )}
       </Window>
     );

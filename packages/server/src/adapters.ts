@@ -20,6 +20,8 @@ import { stubAdapter } from "./stub-adapters.js";
  * - `none`    — not listed at all.
  */
 const registry = new Map<string, AgentAdapter>();
+/** Ids registered as catalog stubs — listed, but driven by nothing. */
+const catalogOnly = new Set<string>();
 
 const register = (adapter: AgentAdapter) => registry.set(adapter.id, adapter);
 
@@ -45,6 +47,7 @@ for (const manifest of readProviderManifests()) {
       `adapters: providers/${manifest.id} is app:"adapter" but no adapter is compiled in — listing it as a stub`,
     );
   }
+  catalogOnly.add(manifest.id);
   register(stubAdapter(manifest.id));
 }
 
@@ -62,4 +65,14 @@ export function getAdapter(id: string): AgentAdapter | undefined {
 
 export function listAdapters(): AgentAdapter[] {
   return [...registry.values()];
+}
+
+/**
+ * True when the id is in the catalog but has no wiring behind it — the CLI is
+ * installed, sessions/auth/console are not. Discovery passes this to the UI so
+ * a stub reads as "not available yet" rather than "not signed in": both are
+ * unauthenticated, only one of them is the operator's to fix.
+ */
+export function isCatalogOnly(id: string): boolean {
+  return catalogOnly.has(id);
 }

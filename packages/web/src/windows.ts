@@ -10,7 +10,8 @@ export type WindowKind =
   | "console"
   | "help"
   | "diff"
-  | "loopModels";
+  | "loopModels"
+  | "projectCreate";
 
 export interface OpenWindow {
   id: string;
@@ -74,4 +75,8 @@ export const WINDOW_SPEC: Record<
   // click on the same provider raises the existing window). Height is
   // operator-resizable: up to ten slot rows can be open at once.
   loopModels: { title: "loop models", x: 9999, y: 9999, w: 460, h: 380 },
+  // Opened from the project panel's own "+ create project" row — a fixed
+  // mid-field spawn, same as context/help, since it has no instrument to
+  // anchor near.
+  projectCreate: { title: "create project", x: 260, y: 220, w: 480 },
 };

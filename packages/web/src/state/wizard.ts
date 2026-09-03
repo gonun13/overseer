@@ -176,6 +176,17 @@ export interface WizardState {
   /** Whether the minimum boot beat has elapsed. Paired with `connected` to
    * leave boot — either can arrive first. */
   bootMinElapsed: boolean;
+  /** State of the create-project form's one in-flight request, if any. Not
+   * persisted — a fresh window always starts idle. */
+  projectCreate: ProjectCreateState;
+}
+
+/** `"idle"` also covers "never asked" and "the last one finished" — the
+ * window closes itself on the transition back to idle after `"working"`, so
+ * there is nothing a caller needs to distinguish those two idles for. */
+export interface ProjectCreateState {
+  status: "idle" | "working" | "error";
+  message?: string;
 }
 
 /** Overlay the latest known status per id onto a freshly (re)assigned roster —
@@ -216,6 +227,7 @@ export const INITIAL_WIZARD: WizardState = {
   connected: false,
   bootMinElapsed: false,
   operationTick: 0,
+  projectCreate: { status: "idle" },
 };
 
 /**
@@ -279,6 +291,14 @@ export type WizardAction =
   | { type: "welcome.done" }
   /** Operator picked a project in the panel — keep wizard state in sync. */
   | { type: "project.selected"; path: string }
+  /** Operator submitted the create-project form. */
+  | { type: "project.create.requested" }
+  /** Server acked a `project.create` — the new project itself arrives
+   * separately via the ordinary `workspace.projects` broadcast. */
+  | { type: "project.created" }
+  /** Server refused a `project.create` (benign — a bad name, a taken folder,
+   * the create-spam guardrails). */
+  | { type: "project.create.failed"; message: string }
   /** Operator picked a theme — keep wizard state in sync. */
   | { type: "theme.selected"; theme: OverseerTheme }
   /** Operator connected a provider from the picker. */
@@ -409,6 +429,18 @@ export function wizardReducer(
 
     case "project.selected":
       return { ...state, activeProjectPath: action.path };
+
+    case "project.create.requested":
+      return { ...state, projectCreate: { status: "working" } };
+
+    case "project.created":
+      return { ...state, projectCreate: { status: "idle" } };
+
+    case "project.create.failed":
+      return {
+        ...state,
+        projectCreate: { status: "error", message: action.message },
+      };
 
     case "theme.selected":
       return { ...state, theme: action.theme };

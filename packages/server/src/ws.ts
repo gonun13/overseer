@@ -50,6 +50,7 @@ import {
   endIntentionalPersonalityDelete,
 } from "./personality-file-watcher.js";
 import { refreshPendingUsage } from "./usage-refresh.js";
+import { createProject } from "./project-create.js";
 import { isInsideWorkspace } from "./workspace.js";
 
 /**
@@ -289,6 +290,34 @@ export function attachWebSocketServer(httpServer: Server): {
           }
           send({ type: "project.selected", path: parsed.path });
           void sessionSupervisor.list();
+          return;
+        }
+        case "project.create": {
+          const result = await createProject({
+            name: parsed.name,
+            folder: parsed.folder,
+            description: parsed.description,
+          });
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "project.create",
+              benign: result.benign,
+              message: result.reason,
+            });
+            return;
+          }
+          // No rescan nudge: the root fs.watch + poll in
+          // workspace-membership-worker.ts picks the new directory up on its
+          // own (~400ms debounce after the watch fires) and broadcasts
+          // workspace.projects to every tab. There is no monitor handle
+          // reachable from here to force an earlier one anyway —
+          // `startWorkspaceMonitor` is wired independently in index.ts.
+          send({
+            type: "project.created",
+            path: result.path,
+            name: parsed.name.trim(),
+          });
           return;
         }
         case "theme.select": {

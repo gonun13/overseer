@@ -41,6 +41,14 @@ export interface DiscoveryController extends WizardState {
   submitOperatorTone: (tone: PersonalityTone) => void;
   /** Persist the active project into internal memory. */
   selectProject: (path: string) => void;
+  /** Create a new project: mkdir under the workspace root, `git init`, write
+   * a README. The result lands in `projectCreate`; the new project itself
+   * follows via the ordinary `workspace.projects` broadcast. */
+  createProject: (input: {
+    name: string;
+    folder: string;
+    description: string;
+  }) => void;
   /** Persist the theme into internal memory. */
   selectTheme: (theme: OverseerTheme) => void;
   /** Attach a provider from the picker (auth is a separate later step). */
@@ -161,6 +169,18 @@ export function useDiscovery(): DiscoveryController {
       }
       if (message.type === "project.selected") {
         dispatch({ type: "project.selected", path: message.path });
+        return;
+      }
+      if (message.type === "project.created") {
+        dispatch({ type: "project.created" });
+        return;
+      }
+      if (message.type === "error" && message.about === "project.create") {
+        // Routed ahead of the generic error branch below: that one only
+        // sets `state.error` for a non-benign failure, which would leave
+        // the create-project form's own `projectCreate` status stuck on
+        // "working" forever instead of showing the refusal inline.
+        dispatch({ type: "project.create.failed", message: message.message });
         return;
       }
       if (message.type === "theme.selected") {
@@ -303,6 +323,15 @@ export function useDiscovery(): DiscoveryController {
     [send],
   );
 
+  const createProject = useCallback(
+    (input: { name: string; folder: string; description: string }) => {
+      dispatch({ type: "project.create.requested" });
+      const message: ClientMessage = { type: "project.create", ...input };
+      send(message);
+    },
+    [send],
+  );
+
   const selectTheme = useCallback(
     (theme: OverseerTheme) => {
       dispatch({ type: "theme.selected", theme });
@@ -421,6 +450,7 @@ export function useDiscovery(): DiscoveryController {
       submitOperatorName,
       submitOperatorTone,
       selectProject,
+      createProject,
       selectTheme,
       connectProvider,
       startLogin,
@@ -441,6 +471,7 @@ export function useDiscovery(): DiscoveryController {
       submitOperatorName,
       submitOperatorTone,
       selectProject,
+      createProject,
       selectTheme,
       connectProvider,
       startLogin,

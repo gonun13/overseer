@@ -194,6 +194,15 @@
   color: var(--accent-fill);
 }
 
+.project-new {
+  color: var(--ink-dim);
+  font-size: 12px;
+}
+
+.project-new:hover {
+  color: var(--accent-fill);
+}
+
 /* ---- settings panel -------------------------------------------------------
    A surface, because you act in it, but not a window: edge-anchored, single,
    not draggable. It carries a 2px border on the edge it slides from (§6.1). */

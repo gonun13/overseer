@@ -151,10 +151,13 @@ function ProvidersTab({
         return (
           <WRow
             key={provider.id}
-            activity={providerAuthActivity(provider.status)}
+            activity={providerAuthActivity(
+              provider.status,
+              provider.catalogOnly === true,
+            )}
             primary={provider.id}
             secondary={
-              providerAuthLabel(provider.status) +
+              providerAuthLabel(provider.status, provider.catalogOnly === true) +
               (isAttached ? " · attached" : "")
             }
             right={active ? "▪" : undefined}

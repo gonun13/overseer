@@ -473,6 +473,7 @@ export default function App() {
               }
               wizard.selectProject(project.path);
             }}
+            onCreate={() => open("projectCreate")}
           />
         )}
 

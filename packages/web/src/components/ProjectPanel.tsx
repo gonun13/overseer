@@ -19,12 +19,14 @@ export function ProjectPanel({
   open,
   onToggle,
   onSelect,
+  onCreate,
 }: {
   projects: Project[];
   active?: Project;
   open: boolean;
   onToggle: () => void;
   onSelect: (project: Project) => void;
+  onCreate: () => void;
 }) {
   return (
     <section className="projects settles-in">
@@ -60,6 +62,9 @@ export function ProjectPanel({
             )}
           </button>
         ))}
+        <button className="project-row project-new" onClick={onCreate}>
+          + create project
+        </button>
       </div>
     </section>
   );

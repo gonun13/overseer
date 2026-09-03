@@ -15,7 +15,7 @@ import {
   scaffoldPersonality,
   type PersonalityResult,
 } from "./memory/personality/api.js";
-import { listAdapters } from "./adapters.js";
+import { isCatalogOnly, listAdapters } from "./adapters.js";
 import {
   WORKSPACE_ROOT,
   describeProject,
@@ -310,6 +310,7 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
             status,
             login: adapter.capabilities.login,
             usageCheck: adapter.capabilities.usageCheck,
+            ...(isCatalogOnly(adapter.id) ? { catalogOnly: true as const } : {}),
             ...(expired ? { authExpired: true as const } : {}),
           };
         }),
