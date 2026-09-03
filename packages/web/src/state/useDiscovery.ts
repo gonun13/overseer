@@ -130,9 +130,19 @@ export function useDiscovery(): DiscoveryController {
         // a refusal that must not tear the wizard down.
         message.type === "provider.options" ||
         message.type === "provider.usageCheck" ||
+        // The project management window's own requests — single-window,
+        // project-scoped, and their refusals (nothing to commit, no remote,
+        // a merge conflict) are exactly the same kind of benign "stay put"
+        // as the rest of this channel.
+        message.type === "project.git.status" ||
+        message.type === "project.git.committed" ||
+        message.type === "project.git.pushed" ||
+        message.type === "project.git.merged" ||
+        message.type === "project.git.reverted" ||
         (message.type === "error" && message.about?.startsWith("session.")) ||
         (message.type === "error" && message.about === "provider.options") ||
-        (message.type === "error" && message.about === "provider.checkUsage")
+        (message.type === "error" && message.about === "provider.checkUsage") ||
+        (message.type === "error" && message.about?.startsWith("project.git."))
       ) {
         for (const listener of sessionListeners.current) listener(message);
         return;

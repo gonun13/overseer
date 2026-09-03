@@ -1,5 +1,5 @@
 import { StatusLight } from "./StatusLight";
-import { ChevronIcon } from "./icons";
+import { BranchIcon, ChevronIcon } from "./icons";
 import type { Project } from "../domain";
 
 /**
@@ -20,6 +20,7 @@ export function ProjectPanel({
   onToggle,
   onSelect,
   onCreate,
+  onManage,
 }: {
   projects: Project[];
   active?: Project;
@@ -27,6 +28,7 @@ export function ProjectPanel({
   onToggle: () => void;
   onSelect: (project: Project) => void;
   onCreate: () => void;
+  onManage: (project: Project) => void;
 }) {
   return (
     <section className="projects settles-in">
@@ -46,10 +48,18 @@ export function ProjectPanel({
 
       <div className={`projects-list ${open ? "open" : ""}`}>
         {projects.map((project) => (
-          <button
+          <div
             key={project.id}
+            role="button"
+            tabIndex={0}
             className={`project-row ${project.id === active?.id ? "current" : ""}`}
             onClick={() => onSelect(project)}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                onSelect(project);
+              }
+            }}
           >
             <StatusLight activity={project.activity} />
             <span className="project-row-name">{project.name}</span>
@@ -60,7 +70,17 @@ export function ProjectPanel({
             {project.note && (
               <span className="project-row-note">{project.note}</span>
             )}
-          </button>
+            <button
+              className="project-row-manage"
+              aria-label={`manage ${project.name}`}
+              onClick={(e) => {
+                e.stopPropagation();
+                onManage(project);
+              }}
+            >
+              <BranchIcon />
+            </button>
+          </div>
         ))}
         <button className="project-row project-new" onClick={onCreate}>
           + create project

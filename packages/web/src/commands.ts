@@ -28,10 +28,9 @@ export const COMMANDS: Command[] = [
     action: { type: "open", kind: "sessions" },
   },
   {
-    name: "projects",
-    aliases: ["project", "switch"],
-    help: "open the project selector",
-    action: { type: "selector" },
+    name: "project",
+    help: "commit, push, merge, or revert the active project's git changes",
+    action: { type: "open", kind: "project" },
   },
   {
     name: "approvals",

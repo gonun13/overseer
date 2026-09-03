@@ -11,7 +11,8 @@ export type WindowKind =
   | "help"
   | "diff"
   | "loopModels"
-  | "projectCreate";
+  | "projectCreate"
+  | "project";
 
 export interface OpenWindow {
   id: string;
@@ -79,4 +80,11 @@ export const WINDOW_SPEC: Record<
   // mid-field spawn, same as context/help, since it has no instrument to
   // anchor near.
   projectCreate: { title: "create project", x: 260, y: 220, w: 480 },
+  // Opened from the project panel's per-row manage icon (payload: that
+  // project's path — also the dedupe key, so a second click on the same row
+  // raises the existing window rather than stacking another one) or from the
+  // `/project` command, which targets the active project. Same fixed
+  // mid-field spawn as `projectCreate` — it has no instrument of its own to
+  // anchor near either.
+  project: { title: "project", x: 300, y: 200, w: 520 },
 };

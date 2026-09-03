@@ -90,9 +90,10 @@
   font-size: 13px;
 }
 
-/* A div, not a button, so a real delete button can sit inside it without
-   nesting interactive elements — the button reset that gives `.project-row`
-   its pointer cursor for free does not apply here. */
+/* Both rows are a div, not a button, so a real icon button (delete, manage)
+   can sit inside without nesting interactive elements — the pointer cursor a
+   `<button>` gives for free does not apply here, so both set it explicitly. */
+.project-row,
 .session-row {
   cursor: pointer;
 }
@@ -152,6 +153,23 @@
 
 .session-row-delete:hover {
   color: var(--accent-fill);
+}
+
+/* Right-aligned same as `-note`/`-delete` — `margin-left: auto` covers the
+   case where there is no note ahead of it to do the pushing already. */
+.project-row-manage {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  flex: none;
+  width: 18px;
+  height: 18px;
+  margin-left: auto;
+  color: var(--ink-faint);
+}
+
+.project-row-manage:hover {
+  color: var(--mark-fill);
 }
 
 /* ---- bottom left: the sessions panel --------------------------------------

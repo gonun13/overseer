@@ -171,7 +171,22 @@ export type ClientMessage =
       name: string;
       folder: string;
       description: string;
-    };
+    }
+  /** Read branch, ahead/behind, remote presence, and changed files for one
+   * project — opens the project management window. `path` rather than the
+   * active project only, so the window works from any row in the panel. */
+  | { type: "project.git.status"; path: string }
+  /** `git add -A` then commit in `path`, with `message`. */
+  | { type: "project.git.commit"; path: string; message: string }
+  /** `git push -u origin <branch>` in `path`. Only offered by the client when
+   * the last status read reported a remote. */
+  | { type: "project.git.push"; path: string }
+  /** Merge the current branch into `main`, locally — offered only when
+   * `path` has no remote (a remote implies a PR process upstream instead). */
+  | { type: "project.git.merge"; path: string }
+  /** Discard every uncommitted change in `path` — `git reset --hard` plus a
+   * clean of untracked files. */
+  | { type: "project.git.revert"; path: string };
 
 export interface ConnectedMessage {
   type: "connected";
@@ -229,6 +244,53 @@ export interface ProjectCreatedMessage {
   type: "project.created";
   path: string;
   name: string;
+}
+
+/** One changed path from `git status --porcelain`, reduced to the one status
+ * word the project window shows next to it. */
+export interface GitFileChange {
+  path: string;
+  status: "modified" | "added" | "deleted" | "renamed" | "untracked" | "unmerged";
+}
+
+/** Reply to `project.git.status`. `ahead`/`behind` are absent when the branch
+ * has no upstream to compare against — never collapsed to `0`, the same rule
+ * `DiscoveredProject.dirty` already follows. */
+export interface ProjectGitStatusMessage {
+  type: "project.git.status";
+  path: string;
+  branch: string;
+  dirty: boolean;
+  hasRemote: boolean;
+  ahead?: number;
+  behind?: number;
+  files: GitFileChange[];
+}
+
+/** Ack that `path` was committed. The file list itself follows via a fresh
+ * `project.git.status` the client re-asks for, not inline here. */
+export interface ProjectGitCommittedMessage {
+  type: "project.git.committed";
+  path: string;
+}
+
+/** Ack that `path`'s current branch was pushed. */
+export interface ProjectGitPushedMessage {
+  type: "project.git.pushed";
+  path: string;
+}
+
+/** Ack that `path`'s feature branch was merged into `main`, locally. */
+export interface ProjectGitMergedMessage {
+  type: "project.git.merged";
+  path: string;
+  branch: string;
+}
+
+/** Ack that every uncommitted change in `path` was discarded. */
+export interface ProjectGitRevertedMessage {
+  type: "project.git.reverted";
+  path: string;
 }
 
 /** Ack that the theme was recorded in internal memory. */
@@ -464,6 +526,11 @@ export type ServerMessage =
   | OperatorTonedMessage
   | ProjectSelectedMessage
   | ProjectCreatedMessage
+  | ProjectGitStatusMessage
+  | ProjectGitCommittedMessage
+  | ProjectGitPushedMessage
+  | ProjectGitMergedMessage
+  | ProjectGitRevertedMessage
   | ThemeSelectedMessage
   | ProviderConnectedMessage
   | ProviderStatusMessage
@@ -513,6 +580,10 @@ export const SESSION_MAX_AGENT_CHARS = 128;
 export const PROJECT_MAX_NAME_CHARS = 200;
 export const PROJECT_MAX_FOLDER_CHARS = 100;
 export const PROJECT_MAX_DESCRIPTION_CHARS = 4_000;
+/** A path frame names a workspace directory, not a document — same order of
+ * magnitude as `PROJECT_MAX_FOLDER_CHARS` plus room for the workspace root. */
+export const GIT_MAX_PATH_CHARS = 4_096;
+export const GIT_MAX_COMMIT_MESSAGE_CHARS = 4_000;
 
 function isConsoleSize(cols: unknown, rows: unknown): boolean {
   return (
@@ -700,7 +771,30 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       msg.description.length <= PROJECT_MAX_DESCRIPTION_CHARS
     );
   }
+  if (
+    type === "project.git.status" ||
+    type === "project.git.push" ||
+    type === "project.git.merge" ||
+    type === "project.git.revert"
+  ) {
+    return isGitPath((value as { path?: unknown }).path);
+  }
+  if (type === "project.git.commit") {
+    const msg = value as { path?: unknown; message?: unknown };
+    return (
+      isGitPath(msg.path) &&
+      typeof msg.message === "string" &&
+      msg.message.trim().length > 0 &&
+      msg.message.length <= GIT_MAX_COMMIT_MESSAGE_CHARS
+    );
+  }
   return false;
+}
+
+function isGitPath(value: unknown): value is string {
+  return (
+    typeof value === "string" && value.length > 0 && value.length <= GIT_MAX_PATH_CHARS
+  );
 }
 
 function isSessionId(value: unknown): value is string {

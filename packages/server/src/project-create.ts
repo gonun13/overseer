@@ -39,7 +39,10 @@ export interface CreateProjectDeps {
 }
 
 async function defaultGitInit(dir: string): Promise<void> {
-  await run("git", ["init"], { cwd: dir, timeout: 5_000 });
+  // -b main: don't inherit whatever init.defaultBranch happens to be, and
+  // don't emit git's "using master" advice — same reasoning as
+  // memory/personality/scaffold.ts's own `git init -q -b main`.
+  await run("git", ["init", "-b", "main"], { cwd: dir, timeout: 5_000 });
 }
 
 /**

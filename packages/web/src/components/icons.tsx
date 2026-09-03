@@ -64,3 +64,16 @@ export function TrashIcon() {
     </svg>
   );
 }
+
+/** A git-branch fork — two nodes off a trunk node, same outline-only style as
+ * the other glyphs. Opens the project management window from a panel row. */
+export function BranchIcon() {
+  return (
+    <svg {...base} width={12} height={12}>
+      <circle cx="4" cy="3" r="1.5" />
+      <circle cx="4" cy="13" r="1.5" />
+      <circle cx="11" cy="6" r="1.5" />
+      <path d="M4 4.5v7M4 8c0-2.2 1.8-3.5 4-3.5h1.5" />
+    </svg>
+  );
+}

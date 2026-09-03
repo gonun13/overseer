@@ -12,6 +12,7 @@ import { WindowStackHost } from "./components/WindowStackHost";
 import type { Project, Session } from "./domain";
 import { SESSION_CONTROL_KEYS, type SessionOptionKey } from "./session";
 import type { Signal } from "./state/signals";
+import type { WindowKind } from "./windows";
 import { useChatSessions } from "./state/useChatSessions";
 import { useDiscovery } from "./state/useDiscovery";
 import { useLoopConfig } from "./state/useLoopConfig";
@@ -84,8 +85,23 @@ export default function App() {
     open("console", "loop", `loop · ${name ?? "workspace"}`);
   }, [open, wizard.activeProjectPath]);
 
+  // A slash command has no project row to hand a path payload from, so
+  // `/project` (and any signal routed the same way) targets whatever is
+  // active. A row's own manage icon (ProjectPanel's onManage) calls `open`
+  // directly with that row's path instead of going through this.
+  const openWindow = useCallback(
+    (kind: WindowKind, payload?: unknown, title?: string) => {
+      if (kind === "project" && payload === undefined) {
+        open(kind, wizard.activeProjectPath);
+        return;
+      }
+      open(kind, payload, title);
+    },
+    [open, wizard.activeProjectPath],
+  );
+
   const prompt = usePromptSession({
-    openWindow: open,
+    openWindow,
     closeAllWindows: closeAll,
     openSettings,
     openProjectSelector,
@@ -474,6 +490,9 @@ export default function App() {
               wizard.selectProject(project.path);
             }}
             onCreate={() => open("projectCreate")}
+            onManage={(project) =>
+              open("project", project.path, project.name)
+            }
           />
         )}
 
@@ -566,6 +585,7 @@ export default function App() {
           onOpenSessionContext={openSessionContext}
           send={wizard.send}
           subscribeConsole={wizard.subscribeConsole}
+          subscribeSession={wizard.subscribeSession}
           loopTakeover={loopTakeover}
           onOpenLoopSession={openLoopSession}
           loopConfig={loopConfig}

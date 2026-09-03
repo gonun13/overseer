@@ -1,9 +1,11 @@
 import { randomUUID } from "node:crypto";
 import type { IncomingMessage } from "node:http";
 import type { Server } from "node:http";
+import path from "node:path";
 import {
   isClientMessage,
   type DiscoveryEvent,
+  type DiscoveryOutcome,
   type ServerMessage,
 } from "@overseer/protocol";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -51,6 +53,7 @@ import {
 } from "./personality-file-watcher.js";
 import { refreshPendingUsage } from "./usage-refresh.js";
 import { createProject } from "./project-create.js";
+import { projectGit, type GitOpResult } from "./project-git.js";
 import { isInsideWorkspace } from "./workspace.js";
 
 /**
@@ -123,6 +126,16 @@ function resetFailure(error: unknown): string {
   return error instanceof Error ? error.message : "could not erase";
 }
 
+/** Maps a git op's result onto the one outcome vocabulary every step and
+ * signal in the app already shares — a benign refusal (nothing to commit, no
+ * remote, already on main) reads as `blocked`, not `failed`: it ran fine and
+ * found a reason not to act, the same distinction `DiscoveryOutcome` draws
+ * everywhere else. */
+function gitStepOutcome(result: GitOpResult): DiscoveryOutcome {
+  if (result.ok) return "ok";
+  return result.benign ? "blocked" : "failed";
+}
+
 export function attachWebSocketServer(httpServer: Server): {
   wss: WebSocketServer;
   broadcast: (message: ServerMessage) => void;
@@ -142,6 +155,40 @@ export function attachWebSocketServer(httpServer: Server): {
   const sessionSupervisor = createSessionSupervisor(broadcast);
   const providerOptions = createProviderOptions();
   const usageCheck = createUsageCheck();
+
+  /**
+   * Records and broadcasts one git action (commit/push/merge/revert) —
+   * broadcast rather than sent to the asking socket alone, since a change to
+   * the project's git state is a fact any tab with that project's window
+   * open should see, the same reasoning `workspace-membership-worker.ts`
+   * broadcasts project add/remove steps. This is also what "highlights" the
+   * overseer for the operator: a fresh `overseer.step` bumps `operationTick`
+   * on the client, which raises the OVERSEER window on its own
+   * (`useShellPresentation.ts`).
+   */
+  const announceGitOp = (
+    verb: string,
+    projectPath: string,
+    result: GitOpResult,
+    action: string,
+    detail: string,
+  ) => {
+    const name = path.basename(projectPath);
+    const outcome = gitStepOutcome(result);
+    void recordAction({
+      actor: "operator",
+      action,
+      outcome,
+      detail: `${name} · ${result.ok ? detail : result.reason}`,
+    });
+    broadcast({
+      type: "overseer.step",
+      id: randomUUID(),
+      label: `${verb} ${name}`,
+      outcome,
+      detail: result.ok ? detail : result.reason,
+    });
+  };
 
   httpServer.on("upgrade", (req: IncomingMessage, socket, head) => {
     if (
@@ -318,6 +365,149 @@ export function attachWebSocketServer(httpServer: Server): {
             path: result.path,
             name: parsed.name.trim(),
           });
+          return;
+        }
+        case "project.git.status": {
+          if (!(await isInsideWorkspace(parsed.path))) {
+            send({
+              type: "error",
+              about: "project.git.status",
+              benign: true,
+              message: "a project must be a path inside the workspace",
+            });
+            return;
+          }
+          try {
+            const result = await projectGit.status(parsed.path);
+            send({ type: "project.git.status", path: parsed.path, ...result });
+          } catch (error) {
+            send({
+              type: "error",
+              about: "project.git.status",
+              benign: true,
+              message: error instanceof Error ? error.message : "could not read git status",
+            });
+          }
+          return;
+        }
+        case "project.git.commit": {
+          if (!(await isInsideWorkspace(parsed.path))) {
+            send({
+              type: "error",
+              about: "project.git.commit",
+              benign: true,
+              message: "a project must be a path inside the workspace",
+            });
+            return;
+          }
+          const result = await projectGit.commit(parsed.path, parsed.message);
+          announceGitOp(
+            "committing",
+            parsed.path,
+            result,
+            "project:commit",
+            parsed.message,
+          );
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "project.git.commit",
+              benign: result.benign,
+              message: result.reason,
+            });
+            return;
+          }
+          send({ type: "project.git.committed", path: parsed.path });
+          return;
+        }
+        case "project.git.push": {
+          if (!(await isInsideWorkspace(parsed.path))) {
+            send({
+              type: "error",
+              about: "project.git.push",
+              benign: true,
+              message: "a project must be a path inside the workspace",
+            });
+            return;
+          }
+          const result = await projectGit.push(parsed.path);
+          announceGitOp(
+            "pushing",
+            parsed.path,
+            result,
+            "project:push",
+            "pushed to origin",
+          );
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "project.git.push",
+              benign: result.benign,
+              message: result.reason,
+            });
+            return;
+          }
+          send({ type: "project.git.pushed", path: parsed.path });
+          return;
+        }
+        case "project.git.merge": {
+          if (!(await isInsideWorkspace(parsed.path))) {
+            send({
+              type: "error",
+              about: "project.git.merge",
+              benign: true,
+              message: "a project must be a path inside the workspace",
+            });
+            return;
+          }
+          const result = await projectGit.mergeToMain(parsed.path);
+          announceGitOp(
+            "merging",
+            parsed.path,
+            result,
+            "project:merge",
+            "merged into main",
+          );
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "project.git.merge",
+              benign: result.benign,
+              message: result.reason,
+            });
+            return;
+          }
+          send({ type: "project.git.merged", path: parsed.path, branch: "main" });
+          return;
+        }
+        case "project.git.revert": {
+          if (!(await isInsideWorkspace(parsed.path))) {
+            send({
+              type: "error",
+              about: "project.git.revert",
+              benign: true,
+              message: "a project must be a path inside the workspace",
+            });
+            return;
+          }
+          const result = await projectGit.revert(parsed.path);
+          announceGitOp(
+            "reverting",
+            parsed.path,
+            result,
+            "project:revert",
+            "discarded uncommitted changes",
+          );
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "project.git.revert",
+              benign: result.benign,
+              message: result.reason,
+            });
+            return;
+          }
+          send({ type: "project.git.reverted", path: parsed.path });
           return;
         }
         case "theme.select": {

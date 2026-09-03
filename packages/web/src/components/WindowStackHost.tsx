@@ -25,6 +25,7 @@ import { HelpWindow } from "./windows/HelpWindow";
 import { LoopModelsWindow } from "./windows/LoopModelsWindow";
 import { OverseerWindow } from "./windows/OverseerWindow";
 import { ProjectCreateWindow } from "./windows/ProjectCreateWindow";
+import { ProjectWindow } from "./windows/ProjectWindow";
 import { ProvidersWindow } from "./windows/ProvidersWindow";
 import { SessionWindow } from "./windows/SessionWindow";
 import { SessionsWindow } from "./windows/SessionsWindow";
@@ -67,6 +68,11 @@ interface WindowStackHostProps {
   onOpenSessionContext: (sessionId: string) => void;
   send: (message: ClientMessage) => void;
   subscribeConsole: (listener: (message: ServerMessage) => void) => () => void;
+  /** Routes `project.git.*` frames to the project management window — same
+   * channel `useProviderOptions`/`useChatSessions` already use, since these
+   * are the same kind of single-window, project-scoped, benign-refusal-
+   * tolerant request. */
+  subscribeSession: (listener: (message: ServerMessage) => void) => () => void;
   /** True when the next loop console to mount should end the run currently
    * holding the workspace's lease. Consumed once, on that mount. */
   loopTakeover: boolean;
@@ -111,6 +117,7 @@ export function WindowStackHost({
   onOpenSessionContext,
   send,
   subscribeConsole,
+  subscribeSession,
   loopTakeover,
   onOpenLoopSession,
   loopConfig,
@@ -290,6 +297,13 @@ export function WindowStackHost({
           <ProjectCreateWindow
             wizard={wizard}
             onClose={() => closeWindow(windowState.id)}
+          />
+        )}
+        {windowState.kind === "project" && (
+          <ProjectWindow
+            path={String(windowState.payload ?? "")}
+            send={send}
+            subscribe={subscribeSession}
           />
         )}
       </Window>
