@@ -612,6 +612,14 @@ export function attachWebSocketServer(httpServer: Server): {
           if (!result.ok) send(sessionError("session.model", result.reason));
           return;
         }
+        case "session.mode": {
+          const result = await sessionSupervisor.setPermissionMode(
+            parsed.sessionId,
+            parsed.mode,
+          );
+          if (!result.ok) send(sessionError("session.mode", result.reason));
+          return;
+        }
         case "session.interrupt": {
           const result = sessionSupervisor.interrupt(parsed.sessionId);
           if (!result.ok) {

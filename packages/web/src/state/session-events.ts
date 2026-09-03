@@ -138,6 +138,13 @@ export function applySessionEvent(
       // for its next turn. Nothing else about the session changed.
       session = { ...session, model: event.model };
       break;
+    case "session.mode":
+      // Same confirmation, for permission mode — but unlike model, mode has
+      // no dedicated `Session` field to update here. The confirmed value
+      // reaches the accordion via the `session.meta` broadcast the
+      // supervisor already pushes (`settingsFromMeta`), same as every other
+      // control row.
+      break;
     case "text.delta": {
       const last = turns.at(-1);
       if (last?.kind === "agent") {

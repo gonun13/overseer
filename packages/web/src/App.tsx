@@ -185,12 +185,12 @@ export default function App() {
 
   const selectSessionControl = useCallback(
     (sessionId: string, key: SessionOptionKey, value: string) => {
-      // Model has a runtime setter (`set_model`) and `setSessionSetting`
-      // sends it, so a pick there retargets the process that is already
-      // running. Mode and agent do not — the CLI offers no runtime control
-      // request for either — so a pick on those rows only arms the next
-      // session. Every row is armed regardless: it is also the default the
-      // *next* session starts with.
+      // Model and mode each have a runtime setter (`set_model` /
+      // `set_permission_mode`) and `setSessionSetting` sends them, so a pick
+      // there retargets the process that is already running. Agent does not
+      // — the CLI offers no runtime control request for it — so a pick on
+      // that row only arms the next session. Every row is armed regardless:
+      // it is also the default the *next* session starts with.
       setSessionSetting(sessionId, key, value);
       armSession(key, value);
       setOpenSessionControls((current) => {

@@ -1,7 +1,8 @@
-import { execFile, spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
-import { promisify } from "node:util";
+import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
+import { randomUUID } from "node:crypto";
 import type {
   PermissionDecision,
+  PermissionMode,
   SessionHandle,
   SessionOpts,
   UserMessage,
@@ -10,8 +11,6 @@ import { exitEvent, normalizeLine, type NormalizeTurnState } from "./normalize.j
 
 const CLI = "agent";
 const KILL_GRACE_MS = 5_000;
-
-const execFileAsync = promisify(execFile);
 
 export type SessionSpawner = (opts: {
   file: string;
@@ -165,6 +164,9 @@ export function createSessionHandle(
    * control request to arm an already-running process with, so this simply
    * changes what the next spawn's `--model` is. */
   let model = opts.model;
+  /** Same idea, for `setPermissionMode` — retargets the next spawn's
+   * `--mode` (or lack of one; see `buildArgs`). */
+  let permissionMode = opts.permissionMode;
 
   const timestamp = () => new Date().toISOString();
 
@@ -178,7 +180,7 @@ export function createSessionHandle(
     const spawnFn = spawner ?? defaultSpawner;
     const child = spawnFn({
       file: CLI,
-      args: buildArgs(chatId, textFromMessage(msg), { ...opts, model }),
+      args: buildArgs(chatId, textFromMessage(msg), { ...opts, model, permissionMode }),
       cwd: opts.projectDir,
       env: process.env,
     });
@@ -295,6 +297,16 @@ export function createSessionHandle(
       });
     },
 
+    setPermissionMode(nextMode: PermissionMode): void {
+      permissionMode = nextMode;
+      queue.push({
+        type: "session.mode",
+        sessionId: chatId,
+        timestamp: timestamp(),
+        mode: nextMode,
+      });
+    },
+
     resolvePermission(): void {
       // No permission-request path exists to resolve (see the comment on
       // the discarded event above) — present only to satisfy the interface.
@@ -313,15 +325,16 @@ export function createSessionHandle(
   return handle;
 }
 
-/** `agent create-chat` mints a chat id the CLI will later accept back via
- * `--resume`, without opening a turn on it — the same role
- * claude-code's in-process `randomUUID()` plays, just a CLI round-trip
- * instead of a local computation. */
+/** `agent create-chat` mints a chat id via a CLI round-trip, but `--resume`
+ * accepts one it has never seen — verified against the real CLI (`agent
+ * 2026.08.31-4057e58`): a locally generated UUID passed straight to
+ * `--resume` on the first turn produces the identical on-disk chat
+ * (`~/.cursor/chats/<hash>/<chatId>/meta.json`, `<projects>/agent-transcripts/
+ * <chatId>/`) as one pre-minted with `create-chat`. So this plays the same
+ * role as claude-code's in-process `randomUUID()`, skipping a ~2s spawn that
+ * bought nothing. */
 export async function mintSessionId(): Promise<string> {
-  const { stdout } = await execFileAsync(CLI, ["create-chat"]);
-  const id = stdout.trim();
-  if (id === "") throw new Error("agent create-chat returned no id");
-  return id;
+  return randomUUID();
 }
 
 export function openSession(chatId: string, opts: SessionOpts): SessionHandle {

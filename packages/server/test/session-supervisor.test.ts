@@ -19,6 +19,7 @@ function fakeHandle(events: AgentEvent[]): SessionHandle {
     send: () => {},
     interrupt: () => {},
     setModel: () => {},
+    setPermissionMode: () => {},
     resolvePermission: () => {},
     close: async () => {},
   };
@@ -211,12 +212,12 @@ describe("session-supervisor", () => {
   });
 
   it("reports a clean failure, not an unhandled rejection, when mintSessionId throws", async () => {
-    // Unlike claude-code's in-process randomUUID(), a provider whose id must
-    // come from its own CLI (cursor's `create-chat`) can genuinely fail — a
-    // network error, the CLI unreachable. Before this had its own try/catch
-    // (mirroring openSession's), a throw here rejected the whole `create()`
-    // call, which nothing in ws.ts catches: the operator's click got no
-    // response at all, not even a benign error frame.
+    // mintSessionId is async to leave room for a provider whose id must
+    // round-trip its own CLI, even though neither shipped adapter does that
+    // today. Before this had its own try/catch (mirroring openSession's), a
+    // throw here rejected the whole `create()` call, which nothing in ws.ts
+    // catches: the operator's click got no response at all, not even a
+    // benign error frame.
     const frames: ServerMessage[] = [];
     const supervisor = createSessionSupervisor((msg) => frames.push(msg), {
       readSnapshot: async () => ({
@@ -227,14 +228,14 @@ describe("session-supervisor", () => {
       getAdapter: () =>
         fakeAdapter({
           mintSessionId: async () => {
-            throw new Error("agent create-chat failed");
+            throw new Error("could not mint a session id");
           },
         }),
     });
 
     const result = await supervisor.create({});
     assert.equal(result.ok, false);
-    if (!result.ok) assert.match(result.reason, /agent create-chat failed/);
+    if (!result.ok) assert.match(result.reason, /could not mint a session id/);
   });
 
   it("creates a session and broadcasts meta", async () => {
@@ -350,6 +351,86 @@ describe("session-supervisor", () => {
         f.type === "session.meta",
     );
     assert.equal(metas.at(-1)?.session.model, "claude-haiku-4-5-20251001");
+  });
+
+  it("retargets a live session's permission mode", async () => {
+    const frames: ServerMessage[] = [];
+    const init: AgentEvent = {
+      type: "session.init",
+      sessionId: "new-id",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      model: "claude-sonnet-5",
+      cwd: "/workspace/demo",
+      tools: [],
+      mcpServers: [],
+      slashCommands: [],
+    };
+    let requestedMode: string | undefined;
+    const handle: SessionHandle = {
+      ...fakeHandle([init]),
+      setPermissionMode: (mode) => {
+        requestedMode = mode;
+      },
+    };
+    const supervisor = createSessionSupervisor((msg) => frames.push(msg), {
+      readSnapshot: async () => ({
+        attached_provider: "claude-code",
+        last_active_project: "/workspace/demo",
+      }),
+      isInsideWorkspace: async () => true,
+      getAdapter: () =>
+        fakeAdapter({
+          mintSessionId: async () => "new-id",
+          openSession: async () => handle,
+        }),
+    });
+
+    await supervisor.create({});
+    const result = await supervisor.setPermissionMode("new-id", "plan");
+
+    assert.equal(result.ok, true);
+    assert.equal(requestedMode, "plan");
+  });
+
+  it("folds a confirmed session.mode event into meta without waiting for another session.init", async () => {
+    const frames: ServerMessage[] = [];
+    const init: AgentEvent = {
+      type: "session.init",
+      sessionId: "new-id",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      model: "claude-sonnet-5",
+      cwd: "/workspace/demo",
+      tools: [],
+      mcpServers: [],
+      slashCommands: [],
+    };
+    const modeSwitch: AgentEvent = {
+      type: "session.mode",
+      sessionId: "new-id",
+      timestamp: "2026-01-01T00:00:01.000Z",
+      mode: "plan",
+    };
+    const supervisor = createSessionSupervisor((msg) => frames.push(msg), {
+      readSnapshot: async () => ({
+        attached_provider: "claude-code",
+        last_active_project: "/workspace/demo",
+      }),
+      isInsideWorkspace: async () => true,
+      getAdapter: () =>
+        fakeAdapter({
+          mintSessionId: async () => "new-id",
+          openSession: async () => fakeHandle([init, modeSwitch]),
+        }),
+    });
+
+    await supervisor.create({});
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const metas = frames.filter(
+      (f): f is Extract<ServerMessage, { type: "session.meta" }> =>
+        f.type === "session.meta",
+    );
+    assert.equal(metas.at(-1)?.session.permissionMode, "plan");
   });
 
   it("send opens a dormant session before delivering the message", async () => {

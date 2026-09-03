@@ -329,11 +329,15 @@ export function useChatSessions(
             : chat,
         ),
       );
-      // Model is the one row with a runtime setter (`set_model`) — retarget
-      // the process that is already running instead of only arming the next
-      // one. The optimistic head above is confirmed or corrected once the
-      // server's own `session.model`/`error` frame comes back.
+      // Model and mode each have a runtime setter (`set_model` /
+      // `set_permission_mode`) — retarget the process that is already
+      // running instead of only arming the next one. The optimistic head
+      // above is confirmed or corrected once the server's own
+      // `session.model`/`session.mode`/`error` frame comes back.
       if (key === "model") send({ type: "session.model", sessionId: id, model: value });
+      if (key === "mode") {
+        send({ type: "session.mode", sessionId: id, mode: value as PermissionMode });
+      }
     },
     [send],
   );

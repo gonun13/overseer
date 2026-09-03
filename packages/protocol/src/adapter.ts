@@ -161,6 +161,11 @@ export interface SessionHandle {
    * request on stdin, not a respawn. Success or failure comes back as a
    * `session.model` or `error` event on `events`, asynchronously. */
   setModel(model: string): void;
+  /** Retarget the *next* turn's permission mode on this already-running
+   * session — a control request on stdin, not a respawn. Success or failure
+   * comes back as a `session.mode` or `error` event on `events`,
+   * asynchronously. */
+  setPermissionMode(mode: PermissionMode): void;
   resolvePermission(id: string, decision: PermissionDecision): void;
   close(): Promise<void>;
 }
@@ -344,9 +349,12 @@ export interface ConsoleHandle {
  * (`@overseer/adapter-cursor`) made that untenable: the supervisor now
  * resolves this from whichever adapter is attached, per call.
  *
- * `mintSessionId` is `Promise`-returning because not every provider can mint
- * one locally — cursor's is a CLI round-trip (`agent create-chat`), unlike
- * claude's in-process `randomUUID()`.
+ * `mintSessionId` is `Promise`-returning to leave room for a provider whose
+ * id must round-trip its own CLI — neither shipped adapter needs that today:
+ * both claude-code and cursor mint locally with `randomUUID()`, cursor's
+ * `agent --resume` having turned out to accept an id it has never seen
+ * (verified against the real CLI) rather than requiring `agent create-chat`
+ * first.
  */
 export interface AdapterSessionStore {
   /** Every session this adapter's own transcripts show for one project —

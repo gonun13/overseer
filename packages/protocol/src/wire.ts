@@ -125,6 +125,10 @@ export type ClientMessage =
    * the live process, not a respawn. Resumes a dormant session first, the
    * same as `session.send`. */
   | { type: "session.model"; sessionId: string; model: string }
+  /** Retarget an already-running session's next turn's permission mode — a
+   * control request on the live process, not a respawn. Resumes a dormant
+   * session first, the same as `session.model`. */
+  | { type: "session.mode"; sessionId: string; mode: PermissionMode }
   /** Interrupt the in-flight turn. */
   | { type: "session.interrupt"; sessionId: string }
   /** Close a live session process. */
@@ -622,6 +626,12 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       typeof msg.model === "string" &&
       msg.model.length > 0 &&
       msg.model.length <= SESSION_MAX_MODEL_CHARS
+    );
+  }
+  if (type === "session.mode") {
+    const msg = value as { sessionId?: unknown; mode?: unknown };
+    return (
+      isSessionId(msg.sessionId) && PERMISSION_MODES.has(msg.mode as string)
     );
   }
   if (type === "loop.config.read") return true;

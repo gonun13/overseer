@@ -239,3 +239,27 @@ describe("createSessionHandle setModel", () => {
     assert.ok(spawned[0]?.args.includes("gpt-5.3-codex"));
   });
 });
+
+describe("createSessionHandle setPermissionMode", () => {
+  it("emits session.mode immediately and arms the next spawn's --mode", async () => {
+    const spawned = install();
+    const handle = createSessionHandle("chat-1", { projectDir: "/proj" });
+    const events: AgentEvent[] = [];
+    void (async () => {
+      for await (const event of handle.events) events.push(event);
+    })();
+
+    handle.setPermissionMode("plan");
+    await drain();
+    assert.deepEqual(
+      events.map((e) => e.type),
+      ["session.mode"],
+    );
+
+    handle.send({ role: "user", content: [{ type: "text", text: "hi" }] });
+    await drain();
+    const args = spawned[0]?.args ?? [];
+    assert.ok(args.includes("--mode"));
+    assert.ok(args.includes("plan"));
+  });
+});

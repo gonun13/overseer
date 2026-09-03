@@ -225,6 +225,81 @@ describe("createSessionHandle stdin", () => {
     assert.match((seen[0] as { message: string }).message, /invalid_model_type/);
   });
 
+  it("sends a runtime permission-mode switch as a nested, identified control request", () => {
+    const fake = install();
+    const handle = createSessionHandle("s15", { projectDir: "/workspace" });
+
+    handle.setPermissionMode("plan");
+
+    const [frame] = frames(fake.written);
+    assert.equal(frame.type, "control_request");
+    assert.equal(typeof frame.request_id, "string");
+    assert.deepEqual(frame.request, {
+      subtype: "set_permission_mode",
+      mode: "plan",
+    });
+  });
+
+  it("reports the confirmed mode once the CLI accepts the switch", async () => {
+    const fake = install();
+    const handle = createSessionHandle("s16", { projectDir: "/workspace" });
+    const seen: AgentEvent[] = [];
+    void (async () => {
+      for await (const event of handle.events) seen.push(event);
+    })();
+
+    handle.setPermissionMode("plan");
+    const [frame] = frames(fake.written);
+
+    await fake.emit({
+      type: "control_response",
+      response: {
+        subtype: "success",
+        request_id: frame.request_id,
+        // The CLI's own response carries its wire vocabulary (e.g. echoing
+        // "manual" back as "mode":"default") — the event must still carry
+        // back what was asked for, not this.
+        response: { mode: "default" },
+      },
+    });
+
+    assert.equal(seen.length, 1);
+    assert.deepEqual(seen[0], {
+      type: "session.mode",
+      sessionId: "s16",
+      timestamp: seen[0]!.timestamp,
+      mode: "plan",
+    });
+  });
+
+  it("surfaces a rejected mode switch as a recoverable error, not a silent no-op", async () => {
+    const fake = install();
+    const handle = createSessionHandle("s17", { projectDir: "/workspace" });
+    const seen: AgentEvent[] = [];
+    void (async () => {
+      for await (const event of handle.events) seen.push(event);
+    })();
+
+    handle.setPermissionMode("plan");
+    const [frame] = frames(fake.written);
+
+    await fake.emit({
+      type: "control_response",
+      response: {
+        subtype: "error",
+        request_id: frame.request_id,
+        error: "Cannot set permission mode: must be one of acceptEdits, auto, bypassPermissions, default, dontAsk, plan",
+      },
+    });
+
+    assert.equal(seen.length, 1);
+    assert.equal(seen[0]!.type, "error");
+    assert.match(
+      (seen[0] as { message: string }).message,
+      /Cannot set permission mode/,
+    );
+  });
+
   it("attaches the model that actually produced a turn's reply to turn.end", async () => {
     const fake = install();
     const handle = createSessionHandle("s14", { projectDir: "/workspace" });

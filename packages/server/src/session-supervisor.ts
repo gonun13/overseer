@@ -232,6 +232,12 @@ export function createSessionSupervisor(
             meta.lastActiveAt = event.timestamp;
             pushMeta({ ...meta });
           }
+          if (event.type === "session.mode") {
+            // Same idea as `session.model`, for a confirmed `set_permission_mode`.
+            meta.permissionMode = event.mode;
+            meta.lastActiveAt = event.timestamp;
+            pushMeta({ ...meta });
+          }
           if (event.type === "turn.end") {
             // An interrupted turn reports a zeroed result — keep the running
             // total rather than resetting the session's cost to nothing.
@@ -355,12 +361,12 @@ export function createSessionSupervisor(
       const ctx = await adapterContext();
       if (!ctx.ok) return ctx;
 
-      // A round-trip for a provider whose id must come from its own CLI
-      // (cursor's `create-chat`) rather than an in-process `randomUUID()` —
-      // unlike claude's, this can genuinely fail (the CLI unreachable, a
-      // network error), so it needs the same defensive catch `openSession`
-      // already has below, not a bare `await` that would reject this whole
-      // method and leave the operator's click answered by nothing at all.
+      // Both shipped adapters mint locally today (see AdapterSessionStore's
+      // doc comment), but the interface stays async for a future provider
+      // whose id must round-trip its own CLI — kept behind the same
+      // defensive catch `openSession` already has below, not a bare `await`
+      // that would reject this whole method and leave the operator's click
+      // answered by nothing at all.
       let sessionId: string;
       try {
         sessionId = await ctx.store.mintSessionId();
@@ -496,6 +502,26 @@ export function createSessionSupervisor(
         return { ok: false, reason: "session could not be opened" };
       }
       entry.handle.setModel(model);
+      touch(sessionId);
+      return { ok: true };
+    },
+
+    /** Retarget an already-running session's next turn's permission mode.
+     * Resumes a dormant session first, the same as `setModel`. */
+    async setPermissionMode(
+      sessionId: string,
+      mode: PermissionMode,
+    ): Promise<SessionResult> {
+      let entry = live.get(sessionId);
+      if (entry === undefined) {
+        const opened = await ensureOpen(sessionId);
+        if (!opened.ok) return opened;
+        entry = live.get(sessionId);
+      }
+      if (entry === undefined) {
+        return { ok: false, reason: "session could not be opened" };
+      }
+      entry.handle.setPermissionMode(mode);
       touch(sessionId);
       return { ok: true };
     },

@@ -102,9 +102,9 @@ export const claudeCodeAdapter: AgentAdapter = {
     async openSession(sessionId: string, opts: SessionOpts): Promise<SessionHandle> {
       return openSession(sessionId, opts);
     },
-    // Wrapped async — the interface accommodates a provider whose id must
-    // come from a CLI round-trip (cursor's `create-chat`); claude's own is
-    // synchronous and just needs the shape.
+    // Wrapped async — the interface leaves room for a provider whose id must
+    // round-trip its own CLI; claude's own is synchronous and just needs the
+    // shape.
     async mintSessionId(): Promise<string> {
       return mintSessionId();
     },

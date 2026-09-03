@@ -4,6 +4,7 @@ import type { PermissionMode } from "./adapter.js";
 export type AgentEvent =
   | SessionInitEvent
   | SessionModelEvent
+  | SessionPermissionModeEvent
   | TextDeltaEvent
   | ThinkingDeltaEvent
   | ToolStartEvent
@@ -44,6 +45,15 @@ export interface SessionInitEvent extends BaseEvent {
 export interface SessionModelEvent extends BaseEvent {
   type: "session.model";
   model: string;
+}
+
+/** A runtime `set_permission_mode` request the CLI confirmed — the mode that
+ * was asked for, echoed back (the response carries no mode of its own worth
+ * trusting over that, same reasoning as `SessionModelEvent`). A rejected
+ * request surfaces as `error` instead; this event only fires on success. */
+export interface SessionPermissionModeEvent extends BaseEvent {
+  type: "session.mode";
+  mode: PermissionMode;
 }
 
 export interface TextDeltaEvent extends BaseEvent {

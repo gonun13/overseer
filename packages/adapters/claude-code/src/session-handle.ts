@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { spawn, type ChildProcessWithoutNullStreams } from "node:child_process";
 import type {
   PermissionDecision,
+  PermissionMode,
   SessionHandle,
   SessionOpts,
   UserMessage,
@@ -155,6 +156,12 @@ export function createSessionHandle(
   /** `set_model` requests awaiting their `control_response`, keyed by request
    * id — the response itself doesn't echo the model back. */
   const pendingModelRequests = new Map<string, string>();
+  /** Same idea, for `set_permission_mode` — verified against the real CLI
+   * (2.1.226): the response's own `mode` field is not trustworthy to echo
+   * (it reports `manual` back as `default`, mirroring `session.init`'s own
+   * asymmetry), so this keeps the wire-level mode that was actually asked
+   * for. */
+  const pendingPermissionModeRequests = new Map<string, PermissionMode>();
   /** The model the most recent `assistant` frame ran on. `turn.end` has no
    * model of its own; this is what attaches one to it. */
   let lastAssistantModel: string | undefined;
@@ -224,27 +231,52 @@ export function createSessionHandle(
     const response = obj.response as Record<string, unknown> | undefined;
     const requestId = response?.request_id;
     if (typeof requestId !== "string") return;
-    const model = pendingModelRequests.get(requestId);
-    if (model === undefined) return;
-    pendingModelRequests.delete(requestId);
 
-    if (response?.subtype === "success") {
-      queue.push({
-        type: "session.model",
-        sessionId,
-        timestamp: ctx.timestamp(),
-        model,
-      });
-    } else {
-      const detail =
-        typeof response?.error === "string" ? response.error : "rejected";
-      queue.push({
-        type: "error",
-        sessionId,
-        timestamp: ctx.timestamp(),
-        message: `model switch failed: ${detail}`,
-        recoverable: true,
-      });
+    const model = pendingModelRequests.get(requestId);
+    if (model !== undefined) {
+      pendingModelRequests.delete(requestId);
+      if (response?.subtype === "success") {
+        queue.push({
+          type: "session.model",
+          sessionId,
+          timestamp: ctx.timestamp(),
+          model,
+        });
+      } else {
+        const detail =
+          typeof response?.error === "string" ? response.error : "rejected";
+        queue.push({
+          type: "error",
+          sessionId,
+          timestamp: ctx.timestamp(),
+          message: `model switch failed: ${detail}`,
+          recoverable: true,
+        });
+      }
+      return;
+    }
+
+    const mode = pendingPermissionModeRequests.get(requestId);
+    if (mode !== undefined) {
+      pendingPermissionModeRequests.delete(requestId);
+      if (response?.subtype === "success") {
+        queue.push({
+          type: "session.mode",
+          sessionId,
+          timestamp: ctx.timestamp(),
+          mode,
+        });
+      } else {
+        const detail =
+          typeof response?.error === "string" ? response.error : "rejected";
+        queue.push({
+          type: "error",
+          sessionId,
+          timestamp: ctx.timestamp(),
+          message: `mode switch failed: ${detail}`,
+          recoverable: true,
+        });
+      }
     }
   }
 
@@ -320,6 +352,20 @@ export function createSessionHandle(
         type: "control_request",
         request_id: requestId,
         request: { subtype: "set_model", model },
+      });
+    },
+
+    setPermissionMode(mode: PermissionMode): void {
+      controlSeq += 1;
+      const requestId = `req_${controlSeq}_set_permission_mode`;
+      pendingPermissionModeRequests.set(requestId, mode);
+      writeLine({
+        type: "control_request",
+        request_id: requestId,
+        // Verified against the real CLI: it accepts the same wire-level
+        // values `--permission-mode` does (including `manual`) and folds
+        // them itself, so nothing needs translating on the way out.
+        request: { subtype: "set_permission_mode", mode },
       });
     },
 
