@@ -1,4 +1,5 @@
 import type { AgentEvent } from "./events.js";
+import type { AdapterPlan } from "./plan.js";
 import type { TurnWire } from "./transcript.js";
 
 /** Flag set the UI renders controls from — an adapter that can't do X doesn't grow an X zone. */
@@ -361,6 +362,10 @@ export interface AdapterSessionStore {
    * merged by the supervisor with whatever it is tracking live. */
   listProjectSessions(projectDir: string): Promise<SessionMeta[]>;
   readSessionHistory(projectDir: string, sessionId: string): Promise<TurnWire[]>;
+  /** Plans this adapter's own transcripts show for one project. Optional: an
+   * adapter whose CLI has no plan step simply omits it, and the server reports
+   * no plans rather than inventing a shape the provider never produced. */
+  listProjectPlans?(projectDir: string): Promise<AdapterPlan[]>;
   /** Open a *new* session under an id the caller already minted (via
    * `mintSessionId`) — the supervisor needs the id before the process starts,
    * to track it. */

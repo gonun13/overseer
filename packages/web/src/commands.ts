@@ -28,6 +28,12 @@ export const COMMANDS: Command[] = [
     action: { type: "open", kind: "sessions" },
   },
   {
+    name: "plans",
+    aliases: ["plan"],
+    help: "plans built in this project's sessions",
+    action: { type: "open", kind: "plans" },
+  },
+  {
     name: "project",
     help: "commit, push, merge, or revert the active project's git changes",
     action: { type: "open", kind: "project" },

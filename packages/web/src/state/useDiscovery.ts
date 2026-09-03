@@ -124,6 +124,11 @@ export function useDiscovery(): DiscoveryController {
         message.type === "session.history" ||
         message.type === "session.event" ||
         message.type === "session.meta" ||
+        // Plans are read out of the same transcripts the sessions above come
+        // from, and every plan operation is an operation on a session — same
+        // channel, same benign refusals.
+        message.type === "plan.list" ||
+        message.type === "plan.implementing" ||
         // What the provider offers a session is a session-control concern, and
         // its refusals are benign the same way the console's are. A manual
         // usage check is the same kind of ask — on-demand, provider-scoped,
@@ -140,6 +145,7 @@ export function useDiscovery(): DiscoveryController {
         message.type === "project.git.merged" ||
         message.type === "project.git.reverted" ||
         (message.type === "error" && message.about?.startsWith("session.")) ||
+        (message.type === "error" && message.about?.startsWith("plan.")) ||
         (message.type === "error" && message.about === "provider.options") ||
         (message.type === "error" && message.about === "provider.checkUsage") ||
         (message.type === "error" && message.about?.startsWith("project.git."))

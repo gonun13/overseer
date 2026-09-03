@@ -2,6 +2,7 @@ export type WindowKind =
   | "overseer"
   | "providers"
   | "sessions"
+  | "plans"
   | "chat"
   | "approvals"
   | "capabilities"
@@ -61,6 +62,12 @@ export const WINDOW_SPEC: Record<
   // resizable from the bottom-right grip. The title is per-session, so this
   // one is only the fallback for a window opened without one.
   chat: { title: "session", x: 9999, y: 9999, w: 560, h: 420 },
+  // Under the project panel, left-aligned with it: plans belong to a project,
+  // and the operator reads the two together. y is the 9999 sentinel — the
+  // panel's own height depends on how many projects there are and whether its
+  // list is open, so the spawn is computed in useWindows rather than assumed
+  // here. Height is operator-resizable: a busy project accumulates plans.
+  plans: { title: "plans", x: 26, y: 9999, w: 520, h: 360 },
   approvals: { title: "approvals", x: 620, y: 148, w: 560 },
   capabilities: { title: "capabilities", x: 150, y: 250, w: 540 },
   capability: { title: "capability", x: 260, y: 210, w: 560 },

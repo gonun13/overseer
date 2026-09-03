@@ -8,6 +8,7 @@ import type {
   SessionMeta,
 } from "./adapter.js";
 import type { AgentEvent } from "./events.js";
+import type { PlanMeta, PlanStatusOverride } from "./plan.js";
 import type { TurnWire } from "./transcript.js";
 import type {
   AppliedPersonality,
@@ -135,6 +136,19 @@ export type ClientMessage =
   | { type: "session.close"; sessionId: string }
   /** Stop the process if running and permanently delete the session's transcript. */
   | { type: "session.delete"; sessionId: string }
+  /** List the plans the active project's transcripts show. */
+  | { type: "plan.list" }
+  /** Retire a plan by hand, or hand it back to what the transcript says
+   * (`"open"`). The three derived statuses are not settable — they are a
+   * reading of the transcript, not an opinion about it. */
+  | { type: "plan.status"; planId: string; status: PlanStatusOverride }
+  /**
+   * Continue a plan in the session that built it: leave `plan` mode and send
+   * the implement turn there, so the work lands in the transcript that holds
+   * the plan. A plan whose session is gone starts a new one, seeded with the
+   * plan itself.
+   */
+  | { type: "plan.implement"; planId: string }
   /**
    * Read the loop's own provider/model configuration — separate from the
    * app's single attached provider (`provider.connect`); the loop picks its
@@ -475,6 +489,22 @@ export interface SessionMetaMessage {
   session: SessionMeta;
 }
 
+/** Plans for the active project — broadcast to all tabs, like the session
+ * list, so a plan retired in one tab leaves the others' lists too. */
+export interface PlanListMessage {
+  type: "plan.list";
+  plans: PlanMeta[];
+}
+
+/** A plan is being continued, in this session. The client opens (or raises)
+ * that session's window: the server has already sent the turn, and the output
+ * is about to arrive there. */
+export interface PlanImplementingMessage {
+  type: "plan.implementing";
+  planId: string;
+  sessionId: string;
+}
+
 /** One loop-runnable provider's model allocation, mirroring `loop/bin/models
  * --json`'s `providers.<id>` entry. */
 export interface LoopProviderInfo {
@@ -547,6 +577,8 @@ export type ServerMessage =
   | SessionHistoryMessage
   | SessionEventMessage
   | SessionMetaMessage
+  | PlanListMessage
+  | PlanImplementingMessage
   | LoopConfigMessage
   | LoopModelsMessage
   | DiscoveryEvent;
@@ -576,6 +608,14 @@ const PERMISSION_MODES = new Set<string>([
 
 /** A subagent name, as the provider reported it. Empty means "none". */
 export const SESSION_MAX_AGENT_CHARS = 128;
+
+/** A plan id is a provider tool-use id, not something Overseer mints, so this
+ * is a sanity bound rather than a format. */
+export const PLAN_MAX_ID_CHARS = 128;
+
+/** Mirrors `PlanStatusOverride` — the derived statuses are deliberately absent:
+ * a client asking for one is asking to overwrite a reading of the transcript. */
+const PLAN_OVERRIDE_STATUSES = new Set<string>(["done", "archived", "open"]);
 
 export const PROJECT_MAX_NAME_CHARS = 200;
 export const PROJECT_MAX_FOLDER_CHARS = 100;
@@ -731,6 +771,16 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       isSessionId(msg.sessionId) && PERMISSION_MODES.has(msg.mode as string)
     );
   }
+  if (type === "plan.list") return true;
+  if (type === "plan.implement") {
+    return isPlanId((value as { planId?: unknown }).planId);
+  }
+  if (type === "plan.status") {
+    const msg = value as { planId?: unknown; status?: unknown };
+    return (
+      isPlanId(msg.planId) && PLAN_OVERRIDE_STATUSES.has(msg.status as string)
+    );
+  }
   if (type === "loop.config.read") return true;
   if (type === "loop.provider.set") {
     const msg = value as { id?: unknown };
@@ -794,6 +844,14 @@ export function isClientMessage(value: unknown): value is ClientMessage {
 function isGitPath(value: unknown): value is string {
   return (
     typeof value === "string" && value.length > 0 && value.length <= GIT_MAX_PATH_CHARS
+  );
+}
+
+function isPlanId(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= PLAN_MAX_ID_CHARS
   );
 }
 

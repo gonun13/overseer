@@ -38,6 +38,15 @@ describe("matchCommand", () => {
     assert.equal(matchCommand("/nope"), undefined);
   });
 
+  it("opens the plans window from either name", () => {
+    assert.equal(matchCommand("/plans")?.action.type, "open");
+    assert.deepEqual(matchCommand("/plans")?.action, {
+      type: "open",
+      kind: "plans",
+    });
+    assert.equal(matchCommand("/plan")?.name, "plans");
+  });
+
   it("does not include a context command", () => {
     assert.equal(
       COMMANDS.some((command) => command.name === "context"),

@@ -21,7 +21,9 @@ export function sessionJsonlPath(
   );
 }
 
-interface JsonlRecord {
+/** One line of a CLI transcript. Exported for the plan reader, which walks
+ * the same files looking for a different thing. */
+export interface JsonlRecord {
   type?: string;
   uuid?: string;
   parentUuid?: string | null;
@@ -91,7 +93,10 @@ function turnFromRecord(record: JsonlRecord): TurnWire | undefined {
   return undefined;
 }
 
-async function parseJsonlFile(filePath: string): Promise<JsonlRecord[]> {
+/** Parse one transcript, skipping lines the CLI's undocumented format has
+ * drifted on. Exported so a second reader of these files does not have to
+ * repeat the skipping rules. */
+export async function parseJsonlFile(filePath: string): Promise<JsonlRecord[]> {
   let raw: string;
   try {
     raw = await readFile(filePath, "utf8");

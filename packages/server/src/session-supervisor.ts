@@ -3,6 +3,8 @@ import type {
   AgentAdapter,
   AgentEvent,
   PermissionMode,
+  PlanMeta,
+  PlanStatusOverride,
   SessionHandle,
   SessionMeta,
   ServerMessage,
@@ -14,10 +16,14 @@ import {
   sweepDeadLoopSessions,
 } from "./loop-sessions.js";
 import {
+  readPlanStore,
   readSnapshot,
   recordAction,
+  rememberPlans,
+  setPlanOverride,
   type WorldSnapshot,
 } from "./memory/internal.js";
+import { mergePlans } from "./plan-registry.js";
 import { isInsideWorkspace } from "./workspace.js";
 
 type Broadcast = (message: ServerMessage) => void;
@@ -50,6 +56,9 @@ export interface SessionSupervisorDeps {
   loopSessionIndex?: typeof loopSessionIndex;
   /** Delete the transcripts of loop runs that have ended. */
   sweepDeadLoopSessions?: typeof sweepDeadLoopSessions;
+  readPlanStore?: typeof readPlanStore;
+  rememberPlans?: typeof rememberPlans;
+  setPlanOverride?: typeof setPlanOverride;
 }
 
 export function createSessionSupervisor(
@@ -63,6 +72,9 @@ export function createSessionSupervisor(
   const loopSessionIndexFn = deps.loopSessionIndex ?? loopSessionIndex;
   const sweepDeadLoopSessionsFn =
     deps.sweepDeadLoopSessions ?? sweepDeadLoopSessions;
+  const readPlanStoreFn = deps.readPlanStore ?? readPlanStore;
+  const rememberPlansFn = deps.rememberPlans ?? rememberPlans;
+  const setPlanOverrideFn = deps.setPlanOverride ?? setPlanOverride;
 
   const idleReapMs = deps.idleReapMs ?? IDLE_REAP_MS;
 
@@ -205,6 +217,35 @@ export function createSessionSupervisor(
     );
   }
 
+  /** Every plan the active project's transcripts hold, with the operator's
+   * own verdicts folded in. Returns the list as well as broadcasting it, so
+   * `implement` can find one plan without a second read of every file. */
+  async function mergePlanList(
+    projectPath: string,
+    store: AdapterSessionStore,
+  ): Promise<PlanMeta[]> {
+    // An adapter with no plan step reports none rather than failing the call:
+    // the plans window is a real, empty surface under cursor, not an error.
+    const read = (await store.listProjectPlans?.(projectPath)) ?? [];
+    // Remembered before it is merged, so a plan survives the deletion of the
+    // session that produced it — see `plan-registry.ts`.
+    await rememberPlansFn(read);
+    const [remembered, sessions] = await Promise.all([
+      readPlanStoreFn(),
+      mergeList(projectPath, store),
+    ]);
+    return mergePlans(read, remembered, sessions, projectPath);
+  }
+
+  async function pushPlans(
+    projectPath: string,
+    store: AdapterSessionStore,
+  ): Promise<PlanMeta[]> {
+    const plans = await mergePlanList(projectPath, store);
+    broadcast({ type: "plan.list", plans });
+    return plans;
+  }
+
   function startPump(
     sessionId: string,
     handle: SessionHandle,
@@ -340,7 +381,10 @@ export function createSessionSupervisor(
     }
   }
 
-  return {
+  // Named rather than returned inline: the plan operations below are built
+  // out of the session ones (open, send, mode) and need to call them through
+  // the same public path a socket frame would.
+  const supervisor = {
     async list(): Promise<SessionResult> {
       const ctx = await adapterContext();
       if (!ctx.ok) return ctx;
@@ -575,7 +619,114 @@ export function createSessionSupervisor(
 
       return { ok: true };
     },
+
+    /** Plans for the active project, broadcast like the session list. */
+    async listPlans(): Promise<SessionResult> {
+      const ctx = await adapterContext();
+      if (!ctx.ok) return ctx;
+      await pushPlans(ctx.projectPath, ctx.store);
+      return { ok: true };
+    },
+
+    /** Retire a plan by hand, or (with `"open"`) hand it back to what its
+     * transcript says. */
+    async setPlanStatus(
+      planId: string,
+      status: PlanStatusOverride,
+    ): Promise<SessionResult> {
+      const ctx = await adapterContext();
+      if (!ctx.ok) return ctx;
+      await setPlanOverrideFn(planId, status);
+      await pushPlans(ctx.projectPath, ctx.store);
+      void recordActionFn({
+        actor: "operator",
+        action: "plan:status",
+        outcome: "ok",
+        detail: `${planId} · ${status}`,
+      });
+      return { ok: true };
+    },
+
+    /**
+     * Continue a plan where it was made.
+     *
+     * The session that proposed the plan is holding the context that produced
+     * it, so implementing it anywhere else throws that away. It is also, as
+     * far as the operator is concerned, where the output belongs: they clicked
+     * a plan and expect that conversation to carry on. A session whose
+     * transcript has since been deleted is the one case that cannot be
+     * resumed — there, a new session is started and the plan text is carried
+     * into it, since nothing else remembers it.
+     *
+     * Leaving `plan` mode is part of implementing: a session still in it would
+     * answer the implement turn with another plan.
+     */
+    async implementPlan(planId: string): Promise<SessionResult> {
+      const ctx = await adapterContext();
+      if (!ctx.ok) return ctx;
+
+      const plans = await mergePlanList(ctx.projectPath, ctx.store);
+      const plan = plans.find((candidate) => candidate.id === planId);
+      if (plan === undefined) {
+        return { ok: false, reason: "plan not found" };
+      }
+
+      const loops = await loopSessionIndexFn();
+      const lease = loops.get(plan.sessionId);
+      if (lease !== undefined) {
+        return {
+          ok: false,
+          reason: `'${lease.slug}' is a live loop run — open its console instead`,
+        };
+      }
+
+      let sessionId = plan.sessionId;
+      let text = RESUME_PLAN_PROMPT;
+      if (!plan.sessionExists) {
+        const created = await supervisor.create({ permissionMode: "acceptEdits" });
+        if (!created.ok || created.sessionId === undefined) {
+          return created.ok ? { ok: false, reason: "could not start a session" } : created;
+        }
+        sessionId = created.sessionId;
+        text = seedPlanPrompt(plan.body);
+      } else {
+        const opened = await supervisor.open(sessionId);
+        if (!opened.ok) return opened;
+        // Best effort: a provider that refuses the control request still gets
+        // the turn, and the prompt says plainly that the planning is over.
+        await supervisor.setPermissionMode(sessionId, "acceptEdits");
+      }
+
+      const sent = await supervisor.send(sessionId, text);
+      if (!sent.ok) return sent;
+
+      broadcast({ type: "plan.implementing", planId, sessionId });
+      await pushPlans(ctx.projectPath, ctx.store);
+
+      void recordActionFn({
+        actor: "operator",
+        action: "plan:implement",
+        outcome: "ok",
+        detail: `${planId} · ${sessionId}`,
+      });
+
+      return { ok: true };
+    },
   };
+
+  return supervisor;
+}
+
+/** Sent into the session that proposed the plan — it still has the plan in
+ * its own transcript, so repeating the text back at it would only crowd the
+ * context that makes it worth resuming. */
+const RESUME_PLAN_PROMPT =
+  "Implement the plan you proposed earlier in this session. Work through it end to end — do not re-plan it.";
+
+/** For a session that has never seen the plan, because the one that wrote it
+ * is gone. */
+function seedPlanPrompt(body: string): string {
+  return `Implement this plan end to end — it was approved already, so do not re-plan it.\n\n${body}`;
 }
 
 export function sessionError(about: string, reason: string): ServerMessage {

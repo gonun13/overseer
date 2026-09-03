@@ -1,5 +1,6 @@
 import { join as pathJoin } from "node:path";
 import type {
+  AdapterPlan,
   AdapterSessionStore,
   AgentAdapter,
   AdapterCapabilities,
@@ -18,6 +19,7 @@ import {
   listSessionsForProject,
 } from "./jsonl.js";
 import { readAuthStatus, signOut, startLogin } from "./login.js";
+import { listPlansForProject } from "./plans.js";
 import { readProviderOptions } from "./options.js";
 import { createSessionHandle, mintSessionId, openSession } from "./session-handle.js";
 import { resolveSessionTitle } from "./session-titles.js";
@@ -110,6 +112,7 @@ export const claudeCodeAdapter: AgentAdapter = {
     },
     lookupSessionTitle,
     deleteSession,
+    listProjectPlans,
   } satisfies AdapterSessionStore,
 };
 
@@ -193,6 +196,13 @@ export async function lookupSessionTitle(
 }
 
 /** Permanently remove a session's transcript from disk. */
+/** Plans this project's transcripts hold — see `plans.ts`. */
+export async function listProjectPlans(
+  projectDir: string,
+): Promise<AdapterPlan[]> {
+  return listPlansForProject(configDir(), projectDir);
+}
+
 export async function deleteSession(
   projectDir: string,
   sessionId: string,

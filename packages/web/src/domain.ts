@@ -1,4 +1,4 @@
-import type { AdapterUsageWindow } from "@overseer/protocol";
+import type { AdapterUsageWindow, PlanStatus } from "@overseer/protocol";
 import type { Activity } from "./status";
 
 /**
@@ -45,6 +45,24 @@ export interface Session {
   origin?: "loop";
   /** Workspace the loop run belongs to. Only set with `origin: "loop"`. */
   loopWorkspace?: string;
+}
+
+/** One plan in the plans window. `status` is the protocol's word for it,
+ * rendered as-is: the operator reads the same vocabulary the server reasons
+ * in. */
+export interface Plan {
+  id: string;
+  activity: Activity;
+  title: string;
+  sessionId: string;
+  /** Session name, when the session is still listed. */
+  session?: string;
+  status: PlanStatus;
+  /** Short human-facing time, e.g. "3h ago". */
+  when: string;
+  /** False once the session that built it has been deleted — implementing it
+   * starts a fresh session instead of resuming. */
+  sessionExists: boolean;
 }
 
 export interface Approval {

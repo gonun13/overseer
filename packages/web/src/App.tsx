@@ -16,6 +16,7 @@ import type { WindowKind } from "./windows";
 import { useChatSessions } from "./state/useChatSessions";
 import { useDiscovery } from "./state/useDiscovery";
 import { useLoopConfig } from "./state/useLoopConfig";
+import { usePlans } from "./state/usePlans";
 import { usePromptSession } from "./state/usePromptSession";
 import { useProviderOptions } from "./state/useProviderOptions";
 import { useShellKeyboard } from "./state/useShellKeyboard";
@@ -158,6 +159,32 @@ export default function App() {
     armedSession,
   );
   const shell = useShellPresentation(wizard, open, sessions);
+
+  // Implementing a plan sends the turn server-side; all this has to do is put
+  // the session it went to in front of the operator. Routed through the same
+  // ref `useChatSessions` uses, since `openChat` is defined further down.
+  const openPlanSession = useCallback(
+    (sessionId: string) => {
+      const session = sessions.find((candidate) => candidate.id === sessionId);
+      if (session !== undefined) openChatRef.current(session);
+    },
+    [sessions],
+  );
+  const {
+    plans,
+    refresh: refreshPlans,
+    implement: implementPlan,
+    setStatus: setPlanStatus,
+    error: plansError,
+  } = usePlans(wizard.send, wizard.subscribeSession, sessions, openPlanSession);
+
+  // The window is opened by a command, not by a row that already had the data
+  // — so it asks for a fresh list as it comes up. The server also broadcasts
+  // one whenever the transcripts change, which is what keeps it current after.
+  const plansOpen = windows.some((w) => w.kind === "plans");
+  useEffect(() => {
+    if (plansOpen) refreshPlans();
+  }, [plansOpen, refreshPlans]);
 
   // Which accordion section is open in each session window. Digits on the
   // prompt terminal target the focused session's controls.
@@ -577,6 +604,11 @@ export default function App() {
           chatFor={chatFor}
           sendChat={sendChat}
           onDeleteSession={onDeleteSession}
+          plans={plans}
+          plansError={plansError}
+          onOpenPlanSession={openPlanSession}
+          onImplementPlan={implementPlan}
+          onSetPlanStatus={setPlanStatus}
           sessionOptions={sessionOptions}
           armedSession={armedSession}
           openSessionControls={openSessionControls}

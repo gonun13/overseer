@@ -254,6 +254,7 @@ export function attachWebSocketServer(httpServer: Server): {
       const auth = currentAuthState();
       if (auth !== undefined) send(auth);
       void sessionSupervisor.list();
+      void sessionSupervisor.listPlans();
     })();
 
     ws.on("message", async (raw) => {
@@ -337,6 +338,7 @@ export function attachWebSocketServer(httpServer: Server): {
           }
           send({ type: "project.selected", path: parsed.path });
           void sessionSupervisor.list();
+          void sessionSupervisor.listPlans();
           return;
         }
         case "project.create": {
@@ -859,6 +861,24 @@ export function attachWebSocketServer(httpServer: Server): {
         // The loop's own provider/model config — independent of the app's
         // attached provider above. Broadcast, not sent to one socket: a
         // change from any tab has to land in every tab's loop window.
+        case "plan.list": {
+          const result = await sessionSupervisor.listPlans();
+          if (!result.ok) send(sessionError("plan.list", result.reason));
+          return;
+        }
+        case "plan.status": {
+          const result = await sessionSupervisor.setPlanStatus(
+            parsed.planId,
+            parsed.status,
+          );
+          if (!result.ok) send(sessionError("plan.status", result.reason));
+          return;
+        }
+        case "plan.implement": {
+          const result = await sessionSupervisor.implementPlan(parsed.planId);
+          if (!result.ok) send(sessionError("plan.implement", result.reason));
+          return;
+        }
         case "loop.config.read": {
           try {
             broadcast(await readLoopConfig());
@@ -917,6 +937,12 @@ export function attachWebSocketServer(httpServer: Server): {
   return {
     wss,
     broadcast,
-    refreshSessions: () => sessionSupervisor.list(),
+    // Plans are read out of the same transcripts, so whatever wakes the
+    // session list wakes them too — a plan proposed in a session Overseer
+    // never started still appears.
+    refreshSessions: async () => {
+      await sessionSupervisor.list();
+      await sessionSupervisor.listPlans();
+    },
   };
 }

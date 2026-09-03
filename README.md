@@ -138,6 +138,9 @@ workspace/            host-shared dir — git projects live here, mounted into t
   columns. Each window's control rows list what the provider actually offers.
 - **Session controls** — model, permission mode, and subagent. Model and mode retarget the
   running process (`set_model` / `set_permission_mode`); a subagent pick arms the next turn.
+- **Plans** — `/plans` lists the plans the active project's sessions have produced (read
+  back out of the provider's own transcripts), each with its status and a button that
+  continues it in the session that built it.
 - **Project creation** — a git project scaffolded into `/workspace` from the project panel.
 - **Console** — raw PTY escape hatch into the provider CLI (xterm.js over `/ws`); distinct from
   stream-json agent sessions.
@@ -167,6 +170,14 @@ discovered from the CLI, plus its permission modes
 ([architecture §1.1.1](docs/architecture-design.md)) — and each adapter declares its own
 capabilities rather than inheriting `claude-code`'s. Model and permission mode change on
 a session already running, through `set_model` / `set_permission_mode` control requests.
+
+Plans are read back out of the provider's transcripts: a session run in `plan` mode leaves
+an `ExitPlanMode` call carrying the plan, and `/plans` lists them under the project panel
+with a derived status (`proposed`, `in-progress`, `superseded`) the operator can retire by
+hand. Implementing one resumes the session that built it, leaves `plan` mode, and sends
+the turn there. Each plan is also copied into internal memory, so deleting a session does
+not delete the plan it produced — implementing one whose session is gone starts a fresh
+session seeded with the plan. `claude-code` only — `cursor` reports no plans.
 
 Projects can be created from the project panel. The dev loop runs inside the app: `/loop`
 opens it in a console window, and the providers window's loop tab sets the loop's provider

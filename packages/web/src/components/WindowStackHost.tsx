@@ -4,7 +4,7 @@ import type {
   OverseerTheme,
   ServerMessage,
 } from "@overseer/protocol";
-import type { Approval, Project, ProviderInfo, Session } from "../domain";
+import type { Approval, Plan, Project, ProviderInfo, Session } from "../domain";
 import type {
   SessionOption,
   SessionOptionKey,
@@ -24,6 +24,7 @@ import { DiffWindow } from "./windows/DiffWindow";
 import { HelpWindow } from "./windows/HelpWindow";
 import { LoopModelsWindow } from "./windows/LoopModelsWindow";
 import { OverseerWindow } from "./windows/OverseerWindow";
+import { PlansWindow } from "./windows/PlansWindow";
 import { ProjectCreateWindow } from "./windows/ProjectCreateWindow";
 import { ProjectWindow } from "./windows/ProjectWindow";
 import { ProvidersWindow } from "./windows/ProvidersWindow";
@@ -54,6 +55,12 @@ interface WindowStackHostProps {
   chatFor: (id: string) => Chat | undefined;
   sendChat: (id: string, input: string) => void;
   onDeleteSession: (id: string) => void;
+  plans: Plan[];
+  /** Last plan refusal in the server's words, shown in the plans window. */
+  plansError?: string;
+  onOpenPlanSession: (sessionId: string) => void;
+  onImplementPlan: (planId: string) => void;
+  onSetPlanStatus: (planId: string, status: "done" | "open") => void;
   sessionOptions: SessionOption[];
   /** Provider defaults plus the operator's picks — the fallback for a row a
    * session has not reported on yet. */
@@ -109,6 +116,11 @@ export function WindowStackHost({
   chatFor,
   sendChat,
   onDeleteSession,
+  plans,
+  plansError,
+  onOpenPlanSession,
+  onImplementPlan,
+  onSetPlanStatus,
   sessionOptions,
   armedSession,
   openSessionControls,
@@ -195,6 +207,16 @@ export function WindowStackHost({
             onSetModel={(slot, model) =>
               onSetLoopModel(String(windowState.payload ?? ""), slot, model)
             }
+          />
+        )}
+        {windowState.kind === "plans" && (
+          <PlansWindow
+            plans={plans}
+            provider={provider}
+            error={plansError}
+            onOpenPlanSession={onOpenPlanSession}
+            onImplementPlan={onImplementPlan}
+            onSetPlanStatus={onSetPlanStatus}
           />
         )}
         {windowState.kind === "sessions" && (

@@ -103,6 +103,50 @@ export function useWindows() {
           ];
         }
 
+        // Plans open under the project panel they belong to, left-aligned
+        // with it (`.projects { left: 26px }` in styles/panels.css). The
+        // panel's height is not fixed — its list grows with the workspace and
+        // collapses to nothing — so this clears the tallest it gets
+        // (`max-height: 44vh` plus its header) rather than measuring a piece
+        // of furniture from inside the window system, the same assumed-
+        // clearance approach the providers branch above takes.
+        if (kind === "plans") {
+          const left = 26;
+          const panelTop = 20;
+          const panelHeader = 34;
+          const gap = 16;
+          const chrome = 36; // tab above the body
+          const below =
+            panelTop +
+            panelHeader +
+            Math.round(window.innerHeight * 0.44) +
+            gap;
+          const y = Math.max(56, below + cascade);
+          // On a short viewport the full body does not fit under the panel.
+          // Give up height rather than the position: sliding up would put the
+          // window over the very furniture it is explaining, which is worse
+          // than a shorter list the operator can resize or scroll.
+          const bodyH = Math.max(
+            160,
+            Math.min(height ?? spec.h ?? 360, window.innerHeight - y - chrome - 24),
+          );
+          return [
+            ...current,
+            {
+              id: `${kind}-${++seq}`,
+              kind,
+              title: title ?? spec.title,
+              ...detailFields,
+              x: left,
+              y,
+              w: width,
+              h: bodyH,
+              z: ++zSeq,
+              payload,
+            },
+          ];
+        }
+
         // Console: mid-right — right-aligned like the provider instrument, but
         // vertically centred so a tall terminal doesn't sit on top of it.
         if (kind === "console") {
