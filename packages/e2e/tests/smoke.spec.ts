@@ -31,6 +31,25 @@ test("shows the active project without its workspace path", async ({
   ).toBeVisible();
 });
 
+test("the active project readout opens the project it names", async ({
+  page,
+}) => {
+  await page.goto("/");
+  await passWizardOpening(page);
+  await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
+
+  await page.getByRole("button", { name: /active project/i }).click();
+
+  // The whole readout is the hit target: it offers the panel to switch with
+  // and the window for the project it is currently naming.
+  await expect(page.locator(".projects")).toBeVisible();
+  await expect(
+    page
+      .locator(".window")
+      .filter({ has: page.getByRole("button", { name: "close project" }) }),
+  ).toBeVisible();
+});
+
 test("opens the providers picker from the widget", async ({ page }) => {
   await page.goto("/");
   await passWizardOpening(page);

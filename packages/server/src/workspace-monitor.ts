@@ -18,8 +18,10 @@ import { createWorkspaceMembershipWorker } from "./workspace-membership-worker.j
  * events, and a clone creates the directory before `.git` exists, so a single
  * event is not enough — a debounced full `scanWorkspace` is the source of truth
  * for membership. A dedicated watch on `personality.json` covers nested edits
- * the root watcher cannot see. Git branch/dirtiness is refreshed on every poll
- * via the instance `git` CLI even when membership is unchanged.
+ * the root watcher cannot see. Git branch/dirtiness rides the same tick — one
+ * scan feeds both — but the probes themselves are gated in `git-probe.ts`, so
+ * an idle workspace costs stats rather than a `git` process per project. A
+ * watcher-driven tick passes `force` to lift the dirtiness floor.
  */
 
 const DEBOUNCE_MS = 400;
@@ -54,8 +56,12 @@ export function startWorkspaceMonitor(
   let polling: ReturnType<typeof setInterval> | null = null;
   let running = false;
   let pending = false;
+  /** Sticky: a forced schedule that lands mid-refresh must still reach the
+   * next pass rather than being swallowed by the coalescing above. */
+  let pendingForce = false;
 
-  const schedule = () => {
+  const schedule = (force = false) => {
+    if (force) pendingForce = true;
     if (timer !== null) clearTimeout(timer);
     timer = setTimeout(() => {
       timer = null;
@@ -75,8 +81,14 @@ export function startWorkspaceMonitor(
     try {
       do {
         pending = false;
+        const force = pendingForce;
+        pendingForce = false;
         const snapshot = await readSnapshotFn();
-        if (!snapshot) continue;
+        if (!snapshot) {
+          // Nothing was refreshed, so the force has not been spent yet.
+          pendingForce ||= force;
+          continue;
+        }
 
         const state = membership.getState();
         const personalityResult = await personality.refresh({
@@ -91,6 +103,7 @@ export function startWorkspaceMonitor(
           snapshot,
           personalityMissing: personalityResult.personalityMissing,
           justNoticedMissing: personalityResult.justNoticedMissing,
+          force,
         });
       } while (pending);
     } catch (error) {

@@ -12,11 +12,8 @@ import {
   personalityDir,
 } from "./memory/personality/api.js";
 import { closeWatcher, watchWithRetry } from "./fs-watch.js";
-import {
-  WORKSPACE_ROOT,
-  scanWorkspace,
-  withGitMeta,
-} from "./workspace.js";
+import { gitProbe, type ProbeEvent } from "./git-probe.js";
+import { WORKSPACE_ROOT, scanWorkspace } from "./workspace.js";
 
 type Broadcast = (message: ServerMessage) => void;
 
@@ -25,6 +22,9 @@ export interface MembershipRefreshContext {
   snapshot: WorldSnapshot;
   personalityMissing: boolean;
   justNoticedMissing: boolean;
+  /** A watcher saw something move, so this tick pays for a dirtiness probe
+   * the interval floor would otherwise skip. */
+  force?: boolean;
 }
 
 export interface MembershipState {
@@ -34,7 +34,9 @@ export interface MembershipState {
 
 export interface WorkspaceMembershipWorkerDeps {
   scanWorkspace: typeof scanWorkspace;
-  withGitMeta: typeof withGitMeta;
+  gitMeta: typeof gitProbe.readMany;
+  forgetGit: typeof gitProbe.forget;
+  takeProbeEvents: typeof gitProbe.takeEvents;
   syncSnapshotProjects: typeof syncSnapshotProjects;
   recordAction: typeof recordAction;
   personalityDir: typeof personalityDir;
@@ -43,7 +45,9 @@ export interface WorkspaceMembershipWorkerDeps {
 
 const defaultDeps: WorkspaceMembershipWorkerDeps = {
   scanWorkspace,
-  withGitMeta,
+  gitMeta: (projects, opts) => gitProbe.readMany(projects, opts),
+  forgetGit: (dir) => gitProbe.forget(dir),
+  takeProbeEvents: () => gitProbe.takeEvents(),
   syncSnapshotProjects,
   recordAction,
   personalityDir,
@@ -139,8 +143,40 @@ function emitUntrackedDiff(
   }
 }
 
+/**
+ * A stalled or failed git probe is an operations line, not just a log line:
+ * the operator watching a branch go stale deserves to be told the mount is
+ * slow rather than left guessing. `git-probe.ts` has already deduped these —
+ * one per directory per state change.
+ */
+function emitProbeEvents(broadcast: Broadcast, events: ProbeEvent[]): void {
+  for (const event of events) {
+    const name = event.dir.split("/").pop() ?? event.dir;
+    if (event.kind === "recovered") {
+      broadcast({
+        type: "overseer.step",
+        id: randomUUID(),
+        label: `git reading ${name} again`,
+        outcome: "ok",
+        detail: event.dir,
+      });
+      continue;
+    }
+    broadcast({
+      type: "overseer.step",
+      id: randomUUID(),
+      label:
+        event.kind === "slow"
+          ? `git slow in ${name}`
+          : `git probe ${event.kind} in ${name}`,
+      outcome: event.kind === "slow" ? "ok" : "blocked",
+      detail: `${event.command} · ${event.detail ?? `${Math.round(event.ms)}ms`}`,
+    });
+  }
+}
+
 export function createWorkspaceMembershipWorker(
-  schedule: () => void,
+  schedule: (force?: boolean) => void,
   deps: Partial<WorkspaceMembershipWorkerDeps> = {},
 ): {
   attach: () => void;
@@ -159,7 +195,9 @@ export function createWorkspaceMembershipWorker(
       () =>
         watch(WORKSPACE_ROOT, { persistent: true }, (_event, name) => {
           if (typeof name === "string" && name.startsWith("_")) return;
-          schedule();
+          // Something under the root moved: worth a dirtiness probe now
+          // rather than at the next interval floor.
+          schedule(true);
         }),
       (error) => {
         console.error("overseer: workspace watch error", error);
@@ -171,6 +209,9 @@ export function createWorkspaceMembershipWorker(
     const { broadcast, snapshot, personalityMissing, justNoticedMissing } =
       ctx;
 
+    // One readdir per tick, and the git meta is filled onto its result — the
+    // membership-changed path used to scan the root a second time (probing
+    // git inline) on top of this one.
     const listing = await d.scanWorkspace(WORKSPACE_ROOT, { git: false });
     const key = scanKey(listing.projects, listing.untracked);
 
@@ -180,9 +221,14 @@ export function createWorkspaceMembershipWorker(
       lastKey = scanKey(lastProjects, lastUntracked);
     }
 
-    if (key === lastKey && !justNoticedMissing) {
+    const changed = key !== lastKey;
+    const projects = await d.gitMeta(listing.projects, {
+      force: changed || ctx.force === true,
+    });
+    emitProbeEvents(broadcast, d.takeProbeEvents());
+
+    if (!changed && !justNoticedMissing) {
       if (personalityMissing) return;
-      const projects = await d.withGitMeta(lastProjects);
       if (gitMetaKey(projects) === gitMetaKey(lastProjects)) return;
       lastProjects = projects;
       await d.syncSnapshotProjects(projects);
@@ -194,13 +240,19 @@ export function createWorkspaceMembershipWorker(
       return;
     }
 
-    const { projects, untracked } = await d.scanWorkspace();
+    const untracked = listing.untracked;
 
     const previousProjects = lastProjects;
     const previousUntracked = lastUntracked;
     lastKey = scanKey(projects, untracked);
     lastProjects = projects;
     lastUntracked = untracked;
+
+    // A project that left the workspace must not keep a cached branch alive.
+    const stillListed = new Set(projects.map((p) => p.path));
+    for (const project of previousProjects) {
+      if (!stillListed.has(project.path)) d.forgetGit(project.path);
+    }
 
     const previousActive = snapshot.last_active_project;
     const stillThere =

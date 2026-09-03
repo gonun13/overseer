@@ -86,7 +86,7 @@ describe("createWorkspaceMembershipWorker", () => {
             ? { projects: snapshot.projects, untracked: [] }
             : { projects: snapshot.projects, untracked: [] },
         ),
-        withGitMeta: mock.fn(async (projects) => projects),
+        gitMeta: mock.fn(async (projects) => projects),
         syncSnapshotProjects: mock.fn(async () => true),
         recordAction: mock.fn(async () => {}),
         watchWithRetry: () => () => undefined,
@@ -120,7 +120,7 @@ describe("createWorkspaceMembershipWorker", () => {
           projects: listed,
           untracked: [],
         })),
-        withGitMeta: mock.fn(async (projects) => {
+        gitMeta: mock.fn(async (projects) => {
           gitRefreshCalls += 1;
           return gitRefreshCalls === 1 ? projects : refreshed;
         }),
@@ -176,7 +176,7 @@ describe("createWorkspaceMembershipWorker", () => {
           }
           return { projects: after, untracked: [] };
         }),
-        withGitMeta: mock.fn(async (projects) => projects),
+        gitMeta: mock.fn(async (projects) => projects),
         syncSnapshotProjects: mock.fn(async () => true),
         recordAction: mock.fn(async () => {}),
         watchWithRetry: () => () => undefined,
@@ -231,7 +231,7 @@ describe("createWorkspaceMembershipWorker", () => {
           }
           return { projects: after, untracked: [] };
         }),
-        withGitMeta: mock.fn(async (projects) => projects),
+        gitMeta: mock.fn(async (projects) => projects),
         syncSnapshotProjects: mock.fn(async () => true),
         recordAction: mock.fn(async () => {}),
         personalityDir: () => personalityPath,
@@ -266,6 +266,141 @@ describe("createWorkspaceMembershipWorker", () => {
       (panel as { personalityMissing?: boolean } | undefined)?.personalityMissing,
       true,
     );
+  });
+
+  it("scans the workspace once per refresh, membership change included", async () => {
+    const { broadcast } = collectMessages();
+    const before = snapshot.projects;
+    const after: DiscoveredProject[] = [
+      { name: "overseer-personality", path: "/workspace/overseer-personality" },
+    ];
+
+    const scans: (boolean | undefined)[] = [];
+    let listingCalls = 0;
+    const worker = createWorkspaceMembershipWorker(
+      () => {},
+      {
+        scanWorkspace: mock.fn(async (_root, opts) => {
+          scans.push(opts?.git);
+          listingCalls += 1;
+          return listingCalls === 1
+            ? { projects: before, untracked: [] }
+            : { projects: after, untracked: [] };
+        }),
+        gitMeta: mock.fn(async (projects) => projects),
+        syncSnapshotProjects: mock.fn(async () => true),
+        recordAction: mock.fn(async () => {}),
+        watchWithRetry: () => () => undefined,
+      },
+    );
+
+    await worker.refresh({
+      broadcast,
+      snapshot,
+      personalityMissing: false,
+      justNoticedMissing: false,
+    });
+    // Second pass changes membership — the path that used to walk the root a
+    // second time to fill git meta in.
+    await worker.refresh({
+      broadcast,
+      snapshot,
+      personalityMissing: false,
+      justNoticedMissing: false,
+    });
+
+    assert.equal(scans.length, 2);
+    assert.ok(scans.every((git) => git === false));
+  });
+
+  it("forgets cached git state for a project that left", async () => {
+    const { broadcast } = collectMessages();
+    const before = snapshot.projects;
+    const after: DiscoveredProject[] = [
+      { name: "overseer-personality", path: "/workspace/overseer-personality" },
+    ];
+    const forgotten: string[] = [];
+
+    let listingCalls = 0;
+    const worker = createWorkspaceMembershipWorker(
+      () => {},
+      {
+        scanWorkspace: mock.fn(async () => {
+          listingCalls += 1;
+          return listingCalls === 1
+            ? { projects: before, untracked: [] }
+            : { projects: after, untracked: [] };
+        }),
+        gitMeta: mock.fn(async (projects) => projects),
+        forgetGit: (dir) => {
+          forgotten.push(dir);
+        },
+        syncSnapshotProjects: mock.fn(async () => true),
+        recordAction: mock.fn(async () => {}),
+        watchWithRetry: () => () => undefined,
+      },
+    );
+
+    await worker.refresh({
+      broadcast,
+      snapshot,
+      personalityMissing: false,
+      justNoticedMissing: false,
+    });
+    await worker.refresh({
+      broadcast,
+      snapshot,
+      personalityMissing: false,
+      justNoticedMissing: false,
+    });
+
+    assert.deepEqual(forgotten, ["/workspace/alpha"]);
+  });
+
+  it("reports a stalled probe as an operations step", async () => {
+    const { messages, broadcast } = collectMessages();
+    let taken = 0;
+    const worker = createWorkspaceMembershipWorker(
+      () => {},
+      {
+        scanWorkspace: mock.fn(async () => ({
+          projects: snapshot.projects,
+          untracked: [],
+        })),
+        gitMeta: mock.fn(async (projects) => projects),
+        takeProbeEvents: () => {
+          taken += 1;
+          return taken === 1
+            ? [
+                {
+                  dir: "/workspace/alpha",
+                  kind: "timeout" as const,
+                  command: "git status --porcelain",
+                  ms: 15_000,
+                  detail: "killed after 15.0s",
+                },
+              ]
+            : [];
+        },
+        syncSnapshotProjects: mock.fn(async () => true),
+        recordAction: mock.fn(async () => {}),
+        watchWithRetry: () => () => undefined,
+      },
+    );
+
+    await worker.refresh({
+      broadcast,
+      snapshot,
+      personalityMissing: false,
+      justNoticedMissing: false,
+    });
+
+    const step = messages.find((m) => m.type === "overseer.step") as
+      | { label: string; outcome: string; detail?: string }
+      | undefined;
+    assert.equal(step?.label, "git probe timeout in alpha");
+    assert.equal(step?.outcome, "blocked");
+    assert.match(step?.detail ?? "", /killed after 15\.0s/);
   });
 });
 
@@ -549,6 +684,58 @@ describe("startWorkspaceMonitor coordinator", () => {
     await new Promise((resolve) => setTimeout(resolve, 5));
 
     assert.deepEqual(order, ["personality", "membership"]);
+    stop();
+  });
+
+  it("keeps a forced schedule that lands mid-refresh", async () => {
+    const forces: (boolean | undefined)[] = [];
+    let schedule!: (force?: boolean) => void;
+    let releaseFirst!: () => void;
+    const firstRefresh = new Promise<void>((resolve) => {
+      releaseFirst = resolve;
+    });
+    const membership = {
+      attach: () => {},
+      destroy: () => {},
+      getState: () => ({
+        lastProjects: snapshot.projects,
+        lastUntracked: [] as UntrackedFolder[],
+      }),
+      refresh: mock.fn(async (ctx: { force?: boolean }) => {
+        forces.push(ctx.force);
+        if (forces.length === 1) await firstRefresh;
+      }),
+    };
+    const personality = {
+      attach: () => {},
+      destroy: () => {},
+      refresh: mock.fn(async () => ({
+        personalityMissing: false,
+        justNoticedMissing: false,
+      })),
+    };
+
+    const stop = startWorkspaceMonitor(() => {}, {
+      readSnapshot: async () => snapshot,
+      createMembership: (sched) => {
+        schedule = sched;
+        return membership;
+      },
+      createPersonality: () => personality,
+      debounceMs: 1,
+      pollMs: 60_000,
+    });
+
+    // Unforced tick starts and blocks; the watcher's forced tick arrives while
+    // it is still running and must not be swallowed by the coalescing.
+    schedule();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    schedule(true);
+    await new Promise((resolve) => setTimeout(resolve, 5));
+    releaseFirst();
+    await new Promise((resolve) => setTimeout(resolve, 5));
+
+    assert.deepEqual(forces, [false, true]);
     stop();
   });
 });

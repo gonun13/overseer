@@ -527,6 +527,9 @@ export default function App() {
           <ActiveProject
             project={shell.activeProject}
             onPick={openProjectSelector}
+            // No payload: `openWindow` targets whatever is active, the same
+            // path the readout is describing.
+            onOpen={() => openWindow("project")}
           />
         )}
 

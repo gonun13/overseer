@@ -5,13 +5,21 @@ import type { Project } from "../domain";
  * Top-centre, permanent. Every session, approval and tool call in the app runs
  * against this project, so it is stated plainly at the top of the field and
  * never hidden behind a menu (design-system.md §6).
+ *
+ * The readout is the whole hit target, and a click on it means "show me this
+ * project": the panel to switch, and — once there is a project to show — its
+ * window, which is where the branch and dirtiness printed here can actually
+ * be acted on. With nothing active yet there is nothing to open, so the empty
+ * state only offers the picker.
  */
 export function ActiveProject({
   project,
   onPick,
+  onOpen,
 }: {
   project?: Project;
   onPick: () => void;
+  onOpen: () => void;
 }) {
   if (!project) {
     return (
@@ -24,7 +32,13 @@ export function ActiveProject({
   }
 
   return (
-    <button className="active-project settles-in" onClick={onPick}>
+    <button
+      className="active-project settles-in"
+      onClick={() => {
+        onPick();
+        onOpen();
+      }}
+    >
       <span className="ap-kicker">active project</span>
       <span className="ap-name">
         <StatusLight activity={project.activity} size={9} />

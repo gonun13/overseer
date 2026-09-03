@@ -89,8 +89,9 @@ export const WINDOW_SPEC: Record<
   projectCreate: { title: "create project", x: 260, y: 220, w: 480 },
   // Opened from the project panel's per-row manage icon (payload: that
   // project's path — also the dedupe key, so a second click on the same row
-  // raises the existing window rather than stacking another one) or from the
-  // `/project` command, which targets the active project. Same fixed
+  // raises the existing window rather than stacking another one), from the
+  // active-project readout, or from the `/project` command — the last two
+  // both target the active project. Same fixed
   // mid-field spawn as `projectCreate` — it has no instrument of its own to
   // anchor near either.
   project: { title: "project", x: 300, y: 200, w: 520 },
