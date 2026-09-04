@@ -8,11 +8,16 @@ import type {
   ConsoleHandle,
   ConsoleOpts,
   ProviderOptions,
+  Subagent,
+  SubagentDraft,
+  SubagentScope,
   SessionHandle,
   SessionMeta,
   SessionOpts,
 } from "@overseer/protocol";
+import { configDir } from "./config-dir.js";
 import { openConsole } from "./console.js";
+import { readSubagents } from "./custom-agents.js";
 import {
   backfillHistory,
   deleteSessionTranscript,
@@ -21,6 +26,10 @@ import {
 import { readAuthStatus, signOut, startLogin } from "./login.js";
 import { listPlansForProject } from "./plans.js";
 import { readProviderOptions } from "./options.js";
+import {
+  deleteSubagentFile,
+  writeSubagentFile,
+} from "./subagent-files.js";
 import { createSessionHandle, mintSessionId, openSession } from "./session-handle.js";
 import { resolveSessionTitle } from "./session-titles.js";
 import { readUsageWindows, withPendingUsage } from "./usage.js";
@@ -41,13 +50,6 @@ const capabilities: AdapterCapabilities = {
   // with a free, deterministic report — a second, manual path is redundant.
   usageCheck: false,
 };
-
-function configDir(): string {
-  return (
-    process.env.CLAUDE_CONFIG_DIR ??
-    `${process.env.HOME ?? "/home/node"}/.claude`
-  );
-}
 
 async function getStatus(): Promise<AdapterStatus> {
   return withPendingUsage(await readAuthStatus());
@@ -82,6 +84,29 @@ export const claudeCodeAdapter: AgentAdapter = {
   refreshUsage,
   listOptions(opts: { projectDir: string }): Promise<ProviderOptions> {
     return readProviderOptions(opts);
+  },
+  async listSubagents(opts: { projectDir: string }): Promise<Subagent[]> {
+    // Never throws, per the interface: an unreadable folder is reported as no
+    // agents, the same way `readSubagents` treats a missing one.
+    try {
+      return await readSubagents({ ...opts, configDir: configDir() });
+    } catch {
+      return [];
+    }
+  },
+  writeSubagent(opts: {
+    projectDir: string;
+    draft: SubagentDraft;
+    previous?: { name: string; scope: SubagentScope };
+  }): Promise<Subagent> {
+    return writeSubagentFile({ ...opts, configDir: configDir() });
+  },
+  deleteSubagent(opts: {
+    projectDir: string;
+    name: string;
+    scope: SubagentScope;
+  }): Promise<void> {
+    return deleteSubagentFile({ ...opts, configDir: configDir() });
   },
   login: {
     start: startLogin,

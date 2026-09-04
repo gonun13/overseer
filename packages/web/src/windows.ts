@@ -6,7 +6,7 @@ export type WindowKind =
   | "chat"
   | "approvals"
   | "capabilities"
-  | "capability"
+  | "subagent"
   | "context"
   | "console"
   | "help"
@@ -70,7 +70,9 @@ export const WINDOW_SPEC: Record<
   plans: { title: "plans", x: 26, y: 9999, w: 520, h: 360 },
   approvals: { title: "approvals", x: 620, y: 148, w: 560 },
   capabilities: { title: "capabilities", x: 150, y: 250, w: 540 },
-  capability: { title: "capability", x: 260, y: 210, w: 560 },
+  // Resizable, unlike most: the instructions box is the point of the window,
+  // and a long prompt in a fixed body is what would make it unusable.
+  subagent: { title: "subagent", x: 260, y: 200, w: 560, h: 420 },
   context: { title: "context", x: 120, y: 300, w: 500 },
   // Mid-right: spawn position is computed in useWindows from the viewport so
   // it sits on the right edge, vertically centred. Height is operator-

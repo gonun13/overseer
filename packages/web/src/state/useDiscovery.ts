@@ -139,6 +139,12 @@ export function useDiscovery(): DiscoveryController {
         // project-scoped, and their refusals (nothing to commit, no remote,
         // a merge conflict) are exactly the same kind of benign "stay put"
         // as the rest of this channel.
+        // The capabilities window's subagent inventory — provider- and
+        // project-scoped, and its refusals ("no active project", a name that
+        // is not kebab-case) are benign in exactly the same way.
+        message.type === "subagent.list" ||
+        message.type === "subagent.written" ||
+        message.type === "subagent.deleted" ||
         message.type === "project.git.status" ||
         message.type === "project.git.committed" ||
         message.type === "project.git.pushed" ||
@@ -148,7 +154,8 @@ export function useDiscovery(): DiscoveryController {
         (message.type === "error" && message.about?.startsWith("plan.")) ||
         (message.type === "error" && message.about === "provider.options") ||
         (message.type === "error" && message.about === "provider.checkUsage") ||
-        (message.type === "error" && message.about?.startsWith("project.git."))
+(message.type === "error" && message.about?.startsWith("project.git.")) ||
+        (message.type === "error" && message.about?.startsWith("subagent."))
       ) {
         for (const listener of sessionListeners.current) listener(message);
         return;

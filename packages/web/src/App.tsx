@@ -19,6 +19,7 @@ import { useLoopConfig } from "./state/useLoopConfig";
 import { usePlans } from "./state/usePlans";
 import { usePromptSession } from "./state/usePromptSession";
 import { useProviderOptions } from "./state/useProviderOptions";
+import { useSubagents } from "./state/useSubagents";
 import { useShellKeyboard } from "./state/useShellKeyboard";
 import { useShellPresentation } from "./state/useShellPresentation";
 import { useUsageCheck } from "./state/useUsageCheck";
@@ -133,6 +134,16 @@ export default function App() {
     wizard.activeProjectPath,
   );
 
+  const subagents = useSubagents(
+    wizard.send,
+    wizard.subscribeSession,
+    optionsProviderId,
+    wizard.activeProjectPath,
+    // A saved subagent is a new row in the session control menu, and waiting
+    // for a project switch to see it is waiting for no reason.
+    refreshSessionOptions,
+  );
+
   const usageCheck = useUsageCheck(wizard.send, wizard.subscribeSession);
 
   const {
@@ -185,6 +196,17 @@ export default function App() {
   useEffect(() => {
     if (plansOpen) refreshPlans();
   }, [plansOpen, refreshPlans]);
+
+  // Same reasoning for the subagent inventory: the operator can add a file to
+  // `.claude/agents` from outside the app at any moment, so a window coming up
+  // asks rather than trusting whatever the last ask returned.
+  const subagentsOpen = windows.some(
+    (w) => w.kind === "capabilities" || w.kind === "subagent",
+  );
+  const refreshSubagents = subagents.refresh;
+  useEffect(() => {
+    if (subagentsOpen) refreshSubagents();
+  }, [subagentsOpen, refreshSubagents]);
 
   // Which accordion section is open in each session window. Digits on the
   // prompt terminal target the focused session's controls.
@@ -613,6 +635,7 @@ export default function App() {
           onImplementPlan={implementPlan}
           onSetPlanStatus={setPlanStatus}
           sessionOptions={sessionOptions}
+          subagents={subagents}
           armedSession={armedSession}
           openSessionControls={openSessionControls}
           onToggleSessionControl={toggleSessionControl}

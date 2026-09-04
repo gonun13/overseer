@@ -1,7 +1,6 @@
 import type { AgentAdapter, ProviderOptions } from "@overseer/protocol";
-import { getAdapter } from "./adapters.js";
-import { readSnapshot, type WorldSnapshot } from "./memory/internal.js";
-import { isInsideWorkspace } from "./workspace.js";
+import type { WorldSnapshot } from "./memory/internal.js";
+import { resolveProviderContext } from "./provider-context.js";
 
 /**
  * What the attached provider offers a session.
@@ -28,10 +27,6 @@ export interface ProviderOptionsDeps {
 }
 
 export function createProviderOptions(deps: ProviderOptionsDeps = {}) {
-  const readSnapshotFn = deps.readSnapshot ?? readSnapshot;
-  const getAdapterFn = deps.getAdapter ?? getAdapter;
-  const isInsideWorkspaceFn = deps.isInsideWorkspace ?? isInsideWorkspace;
-
   /** Keyed `<providerId>\0<projectDir>` — a different provider is a different answer. */
   const inFlight = new Map<string, Promise<OptionsResult>>();
 
@@ -39,53 +34,17 @@ export function createProviderOptions(deps: ProviderOptionsDeps = {}) {
     return `${providerId}\0${projectDir}`;
   }
 
-  async function context(): Promise<
-    | { ok: true; adapter: AgentAdapter; projectDir: string }
-    | { ok: false; reason: string }
-  > {
-    const snapshot = await readSnapshotFn();
-    const providerId = snapshot?.attached_provider;
-    if (providerId === undefined) {
-      return { ok: false, reason: "no provider attached" };
-    }
-    const projectDir = snapshot?.last_active_project;
-    if (projectDir === undefined) {
-      return { ok: false, reason: "no active project" };
-    }
-    if (!(await isInsideWorkspaceFn(projectDir))) {
-      return {
-        ok: false,
-        reason: "active project is not inside the workspace",
-      };
-    }
-    const adapter = getAdapterFn(providerId);
-    if (adapter === undefined) {
-      return { ok: false, reason: `unknown provider: ${providerId}` };
-    }
-    if (adapter.listOptions === undefined) {
+  function context() {
+    return resolveProviderContext(
       // A catalog stub. Refuse rather than answer with plausible defaults —
       // menus the provider cannot honour are worse than menus that stay shut.
-      return {
-        ok: false,
-        reason: `${adapter.id} cannot report session options`,
-      };
-    }
-    let status;
-    try {
-      status = await adapter.getStatus();
-    } catch (error) {
-      return {
-        ok: false,
-        reason:
-          error instanceof Error
-            ? error.message
-            : "could not read provider status",
-      };
-    }
-    if (!status.authenticated) {
-      return { ok: false, reason: "provider is not signed in" };
-    }
-    return { ok: true, adapter, projectDir };
+      (adapter) =>
+        adapter.listOptions === undefined
+          ? `${adapter.id} cannot report session options`
+          : undefined,
+      // Signed in, because answering means spawning the CLI.
+      { authenticated: true, deps },
+    );
   }
 
   return {

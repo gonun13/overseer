@@ -17,7 +17,9 @@ import type { OpenWindow, WindowKind } from "../windows";
 import { Window } from "./Window";
 import { ApprovalsWindow } from "./windows/ApprovalsWindow";
 import { CapabilitiesWindow } from "./windows/CapabilitiesWindow";
-import { CapabilityWindow } from "./windows/CapabilityWindow";
+import { SubagentWindow } from "./windows/SubagentWindow";
+import type { SubagentsState } from "../state/useSubagents";
+import { findSubagent, subagentKey } from "../subagents";
 import { ConsoleWindow } from "./windows/ConsoleWindow";
 import { ContextWindow } from "./windows/ContextWindow";
 import { DiffWindow } from "./windows/DiffWindow";
@@ -62,6 +64,7 @@ interface WindowStackHostProps {
   onImplementPlan: (planId: string) => void;
   onSetPlanStatus: (planId: string, status: "done" | "open") => void;
   sessionOptions: SessionOption[];
+  subagents: SubagentsState;
   /** Provider defaults plus the operator's picks — the fallback for a row a
    * session has not reported on yet. */
   armedSession: SessionSettings;
@@ -122,6 +125,7 @@ export function WindowStackHost({
   onImplementPlan,
   onSetPlanStatus,
   sessionOptions,
+  subagents,
   armedSession,
   openSessionControls,
   onToggleSessionControl,
@@ -286,13 +290,27 @@ export function WindowStackHost({
         )}
         {windowState.kind === "capabilities" && (
           <CapabilitiesWindow
-            capabilities={[]}
             provider={provider}
-            onEdit={(name) => openWindow("capability", name, name)}
+            subagents={subagents}
+            onEdit={(subagent) =>
+              openWindow("subagent", subagentKey(subagent), subagent.name)
+            }
+            // An empty payload is the create form. It is also its dedupe key,
+            // so a second "+ subagent" raises the one already open rather than
+            // stacking a second blank form over it.
+            onCreate={() => openWindow("subagent", "", "new subagent")}
           />
         )}
-        {windowState.kind === "capability" && (
-          <CapabilityWindow name={String(windowState.payload ?? "")} />
+        {windowState.kind === "subagent" && (
+          <SubagentWindow
+            // Looked up rather than carried on the payload: after a save
+            // renames a file, the row this window was opened from is gone and
+            // the list is the only thing that knows where it went.
+            existing={findSubagent(subagents.subagents, String(windowState.payload ?? ""))}
+            subagents={subagents}
+            models={sessionOptions.find((o) => o.key === "model")}
+            onClose={() => closeWindow(windowState.id)}
+          />
         )}
         {windowState.kind === "context" && (
           <ContextWindow

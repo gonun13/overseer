@@ -1,5 +1,6 @@
 import type { AgentEvent } from "./events.js";
 import type { AdapterPlan } from "./plan.js";
+import type { Subagent, SubagentDraft, SubagentScope } from "./subagent.js";
 import type { TurnWire } from "./transcript.js";
 
 /** Flag set the UI renders controls from — an adapter that can't do X doesn't grow an X zone. */
@@ -408,6 +409,42 @@ export interface AgentAdapter {
    * plausible-looking values. Never throws; empty lists are the failure shape.
    */
   listOptions?(opts: { projectDir: string }): Promise<ProviderOptions>;
+  /**
+   * The operator's own subagent files for one project — both scopes, with the
+   * body and the path, not the menu-shaped summary `listOptions` returns.
+   *
+   * Absent when the adapter has no such concept, in which case the server
+   * refuses the request rather than reporting an empty inventory that would
+   * read as "you have none" (the `listProjectPlans` precedent). Never throws;
+   * an unreadable folder reports nothing rather than failing the list.
+   */
+  listSubagents?(opts: { projectDir: string }): Promise<Subagent[]>;
+  /**
+   * Create or replace one subagent file, returning it as read back from disk
+   * rather than as asked for.
+   *
+   * `previous` names the file being edited: a subagent's name *is* its
+   * filename, so an edit that renames it or moves its scope is a write plus an
+   * unlink, and only the adapter knows where either file lives.
+   *
+   * May throw — unlike a failed list, a failed write is something the operator
+   * has to see.
+   */
+  writeSubagent?(opts: {
+    projectDir: string;
+    draft: SubagentDraft;
+    previous?: { name: string; scope: SubagentScope };
+  }): Promise<Subagent>;
+  /**
+   * Remove one subagent file. Resolves the path through the adapter's own
+   * listing rather than composing it, so a name the write path would reject
+   * can still be deleted. May throw.
+   */
+  deleteSubagent?(opts: {
+    projectDir: string;
+    name: string;
+    scope: SubagentScope;
+  }): Promise<void>;
   /** Present only when `capabilities.login` is true. */
   login?: AdapterLogin;
   /**

@@ -18,8 +18,9 @@ Behavior: [docs/overseer-behavior.md](docs/overseer-behavior.md) ·
 Versioning: [docs/architecture-design.md §8](docs/architecture-design.md#8-versioning)
 
 > **Early stage.** The UI shell, overseer wizard, provider sessions, and the raw OPEN
-> CONSOLE PTY are live for `claude-code` and `cursor`. Approvals, capabilities, turn
-> context, and diff rendering are not built — those windows open and say so.
+> CONSOLE PTY are live for `claude-code` and `cursor`, as is subagent authoring in the
+> capabilities window. Approvals, MCP servers, skills, turn context, and diff rendering
+> are not built — those windows and tabs open and say so.
 > Permission requests are auto-denied. See [Status](#status).
 
 ## Requirements
@@ -148,8 +149,8 @@ workspace/            host-shared dir — git projects live here, mounted into t
   loop tab sets which provider and which per-step models it uses.
 - **Two themes** — samaritan (default) and machine; choice is remembered in internal memory.
 
-Windows that exist as shape only, and say so when opened: **approvals**, **capabilities**
-(and its editor), **turn context**, **diffs**. See [Status](#status).
+Windows that exist as shape only, and say so when opened: **approvals**, the **mcp** and
+**skills** tabs of **capabilities**, **turn context**, **diffs**. See [Status](#status).
 
 ## Status
 
@@ -190,8 +191,9 @@ Still missing — these windows open and mark themselves unavailable rather than
 
 - **Approvals queue.** Permission requests are auto-denied with a visible error, so
   nothing ever reaches the queue.
-- **Capabilities.** MCP servers, skills, and subagents are not enumerated from the
-  provider; the inventory is empty and its editor neither loads nor saves.
+- **Capabilities: mcp and skills.** Neither is enumerated from the provider; both tabs are
+  empty and say so. Subagents, the third tab, are live — listed, created, edited and
+  removed as real `.claude/agents/*.md` files.
 - **Turn context.** No file, git diff, or terminal output can be attached to a turn.
 - **Diff rendering.** `Edit` / `Write` tool input is not parsed into a unified diff.
 - **Full adapters** for the remaining catalog stubs (`codex`, `opencode`,

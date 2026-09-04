@@ -7,13 +7,16 @@ import { passWizardOpening, SETTLED } from "./shell";
  * claim about a queue that does not exist — so each of them carries the
  * `WUnavailable` note (`packages/web/src/components/windows/bits.tsx`).
  *
- * Only the two command-reachable ones are covered here: `context` opens from a
+ * Only the command-reachable ones are covered here: `context` opens from a
  * session's control row and `diff` from a tool turn's inspect, neither of
  * which exists without a signed-in provider and a live turn.
  *
- * When one of these goes live, this expectation is what should fail.
+ * The capabilities window is now partly live — its subagents tab reads real
+ * files — so the two tabs that are not carry the note instead of the window,
+ * and `tab` says which one to open first. When one of those goes live, this
+ * expectation is what should fail.
  */
-for (const { command, window, detail } of [
+for (const { command, window, tab, detail, label } of [
   {
     command: "/approvals",
     window: "approvals",
@@ -22,10 +25,18 @@ for (const { command, window, detail } of [
   {
     command: "/capabilities",
     window: "capabilities",
-    detail: /not read from the provider yet/i,
+    tab: "mcp",
+    detail: /mcp servers are not read from the provider yet/i,
+  },
+  {
+    command: "/capabilities",
+    window: "capabilities",
+    tab: "skills",
+    label: "capabilities · skills",
+    detail: /skills are not read from the provider yet/i,
   },
 ]) {
-  test(`${window} declares itself unavailable`, async ({ page }) => {
+  test(`${label ?? window} declares itself unavailable`, async ({ page }) => {
     await page.goto("/");
     await passWizardOpening(page);
     await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
@@ -40,6 +51,11 @@ for (const { command, window, detail } of [
       .locator(".window")
       .filter({ has: page.getByRole("button", { name: `close ${window}` }) });
     await expect(frame).toBeVisible();
+    // A tabbed window carries the note per tab: the window as a whole is not
+    // unavailable, only these two parts of it.
+    if (tab !== undefined) {
+      await frame.getByRole("button", { name: tab, exact: true }).click();
+    }
     await expect(frame.getByText(/not available yet/i)).toBeVisible();
     await expect(frame.getByText(detail)).toBeVisible();
   });

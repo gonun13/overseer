@@ -4,6 +4,7 @@ import type {
   ProviderOption,
   ProviderOptions,
 } from "@overseer/protocol";
+import { configDir } from "./config-dir.js";
 import { readCustomAgents } from "./custom-agents.js";
 
 /**
@@ -235,13 +236,6 @@ export async function readProviderOptions(
   };
 }
 
-function configDir(): string {
-  return (
-    process.env.CLAUDE_CONFIG_DIR ??
-    `${process.env.HOME ?? "/home/node"}/.claude`
-  );
-}
-
 /**
  * Spawn the CLI, ask once, and always settle within timeout+grace. The child is
  * killed as soon as the answer arrives: in stream-json input mode it stays open
@@ -253,10 +247,6 @@ function runInitialize(
   killGraceMs: number,
 ): Promise<string> {
   return new Promise((resolve) => {
-    const configDir =
-      process.env.CLAUDE_CONFIG_DIR ??
-      `${process.env.HOME ?? "/home/node"}/.claude`;
-
     // Detached so the CLI and any children share a process group we can reap.
     const child = spawn(
       CLI,
@@ -271,7 +261,7 @@ function runInitialize(
       ],
       {
         cwd: projectDir,
-        env: { ...process.env, CLAUDE_CONFIG_DIR: configDir },
+        env: { ...process.env, CLAUDE_CONFIG_DIR: configDir() },
         detached: true,
         stdio: ["pipe", "pipe", "pipe"],
       },

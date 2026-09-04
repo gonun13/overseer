@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import { useEffect, useState, type ReactNode } from "react";
 import { StatusLight } from "../StatusLight";
 import { ACTIVITY_STEP_WORD, type Activity } from "../../status";
 import type { ProviderInfo } from "../../domain";
@@ -111,4 +111,52 @@ export function WRow({
  */
 export function WUnavailable({ detail }: { detail: string }) {
   return <p className="w-note">not available yet · {detail}</p>;
+}
+
+/**
+ * A destructive action that asks once, in place.
+ *
+ * Not a `DecisionWindow`: that surface blocks the whole field and cannot be
+ * dismissed, which is right for erasing the overseer's memory and far too
+ * heavy for removing one file the operator can write again in a minute. The
+ * button becoming its own confirmation keeps the gesture where the thing is.
+ *
+ * The arming lapses on its own, so a window left open on a half-pressed
+ * delete cannot be completed by a later, unrelated click.
+ */
+export function WConfirmButton({
+  label,
+  confirmLabel,
+  onConfirm,
+  disabled,
+}: {
+  label: string;
+  confirmLabel: string;
+  onConfirm: () => void;
+  disabled?: boolean;
+}) {
+  const [armed, setArmed] = useState(false);
+
+  useEffect(() => {
+    if (!armed) return;
+    const timer = setTimeout(() => setArmed(false), 4_000);
+    return () => clearTimeout(timer);
+  }, [armed]);
+
+  return (
+    <button
+      className="w-btn danger"
+      disabled={disabled === true}
+      onClick={() => {
+        if (!armed) {
+          setArmed(true);
+          return;
+        }
+        setArmed(false);
+        onConfirm();
+      }}
+    >
+      {armed ? confirmLabel : label}
+    </button>
+  );
 }

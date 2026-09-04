@@ -28,3 +28,19 @@ export function slugify(input: string): string {
     .replace(/[^a-z0-9]+/g, "-")
     .replace(/^-+|-+$/g, "");
 }
+
+/**
+ * The one shared rule for a subagent name, used both to validate what the
+ * editor submits and to compose the file it lands in.
+ *
+ * Deliberately a separate constant rather than an alias of
+ * `PROJECT_FOLDER_PATTERN`: that one governs a directory in the workspace,
+ * this one a `<name>.md` inside an agents folder, and the two are free to
+ * diverge. Kebab-case is also what Claude Code's own agents use.
+ *
+ * As with the folder rule, this is the entire pre-creation containment story:
+ * the file does not exist at validation time and so cannot be `realpath`-
+ * checked, but `path.join(agentsDir, `${name}.md`)` on a string matching this
+ * has no separators and no `.`/`..`, and cannot leave the folder.
+ */
+export const SUBAGENT_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;

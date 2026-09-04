@@ -9,6 +9,7 @@ import type {
 } from "./adapter.js";
 import type { AgentEvent } from "./events.js";
 import type { PlanMeta, PlanStatusOverride } from "./plan.js";
+import type { Subagent, SubagentScope } from "./subagent.js";
 import type { TurnWire } from "./transcript.js";
 import type {
   AppliedPersonality,
@@ -156,6 +157,43 @@ export type ClientMessage =
    * than pushed at connect time: it shells out to `loop/bin/models`, and
    * only a client with the loop tab of the providers window open needs it.
    */
+  /**
+   * List the operator's own subagent files for the active project — both
+   * scopes. Explicit rather than pushed at connect time, like
+   * `provider.options`: only a client with the capabilities window open needs
+   * it. Unlike that one it costs no subprocess, just two directory reads.
+   */
+  | { type: "subagent.list" }
+  /**
+   * Create or replace one subagent file.
+   *
+   * `previousName`/`previousScope` name the file being edited: the name *is*
+   * the filename, so a rename or a scope move has to remove the old file, and
+   * only the request knows which one that was. Both absent means create.
+   *
+   * `model` and `tools` empty mean inherit the session's — not an empty model
+   * and not an empty allowlist.
+   */
+  | {
+      type: "subagent.write";
+      name: string;
+      description: string;
+      prompt: string;
+      model: string;
+      tools: string;
+      scope: SubagentScope;
+      previousName?: string;
+      previousScope?: SubagentScope;
+    }
+  /**
+   * Remove one subagent file.
+   *
+   * Deliberately accepts a `name` the write path would refuse: a hand-written
+   * file whose frontmatter name is not kebab-case is exactly the one an
+   * operator most wants to delete. The server resolves it through the
+   * adapter's own listing rather than composing a path from it.
+   */
+  | { type: "subagent.delete"; name: string; scope: SubagentScope }
   | { type: "loop.config.read" }
   /** Select which provider the loop runs on next (`loop/bin/provider`). */
   | { type: "loop.provider.set"; id: string }
@@ -367,6 +405,44 @@ export interface ProviderOptionsMessage {
 }
 
 /**
+ * Every subagent file the operator has, for one project.
+ *
+ * Broadcast rather than sent to the asker, and re-broadcast after every
+ * successful write or delete — the same reasoning as `ProviderOptionsMessage`:
+ * this is a fact about the instance, and a second tab must not have to re-ask
+ * to see an edit made in the first.
+ *
+ * `projectDir` is on the frame because project-scoped agents are, so a client
+ * that has moved on can tell this reply is stale.
+ */
+export interface SubagentListMessage {
+  type: "subagent.list";
+  providerId: string;
+  projectDir: string;
+  subagents: Subagent[];
+}
+
+/**
+ * One write landed, as it reads back off disk — which is not always what was
+ * asked for, since the name in the frontmatter decides the filename.
+ *
+ * Sent to the socket that asked rather than broadcast, so its form can close:
+ * the `subagent.list` that follows is what updates every other tab. Same shape
+ * and reasoning as `ProjectCreatedMessage`.
+ */
+export interface SubagentWrittenMessage {
+  type: "subagent.written";
+  subagent: Subagent;
+}
+
+/** One subagent file is gone. Sent to the asker, for the same reason. */
+export interface SubagentDeletedMessage {
+  type: "subagent.deleted";
+  name: string;
+  scope: SubagentScope;
+}
+
+/**
  * The whole state of the login flow in one frame.
  *
  * One state frame rather than a stream of deltas: a tab that connects (or asks)
@@ -566,6 +642,9 @@ export type ServerMessage =
   | ProviderStatusMessage
   | ProviderUsageCheckMessage
   | ProviderOptionsMessage
+  | SubagentListMessage
+  | SubagentWrittenMessage
+  | SubagentDeletedMessage
   | AuthStateMessage
   | WorkspaceProjectsMessage
   | OverseerStepMessage
@@ -624,6 +703,20 @@ export const PROJECT_MAX_DESCRIPTION_CHARS = 4_000;
  * magnitude as `PROJECT_MAX_FOLDER_CHARS` plus room for the workspace root. */
 export const GIT_MAX_PATH_CHARS = 4_096;
 export const GIT_MAX_COMMIT_MESSAGE_CHARS = 4_000;
+
+/** A subagent name is also its filename; kebab-case at this length covers
+ * every real agent name and keeps the path short. */
+export const SUBAGENT_MAX_NAME_CHARS = 64;
+/** The description is the routing hint a CLI matches a task against — a
+ * sentence or two, not a document. */
+export const SUBAGENT_MAX_DESCRIPTION_CHARS = 1_000;
+/** The body. Same bound as a user turn: it is prose of the same order. */
+export const SUBAGENT_MAX_PROMPT_CHARS = 64_000;
+/** A comma-separated tool allowlist, not free prose. */
+export const SUBAGENT_MAX_TOOLS_CHARS = 1_000;
+
+/** Mirrors `SubagentScope`. */
+const SUBAGENT_SCOPES = new Set<string>(["project", "user"]);
 
 function isConsoleSize(cols: unknown, rows: unknown): boolean {
   return (
@@ -838,7 +931,58 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       msg.message.length <= GIT_MAX_COMMIT_MESSAGE_CHARS
     );
   }
+  if (type === "subagent.list") return true;
+  if (type === "subagent.write") {
+    const msg = value as {
+      name?: unknown;
+      description?: unknown;
+      prompt?: unknown;
+      model?: unknown;
+      tools?: unknown;
+      scope?: unknown;
+      previousName?: unknown;
+      previousScope?: unknown;
+    };
+    return (
+      isSubagentName(msg.name) &&
+      typeof msg.description === "string" &&
+      msg.description.length <= SUBAGENT_MAX_DESCRIPTION_CHARS &&
+      typeof msg.prompt === "string" &&
+      msg.prompt.length <= SUBAGENT_MAX_PROMPT_CHARS &&
+      typeof msg.model === "string" &&
+      msg.model.length <= SESSION_MAX_MODEL_CHARS &&
+      typeof msg.tools === "string" &&
+      msg.tools.length <= SUBAGENT_MAX_TOOLS_CHARS &&
+      SUBAGENT_SCOPES.has(msg.scope as string) &&
+      (msg.previousName === undefined || isSubagentName(msg.previousName)) &&
+      (msg.previousScope === undefined ||
+        SUBAGENT_SCOPES.has(msg.previousScope as string))
+    );
+  }
+  if (type === "subagent.delete") {
+    const msg = value as { name?: unknown; scope?: unknown };
+    return isSubagentName(msg.name) && SUBAGENT_SCOPES.has(msg.scope as string);
+  }
   return false;
+}
+
+/**
+ * Shape and length only — deliberately not `SUBAGENT_NAME_PATTERN`.
+ *
+ * A name that is the right shape but the wrong format is a mistake the
+ * operator made in a form, and it deserves a sentence telling them the rule
+ * (which the server gives it), not a frame silently dropped as unrecognized.
+ * The same split `project.create` makes with `PROJECT_FOLDER_PATTERN`.
+ *
+ * It is also what lets `subagent.delete` accept a hand-written name the write
+ * path would refuse — the one file an operator most wants to be able to remove.
+ */
+function isSubagentName(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= SUBAGENT_MAX_NAME_CHARS
+  );
 }
 
 function isGitPath(value: unknown): value is string {

@@ -204,9 +204,11 @@ spawn(
 
 ### 1.3 Async side-tasks (skills and subagent editing)
 
-Skills and subagents are edited by asking the agent, not through dedicated forms.
+Skills are edited by asking the agent, not through dedicated forms.
 
 Each edit opens a **side-task**: a short-lived session scoped to the relevant config directory. Its status appears in the capabilities zone, and the capability row refreshes from disk when it finishes.
+
+**Subagents diverge from this as shipped.** They are written directly by the adapter (`writeSubagent` / `deleteSubagent`, `packages/adapters/claude-code/src/subagent-files.ts`) from a form in the capabilities window, not by a side-task. A subagent file is a short, fixed shape — four frontmatter keys and a prose body — so a deterministic write is both cheaper and more predictable than spending a turn on it, and the operator's own text reaches disk unaltered. The side-task remains the right model for skills, whose layout is a directory rather than a file.
 
 A raw file editor remains optional.
 
@@ -297,8 +299,9 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | MCP add / remove                          | Capabilities | `mcp add` (stdio/http/sse, `-e`, `--header`), `add-json`, `remove`                                            |
 | MCP OAuth login                           | Capabilities | `mcp login --no-browser`; URL out, redirect URL in                                                            |
 | Per-session MCP sets                      | Capabilities | `--mcp-config`, `--strict-mcp-config`                                                                         |
-| Skills + subagents inventory              | Capabilities | filesystem discovery of `.claude/skills`, `.claude/agents`                                                    |
-| Agent-driven skill/subagent editing       | Capabilities | async side-tasks (§1.3)                                                                                       |
+| Subagent inventory + editing              | Capabilities | **live** — filesystem read/write of `.claude/agents` in both scopes (§1.3)                                     |
+| Skills inventory                          | Capabilities | filesystem discovery of `.claude/skills`                                                                      |
+| Agent-driven skill editing                | Capabilities | async side-tasks (§1.3)                                                                                       |
 | Pin a subagent / ephemeral agents         | Console      | `--agent <name>`, `--agents <json>`                                                                           |
 | File attachments, image paste             | Console      | content blocks on stdin                                                                                       |
 | Session fork                              | Sessions     | `--fork-session`                                                                                              |

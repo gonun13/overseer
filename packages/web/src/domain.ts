@@ -153,15 +153,3 @@ export type DiffLine = { kind: "add" | "del" | "ctx"; text: string };
  * streams through xterm rather than this shape. */
 export type ConsoleLine = { kind: "in" | "out" | "err"; text: string };
 
-export interface CapabilityDraft {
-  name: string;
-  kind: string;
-  description: string;
-  /** Free text for a skill or subagent; the thing actually being edited. */
-  instructions: string;
-  model: string;
-  tools: { name: string; enabled: boolean }[];
-  /** Where it lives on disk. The provider's layout, not the web layer's guess —
-   * `.claude/skills/…` is true of claude-code and of nothing else in general. */
-  file: string;
-}

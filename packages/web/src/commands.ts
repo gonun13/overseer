@@ -46,7 +46,7 @@ export const COMMANDS: Command[] = [
   },
   {
     name: "capabilities",
-    aliases: ["mcp", "skills"],
+    aliases: ["mcp", "skills", "subagents", "agents"],
     help: "mcp servers, skills, subagents",
     action: { type: "open", kind: "capabilities" },
   },

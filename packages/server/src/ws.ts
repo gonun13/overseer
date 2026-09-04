@@ -7,6 +7,7 @@ import {
   type DiscoveryEvent,
   type DiscoveryOutcome,
   type ServerMessage,
+  type Subagent,
 } from "@overseer/protocol";
 import { WebSocketServer, type WebSocket } from "ws";
 import { listAdapters } from "./adapters.js";
@@ -53,6 +54,7 @@ import {
 } from "./personality-file-watcher.js";
 import { refreshPendingUsage } from "./usage-refresh.js";
 import { createProject } from "./project-create.js";
+import { subagents } from "./subagents.js";
 import { projectGit, type GitOpResult } from "./project-git.js";
 import { isInsideWorkspace } from "./workspace.js";
 
@@ -150,6 +152,37 @@ export function attachWebSocketServer(httpServer: Server): {
     for (const client of wss.clients) {
       if (client.readyState === client.OPEN) client.send(raw);
     }
+  };
+
+  /**
+   * The subagent inventory is a fact about the instance, so it goes to every
+   * tab — the same reasoning `provider.options` broadcasts on.
+   */
+  const broadcastSubagents = (result: {
+    providerId: string;
+    projectDir: string;
+    subagents: Subagent[];
+  }): void => {
+    broadcast({
+      type: "subagent.list",
+      providerId: result.providerId,
+      projectDir: result.projectDir,
+      subagents: result.subagents,
+    });
+  };
+
+  /**
+   * Re-read after a write or delete and push the result, rather than patching
+   * a local copy: one extra directory read buys a broadcast that is what is
+   * actually on disk, including the rename a write may have performed.
+   *
+   * Silent on failure. The write itself already succeeded and has been
+   * acknowledged; a second error frame about the refresh would report a
+   * failure the operator's action did not have.
+   */
+  const pushSubagents = async (): Promise<void> => {
+    const result = await subagents.list();
+    if (result.ok) broadcastSubagents(result);
   };
 
   const sessionSupervisor = createSessionSupervisor(broadcast);
@@ -778,6 +811,77 @@ export function attachWebSocketServer(httpServer: Server): {
             projectDir: result.projectDir,
             options: result.options,
           });
+          return;
+        }
+        case "subagent.list": {
+          const result = await subagents.list();
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "subagent.list",
+              benign: true,
+              message: result.reason,
+            });
+            return;
+          }
+          broadcastSubagents(result);
+          return;
+        }
+        case "subagent.write": {
+          const result = await subagents.write({
+            draft: {
+              name: parsed.name,
+              description: parsed.description,
+              prompt: parsed.prompt,
+              model: parsed.model,
+              tools: parsed.tools,
+              scope: parsed.scope,
+            },
+            ...(parsed.previousName !== undefined
+              ? {
+                  previous: {
+                    name: parsed.previousName,
+                    // A rename within one scope does not resend the scope.
+                    scope: parsed.previousScope ?? parsed.scope,
+                  },
+                }
+              : {}),
+          });
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "subagent.write",
+              benign: result.benign,
+              message: result.reason,
+            });
+            return;
+          }
+          // To the asker, so its form can close on its own request rather than
+          // on any write that happens to land.
+          send({ type: "subagent.written", subagent: result.subagent });
+          await pushSubagents();
+          return;
+        }
+        case "subagent.delete": {
+          const result = await subagents.remove({
+            name: parsed.name,
+            scope: parsed.scope,
+          });
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "subagent.delete",
+              benign: result.benign,
+              message: result.reason,
+            });
+            return;
+          }
+          send({
+            type: "subagent.deleted",
+            name: parsed.name,
+            scope: parsed.scope,
+          });
+          await pushSubagents();
           return;
         }
         case "provider.checkUsage": {
