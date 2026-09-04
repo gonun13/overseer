@@ -105,6 +105,95 @@
   overflow-wrap: anywhere;
 }
 
+/* Markdown elements inside a turn. Headings stay in the app's one monospace
+   family (design-system.md §8) — hierarchy comes from weight, not a font
+   swap — and code/pre wrap instead of scrolling horizontally (§10). */
+.turn-text > *:first-child {
+  margin-top: 0;
+}
+
+.turn-text > *:last-child {
+  margin-bottom: 0;
+}
+
+.turn-text p {
+  margin: 0 0 8px;
+}
+
+.turn-text h1,
+.turn-text h2,
+.turn-text h3,
+.turn-text h4,
+.turn-text h5,
+.turn-text h6 {
+  margin: 12px 0 6px;
+  font-family: inherit;
+  font-size: 14px;
+  font-weight: 700;
+}
+
+.turn-text code {
+  font-family: inherit;
+  background: var(--stamp-edge);
+  padding: 1px 4px;
+  border-radius: 2px;
+}
+
+.turn-text pre {
+  margin: 8px 0;
+  padding: 8px 10px;
+  background: var(--stamp-edge);
+  border-left: 1px solid var(--stamp-edge);
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+}
+
+.turn-text pre code {
+  background: none;
+  padding: 0;
+}
+
+.turn-text ul,
+.turn-text ol {
+  margin: 6px 0;
+  padding-left: 20px;
+}
+
+.turn-text li {
+  margin: 2px 0;
+}
+
+.turn-text a {
+  color: var(--accent-fill);
+  text-decoration: underline;
+}
+
+.turn-text blockquote {
+  margin: 8px 0;
+  padding-left: 10px;
+  border-left: 1px solid var(--stamp-edge);
+  color: var(--stamp-dim);
+}
+
+.turn-text hr {
+  border: none;
+  border-top: 1px solid var(--stamp-edge);
+  margin: 10px 0;
+}
+
+.turn-text table {
+  border-collapse: collapse;
+  margin: 8px 0;
+  width: 100%;
+}
+
+.turn-text th,
+.turn-text td {
+  border: 1px solid var(--stamp-edge);
+  padding: 3px 6px;
+  text-align: left;
+}
+
 /* Terminal output: consecutive tool calls read as one continuous console
    block, not separate chips with the dark chat surface showing between them
    — a run shares its top and bottom border and never gaps internally. Spacing

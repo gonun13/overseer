@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { ProviderOption } from "@overseer/protocol";
 import type { Turn } from "../domain";
 import { ChevronIcon } from "./icons";
+import { TurnMarkdown } from "./TurnMarkdown";
 import { findOption } from "../session";
 
 /**
@@ -72,7 +73,9 @@ const TurnThinking = memo(function TurnThinking({
         <ChevronIcon open={expanded} />
         <span className="turn-label">thinking</span>
       </button>
-      {expanded && <p className="turn-text turn-thinking-text">{turn.text}</p>}
+      {expanded && (
+        <TurnMarkdown className="turn-text turn-thinking-text" text={turn.text} />
+      )}
     </div>
   );
 });
@@ -92,7 +95,7 @@ const TurnMessage = memo(function TurnMessage({
           <span className="turn-label-model"> · {modelLabel}</span>
         )}
       </div>
-      <p className="turn-text">{turn.text}</p>
+      <TurnMarkdown className="turn-text" text={turn.text} />
     </div>
   );
 });
