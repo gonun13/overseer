@@ -1,6 +1,6 @@
 {
   "name": "@overseer/protocol",
-  "version": "0.2.0",
+  "version": "0.2.1",
   "description": "Shared TypeScript types — the frontend/backend/adapter contract.",
   "type": "module",
   "main": "./dist/index.js",

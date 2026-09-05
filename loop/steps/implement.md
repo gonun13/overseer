@@ -100,7 +100,14 @@ an altered one is rejected and the step has to be redone.
    given. Everything under the plan's `Out of Plan` stays undone. If you
    genuinely must touch a file no tracer in the group owns, make the smallest
    possible change and record it under `## Deviations`.
-10. **Do not touch version control.** No commit, no branch, no stash, no revert,
+10. **Keep the project's changelog current.** If `workspace_dir` has a
+   `CHANGELOG.md` at its root, and this run changed something a user of the
+   project can observe, add one line to it under the heading for the version
+   being worked on — in the project's own existing style, matching the entries
+   already there. Nothing observable changed (a refactor, tests, plumbing,
+   docs) means no entry. No `CHANGELOG.md` means nothing to do; do not create
+   one, and do not rewrite entries that are already released.
+11. **Do not touch version control.** No commit, no branch, no stash, no revert,
    no reset. You are already on this request's own branch — `loop/bin/step` cut
    it off the tip of the train when the request took the working tree — so stay
    on it and leave the tree dirty. Committing is the `commit` step, where bash

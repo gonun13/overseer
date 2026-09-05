@@ -9,7 +9,9 @@ import { passWizardOpening, SETTLED } from "./shell";
  *
  * Only the command-reachable ones are covered here: `context` opens from a
  * session's control row and `diff` from a tool turn's inspect, neither of
- * which exists without a signed-in provider and a live turn.
+ * which exists without a signed-in provider and a live turn. Approvals used to
+ * be covered too — they are live now, inline in the session, so there is no
+ * unavailable surface left to assert on.
  *
  * The capabilities window is now partly live — its subagents tab reads real
  * files — so the two tabs that are not carry the note instead of the window,
@@ -17,11 +19,6 @@ import { passWizardOpening, SETTLED } from "./shell";
  * expectation is what should fail.
  */
 for (const { command, window, tab, detail, label } of [
-  {
-    command: "/approvals",
-    window: "approvals",
-    detail: /permission requests are auto-denied/i,
-  },
   {
     command: "/capabilities",
     window: "capabilities",

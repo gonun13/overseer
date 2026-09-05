@@ -491,7 +491,7 @@ example `2.4.1`):
 
 The number reflects **which design-doc milestone is shipped**, not commit count or PR volume. When
 in doubt, compare the running product against the doc sections below — not git history alone. How
-those three components map onto Overseer's tiers is in §8.2 (pre-1.0) and §8.4 (after `1.0.0`).
+those three components map onto Overseer's tiers is in §8.2 (pre-1.0) and §8.5 (after `1.0.0`).
 
 ### 8.1 Monorepo rule
 
@@ -527,9 +527,8 @@ the tier already claimed by the current version.
 | `1.x`     | §3 **Important**| Additive features from the Important tier. Each MINOR should map to a closed subset of that table (call it out in release notes). |
 | `2.x+`    | §3 **Nice to have** + later providers | Major product expansion; breaking protocol or UX contract bumps MAJOR. |
 
-**Explicit non-goals for `0.2.x`:** the §3 MVP approvals queue (`can_use_tool` is answered `deny`
-with a visible error), diff rendering for `Edit` / `Write`, the capabilities inventory and its
-editor, turn context attachment, and §5 provider-backed querying in
+**Explicit non-goals for `0.2.x`:** diff rendering for `Edit` / `Write`, the capabilities
+inventory and its editor, turn context attachment, and §5 provider-backed querying in
 [overseer-behavior.md](overseer-behavior.md) ("planned, not built"). Every one of those has a
 window already; each carries a `WUnavailable` note naming what is missing rather than rendering an
 empty frame that reads as a working-but-idle surface
@@ -541,13 +540,39 @@ empty frame that reads as a working-but-idle surface
 
 1. Walk the milestone table: does the product meet the ship bar for the target version?
 2. Update README [Status](../README.md#status) if the "in place" / "still missing" lists changed.
-3. Bump the same version in root and every `@overseer/*` `package.json`; sync `package-lock.json`
+3. Open a `##` section for the new version at the top of [CHANGELOG.md](../CHANGELOG.md) and check
+   that every operator-visible change since the last release has an entry under it (§8.4).
+4. Bump the same version in root and every `@overseer/*` `package.json`; sync `package-lock.json`
    (`./bin/npm install`). The footer and help window pick up the root version automatically.
-4. Tag `vX.Y.Z` on the merge commit to `main` (annotated tag preferred).
-5. Mention the version in the PR or release notes when the bump is intentional — not as a drive-by in
+5. Tag `vX.Y.Z` on the merge commit to `main` (annotated tag preferred).
+6. Mention the version in the PR or release notes when the bump is intentional — not as a drive-by in
    unrelated work.
 
-### 8.4 After `1.0.0`
+### 8.4 Changelog
+
+`CHANGELOG.md` at the repo root is the operator-facing release notes, and the only place they
+live. The `changelog` window renders it — `/changelog`, or a click on the version in the footer —
+by importing the file and parsing it (`packages/web/src/changelog.ts`,
+`packages/web/src/changelogSource.ts`), so the file *is* the feature; there is no second copy to
+keep in sync.
+
+**Every feature, fix, or behaviour change adds its entry in the same change that makes it**, under
+the `##` heading for the version it will ship as, in the matching `###` section (`Added` /
+`Changed` / `Fixed` / `Removed`). Waiting until release time means writing release notes from
+`git log --oneline`, which is how the notes end up describing commits instead of the product.
+
+Entries are conservative and public-facing: what an operator can now do or now sees, present
+tense, one line. No file paths, package names, internal type names, or wire-message names — the
+reader runs this thing, they do not build it. A change that alters nothing an operator can observe
+gets **no** entry; refactors, tests, plumbing, docs and dependency bumps are deliberately absent,
+and a release whose whole content is invisible gets no section.
+
+A shipped section is a record, not a draft: open a new `## X.Y.Z — YYYY-MM-DD` heading at the top
+on a bump and leave everything below it alone. The parser tolerates a malformed file by yielding
+fewer releases rather than throwing, so a broken heading loses a release silently — keep the shape
+the file already has.
+
+### 8.5 After `1.0.0`
 
 Normal SemVer applies on top of the tier map: breaking protocol or UX changes → `MAJOR`; new Important-tier
 capability → `MINOR`; fix or internal cleanup → `PATCH`.

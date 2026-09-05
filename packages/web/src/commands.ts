@@ -67,6 +67,12 @@ export const COMMANDS: Command[] = [
     action: { type: "open", kind: "help" },
   },
   {
+    name: "changelog",
+    aliases: ["changes", "whatsnew"],
+    help: "what changed in each release",
+    action: { type: "open", kind: "changelog" },
+  },
+  {
     name: "theme",
     aliases: ["night", "day"],
     help: "switch theme",

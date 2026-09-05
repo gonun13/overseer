@@ -364,6 +364,7 @@ export default function App() {
   );
 
   const openHelp = useCallback(() => open("help"), [open]);
+  const openChangelog = useCallback(() => open("changelog"), [open]);
 
   // Workspace whose loop run the operator is being asked to take over, and the
   // one-shot flag the next loop console consumes once they say yes.
@@ -616,6 +617,7 @@ export default function App() {
           onPromptBlur={prompt.blur}
           onPromptSubmit={submitPrompt}
           onOpenHelp={openHelp}
+          onOpenChangelog={openChangelog}
         />
 
         <WindowStackHost

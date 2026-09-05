@@ -19,9 +19,9 @@ Versioning: [docs/architecture-design.md §8](docs/architecture-design.md#8-vers
 
 > **Early stage.** The UI shell, overseer wizard, provider sessions, and the raw OPEN
 > CONSOLE PTY are live for `claude-code` and `cursor`, as is subagent authoring in the
-> capabilities window. Approvals, MCP servers, skills, turn context, and diff rendering
-> are not built — those windows and tabs open and say so.
-> Permission requests are auto-denied. See [Status](#status).
+> capabilities window, and inline approval of permission requests. MCP servers, skills,
+> turn context, and diff rendering are not built — those windows and tabs open and say so.
+> See [Status](#status).
 
 ## Requirements
 
@@ -147,10 +147,13 @@ workspace/            host-shared dir — git projects live here, mounted into t
   stream-json agent sessions.
 - **Dev loop, in-app** — `/loop` runs `loop/` in a console window; the providers window's
   loop tab sets which provider and which per-step models it uses.
+- **Inline approvals** — a permission request appears in the session that raised it, answered
+  with allow once, allow always, or deny.
+- **Changelog** — `/changelog`, or the version in the footer, opens what changed in each release.
 - **Two themes** — samaritan (default) and machine; choice is remembered in internal memory.
 
-Windows that exist as shape only, and say so when opened: **approvals**, the **mcp** and
-**skills** tabs of **capabilities**, **turn context**, **diffs**. See [Status](#status).
+Windows that exist as shape only, and say so when opened: the **mcp** and **skills** tabs of
+**capabilities**, **turn context**, **diffs**. See [Status](#status).
 
 ## Status
 
@@ -189,8 +192,6 @@ window and their CLIs ship in the image, but have no login, console, or session 
 
 Still missing — these windows open and mark themselves unavailable rather than pretending:
 
-- **Approvals queue.** Permission requests are auto-denied with a visible error, so
-  nothing ever reaches the queue.
 - **Capabilities: mcp and skills.** Neither is enumerated from the provider; both tabs are
   empty and say so. Subagents, the third tab, are live — listed, created, edited and
   removed as real `.claude/agents/*.md` files.
@@ -203,7 +204,7 @@ Still missing — these windows open and mark themselves unavailable rather than
 
 The product version is the root `package.json` `version` field — currently the **live sessions &
 providers** milestone ([architecture §8.2](docs/architecture-design.md#82-milestone-map)).
-**`1.0.0`** waits on the §3 MVP core loop: approvals, capabilities, turn context, and diffs. Versions follow [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`): **MAJOR**
+**`1.0.0`** waits on the rest of the §3 MVP core loop: capabilities, turn context, and diffs. Versions follow [Semantic Versioning](https://semver.org/) (`MAJOR.MINOR.PATCH`): **MAJOR**
 when updates break compatibility, **MINOR** when features are added safely, **PATCH** when small
 bugs are fixed. Bump rules and the milestone map live in
 [architecture-design.md §8](docs/architecture-design.md#8-versioning). The footer reads that field

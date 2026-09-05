@@ -16,6 +16,7 @@ import type { LoopConfigState, LoopModelsEntry } from "../state/useLoopConfig";
 import type { OpenWindow, WindowKind } from "../windows";
 import { Window } from "./Window";
 import { CapabilitiesWindow } from "./windows/CapabilitiesWindow";
+import { ChangelogWindow } from "./windows/ChangelogWindow";
 import { SubagentWindow } from "./windows/SubagentWindow";
 import type { SubagentsState } from "../state/useSubagents";
 import { findSubagent, subagentKey } from "../subagents";
@@ -326,6 +327,7 @@ export function WindowStackHost({
           />
         )}
         {windowState.kind === "help" && <HelpWindow provider={provider} />}
+        {windowState.kind === "changelog" && <ChangelogWindow />}
         {windowState.kind === "diff" && (
           <DiffWindow target={String(windowState.payload ?? "")} />
         )}

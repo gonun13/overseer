@@ -11,6 +11,7 @@ interface PromptChromeProps {
   onPromptBlur: () => void;
   onPromptSubmit: (input: string) => void;
   onOpenHelp: () => void;
+  onOpenChangelog: () => void;
 }
 
 /** Bottom-of-field chrome for the prompt terminal and footer. */
@@ -23,6 +24,7 @@ export function PromptChrome({
   onPromptBlur,
   onPromptSubmit,
   onOpenHelp,
+  onOpenChangelog,
 }: PromptChromeProps) {
   return (
     <>
@@ -39,7 +41,17 @@ export function PromptChrome({
         )}
         {footerVisible && (
           <p className="footer settles-in">
-            {overseerVersionLabel()}
+            {/* The version is the changelog's own handle: an operator who
+                notices the number is the one asking what changed in it. Reads
+                as footer type until hovered — `.footer-link` inherits, so this
+                is a word you can click, not a control. */}
+            <button
+              type="button"
+              className="footer-link"
+              onClick={onOpenChangelog}
+            >
+              {overseerVersionLabel()}
+            </button>
             {promptVisible && (
               <>
                 {" "}

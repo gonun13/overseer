@@ -9,6 +9,7 @@ export type WindowKind =
   | "context"
   | "console"
   | "help"
+  | "changelog"
   | "diff"
   | "loopModels"
   | "projectCreate"
@@ -77,6 +78,11 @@ export const WINDOW_SPEC: Record<
   // resizable from the bottom-right grip.
   console: { title: "console", x: 9999, y: 9999, w: 720, h: 480 },
   help: { title: "help", x: 380, y: 190, w: 560 },
+  // Beside help, offset so the two can sit open together — they answer the
+  // neighbouring questions "what can this do" and "what changed". Opened from
+  // the `/changelog` command or by clicking the version in the footer. Height
+  // is operator-resizable: the list grows by one section every release.
+  changelog: { title: "changelog", x: 420, y: 220, w: 560, h: 400 },
   diff: { title: "diff", x: 700, y: 260, w: 580 },
   // Opened from the providers window's loop tab, one per provider (the
   // payload — a provider id — is also useWindows' dedupe key, so a second
