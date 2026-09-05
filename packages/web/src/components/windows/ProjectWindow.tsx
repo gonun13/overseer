@@ -1,6 +1,19 @@
 import { useEffect, useState } from "react";
 import type { ClientMessage, GitFileChange, ServerMessage } from "@overseer/protocol";
-import { WInline, WRow, WTitle } from "./bits";
+import { WInline, WRow, WTitle, type RowTone } from "./bits";
+
+/** How a file's fate reads in the list. Untracked and added are both "new"
+ * ink: the operator is being asked whether to commit, and from that question's
+ * point of view a file git has never seen and one already staged are the same
+ * thing. */
+const FILE_TONE: Record<GitFileChange["status"], RowTone> = {
+  deleted: "gone",
+  unmerged: "gone",
+  added: "new",
+  untracked: "new",
+  modified: "changed",
+  renamed: "changed",
+};
 
 interface GitStatusState {
   branch: string;
@@ -8,6 +21,7 @@ interface GitStatusState {
   hasRemote: boolean;
   ahead?: number;
   behind?: number;
+  defaultBranch: string;
   files: GitFileChange[];
 }
 
@@ -19,8 +33,10 @@ type Busy = "commit" | "push" | "merge" | "revert" | null;
  * path) or the `/project` command, which targets the active project.
  *
  * Push and merge are mutually exclusive on purpose: a remote implies a PR
- * process upstream, so merge-to-main is only offered when there is none to
- * defer to.
+ * process upstream, so merge-to-default is only offered when there is none
+ * to defer to. "Default" is never assumed to be `main` — it's whatever the
+ * server's status read named (`main`, `master`, or a clone's own
+ * `origin/HEAD`), and the button labels itself after that name.
  */
 export function ProjectWindow({
   path,
@@ -41,8 +57,8 @@ export function ProjectWindow({
     if (!path) return;
     return subscribe((frame) => {
       if (frame.type === "project.git.status" && frame.path === path) {
-        const { branch, dirty, hasRemote, ahead, behind, files } = frame;
-        setStatus({ branch, dirty, hasRemote, ahead, behind, files });
+        const { branch, dirty, hasRemote, ahead, behind, defaultBranch, files } = frame;
+        setStatus({ branch, dirty, hasRemote, ahead, behind, defaultBranch, files });
         return;
       }
       if (
@@ -84,6 +100,16 @@ export function ProjectWindow({
     return <div className="w-empty">no active project</div>;
   }
 
+  // Push is only live when there is something to send and nothing left behind:
+  // uncommitted work means the push would ship a half-state, and `ahead === 0`
+  // means the remote already has every commit. `ahead === undefined` is the
+  // never-pushed branch — no upstream to compare against, so `push -u` is
+  // exactly the thing to offer.
+  const canPush =
+    status !== undefined &&
+    !status.dirty &&
+    (status.ahead === undefined || status.ahead > 0);
+
   function commit() {
     if (!path || message.trim() === "") return;
     setBusy("commit");
@@ -122,6 +148,7 @@ export function ProjectWindow({
                 activity="idle"
                 primary={file.path}
                 right={file.status}
+                tone={FILE_TONE[file.status]}
               />
             ))
           )}
@@ -156,7 +183,7 @@ export function ProjectWindow({
                 <button
                   type="button"
                   className="w-btn"
-                  disabled={busy !== null}
+                  disabled={busy !== null || !canPush}
                   onClick={() => {
                     setBusy("push");
                     setError(undefined);
@@ -166,14 +193,14 @@ export function ProjectWindow({
                   {busy === "push" ? "pushing…" : "push"}
                 </button>
               ) : (
-                status.branch !== "main" && (
+                status.branch !== status.defaultBranch && (
                   <button
                     type="button"
                     className="w-btn"
                     disabled={busy !== null}
                     onClick={() => setConfirming("merge")}
                   >
-                    merge to main…
+                    merge to {status.defaultBranch}…
                   </button>
                 )
               )}
@@ -188,13 +215,24 @@ export function ProjectWindow({
             </div>
           )}
           {status.hasRemote && (
-            <p className="w-note">merge happens through the PR process upstream.</p>
+            <>
+              {status.dirty ? (
+                <p className="w-note">
+                  commit first · push sends commits, not working changes.
+                </p>
+              ) : (
+                status.ahead === 0 && (
+                  <p className="w-note">nothing to push · the remote is up to date.</p>
+                )
+              )}
+              <p className="w-note">merge happens through the PR process upstream.</p>
+            </>
           )}
 
           {confirming === "merge" && (
             <div className="btn-row">
               <span className="w-note">
-                merge {status.branch} into main — cannot be undone.
+                merge {status.branch} into {status.defaultBranch} — cannot be undone.
               </span>
               <button
                 type="button"

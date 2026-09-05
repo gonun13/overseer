@@ -370,6 +370,64 @@
   user-select: text;
 }
 
+/* ---- changelog carousel ---------------------------------------------------
+   One release fills the window; the arrows step the filmstrip left/right
+   rather than swapping the body, so moving through history reads as travel
+   along one strip and not a sequence of unrelated documents. */
+.changelog-nav {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+  margin: 0 0 4px;
+}
+
+.changelog-nav-count {
+  font-size: 11px;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-dim);
+}
+
+.changelog-arrow {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  padding: 0;
+  border: 1px solid var(--ink-rule);
+  background: transparent;
+  color: var(--ink);
+  font-size: 13px;
+  line-height: 1;
+  cursor: pointer;
+}
+
+.changelog-arrow:hover:not(:disabled) {
+  border-color: var(--light-accent);
+  color: var(--light-accent);
+}
+
+.changelog-arrow:disabled {
+  opacity: 0.3;
+  cursor: default;
+}
+
+.changelog-viewport {
+  overflow: hidden;
+}
+
+.changelog-track {
+  display: flex;
+  align-items: flex-start;
+  transition: transform 0.28s ease-out;
+}
+
+.changelog-slide {
+  flex: none;
+  min-width: 0;
+}
+
 .w-path {
   margin-bottom: 8px;
   font-size: 11px;
@@ -477,6 +535,25 @@
   font-size: 11px;
   font-variant-numeric: tabular-nums;
   color: var(--ink-dim);
+}
+
+/* Row tones — the git file list, where the row's ink is the tell and the
+   status light stays idle: gone is the accent already used for destructive
+   things, new is the ok green, changed the same green stepped back toward the
+   body ink so the two read as degrees of one fact rather than two signals. */
+.w-row.tone-gone .w-row-primary,
+.w-row.tone-gone .w-row-right {
+  color: var(--accent-fill);
+}
+
+.w-row.tone-new .w-row-primary,
+.w-row.tone-new .w-row-right {
+  color: var(--ok-fill);
+}
+
+.w-row.tone-changed .w-row-primary,
+.w-row.tone-changed .w-row-right {
+  color: color-mix(in srgb, var(--ok-fill) 55%, var(--ink));
 }
 
 .w-row-actions {

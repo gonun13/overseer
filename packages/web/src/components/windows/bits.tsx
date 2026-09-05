@@ -70,12 +70,19 @@ export function WStep({
   );
 }
 
+/** Optional ink for a row whose *content* carries a meaning the status light
+ * cannot — a git file's fate (gone / new / touched), where the row is not a
+ * unit of activity at all. Three named tones rather than free colour, so no
+ * call site can invent a fourth. */
+export type RowTone = "gone" | "new" | "changed";
+
 export function WRow({
   activity,
   primary,
   secondary,
   right,
   actions,
+  tone,
   onClick,
 }: {
   activity: Activity;
@@ -83,10 +90,14 @@ export function WRow({
   secondary?: string;
   right?: string;
   actions?: ReactNode;
+  tone?: RowTone;
   onClick?: () => void;
 }) {
   return (
-    <div className={`w-row ${onClick ? "clickable" : ""}`} onClick={onClick}>
+    <div
+      className={`w-row ${onClick ? "clickable" : ""} ${tone ? `tone-${tone}` : ""}`}
+      onClick={onClick}
+    >
       <StatusLight activity={activity} />
       <span className="w-row-main">
         <span className="w-row-primary">{primary}</span>

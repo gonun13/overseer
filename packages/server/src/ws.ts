@@ -414,7 +414,13 @@ export function attachWebSocketServer(httpServer: Server): {
           }
           try {
             const result = await projectGit.status(parsed.path);
-            send({ type: "project.git.status", path: parsed.path, ...result });
+            const defaultBranch = await projectGit.defaultBranch(parsed.path);
+            send({
+              type: "project.git.status",
+              path: parsed.path,
+              ...result,
+              defaultBranch,
+            });
           } catch (error) {
             send({
               type: "error",
@@ -495,13 +501,13 @@ export function attachWebSocketServer(httpServer: Server): {
             });
             return;
           }
-          const result = await projectGit.mergeToMain(parsed.path);
+          const result = await projectGit.mergeToDefault(parsed.path);
           announceGitOp(
             "merging",
             parsed.path,
             result,
             "project:merge",
-            "merged into main",
+            result.ok ? `merged into ${result.into}` : "merge",
           );
           if (!result.ok) {
             send({
@@ -512,7 +518,12 @@ export function attachWebSocketServer(httpServer: Server): {
             });
             return;
           }
-          send({ type: "project.git.merged", path: parsed.path, branch: "main" });
+          send({
+            type: "project.git.merged",
+            path: parsed.path,
+            branch: result.from,
+            into: result.into,
+          });
           return;
         }
         case "project.git.revert": {

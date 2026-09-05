@@ -242,8 +242,10 @@ export type ClientMessage =
   /** `git push -u origin <branch>` in `path`. Only offered by the client when
    * the last status read reported a remote. */
   | { type: "project.git.push"; path: string }
-  /** Merge the current branch into `main`, locally — offered only when
-   * `path` has no remote (a remote implies a PR process upstream instead). */
+  /** Merge the current branch into `path`'s default branch, locally —
+   * offered only when `path` has no remote (a remote implies a PR process
+   * upstream instead). The default branch is whatever the server's
+   * `project.git.status` reply named — `main`, `master`, or otherwise. */
   | { type: "project.git.merge"; path: string }
   /** Discard every uncommitted change in `path` — `git reset --hard` plus a
    * clean of untracked files. */
@@ -316,7 +318,11 @@ export interface GitFileChange {
 
 /** Reply to `project.git.status`. `ahead`/`behind` are absent when the branch
  * has no upstream to compare against — never collapsed to `0`, the same rule
- * `DiscoveredProject.dirty` already follows. */
+ * `DiscoveredProject.dirty` already follows. `defaultBranch` is this
+ * project's trunk — `main` in the common case, but `master` or whatever a
+ * clone's `origin/HEAD` names for one that predates that convention — and is
+ * what `project.git.merge` targets, and what the merge button labels itself
+ * after. */
 export interface ProjectGitStatusMessage {
   type: "project.git.status";
   path: string;
@@ -325,6 +331,7 @@ export interface ProjectGitStatusMessage {
   hasRemote: boolean;
   ahead?: number;
   behind?: number;
+  defaultBranch: string;
   files: GitFileChange[];
 }
 
@@ -341,11 +348,13 @@ export interface ProjectGitPushedMessage {
   path: string;
 }
 
-/** Ack that `path`'s feature branch was merged into `main`, locally. */
+/** Ack that `path`'s feature branch (`branch`) was merged into its default
+ * branch (`into`), locally. */
 export interface ProjectGitMergedMessage {
   type: "project.git.merged";
   path: string;
   branch: string;
+  into: string;
 }
 
 /** Ack that every uncommitted change in `path` was discarded. */

@@ -5,6 +5,20 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
 
+## 0.2.2 — 2026-09-05
+
+### Changed
+
+- The project window opens at the top centre of the field, under the active project readout.
+- Changed files in the project window are inked by their fate: deleted red, new green, modified a
+  softer green.
+- Push is offered only when there is something to send: it stays disabled while changes are
+  uncommitted or the remote already has every commit, and says which.
+- The changelog window shows one release at a time, with arrows to step between versions.
+- Merge to default targets whatever branch the project actually treats as trunk — `main`,
+  `master`, or otherwise — instead of assuming `main`.
+- The project window's tab names the project it belongs to.
+
 ## 0.2.1 — 2026-09-05
 
 ### Added

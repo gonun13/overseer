@@ -97,8 +97,8 @@ export const WINDOW_SPEC: Record<
   // project's path — also the dedupe key, so a second click on the same row
   // raises the existing window rather than stacking another one), from the
   // active-project readout, or from the `/project` command — the last two
-  // both target the active project. Same fixed
-  // mid-field spawn as `projectCreate` — it has no instrument of its own to
-  // anchor near either.
-  project: { title: "project", x: 300, y: 200, w: 520 },
+  // both target the active project. Top-centre, under the active-project
+  // readout it answers for: x is the 9999 sentinel, since the spawn is
+  // centred on the viewport in useWindows rather than at one assumed width.
+  project: { title: "project", x: 9999, y: 96, w: 520 },
 };

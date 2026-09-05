@@ -36,6 +36,7 @@ function chatWindowLabel(
     : { title: session.name, detail: project.name };
 }
 
+
 export default function App() {
   const [projectsOpen, setProjectsOpen] = useState(true);
   // Open by default: sessions are the point of the field once a provider is
@@ -94,12 +95,15 @@ export default function App() {
   const openWindow = useCallback(
     (kind: WindowKind, payload?: unknown, title?: string) => {
       if (kind === "project" && payload === undefined) {
-        open(kind, wizard.activeProjectPath);
+        const name = wizard.projects.find(
+          (p) => p.path === wizard.activeProjectPath,
+        )?.name;
+        open(kind, wizard.activeProjectPath, undefined, name);
         return;
       }
       open(kind, payload, title);
     },
-    [open, wizard.activeProjectPath],
+    [open, wizard.activeProjectPath, wizard.projects],
   );
 
   const prompt = usePromptSession({
@@ -548,7 +552,7 @@ export default function App() {
             }}
             onCreate={() => open("projectCreate")}
             onManage={(project) =>
-              open("project", project.path, project.name)
+              open("project", project.path, undefined, project.name)
             }
           />
         )}

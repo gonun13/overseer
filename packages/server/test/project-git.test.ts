@@ -163,7 +163,58 @@ describe("projectGit.push", () => {
   });
 });
 
-describe("projectGit.mergeToMain", () => {
+describe("projectGit.defaultBranch", () => {
+  it("resolves to the remote's own default when origin/HEAD is recorded locally", async () => {
+    const run = scriptedRun([
+      { stdout: "refs/remotes/origin/trunk\n" }, // symbolic-ref origin/HEAD
+    ]);
+    const projectGit = createProjectGit({ run });
+
+    const result = await projectGit.defaultBranch("/workspace/demo");
+
+    assert.equal(result, "trunk");
+    assert.equal(run.mock.calls.length, 1);
+  });
+
+  it("falls back to main when no remote default is recorded but main exists locally", async () => {
+    const run = scriptedRun([
+      new Error("fatal: ref refs/remotes/origin/HEAD is not a symbolic ref"),
+      { stdout: "develop\nmain\n" }, // branch --format
+    ]);
+    const projectGit = createProjectGit({ run });
+
+    const result = await projectGit.defaultBranch("/workspace/demo");
+
+    assert.equal(result, "main");
+  });
+
+  it("falls back to master when main is absent", async () => {
+    const run = scriptedRun([
+      new Error("fatal: ref refs/remotes/origin/HEAD is not a symbolic ref"),
+      { stdout: "develop\nmaster\n" },
+    ]);
+    const projectGit = createProjectGit({ run });
+
+    const result = await projectGit.defaultBranch("/workspace/demo");
+
+    assert.equal(result, "master");
+  });
+
+  it("falls back to the current branch when neither convention nor a remote default exists", async () => {
+    const run = scriptedRun([
+      new Error("fatal: ref refs/remotes/origin/HEAD is not a symbolic ref"),
+      { stdout: "develop\nfeature-x\n" },
+      { stdout: "feature-x\n" }, // branch --show-current
+    ]);
+    const projectGit = createProjectGit({ run });
+
+    const result = await projectGit.defaultBranch("/workspace/demo");
+
+    assert.equal(result, "feature-x");
+  });
+});
+
+describe("projectGit.mergeToDefault", () => {
   it("refuses when a remote is attached", async () => {
     const run = scriptedRun([
       { stdout: "## feature-x\n" }, // status --branch
@@ -171,7 +222,7 @@ describe("projectGit.mergeToMain", () => {
     ]);
     const projectGit = createProjectGit({ run });
 
-    const result = await projectGit.mergeToMain("/workspace/demo");
+    const result = await projectGit.mergeToDefault("/workspace/demo");
 
     assert.deepEqual(result, {
       ok: false,
@@ -180,11 +231,16 @@ describe("projectGit.mergeToMain", () => {
     });
   });
 
-  it("refuses when already on main", async () => {
-    const run = scriptedRun([{ stdout: "## main\n" }, { stdout: "" }]);
+  it("refuses when already on the default branch", async () => {
+    const run = scriptedRun([
+      { stdout: "## main\n" }, // status --branch
+      { stdout: "" }, // remote
+      new Error("fatal: ref refs/remotes/origin/HEAD is not a symbolic ref"),
+      { stdout: "main\n" }, // branch --format
+    ]);
     const projectGit = createProjectGit({ run });
 
-    const result = await projectGit.mergeToMain("/workspace/demo");
+    const result = await projectGit.mergeToDefault("/workspace/demo");
 
     assert.deepEqual(result, {
       ok: false,
@@ -193,26 +249,46 @@ describe("projectGit.mergeToMain", () => {
     });
   });
 
-  it("checks out main and merges the feature branch, with no identity override when one resolves", async () => {
+  it("checks out the default branch and merges the feature branch, with no identity override when one resolves", async () => {
     const run = scriptedRun([
       { stdout: "## feature-x\n" }, // status --branch
       { stdout: "" }, // remote
+      new Error("fatal: ref refs/remotes/origin/HEAD is not a symbolic ref"),
+      { stdout: "feature-x\nmain\n" }, // branch --format
       { stdout: "" }, // checkout main
       { stdout: "Me <me@example.com> 1700000000 +0000\n" }, // var GIT_AUTHOR_IDENT
       { stdout: "" }, // merge --no-ff feature-x
     ]);
     const projectGit = createProjectGit({ run });
 
-    const result = await projectGit.mergeToMain("/workspace/demo");
+    const result = await projectGit.mergeToDefault("/workspace/demo");
 
-    assert.deepEqual(result, { ok: true });
-    assert.deepEqual(run.mock.calls[2]?.arguments[1], ["checkout", "main"]);
-    assert.deepEqual(run.mock.calls[4]?.arguments[1], [
+    assert.deepEqual(result, { ok: true, from: "feature-x", into: "main" });
+    assert.deepEqual(run.mock.calls[4]?.arguments[1], ["checkout", "main"]);
+    assert.deepEqual(run.mock.calls[6]?.arguments[1], [
       "merge",
       "--no-ff",
       "feature-x",
     ]);
-    assert.equal(run.mock.calls[4]?.arguments[2], undefined);
+    assert.equal(run.mock.calls[6]?.arguments[2], undefined);
+  });
+
+  it("targets master instead of main when that's the project's default", async () => {
+    const run = scriptedRun([
+      { stdout: "## feature-x\n" }, // status --branch
+      { stdout: "" }, // remote
+      new Error("fatal: ref refs/remotes/origin/HEAD is not a symbolic ref"),
+      { stdout: "feature-x\nmaster\n" }, // branch --format — no `main`
+      { stdout: "" }, // checkout master
+      { stdout: "Me <me@example.com> 1700000000 +0000\n" }, // var GIT_AUTHOR_IDENT
+      { stdout: "" }, // merge --no-ff feature-x
+    ]);
+    const projectGit = createProjectGit({ run });
+
+    const result = await projectGit.mergeToDefault("/workspace/demo");
+
+    assert.deepEqual(result, { ok: true, from: "feature-x", into: "master" });
+    assert.deepEqual(run.mock.calls[4]?.arguments[1], ["checkout", "master"]);
   });
 
   it("falls back to the overseer identity for the merge commit when git cannot resolve one", async () => {
@@ -222,16 +298,18 @@ describe("projectGit.mergeToMain", () => {
     const run = scriptedRun([
       { stdout: "## feature-x\n" }, // status --branch
       { stdout: "" }, // remote
+      new Error("fatal: ref refs/remotes/origin/HEAD is not a symbolic ref"),
+      { stdout: "feature-x\nmain\n" }, // branch --format
       { stdout: "" }, // checkout main
       new Error("fatal: empty ident name (for <>) not allowed"), // var GIT_AUTHOR_IDENT
       { stdout: "" }, // merge --no-ff feature-x
     ]);
     const projectGit = createProjectGit({ run });
 
-    const result = await projectGit.mergeToMain("/workspace/demo");
+    const result = await projectGit.mergeToDefault("/workspace/demo");
 
-    assert.deepEqual(result, { ok: true });
-    assert.deepEqual(run.mock.calls[4]?.arguments[2], {
+    assert.deepEqual(result, { ok: true, from: "feature-x", into: "main" });
+    assert.deepEqual(run.mock.calls[6]?.arguments[2], {
       GIT_AUTHOR_NAME: "overseer",
       GIT_AUTHOR_EMAIL: "overseer@localhost",
       GIT_COMMITTER_NAME: "overseer",
@@ -243,6 +321,8 @@ describe("projectGit.mergeToMain", () => {
     const run = scriptedRun([
       { stdout: "## feature-x\n" },
       { stdout: "" },
+      new Error("fatal: ref refs/remotes/origin/HEAD is not a symbolic ref"),
+      { stdout: "feature-x\nmain\n" }, // branch --format
       { stdout: "" }, // checkout main
       { stdout: "Me <me@example.com> 1700000000 +0000\n" }, // var GIT_AUTHOR_IDENT
       new Error("CONFLICT (content): Merge conflict in src/app.ts"),
@@ -250,11 +330,11 @@ describe("projectGit.mergeToMain", () => {
     ]);
     const projectGit = createProjectGit({ run });
 
-    const result = await projectGit.mergeToMain("/workspace/demo");
+    const result = await projectGit.mergeToDefault("/workspace/demo");
 
     assert.equal(result.ok, false);
     assert.equal((result as { benign: boolean }).benign, true);
-    assert.deepEqual(run.mock.calls[5]?.arguments[1], ["merge", "--abort"]);
+    assert.deepEqual(run.mock.calls[7]?.arguments[1], ["merge", "--abort"]);
   });
 });
 

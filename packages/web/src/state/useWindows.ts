@@ -177,6 +177,35 @@ export function useWindows() {
           ];
         }
 
+        // Project: top-centre — the git surface for the project the operator
+        // is already looking at, so it opens directly under the centred
+        // active-project readout (top 18, ~60 tall) rather than off in the
+        // middle of the field. Centred horizontally on the viewport, clamped
+        // so it never lands off-screen.
+        if (kind === "project") {
+          return [
+            ...current,
+            {
+              id: `${kind}-${++seq}`,
+              kind,
+              title: title ?? spec.title,
+              ...detailFields,
+              x: Math.max(
+                24,
+                Math.min(
+                  Math.round((window.innerWidth - width) / 2) + cascade,
+                  window.innerWidth - width - 24,
+                ),
+              ),
+              y: Math.max(56, 96 + cascade),
+              w: width,
+              ...(height !== undefined ? { h: height } : {}),
+              z: ++zSeq,
+              payload,
+            },
+          ];
+        }
+
         // Chat: mid-bottom — centred on the field and low, so a conversation
         // opens where the operator is already looking, but above the prompt
         // terminal and the footer rather than on top of them.

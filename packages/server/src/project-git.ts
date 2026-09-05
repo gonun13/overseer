@@ -17,6 +17,13 @@ export type GitOpResult =
   | { ok: true }
   | { ok: false; reason: string; benign: boolean };
 
+/** `mergeToDefault`'s result carries which branch it merged from and into —
+ * the ack to the client names both, and the client no longer has to assume
+ * the target was `main`. */
+export type MergeResult =
+  | { ok: true; from: string; into: string }
+  | { ok: false; reason: string; benign: boolean };
+
 export interface ProjectGitDeps {
   /** One `git` invocation in `dir`, with optional env overrides. Swappable in
    * tests for canned stdout/stderr instead of a real process — same shape
@@ -151,7 +158,50 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     }
   }
 
-  async function mergeToMain(dir: string): Promise<GitOpResult> {
+  /**
+   * The branch this project treats as its trunk — not always `main`: a repo
+   * that predates that convention, or one cloned from a remote that names
+   * its own, has to be merged into the branch it actually has.
+   *
+   * Preference order: the remote's own notion of default, when `origin/HEAD`
+   * is recorded locally (the same thing `git clone` sets up); else whichever
+   * of `main`/`master` exists as a local branch, in that order; else the
+   * current branch itself — nothing conventional to point at, so the closest
+   * thing this repo has to a default is wherever HEAD already is.
+   */
+  async function defaultBranch(dir: string): Promise<string> {
+    try {
+      const { stdout } = await run(dir, [
+        "symbolic-ref",
+        "refs/remotes/origin/HEAD",
+      ]);
+      const short = stdout.trim().replace(/^refs\/remotes\/origin\//, "");
+      if (short) return short;
+    } catch {
+      // No remote, or one whose HEAD was never recorded locally (common
+      // right after `git remote add` without a fetch) — fall through.
+    }
+
+    try {
+      const { stdout } = await run(dir, [
+        "branch",
+        "--format=%(refname:short)",
+      ]);
+      const branches = stdout
+        .split("\n")
+        .map((line) => line.trim())
+        .filter(Boolean);
+      if (branches.includes("main")) return "main";
+      if (branches.includes("master")) return "master";
+    } catch {
+      // No local branches to enumerate — an empty, commit-less repo.
+    }
+
+    const { stdout: currentOut } = await run(dir, ["branch", "--show-current"]);
+    return currentOut.trim() || "main";
+  }
+
+  async function mergeToDefault(dir: string): Promise<MergeResult> {
     const current = await status(dir);
     if (current.hasRemote) {
       return {
@@ -160,13 +210,15 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
         reason: "a remote is attached — merge through the upstream PR process",
       };
     }
-    if (current.branch === "main") {
-      return { ok: false, benign: true, reason: "already on main" };
+
+    const target = await defaultBranch(dir);
+    if (current.branch === target) {
+      return { ok: false, benign: true, reason: `already on ${target}` };
     }
 
     const branch = current.branch;
     try {
-      await run(dir, ["checkout", "main"]);
+      await run(dir, ["checkout", target]);
     } catch (error) {
       return { ok: false, benign: true, reason: describe(error) };
     }
@@ -181,13 +233,13 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
         ["merge", "--no-ff", branch],
         identity ? undefined : FALLBACK_IDENTITY_ENV,
       );
-      return { ok: true };
+      return { ok: true, from: branch, into: target };
     } catch (error) {
       await run(dir, ["merge", "--abort"]).catch(() => {});
       return {
         ok: false,
         benign: true,
-        reason: `merge conflict — aborted, still on main: ${describe(error)}`,
+        reason: `merge conflict — aborted, still on ${target}: ${describe(error)}`,
       };
     }
   }
@@ -210,7 +262,7 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     }
   }
 
-  return { status, commit, push, mergeToMain, revert };
+  return { status, commit, push, defaultBranch, mergeToDefault, revert };
 }
 
 function statusFromCode(code: string): GitFileChange["status"] {
