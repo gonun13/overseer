@@ -717,6 +717,14 @@ export const APPROVAL_MAX_ID_CHARS = 128;
 export const APPROVAL_MAX_RULE_CHARS = 256;
 /** Optional free text on a deny. */
 export const APPROVAL_MAX_FEEDBACK_CHARS = 2_000;
+/** A question tool asks at most four questions in one call (claude's
+ * `AskUserQuestion`); the bound is that, with room to spare. */
+export const APPROVAL_MAX_ANSWERS = 8;
+/** Answer keys are the question text verbatim, so they are a sentence. */
+export const APPROVAL_MAX_QUESTION_CHARS = 1_000;
+/** An answer is a picked option's label, or the operator's own words in place
+ * of one — the same order of magnitude as a deny's feedback. */
+export const APPROVAL_MAX_ANSWER_CHARS = 2_000;
 
 /** Mirrors `PlanStatusOverride` — the derived statuses are deliberately absent:
  * a client asking for one is asking to overwrite a reading of the transcript. */
@@ -1049,7 +1057,11 @@ function isSessionId(value: unknown): value is string {
 
 function isPermissionDecision(value: unknown): value is PermissionDecision {
   if (typeof value !== "object" || value === null) return false;
-  const decision = value as { decision?: unknown; rule?: unknown; feedback?: unknown };
+  const decision = value as {
+    decision?: unknown;
+    rule?: unknown;
+    feedback?: unknown;
+  };
   if (decision.decision === "allow-once") return true;
   if (decision.decision === "allow-always") {
     return (
@@ -1063,6 +1075,22 @@ function isPermissionDecision(value: unknown): value is PermissionDecision {
       decision.feedback === undefined ||
       (typeof decision.feedback === "string" &&
         decision.feedback.length <= APPROVAL_MAX_FEEDBACK_CHARS)
+    );
+  }
+  if (decision.decision === "answer") {
+    const answers = (value as { answers?: unknown }).answers;
+    if (typeof answers !== "object" || answers === null) return false;
+    const entries = Object.entries(answers as Record<string, unknown>);
+    if (entries.length === 0 || entries.length > APPROVAL_MAX_ANSWERS) {
+      return false;
+    }
+    return entries.every(
+      ([question, answer]) =>
+        question.length > 0 &&
+        question.length <= APPROVAL_MAX_QUESTION_CHARS &&
+        typeof answer === "string" &&
+        answer.length > 0 &&
+        answer.length <= APPROVAL_MAX_ANSWER_CHARS,
     );
   }
   return false;

@@ -159,8 +159,15 @@ export function createSessionHandle(
   let controlSeq = 0;
   const pendingPermissions = new Map<
     string,
-    { toolName: string; input: unknown }
+    { toolName: string; input: unknown; suggestions?: unknown[] }
   >();
+  /** The CLI's own `permission_suggestions` for a live `can_use_tool`, keyed by
+   * request id and read off the raw frame (they are not part of the normalized
+   * event). Verified against the real CLI (2.1.226): what "allow always" has to
+   * send back is *these, verbatim* — for a `Write` the CLI asks for
+   * `setMode acceptEdits`, not a `Write(*)` rule — and handing it anything else
+   * leaves the permission engine unchanged, so the very next write asks again. */
+  const pendingSuggestions = new Map<string, unknown[]>();
   /** `set_model` requests awaiting their `control_response`, keyed by request
    * id — the response itself doesn't echo the model back. */
   const pendingModelRequests = new Map<string, string>();
@@ -195,7 +202,9 @@ export function createSessionHandle(
             pendingPermissions.set(event.requestId, {
               toolName: event.toolName,
               input: event.input,
+              suggestions: pendingSuggestions.get(event.requestId),
             });
+            pendingSuggestions.delete(event.requestId);
           }
           if (event.type === "turn.end") {
             turnInFlight = false;
@@ -226,6 +235,18 @@ export function createSessionHandle(
     }
     if (typeof record !== "object" || record === null) return;
     const obj = record as Record<string, unknown>;
+
+    if (obj.type === "control_request") {
+      const request = obj.request as Record<string, unknown> | undefined;
+      if (
+        request?.subtype === "can_use_tool" &&
+        typeof obj.request_id === "string" &&
+        Array.isArray(request.permission_suggestions)
+      ) {
+        pendingSuggestions.set(obj.request_id, request.permission_suggestions);
+      }
+      return;
+    }
 
     if (obj.type === "assistant") {
       const message = obj.message as Record<string, unknown> | undefined;
@@ -397,6 +418,26 @@ export function createSessionHandle(
         return;
       }
 
+      // An answered question tool: the answers are the tool's own result,
+      // carried back on its input. Allowing without them makes the CLI report
+      // that the operator said nothing.
+      const updatedInput =
+        decision.decision === "answer"
+          ? {
+              ...(typeof pending.input === "object" && pending.input !== null
+                ? (pending.input as Record<string, unknown>)
+                : {}),
+              answers: decision.answers,
+            }
+          : pending.input;
+
+      const updatedPermissions =
+        decision.decision === "allow-always"
+          ? pending.suggestions !== undefined && pending.suggestions.length > 0
+            ? pending.suggestions
+            : [addRuleUpdate(decision.rule)]
+          : undefined;
+
       writeLine({
         type: "control_response",
         response: {
@@ -404,10 +445,8 @@ export function createSessionHandle(
           request_id: id,
           response: {
             behavior: "allow",
-            updatedInput: pending.input,
-            ...(decision.decision === "allow-always"
-              ? { updatedPermissions: [{ type: "addRules", rules: [decision.rule] }] }
-              : {}),
+            updatedInput,
+            ...(updatedPermissions !== undefined ? { updatedPermissions } : {}),
           },
         },
       });
@@ -426,6 +465,29 @@ export function createSessionHandle(
   };
 
   return handle;
+}
+
+/** Fallback for an "allow always" the CLI offered no suggestions for: turn the
+ * protocol's `Tool(content)` rule string into the `addRules` update the CLI
+ * accepts — a `{ toolName, ruleContent }` pair, an explicit `behavior`, and a
+ * `destination`. A bare `*` is dropped rather than passed through: as a rule
+ * body it is a path pattern matching one directory level, whereas leaving it
+ * off is what actually means "this tool, anywhere". `session` keeps the grant
+ * to the run in front of the operator instead of writing their settings files. */
+function addRuleUpdate(rule: string): unknown {
+  const match = /^([^(]+)\((.*)\)$/s.exec(rule.trim());
+  const toolName = (match?.[1] ?? rule).trim();
+  const content = match?.[2]?.trim() ?? "";
+  return {
+    type: "addRules",
+    rules: [
+      content === "" || content === "*"
+        ? { toolName }
+        : { toolName, ruleContent: content },
+    ],
+    behavior: "allow",
+    destination: "session",
+  };
 }
 
 export function mintSessionId(): string {

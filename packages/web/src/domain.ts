@@ -147,7 +147,22 @@ export type Turn =
        * input itself is not shown — the operator is deciding whether this
        * tool may touch this target, not reviewing a payload. */
       target: string;
+      /** Set only when the request came from a question tool. Then the
+       * request is not an approval at all: the provider is asking the
+       * operator something and the answers are what it gets back, so the row
+       * shows the questions instead of allow/deny. */
+      questions?: ApprovalQuestion[];
     };
+
+/** One question a provider asked through its question tool, as the operator
+ * sees it. `multiSelect` questions take any number of options; the rest take
+ * exactly one. */
+export type ApprovalQuestion = {
+  question: string;
+  header: string;
+  multiSelect: boolean;
+  options: Array<{ label: string; description: string }>;
+};
 
 export type DiffLine = { kind: "add" | "del" | "ctx"; text: string };
 

@@ -1,6 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
 import type { PermissionDecision, ProviderOption } from "@overseer/protocol";
-import type { Turn } from "../domain";
+import type { ApprovalQuestion, Turn } from "../domain";
 import { ChevronIcon } from "./icons";
 import { TurnMarkdown } from "./TurnMarkdown";
 import { findOption } from "../session";
@@ -128,6 +128,119 @@ const TurnApproval = memo(function TurnApproval({
   );
 });
 
+/**
+ * A question the provider asked, not a tool it wants to run. The provider is
+ * blocked on the answer and treats silence as "the operator said nothing", so
+ * this row shows the questions themselves rather than allow/deny — the reason
+ * `AskUserQuestion` used to look like an approval nobody could answer.
+ */
+const TurnQuestions = memo(function TurnQuestions({
+  turn,
+  questions,
+  onResolve,
+}: {
+  turn: Extract<Turn, { kind: "approval" }>;
+  questions: ApprovalQuestion[];
+  onResolve: (id: string, decision: PermissionDecision) => void;
+}) {
+  const [picked, setPicked] = useState<Record<string, string[]>>({});
+
+  const toggle = useCallback(
+    (question: ApprovalQuestion, label: string) => {
+      setPicked((current) => {
+        const chosen = current[question.question] ?? [];
+        if (!question.multiSelect) {
+          return { ...current, [question.question]: [label] };
+        }
+        return {
+          ...current,
+          [question.question]: chosen.includes(label)
+            ? chosen.filter((entry) => entry !== label)
+            : [...chosen, label],
+        };
+      });
+    },
+    [],
+  );
+
+  const answered = questions.every(
+    (question) => (picked[question.question] ?? []).length > 0,
+  );
+
+  return (
+    <div className="approval questions">
+      <div className="approval-head">
+        <span className="turn-label">asking you</span>
+      </div>
+      {questions.map((question) => (
+        <div className="question" key={question.question}>
+          <div className="question-head">
+            <span className="question-chip">{question.header}</span>
+            <span className="question-text">{question.question}</span>
+          </div>
+          <div className="question-options">
+            {question.options.map((option) => {
+              const chosen = (picked[question.question] ?? []).includes(
+                option.label,
+              );
+              return (
+                <button
+                  type="button"
+                  className="question-option"
+                  aria-pressed={chosen}
+                  key={option.label}
+                  onClick={() => toggle(question, option.label)}
+                >
+                  <span className="w-btn-mark">{chosen ? "▪" : ""}</span>
+                  <span className="question-option-label">{option.label}</span>
+                  {option.description !== "" && (
+                    <span className="question-option-detail">
+                      {option.description}
+                    </span>
+                  )}
+                </button>
+              );
+            })}
+          </div>
+        </div>
+      ))}
+      <div className="btn-row">
+        <button
+          className="w-btn"
+          disabled={!answered}
+          onClick={() =>
+            onResolve(turn.id, {
+              decision: "answer",
+              // Keyed by the question text, exactly as asked — that is how the
+              // provider matches an answer back to its question. A multi-select
+              // goes back comma-joined, the same shape the CLI folds a list to.
+              answers: Object.fromEntries(
+                questions.map((question) => [
+                  question.question,
+                  (picked[question.question] ?? []).join(", "),
+                ]),
+              ),
+            })
+          }
+        >
+          answer
+        </button>
+        <button
+          className="w-btn danger"
+          onClick={() =>
+            onResolve(turn.id, {
+              decision: "deny",
+              feedback: "the operator skipped the question",
+            })
+          }
+        >
+          skip
+        </button>
+      </div>
+    </div>
+  );
+});
+
 const TurnMessage = memo(function TurnMessage({
   turn,
   modelLabel,
@@ -206,7 +319,14 @@ export function Transcript({
           return <TurnTool key={turn.id} turn={turn} onInspect={onInspect} />;
         }
         if (turn.kind === "approval") {
-          return (
+          return turn.questions !== undefined ? (
+            <TurnQuestions
+              key={turn.id}
+              turn={turn}
+              questions={turn.questions}
+              onResolve={onResolveApproval}
+            />
+          ) : (
             <TurnApproval
               key={turn.id}
               turn={turn}

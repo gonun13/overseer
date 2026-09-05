@@ -1,4 +1,16 @@
 {
+  // tsc runs its watchers inside the `deps` container against a Docker Desktop
+  // bind mount, where inotify events arrive unreliably — and a missed event is
+  // silent: the watcher reports "Found 0 errors" while `dist/` keeps the old
+  // build, so the server validates wire messages against a protocol that no
+  // longer matches the source. `CHOKIDAR_USEPOLLING` does not reach tsc (it is
+  // chokidar's, for vite), so the polling has to be asked for here. Ignored
+  // outside `--watch`.
+  "watchOptions": {
+    "watchFile": "priorityPollingInterval",
+    "watchDirectory": "dynamicPriorityPolling",
+    "fallbackPolling": "dynamicPriority"
+  },
   "compilerOptions": {
     "target": "ES2022",
     "lib": ["ES2022"],

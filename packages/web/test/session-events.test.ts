@@ -5,8 +5,87 @@ import {
   appendUserTurn,
   applySessionEvent,
   metaToSession,
+  parseApprovalQuestions,
   reconcileSessionList,
 } from "../src/state/session-events.ts";
+
+describe("question requests", () => {
+  const ASK_INPUT = {
+    questions: [
+      {
+        question: "Which bash?",
+        header: "Shell",
+        multiSelect: false,
+        options: [
+          { label: "pure bash", description: "no dependencies" },
+          { label: "zsh", description: "nicer, less portable" },
+        ],
+      },
+    ],
+  };
+
+  it("reads a question tool's questions off its input", () => {
+    const questions = parseApprovalQuestions("AskUserQuestion", ASK_INPUT);
+    assert.equal(questions?.length, 1);
+    assert.equal(questions?.[0]?.header, "Shell");
+    assert.equal(questions?.[0]?.options.length, 2);
+  });
+
+  it("leaves an ordinary tool alone", () => {
+    assert.equal(
+      parseApprovalQuestions("Write", { file_path: "/workspace/a.txt" }),
+      undefined,
+    );
+  });
+
+  it("falls back to a plain approval when the input does not read as questions", () => {
+    // Better an approval the operator cannot answer than a card offering
+    // options that were never actually asked.
+    assert.equal(parseApprovalQuestions("AskUserQuestion", {}), undefined);
+    assert.equal(
+      parseApprovalQuestions("AskUserQuestion", { questions: [{ header: "x" }] }),
+      undefined,
+    );
+    assert.equal(
+      parseApprovalQuestions("AskUserQuestion", {
+        questions: [{ question: "Which?", options: [] }],
+      }),
+      undefined,
+    );
+  });
+
+  it("carries the questions onto the approval turn", () => {
+    const chat = {
+      session: metaToSession({
+        id: "q1",
+        adapterId: "claude-code",
+        projectDir: "/workspace/demo",
+        model: "",
+        permissionMode: "default",
+        status: "live" as const,
+        createdAt: "",
+        lastActiveAt: "",
+        totalCostUsd: 0,
+      }),
+      turns: [],
+    };
+    const next = applySessionEvent(chat, {
+      type: "permission.request",
+      sessionId: "q1",
+      timestamp: "",
+      requestId: "req_1",
+      toolName: "AskUserQuestion",
+      input: ASK_INPUT,
+    });
+    const turn = next.turns[0];
+    assert.equal(turn?.kind, "approval");
+    assert.equal(
+      turn?.kind === "approval" && turn.questions?.[0]?.question,
+      "Which bash?",
+    );
+    assert.equal(next.session.doing, "waiting on your answer");
+  });
+});
 
 describe("session-events", () => {
   it("maps session meta to UI session", () => {

@@ -747,3 +747,74 @@ a.w-btn {
   text-transform: none;
   color: var(--ink-dim);
 }
+
+/* A question the provider asked. Wider than an approval row on purpose: the
+   operator is reading options and their consequences here, not glancing at a
+   path and deciding yes or no. */
+.approval.questions .btn-row {
+  margin-top: 10px;
+}
+
+.question {
+  margin-top: 12px;
+}
+
+.question-head {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+}
+
+.question-chip {
+  flex: none;
+  padding: 1px 5px;
+  border: 1px solid var(--ink-dim);
+  color: var(--ink-dim);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.question-text {
+  color: var(--ink);
+}
+
+.question-options {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  margin-top: 8px;
+}
+
+/* Not a `.w-btn`: an option carries a label *and* the consequence of picking
+   it, so it is a left-aligned row rather than a stamp. Selection is marked the
+   same way every other current value is — a `--mark-fill` glyph in the gutter. */
+.question-option {
+  display: flex;
+  align-items: baseline;
+  gap: 8px;
+  width: 100%;
+  padding: 4px 8px;
+  border: 1px solid var(--ink-rule);
+  background: transparent;
+  color: var(--ink);
+  text-align: left;
+}
+
+.question-option:hover {
+  border-color: var(--ink);
+}
+
+.question-option[aria-pressed="true"] {
+  border-color: var(--ink);
+}
+
+.question-option-label {
+  flex: none;
+}
+
+.question-option-detail {
+  min-width: 0;
+  color: var(--ink-dim);
+  font-size: 11px;
+}

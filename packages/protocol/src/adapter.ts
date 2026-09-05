@@ -61,7 +61,17 @@ export type PermissionMode =
 export type PermissionDecision =
   | { decision: "allow-once" }
   | { decision: "allow-always"; rule: string }
-  | { decision: "deny"; feedback?: string };
+  | { decision: "deny"; feedback?: string }
+  /**
+   * The operator answered a question the provider asked with a question tool
+   * (claude's `AskUserQuestion`), keyed by the question text exactly as it was
+   * asked. Not an approval: the answers *are* the tool's result, and a request
+   * allowed without them reports back that the operator said nothing
+   * (verified against the CLI, 2.1.226: "The user did not answer the
+   * questions."). Multi-select answers arrive as one comma-joined string,
+   * which is the same shape the CLI coerces a list to.
+   */
+  | { decision: "answer"; answers: Record<string, string> };
 
 export interface SessionOpts {
   projectDir: string;

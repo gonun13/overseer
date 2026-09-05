@@ -163,6 +163,137 @@ describe("createSessionHandle stdin", () => {
     });
   });
 
+  it("hands an allow-always back the CLI's own suggestions, verbatim", async () => {
+    // Verified against the real CLI (2.1.226): for a `Write` it suggests
+    // `setMode acceptEdits`, not a `Write(*)` rule, and only its own
+    // suggestions actually move the permission engine — anything else leaves
+    // it untouched and the next write asks again.
+    const fake = install();
+    const handle = createSessionHandle("s5b", { projectDir: "/workspace" });
+    const suggestions = [
+      { type: "setMode", mode: "acceptEdits", destination: "session" },
+    ];
+
+    await fake.emit({
+      type: "control_request",
+      request_id: "req_11",
+      request: {
+        subtype: "can_use_tool",
+        tool_name: "Write",
+        input: { file_path: "/workspace/a.txt", content: "a" },
+        permission_suggestions: suggestions,
+      },
+    });
+    handle.resolvePermission("req_11", {
+      decision: "allow-always",
+      rule: "Write(*)",
+    });
+
+    const response = frames(fake.written)[0].response as Record<string, unknown>;
+    assert.deepEqual(response.response, {
+      behavior: "allow",
+      updatedInput: { file_path: "/workspace/a.txt", content: "a" },
+      updatedPermissions: suggestions,
+    });
+  });
+
+  it("falls back to a well-formed addRules update when none were suggested", async () => {
+    const fake = install();
+    const handle = createSessionHandle("s5c", { projectDir: "/workspace" });
+
+    await fake.emit({
+      type: "control_request",
+      request_id: "req_12",
+      request: {
+        subtype: "can_use_tool",
+        tool_name: "Bash",
+        input: { command: "git status" },
+      },
+    });
+    handle.resolvePermission("req_12", {
+      decision: "allow-always",
+      rule: "Bash(git *)",
+    });
+
+    const response = frames(fake.written)[0].response as Record<string, unknown>;
+    assert.deepEqual(
+      (response.response as Record<string, unknown>).updatedPermissions,
+      [
+        {
+          type: "addRules",
+          rules: [{ toolName: "Bash", ruleContent: "git *" }],
+          behavior: "allow",
+          destination: "session",
+        },
+      ],
+    );
+  });
+
+  it("drops a bare * from the fallback rule", async () => {
+    // As a rule body `*` is a path pattern that matches one directory level;
+    // no body at all is what means "this tool, anywhere".
+    const fake = install();
+    const handle = createSessionHandle("s5d", { projectDir: "/workspace" });
+
+    await fake.emit({
+      type: "control_request",
+      request_id: "req_13",
+      request: {
+        subtype: "can_use_tool",
+        tool_name: "Write",
+        input: { file_path: "/workspace/a.txt" },
+      },
+    });
+    handle.resolvePermission("req_13", {
+      decision: "allow-always",
+      rule: "Write(*)",
+    });
+
+    const response = frames(fake.written)[0].response as Record<string, unknown>;
+    assert.deepEqual(
+      (response.response as Record<string, unknown>).updatedPermissions,
+      [
+        {
+          type: "addRules",
+          rules: [{ toolName: "Write" }],
+          behavior: "allow",
+          destination: "session",
+        },
+      ],
+    );
+  });
+
+  it("returns a question tool's answers on its input", async () => {
+    // Verified against the CLI (2.1.226): with no `answers` on the input it
+    // reports back "The user did not answer the questions." — allowing the
+    // call is not the same as answering it.
+    const fake = install();
+    const handle = createSessionHandle("s5e", { projectDir: "/workspace" });
+    const input = {
+      questions: [{ question: "Which shell?", header: "Shell", options: [] }],
+    };
+
+    await fake.emit({
+      type: "control_request",
+      request_id: "req_14",
+      request: {
+        subtype: "can_use_tool",
+        tool_name: "AskUserQuestion",
+        input,
+      },
+    });
+    handle.resolvePermission("req_14", {
+      decision: "answer",
+      answers: { "Which shell?": "pure bash" },
+    });
+
+    const response = frames(fake.written)[0].response as Record<string, unknown>;
+    assert.deepEqual(response.response, {
+      behavior: "allow",
+      updatedInput: { ...input, answers: { "Which shell?": "pure bash" } },
+    });
+  });
+
   it("sends a runtime model switch as a nested, identified control request", () => {
     const fake = install();
     const handle = createSessionHandle("s11", { projectDir: "/workspace" });

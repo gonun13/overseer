@@ -1,6 +1,6 @@
 import type { AgentEvent, SessionMeta, TurnWire } from "@overseer/protocol";
 import type { Activity } from "../status";
-import type { Session, Turn } from "../domain";
+import type { ApprovalQuestion, Session, Turn } from "../domain";
 import type { SessionSettings } from "../session";
 
 /** Matches `BLANK_SESSION_SETTINGS` in `../session` — duplicated rather than
@@ -29,6 +29,63 @@ function toolTarget(input: unknown, toolName: string): string {
     return (input as { file_path: string }).file_path;
   }
   return toolName;
+}
+
+/** The tools that ask the operator a question rather than ask to act. Claude
+ * calls its one `AskUserQuestion`; the shape of its input is read defensively
+ * below, since a provider is free to change it under us. */
+const QUESTION_TOOLS = new Set(["AskUserQuestion"]);
+
+function asRecord(value: unknown): Record<string, unknown> | undefined {
+  return typeof value === "object" && value !== null && !Array.isArray(value)
+    ? (value as Record<string, unknown>)
+    : undefined;
+}
+
+function asText(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== "" ? value : undefined;
+}
+
+/**
+ * The questions carried on a question tool's input, or `undefined` if the
+ * input does not read as one. Undefined is the safe answer: the row falls back
+ * to a plain approval, which at worst asks the operator a question they cannot
+ * answer — where a half-parsed card would offer options that are not real.
+ */
+export function parseApprovalQuestions(
+  toolName: string,
+  input: unknown,
+): ApprovalQuestion[] | undefined {
+  if (!QUESTION_TOOLS.has(toolName)) return undefined;
+  const raw = asRecord(input)?.questions;
+  if (!Array.isArray(raw) || raw.length === 0) return undefined;
+
+  const questions: ApprovalQuestion[] = [];
+  for (const entry of raw) {
+    const record = asRecord(entry);
+    const question = asText(record?.question);
+    if (record === undefined || question === undefined) return undefined;
+    const options: ApprovalQuestion["options"] = [];
+    for (const optionEntry of Array.isArray(record.options)
+      ? record.options
+      : []) {
+      const option = asRecord(optionEntry);
+      const label = asText(option?.label);
+      if (label === undefined) return undefined;
+      options.push({
+        label,
+        description: asText(option?.description) ?? "",
+      });
+    }
+    if (options.length === 0) return undefined;
+    questions.push({
+      question,
+      header: asText(record.header) ?? "question",
+      multiSelect: record.multiSelect === true,
+      options,
+    });
+  }
+  return questions;
 }
 
 export function turnWireToTurn(turn: TurnWire): Turn {
@@ -233,7 +290,8 @@ export function applySessionEvent(
           : turn,
       );
       break;
-    case "permission.request":
+    case "permission.request": {
+      const questions = parseApprovalQuestions(event.toolName, event.input);
       turns = [
         ...turns,
         {
@@ -241,14 +299,19 @@ export function applySessionEvent(
           kind: "approval",
           tool: event.toolName,
           target: toolTarget(event.input, event.toolName),
+          ...(questions !== undefined ? { questions } : {}),
         },
       ];
       session = {
         ...session,
         activity: "approval",
-        doing: `waiting on your approval for ${event.toolName}`,
+        doing:
+          questions !== undefined
+            ? "waiting on your answer"
+            : `waiting on your approval for ${event.toolName}`,
       };
       break;
+    }
     case "turn.end":
       session = {
         ...session,

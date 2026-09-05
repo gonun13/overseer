@@ -5,6 +5,18 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
 
+## 0.2.3 — 2026-09-05
+
+### Added
+
+- When the agent asks you a question, the session window shows the question and its options and
+  sends back what you pick, instead of an approval that could only be allowed or denied.
+
+### Fixed
+
+- "Allow always" now holds for the rest of the session — the same tool no longer asks again on the
+  very next use.
+
 ## 0.2.2 — 2026-09-05
 
 ### Changed
