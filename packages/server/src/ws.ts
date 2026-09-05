@@ -952,6 +952,15 @@ export function attachWebSocketServer(httpServer: Server): {
           }
           return;
         }
+        case "approval.resolve": {
+          const result = sessionSupervisor.resolveApproval(
+            parsed.sessionId,
+            parsed.requestId,
+            parsed.decision,
+          );
+          if (!result.ok) send(sessionError("approval.resolve", result.reason));
+          return;
+        }
         case "session.close": {
           const result = await sessionSupervisor.close(parsed.sessionId);
           if (!result.ok) send(sessionError("session.close", result.reason));

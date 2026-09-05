@@ -302,6 +302,12 @@ button {
   box-shadow: 0 0 6px var(--light-warn);
 }
 
+.light.approval {
+  border-color: var(--light-warn);
+  background: var(--light-warn);
+  box-shadow: 0 0 6px var(--light-warn);
+}
+
 @keyframes pulse {
   0%,
   100% {
@@ -317,7 +323,8 @@ button {
 }
 
 /* Blocked pulses faster than work in progress — urgency is in the rhythm. */
-.light.waiting.pulse {
+.light.waiting.pulse,
+.light.approval.pulse {
   animation-duration: 0.7s;
 }
 

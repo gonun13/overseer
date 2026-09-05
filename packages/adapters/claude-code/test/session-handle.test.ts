@@ -341,6 +341,18 @@ describe("createSessionHandle argv", () => {
     assert.ok(resumed.args.includes("--resume"));
     assert.equal(resumed.args.includes("--session-id"), false);
   });
+
+  it("routes permission prompts to us rather than letting the CLI self-deny", () => {
+    // Without `--permission-prompt-tool stdio` the CLI has nobody to ask, so
+    // every `ask` decision its permission engine reaches turns straight into
+    // "...but you haven't granted it yet" and no `can_use_tool` control
+    // request is ever sent — the approvals queue stays empty forever.
+    const fake = install();
+    createSessionHandle("s9", { projectDir: "/workspace" });
+    const at = fake.args.indexOf("--permission-prompt-tool");
+    assert.notEqual(at, -1);
+    assert.equal(fake.args[at + 1], "stdio");
+  });
 });
 
 describe("createSessionHandle stdout", () => {

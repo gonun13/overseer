@@ -660,15 +660,13 @@ a.w-btn {
   letter-spacing: 0.5px;
 }
 
-.approval-session {
+/* The path the call wants to touch. Not uppercased with the rest of the head:
+   this is a value, not a stamp, and a shouted path is unreadable. */
+.approval-target {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
   white-space: nowrap;
+  text-transform: none;
   color: var(--ink-dim);
-}
-
-.approval-body {
-  margin: 8px 0;
-  color: var(--accent-fill);
 }

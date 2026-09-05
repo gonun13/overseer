@@ -2,6 +2,7 @@ import type {
   AdapterSessionStore,
   AgentAdapter,
   AgentEvent,
+  PermissionDecision,
   PermissionMode,
   PlanMeta,
   PlanStatusOverride,
@@ -38,6 +39,10 @@ interface LiveSession {
    * title lookups or exit-time list refresh onto a different adapter's
    * store. */
   store: AdapterSessionStore;
+  /** `can_use_tool` requests still waiting on the operator. Non-empty exempts
+   * the session from idle reaping — the CLI has no way to redeliver a lost
+   * request after a `--resume`, so reaping here would strand the decision. */
+  pendingApprovals: Set<string>;
 }
 
 /** Idle sessions are reaped and resumed with `--resume` on the next message. */
@@ -106,6 +111,9 @@ export function createSessionSupervisor(
     const now = Date.now();
     for (const [id, entry] of [...live]) {
       if (now - entry.lastActivityAt < idleReapMs) continue;
+      // A pending approval has no way to be redelivered after `--resume` —
+      // reaping here would strand the operator's decision mid-flight.
+      if (entry.pendingApprovals.size > 0) continue;
       live.delete(id);
       await entry.handle.close();
       entry.meta.status = "dormant";
@@ -294,19 +302,10 @@ export function createSessionSupervisor(
           if (event.type === "permission.request") {
             if (seenPermissions.has(event.requestId)) continue;
             seenPermissions.add(event.requestId);
-            // MVP: auto-deny with visible error so the turn can continue.
-            handle.resolvePermission(event.requestId, {
-              decision: "deny",
-              feedback: "Overseer approvals queue is not wired yet",
-            });
-            pushEvent({
-              type: "error",
-              sessionId,
-              timestamp: new Date().toISOString(),
-              message: `permission denied (pending UI): ${event.toolName}`,
-              recoverable: true,
-            });
-            continue;
+            // Handled inline, inside the session that raised it — see
+            // `resolveApproval`. Falls through to the ordinary `pushEvent`
+            // below so it reaches the client like any other session event.
+            live.get(sessionId)?.pendingApprovals.add(event.requestId);
           }
           if (event.type === "exit") {
             live.delete(sessionId);
@@ -360,7 +359,7 @@ export function createSessionSupervisor(
     meta.status = "live";
 
     const pump = startPump(sessionId, handle, meta, ctx.store);
-    track(sessionId, { handle, meta, pump, lastActivityAt: Date.now(), store: ctx.store });
+    track(sessionId, { handle, meta, pump, lastActivityAt: Date.now(), store: ctx.store, pendingApprovals: new Set() });
     pushMeta(meta);
     return { ok: true };
   }
@@ -461,7 +460,7 @@ export function createSessionSupervisor(
       };
 
       const pump = startPump(sessionId, handle, meta, ctx.store);
-      track(sessionId, { handle, meta, pump, lastActivityAt: Date.now(), store: ctx.store });
+      track(sessionId, { handle, meta, pump, lastActivityAt: Date.now(), store: ctx.store, pendingApprovals: new Set() });
 
       pushMeta(meta);
       const sessions = await mergeList(ctx.projectPath, ctx.store);
@@ -529,6 +528,24 @@ export function createSessionSupervisor(
         return { ok: false, reason: "session is not live" };
       }
       entry.handle.interrupt();
+      return { ok: true };
+    },
+
+    /** Answer a pending `can_use_tool` request. A pending request only ever
+     * exists on an already-live handle, so unlike `setModel`/`setPermissionMode`
+     * this never resumes a dormant session. */
+    resolveApproval(
+      sessionId: string,
+      requestId: string,
+      decision: PermissionDecision,
+    ): SessionResult {
+      const entry = live.get(sessionId);
+      if (entry === undefined) {
+        return { ok: false, reason: "session is not live" };
+      }
+      entry.handle.resolvePermission(requestId, decision);
+      entry.pendingApprovals.delete(requestId);
+      touch(sessionId);
       return { ok: true };
     },
 

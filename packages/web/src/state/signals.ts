@@ -5,7 +5,7 @@ import type {
 } from "@overseer/protocol";
 import { ACTIVITY_HEADLINE, ACTIVITY_RANK, type Activity } from "../status.ts";
 import type { WindowKind } from "../windows";
-import type { Approval, Capability, Project, Session } from "../domain";
+import type { Capability, Project, Session } from "../domain";
 
 /** Where a signal sends you when you click it. Every signal is actionable —
  * a message the operator can't act on is noise (design-system.md §4). */
@@ -41,7 +41,6 @@ export interface WorldState {
   projects: Project[];
   activeProject?: Project;
   sessions: Session[];
-  approvals: Approval[];
   capabilities: Capability[];
   provider: {
     name: string;
@@ -73,7 +72,7 @@ export interface WorldState {
  */
 export function deriveSignals(world: WorldState): Signal[] {
   const signals: Signal[] = [];
-  const { activeProject, sessions, approvals, capabilities, provider } = world;
+  const { activeProject, sessions, capabilities, provider } = world;
 
   // A customization the operator wrote that did not take effect. Reported, not
   // dropped: silently ignoring it leaves them believing it worked, which is
@@ -176,16 +175,20 @@ export function deriveSignals(world: WorldState): Signal[] {
     });
   }
 
-  if (approvals.length > 0) {
+  // A session sitting on a `can_use_tool` request — resolved inline, in that
+  // session's own window, not a separate queue (docs/architecture-design.md
+  // §3's MVP shape, not the 1.x cross-session queue). One signal per session,
+  // each pointing straight at it.
+  for (const session of sessions) {
+    if (session.activity !== "approval") continue;
     signals.push({
-      id: "approvals",
-      activity: "attention",
+      id: `approval-${session.id}`,
+      activity: session.activity,
       kicker: "approval",
-      text:
-        approvals.length === 1
-          ? `${approvals[0].tool} wants to run in ${approvals[0].session} and is waiting on you.`
-          : `${approvals.length} tool calls are waiting on your decision.`,
-      target: { kind: "window", window: "approvals" },
+      text: session.doing
+        ? `${session.name} · ${session.doing}.`
+        : `${session.name} needs your approval.`,
+      target: { kind: "window", window: "chat", payload: session.id },
     });
   }
 

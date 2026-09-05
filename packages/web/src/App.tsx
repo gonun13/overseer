@@ -163,6 +163,7 @@ export default function App() {
     chatFor,
     send: sendChat,
     deleteSession,
+    resolveApproval,
   } = useChatSessions(
     wizard.send,
     wizard.subscribeSession,
@@ -477,6 +478,12 @@ export default function App() {
     (signal: Signal) => {
       switch (signal.target.kind) {
         case "window":
+          // A signal pointing at a chat window is pointing at a specific
+          // session — raise it the same way every other route into a chat
+          // window does, so the sidebar's active-session state stays honest.
+          if (signal.target.window === "chat" && signal.target.payload) {
+            focusSession(signal.target.payload);
+          }
           open(signal.target.window, signal.target.payload);
           return;
         case "settings":
@@ -496,7 +503,7 @@ export default function App() {
           return;
       }
     },
-    [open, openProjectSelector, openSettings, startChat, startLogin],
+    [open, openProjectSelector, openSettings, startChat, startLogin, focusSession],
   );
 
   return (
@@ -629,6 +636,7 @@ export default function App() {
           chatFor={chatFor}
           sendChat={sendChat}
           onDeleteSession={onDeleteSession}
+          onResolveApproval={resolveApproval}
           plans={plans}
           plansError={plansError}
           onOpenPlanSession={openPlanSession}

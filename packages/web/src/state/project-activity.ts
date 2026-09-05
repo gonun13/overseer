@@ -2,11 +2,12 @@ import type { Project, Session } from "../domain";
 import type { Activity } from "../status";
 
 const ACTIVITY_PRIORITY: Record<Activity, number> = {
-  attention: 0,
-  working: 1,
-  waiting: 2,
-  done: 3,
-  idle: 4,
+  approval: 0,
+  attention: 1,
+  working: 2,
+  waiting: 3,
+  done: 4,
+  idle: 5,
 };
 
 function mergeActivity(a: Activity, b: Activity): Activity {

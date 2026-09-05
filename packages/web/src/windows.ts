@@ -4,7 +4,6 @@ export type WindowKind =
   | "sessions"
   | "plans"
   | "chat"
-  | "approvals"
   | "capabilities"
   | "subagent"
   | "context"
@@ -68,7 +67,6 @@ export const WINDOW_SPEC: Record<
   // list is open, so the spawn is computed in useWindows rather than assumed
   // here. Height is operator-resizable: a busy project accumulates plans.
   plans: { title: "plans", x: 26, y: 9999, w: 520, h: 360 },
-  approvals: { title: "approvals", x: 620, y: 148, w: 560 },
   capabilities: { title: "capabilities", x: 150, y: 250, w: 540 },
   // Resizable, unlike most: the instructions box is the point of the window,
   // and a long prompt in a fixed body is what would make it unusable.

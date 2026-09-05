@@ -433,6 +433,171 @@ describe("session-supervisor", () => {
     assert.equal(metas.at(-1)?.session.permissionMode, "plan");
   });
 
+  it("queues a permission request instead of auto-denying it", async () => {
+    const frames: ServerMessage[] = [];
+    const init: AgentEvent = {
+      type: "session.init",
+      sessionId: "new-id",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      model: "claude-sonnet-5",
+      cwd: "/workspace/demo",
+      tools: [],
+      mcpServers: [],
+      slashCommands: [],
+    };
+    const request: AgentEvent = {
+      type: "permission.request",
+      sessionId: "new-id",
+      timestamp: "2026-01-01T00:00:01.000Z",
+      requestId: "req-1",
+      toolName: "Bash",
+      input: { command: "ls" },
+    };
+    const resolved: unknown[] = [];
+    const handle: SessionHandle = {
+      ...fakeHandle([init, request]),
+      resolvePermission: (id, decision) => {
+        resolved.push({ id, decision });
+      },
+    };
+    const supervisor = createSessionSupervisor((msg) => frames.push(msg), {
+      readSnapshot: async () => ({
+        attached_provider: "claude-code",
+        last_active_project: "/workspace/demo",
+      }),
+      isInsideWorkspace: async () => true,
+      getAdapter: () =>
+        fakeAdapter({
+          mintSessionId: async () => "new-id",
+          openSession: async () => handle,
+        }),
+    });
+
+    await supervisor.create({});
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    // Nothing auto-resolved it — the operator hasn't answered yet.
+    assert.deepEqual(resolved, []);
+    const events = frames.filter(
+      (f): f is Extract<ServerMessage, { type: "session.event" }> =>
+        f.type === "session.event",
+    );
+    assert.ok(
+      events.some((f) => f.event.type === "permission.request"),
+      "the raw request reaches the client like any other session event",
+    );
+  });
+
+  it("resolveApproval answers the pending request with the operator's decision", async () => {
+    const frames: ServerMessage[] = [];
+    const init: AgentEvent = {
+      type: "session.init",
+      sessionId: "new-id",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      model: "claude-sonnet-5",
+      cwd: "/workspace/demo",
+      tools: [],
+      mcpServers: [],
+      slashCommands: [],
+    };
+    const request: AgentEvent = {
+      type: "permission.request",
+      sessionId: "new-id",
+      timestamp: "2026-01-01T00:00:01.000Z",
+      requestId: "req-1",
+      toolName: "Bash",
+      input: { command: "ls" },
+    };
+    const resolved: unknown[] = [];
+    const handle: SessionHandle = {
+      ...fakeHandle([init, request]),
+      resolvePermission: (id, decision) => {
+        resolved.push({ id, decision });
+      },
+    };
+    const supervisor = createSessionSupervisor((msg) => frames.push(msg), {
+      readSnapshot: async () => ({
+        attached_provider: "claude-code",
+        last_active_project: "/workspace/demo",
+      }),
+      isInsideWorkspace: async () => true,
+      getAdapter: () =>
+        fakeAdapter({
+          mintSessionId: async () => "new-id",
+          openSession: async () => handle,
+        }),
+    });
+
+    await supervisor.create({});
+    await new Promise((resolve) => setTimeout(resolve, 0));
+
+    const result = supervisor.resolveApproval("new-id", "req-1", {
+      decision: "allow-once",
+    });
+
+    assert.equal(result.ok, true);
+    assert.deepEqual(resolved, [
+      { id: "req-1", decision: { decision: "allow-once" } },
+    ]);
+  });
+
+  it("refuses to resolve an approval on a session that is not live", () => {
+    const supervisor = createSessionSupervisor(() => {});
+    const result = supervisor.resolveApproval("no-such-session", "req-1", {
+      decision: "deny",
+    });
+    assert.equal(result.ok, false);
+  });
+
+  it("does not reap an idle session with a pending approval", async () => {
+    const frames: ServerMessage[] = [];
+    const init: AgentEvent = {
+      type: "session.init",
+      sessionId: "idle-id",
+      timestamp: "2026-01-01T00:00:00.000Z",
+      model: "claude-sonnet-5",
+      cwd: "/workspace/demo",
+      tools: [],
+      mcpServers: [],
+      slashCommands: [],
+    };
+    const request: AgentEvent = {
+      type: "permission.request",
+      sessionId: "idle-id",
+      timestamp: "2026-01-01T00:00:01.000Z",
+      requestId: "req-1",
+      toolName: "Bash",
+      input: { command: "ls" },
+    };
+    let closed = false;
+    const handle: SessionHandle = {
+      ...fakeHandle([init, request]),
+      close: async () => {
+        closed = true;
+      },
+    };
+    const supervisor = createSessionSupervisor((msg) => frames.push(msg), {
+      readSnapshot: async () => ({
+        attached_provider: "claude-code",
+        last_active_project: "/workspace/demo",
+      }),
+      isInsideWorkspace: async () => true,
+      getAdapter: () =>
+        fakeAdapter({
+          mintSessionId: async () => "idle-id",
+          openSession: async () => handle,
+        }),
+      idleReapMs: 20,
+    });
+
+    await supervisor.create({});
+    await new Promise((r) => setTimeout(r, 120));
+
+    // A lost `can_use_tool` request has no way to be redelivered after a
+    // `--resume` — reaping here would strand the operator's decision.
+    assert.equal(closed, false);
+  });
+
   it("send opens a dormant session before delivering the message", async () => {
     let resumed = false;
     const frames: ServerMessage[] = [];

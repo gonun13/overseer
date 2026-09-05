@@ -65,16 +65,6 @@ export interface Plan {
   sessionExists: boolean;
 }
 
-export interface Approval {
-  id: string;
-  activity: Activity;
-  ref: string;
-  sessionId: string;
-  session: string;
-  tool: string;
-  body: string;
-}
-
 export interface Capability {
   id: string;
   activity: Activity;
@@ -145,6 +135,18 @@ export type Turn =
       target: string;
       /** Live tool calls only — backfilled history leaves this unset. */
       status?: "running" | "ok" | "error";
+    }
+  | {
+      /** The provider's `can_use_tool` request id. No `toolUseId` correlates
+       * this back to the "tool" turn it follows — the CLI's permission
+       * control request carries no such id — so it renders as its own turn. */
+      id: string;
+      kind: "approval";
+      tool: string;
+      /** Same reading as a tool row's: what the call is acting on. The tool
+       * input itself is not shown — the operator is deciding whether this
+       * tool may touch this target, not reviewing a payload. */
+      target: string;
     };
 
 export type DiffLine = { kind: "add" | "del" | "ctx"; text: string };

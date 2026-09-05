@@ -39,12 +39,6 @@ export const COMMANDS: Command[] = [
     action: { type: "open", kind: "project" },
   },
   {
-    name: "approvals",
-    aliases: ["approval"],
-    help: "pending approval queue",
-    action: { type: "open", kind: "approvals" },
-  },
-  {
     name: "capabilities",
     aliases: ["mcp", "skills", "subagents", "agents"],
     help: "mcp servers, skills, subagents",

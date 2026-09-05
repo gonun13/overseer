@@ -2,6 +2,7 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type {
   AgentEvent,
   ClientMessage,
+  PermissionDecision,
   PermissionMode,
   ServerMessage,
   SessionMeta,
@@ -44,6 +45,10 @@ export function useChatSessions(
   /** Session whose `session.open` is in flight, so a refusal can be shown in
    * the window that asked for it. */
   const pendingOpenSession = useRef<string | undefined>(undefined);
+  /** Session whose `approval.resolve` is in flight, so a refusal (the session
+   * went dormant/closed between the click and the server processing it) can
+   * be shown in the right window. */
+  const pendingApprovalSession = useRef<string | undefined>(undefined);
 
   const resetSessionActivity = useCallback((sessionId: string) => {
     setChats((current) =>
@@ -256,6 +261,29 @@ export function useChatSessions(
           pendingSendSession.current = undefined;
         }
       }
+      if (message.type === "error" && message.about === "approval.resolve") {
+        // The optimistic turn-removal already happened on click — the only
+        // realistic failure is the session going dormant/closed underneath
+        // it, so there is nothing to resurrect, just an explanation.
+        const target = pendingApprovalSession.current;
+        pendingApprovalSession.current = undefined;
+        if (target !== undefined) {
+          setChats((current) =>
+            current.map((chat) =>
+              chat.session.id === target
+                ? {
+                    ...chat,
+                    session: {
+                      ...chat.session,
+                      activity: "attention",
+                      doing: message.message,
+                    },
+                  }
+                : chat,
+            ),
+          );
+        }
+      }
     });
     return () => {
       unsubscribe();
@@ -370,6 +398,33 @@ export function useChatSessions(
     send({ type: "session.list" });
   }, [send]);
 
+  /** Answer a pending inline approval turn. Optimistic, like `sendChat`: the
+   * CLI resumes either way, and the real outcome arrives via the ordinary
+   * `tool.end`/`turn.end`/`error` events that follow — there is no dedicated
+   * confirmation event for a resolved permission request. */
+  const resolveApproval = useCallback(
+    (sessionId: string, requestId: string, decision: PermissionDecision) => {
+      pendingApprovalSession.current = sessionId;
+      send({ type: "approval.resolve", sessionId, requestId, decision });
+      setChats((current) =>
+        current.map((chat) =>
+          chat.session.id === sessionId
+            ? {
+                ...chat,
+                turns: chat.turns.filter((turn) => turn.id !== requestId),
+                session: {
+                  ...chat.session,
+                  activity: "working",
+                  doing: "continuing...",
+                },
+              }
+            : chat,
+        ),
+      );
+    },
+    [send],
+  );
+
   const deleteSession = useCallback(
     (id: string) => {
       send({ type: "session.delete", sessionId: id });
@@ -394,5 +449,6 @@ export function useChatSessions(
     send: sendChat,
     requestList,
     deleteSession,
+    resolveApproval,
   };
 }

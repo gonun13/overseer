@@ -17,6 +17,20 @@ function truncateSessionName(name: string): string {
   return `${name.slice(0, SESSION_NAME_MAX - 1)}…`;
 }
 
+/** What a tool call is acting on, for the one line a row gets. Falls back to
+ * the tool's own name when its input names no file — a `Bash` call is not
+ * about a path. Shared by tool rows and the approval that gates one. */
+function toolTarget(input: unknown, toolName: string): string {
+  if (
+    typeof input === "object" &&
+    input !== null &&
+    typeof (input as { file_path?: unknown }).file_path === "string"
+  ) {
+    return (input as { file_path: string }).file_path;
+  }
+  return toolName;
+}
+
 export function turnWireToTurn(turn: TurnWire): Turn {
   if (turn.kind === "tool") {
     return {
@@ -206,13 +220,7 @@ export function applySessionEvent(
           id: event.toolUseId,
           kind: "tool",
           tool: event.name,
-          target:
-            typeof event.input === "object" &&
-            event.input !== null &&
-            typeof (event.input as { file_path?: unknown }).file_path ===
-              "string"
-              ? (event.input as { file_path: string }).file_path
-              : event.name,
+          target: toolTarget(event.input, event.name),
           status: "running",
         },
       ];
@@ -224,6 +232,22 @@ export function applySessionEvent(
           ? { ...turn, status: event.isError ? "error" : "ok" }
           : turn,
       );
+      break;
+    case "permission.request":
+      turns = [
+        ...turns,
+        {
+          id: event.requestId,
+          kind: "approval",
+          tool: event.toolName,
+          target: toolTarget(event.input, event.toolName),
+        },
+      ];
+      session = {
+        ...session,
+        activity: "approval",
+        doing: `waiting on your approval for ${event.toolName}`,
+      };
       break;
     case "turn.end":
       session = {

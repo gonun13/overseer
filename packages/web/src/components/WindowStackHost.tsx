@@ -1,10 +1,10 @@
-import { useState } from "react";
 import type {
   ClientMessage,
   OverseerTheme,
+  PermissionDecision,
   ServerMessage,
 } from "@overseer/protocol";
-import type { Approval, Plan, Project, ProviderInfo, Session } from "../domain";
+import type { Plan, Project, ProviderInfo, Session } from "../domain";
 import type {
   SessionOption,
   SessionOptionKey,
@@ -15,7 +15,6 @@ import type { DiscoveryController } from "../state/useDiscovery";
 import type { LoopConfigState, LoopModelsEntry } from "../state/useLoopConfig";
 import type { OpenWindow, WindowKind } from "../windows";
 import { Window } from "./Window";
-import { ApprovalsWindow } from "./windows/ApprovalsWindow";
 import { CapabilitiesWindow } from "./windows/CapabilitiesWindow";
 import { SubagentWindow } from "./windows/SubagentWindow";
 import type { SubagentsState } from "../state/useSubagents";
@@ -57,6 +56,11 @@ interface WindowStackHostProps {
   chatFor: (id: string) => Chat | undefined;
   sendChat: (id: string, input: string) => void;
   onDeleteSession: (id: string) => void;
+  onResolveApproval: (
+    sessionId: string,
+    requestId: string,
+    decision: PermissionDecision,
+  ) => void;
   plans: Plan[];
   /** Last plan refusal in the server's words, shown in the plans window. */
   plansError?: string;
@@ -119,6 +123,7 @@ export function WindowStackHost({
   chatFor,
   sendChat,
   onDeleteSession,
+  onResolveApproval,
   plans,
   plansError,
   onOpenPlanSession,
@@ -142,7 +147,6 @@ export function WindowStackHost({
   loopModelsByProvider,
   onReadLoopModels,
 }: WindowStackHostProps) {
-  const [approvals, setApprovals] = useState<Approval[]>([]);
   const models = sessionOptions.find((o) => o.key === "model")?.values ?? [];
 
   return windows.map((windowState) => {
@@ -275,16 +279,8 @@ export function WindowStackHost({
               if (turn?.kind === "tool")
                 openWindow("diff", turn.target, turn.tool);
             }}
-          />
-        )}
-        {windowState.kind === "approvals" && (
-          <ApprovalsWindow
-            approvals={approvals}
-            provider={provider}
-            onResolve={(id) =>
-              setApprovals((current) =>
-                current.filter((approval) => approval.id !== id),
-              )
+            onResolveApproval={(requestId, decision) =>
+              onResolveApproval(chat.session.id, requestId, decision)
             }
           />
         )}

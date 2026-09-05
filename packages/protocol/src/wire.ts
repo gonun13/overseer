@@ -2,6 +2,7 @@ import type {
   AdapterStatus,
   AdapterUsageWindow,
   LoginPhase,
+  PermissionDecision,
   PermissionMode,
   ProviderOption,
   ProviderOptions,
@@ -131,6 +132,14 @@ export type ClientMessage =
    * control request on the live process, not a respawn. Resumes a dormant
    * session first, the same as `session.model`. */
   | { type: "session.mode"; sessionId: string; mode: PermissionMode }
+  /** Answer a pending `can_use_tool` request on a live session — inline,
+   * inside the session that raised it. */
+  | {
+      type: "approval.resolve";
+      sessionId: string;
+      requestId: string;
+      decision: PermissionDecision;
+    }
   /** Interrupt the in-flight turn. */
   | { type: "session.interrupt"; sessionId: string }
   /** Close a live session process. */
@@ -692,6 +701,14 @@ export const SESSION_MAX_AGENT_CHARS = 128;
  * is a sanity bound rather than a format. */
 export const PLAN_MAX_ID_CHARS = 128;
 
+/** A permission request id is the provider's own `can_use_tool` request id —
+ * a sanity bound, not a format, same reasoning as `PLAN_MAX_ID_CHARS`. */
+export const APPROVAL_MAX_ID_CHARS = 128;
+/** An "allow always" rule, e.g. `Bash(git *)` — short by construction. */
+export const APPROVAL_MAX_RULE_CHARS = 256;
+/** Optional free text on a deny. */
+export const APPROVAL_MAX_FEEDBACK_CHARS = 2_000;
+
 /** Mirrors `PlanStatusOverride` — the derived statuses are deliberately absent:
  * a client asking for one is asking to overwrite a reading of the transcript. */
 const PLAN_OVERRIDE_STATUSES = new Set<string>(["done", "archived", "open"]);
@@ -864,6 +881,20 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       isSessionId(msg.sessionId) && PERMISSION_MODES.has(msg.mode as string)
     );
   }
+  if (type === "approval.resolve") {
+    const msg = value as {
+      sessionId?: unknown;
+      requestId?: unknown;
+      decision?: unknown;
+    };
+    return (
+      isSessionId(msg.sessionId) &&
+      typeof msg.requestId === "string" &&
+      msg.requestId.length > 0 &&
+      msg.requestId.length <= APPROVAL_MAX_ID_CHARS &&
+      isPermissionDecision(msg.decision)
+    );
+  }
   if (type === "plan.list") return true;
   if (type === "plan.implement") {
     return isPlanId((value as { planId?: unknown }).planId);
@@ -1005,4 +1036,25 @@ function isSessionId(value: unknown): value is string {
     value.length > 0 &&
     value.length <= SESSION_MAX_ID_CHARS
   );
+}
+
+function isPermissionDecision(value: unknown): value is PermissionDecision {
+  if (typeof value !== "object" || value === null) return false;
+  const decision = value as { decision?: unknown; rule?: unknown; feedback?: unknown };
+  if (decision.decision === "allow-once") return true;
+  if (decision.decision === "allow-always") {
+    return (
+      typeof decision.rule === "string" &&
+      decision.rule.length > 0 &&
+      decision.rule.length <= APPROVAL_MAX_RULE_CHARS
+    );
+  }
+  if (decision.decision === "deny") {
+    return (
+      decision.feedback === undefined ||
+      (typeof decision.feedback === "string" &&
+        decision.feedback.length <= APPROVAL_MAX_FEEDBACK_CHARS)
+    );
+  }
+  return false;
 }

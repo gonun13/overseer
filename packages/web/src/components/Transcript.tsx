@@ -1,5 +1,5 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import type { ProviderOption } from "@overseer/protocol";
+import type { PermissionDecision, ProviderOption } from "@overseer/protocol";
 import type { Turn } from "../domain";
 import { ChevronIcon } from "./icons";
 import { TurnMarkdown } from "./TurnMarkdown";
@@ -80,6 +80,54 @@ const TurnThinking = memo(function TurnThinking({
   );
 });
 
+/**
+ * A live `can_use_tool` request, inline in the session that raised it. Only
+ * ever pending — resolving it removes the turn (`useChatSessions.resolveApproval`),
+ * so there is no "already decided" render state to show here.
+ */
+const TurnApproval = memo(function TurnApproval({
+  turn,
+  onResolve,
+}: {
+  turn: Extract<Turn, { kind: "approval" }>;
+  onResolve: (id: string, decision: PermissionDecision) => void;
+}) {
+  return (
+    <div className="approval">
+      <div className="approval-head">
+        <span className="turn-label">approval</span>
+        <span className="approval-tool">{turn.tool}</span>
+        <span className="approval-target">{turn.target}</span>
+      </div>
+      <div className="btn-row">
+        <button
+          className="w-btn"
+          onClick={() => onResolve(turn.id, { decision: "allow-once" })}
+        >
+          allow once
+        </button>
+        <button
+          className="w-btn"
+          onClick={() =>
+            onResolve(turn.id, {
+              decision: "allow-always",
+              rule: `${turn.tool}(*)`,
+            })
+          }
+        >
+          allow always
+        </button>
+        <button
+          className="w-btn danger"
+          onClick={() => onResolve(turn.id, { decision: "deny" })}
+        >
+          deny
+        </button>
+      </div>
+    </div>
+  );
+});
+
 const TurnMessage = memo(function TurnMessage({
   turn,
   modelLabel,
@@ -104,6 +152,7 @@ export function Transcript({
   turns,
   models,
   onInspect,
+  onResolveApproval,
 }: {
   turns: Turn[];
   /** The model row's catalog — resolves a turn's raw reported model id
@@ -111,6 +160,7 @@ export function Transcript({
    * (`"Haiku 4.5"`) the same way the session controls do. */
   models: ProviderOption[];
   onInspect: (id: string) => void;
+  onResolveApproval: (id: string, decision: PermissionDecision) => void;
 }) {
   const end = useRef<HTMLDivElement>(null);
   // Follows the bottom by default — opening a session, or a reply starting to
@@ -154,6 +204,15 @@ export function Transcript({
       {turns.map((turn, i) => {
         if (turn.kind === "tool") {
           return <TurnTool key={turn.id} turn={turn} onInspect={onInspect} />;
+        }
+        if (turn.kind === "approval") {
+          return (
+            <TurnApproval
+              key={turn.id}
+              turn={turn}
+              onResolve={onResolveApproval}
+            />
+          );
         }
         if (turn.kind === "thinking") {
           // Open by default while it is the newest thing in the transcript —

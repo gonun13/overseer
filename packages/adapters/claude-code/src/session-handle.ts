@@ -76,6 +76,14 @@ function buildArgs(sessionId: string, opts: SessionOpts): string[] {
     "--forward-subagent-text",
     "--replay-user-messages",
     "--verbose",
+    // Route permission prompts to us as `can_use_tool` control requests on
+    // stdout, instead of the CLI having no one to ask. Without it every
+    // decision the permission engine returns as `ask` becomes an immediate
+    // denial ("...but you haven't granted it yet"), and the approvals queue
+    // never sees a request. `stdio` is the sentinel the Agent SDK itself
+    // passes whenever a `canUseTool` callback is set.
+    "--permission-prompt-tool",
+    "stdio",
   ];
   if (opts.resumeSessionId !== undefined) {
     args.push("--resume", opts.resumeSessionId);

@@ -71,7 +71,6 @@ export function useShellPresentation(
         projects,
         activeProject,
         sessions,
-        approvals: [],
         capabilities: [],
         provider,
         rejected: wizard.rejected,

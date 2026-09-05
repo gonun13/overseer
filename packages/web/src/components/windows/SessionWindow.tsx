@@ -1,4 +1,5 @@
 import { useState } from "react";
+import type { PermissionDecision } from "@overseer/protocol";
 import { Composer } from "../Composer";
 import { SessionControls } from "../SessionControls";
 import { Transcript } from "../Transcript";
@@ -37,6 +38,7 @@ export function SessionWindow({
   onOpenSessionContext,
   onSubmit,
   onInspect,
+  onResolveApproval,
   note,
 }: {
   turns: Turn[];
@@ -54,9 +56,11 @@ export function SessionWindow({
   onOpenSessionContext: () => void;
   onSubmit: (input: string) => void;
   onInspect: (id: string) => void;
+  onResolveApproval: (id: string, decision: PermissionDecision) => void;
 }) {
   const [value, setValue] = useState("");
   const models = options.find((option) => option.key === "model")?.values ?? [];
+  const awaitingApproval = turns.some((turn) => turn.kind === "approval");
 
   function submit() {
     const trimmed = value.trim();
@@ -71,7 +75,12 @@ export function SessionWindow({
         {turns.length === 0 ? (
           <p className="session-empty">{note ?? "nothing said yet"}</p>
         ) : (
-          <Transcript turns={turns} models={models} onInspect={onInspect} />
+          <Transcript
+            turns={turns}
+            models={models}
+            onInspect={onInspect}
+            onResolveApproval={onResolveApproval}
+          />
         )}
       </div>
 
@@ -84,7 +93,9 @@ export function SessionWindow({
         // each row is set to, and saying it twice makes the operator check
         // which one is authoritative.
         meta={
-          busy ? (
+          awaitingApproval ? (
+            <span>waiting on your approval</span>
+          ) : busy ? (
             <span>turn in flight</span>
           ) : (
             <span>enter to send · shift+enter for a newline</span>
