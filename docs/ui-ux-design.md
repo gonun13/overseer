@@ -1,6 +1,6 @@
 # Overseer — UI/UX Design
 
-**Reference:** [samaritan-web](https://git.kaki87.net/thornhill-corp/samaritan-web) for layout and interaction
+**Reference:** Person of Interest TV show for inspiration on layout and interaction
 model. Colour and type below are Overseer's own.
 
 **Premise:** an operator watches agents work. The interface answers _what should I be looking at?_ before

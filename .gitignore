@@ -20,13 +20,18 @@ packages/e2e/test-results/
 # Container-owned state that may appear at repo root during local dev.
 .overseer/
 .claude/
+.cursor/
+.codex/
+.opencode/
 
-# The claude-code bundle's `.claude/` is versioned config — the permissions a
-# loop session runs under — not container-owned runtime state. The blanket rule
-# above ignores `.claude/` at any depth, so un-ignore this one. Lived in
-# loop/.gitignore until the provider bundles moved to the shared providers/.
+# The claude-code and cursor bundles' `.claude/`/`.cursor/` are versioned config —
+# the permissions a loop session runs under — not container-owned runtime state. The
+# blanket rules above ignore them at any depth, so un-ignore these. `.claude/` lived
+# in loop/.gitignore until the provider bundles moved to the shared providers/.
 !providers/claude-code/.claude/
 !providers/claude-code/.claude/**
+!providers/cursor/.cursor/
+!providers/cursor/.cursor/**
 
 # Keep provider instructions like CLAUDE.md or other provider-specific files on host away from repos.
 CLAUDE.md

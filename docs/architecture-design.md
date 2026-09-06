@@ -11,13 +11,19 @@
 ## 1. Architecture
 
 ```
+bin/                  docker shortcuts — the only supported way to run anything
+providers/            one directory per agent CLI, read by the app and the loop alike
+                      (claude-code, cursor, codex, opencode, github-copilot)
 packages/
-  protocol/           shared TS types — the frontend/backend contract
+  protocol/           shared TS types — the frontend/backend/adapter contract
   web/                React + Vite + Tailwind SPA
-  server/             Node: WS + REST, session supervisor, adapter registry
-                      (also registers catalog stubs: codex, opencode, github-copilot)
+  server/             Node: WS + REST, static SPA host, adapter registry, session supervisor
   adapters/
-    claude-code/      spawns `claude`, normalizes stream-json → protocol
+    claude-code/      Claude Code adapter — login, console, stream-json sessions
+    cursor/           Cursor adapter — login, console, stream-json sessions
+  e2e/                Playwright acceptance tests (container-only)
+loop/                 the dev-loop CLI — bash, a provider CLI, and plain files
+workspace/            host-shared dir — git projects live here, mounted into the container
 ```
 
 **Frontend-first, provider-agnostic.** `protocol/` is written to serve the UI, not to mirror any one CLI's output. Adapters translate provider-specific behavior into it. Catalog stubs live in the server registry (`stub-adapters.ts`) until they earn a real `packages/adapters/<id>/` package.
