@@ -35,3 +35,6 @@ packages/e2e/test-results/
 
 # Keep provider instructions like CLAUDE.md or other provider-specific files on host away from repos.
 CLAUDE.md
+
+# Network/execution surface scan — names internal hosts and weak spots, stays local.
+NTA.md

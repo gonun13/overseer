@@ -1,5 +1,10 @@
 # Overseer
 
+<p align="center">
+  <img src="docs/samples/overseer_white.png" width="49%" />
+  <img src="docs/samples/overseer_black.png" width="49%" />
+</p>
+
 A single-page web console for driving CLI coding agents. 
 
 For now only `claude-code` and `cursor` are fully wired providers but others are ready to be implemented.
