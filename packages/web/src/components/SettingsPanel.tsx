@@ -412,7 +412,14 @@ function IdentityRow({
           <input
             className="w-input"
             value={name}
-            placeholder="your name"
+            // Labelled explicitly: `WInline`'s label is adjacent text, not a
+            // <label>, so without this the field has no accessible name at
+            // all. "git author name" rather than anything containing "your
+            // name" — the wizard's own name ask owns that phrasing, and two
+            // textboxes answering to it made the e2e wizard helper type into
+            // this panel instead.
+            aria-label="git author name"
+            placeholder="Ada Lovelace"
             spellCheck={false}
             autoComplete="off"
             autoCapitalize="off"
@@ -430,7 +437,8 @@ function IdentityRow({
           <input
             className="w-input"
             value={email}
-            placeholder="you@example.com"
+            aria-label="git author email"
+            placeholder="ada@example.com"
             spellCheck={false}
             autoComplete="off"
             autoCapitalize="off"
