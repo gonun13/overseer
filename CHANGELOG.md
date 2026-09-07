@@ -9,9 +9,10 @@ rules for writing an entry live in
 
 ### Added
 
-- Settings has a git access section: generate an ssh key inside the container, copy its public half
-  to your git host, and test the connection against the hosts your own projects point at.
-- Set the name and email that commits made from here are authored under.
+- Settings has a git access section reporting whether the container's ssh key and identity are set
+  up, with a button into a new git config window: generate a key inside the container, copy its
+  public half to your git host, test the connection against the hosts your own projects point at,
+  and set the name and email commits made from here are authored under.
 
 ### Fixed
 

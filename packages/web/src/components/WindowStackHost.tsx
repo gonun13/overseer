@@ -17,6 +17,7 @@ import type { OpenWindow, WindowKind } from "../windows";
 import { Window } from "./Window";
 import { CapabilitiesWindow } from "./windows/CapabilitiesWindow";
 import { ChangelogWindow } from "./windows/ChangelogWindow";
+import { GitConfigWindow } from "./windows/GitConfigWindow";
 import { SubagentWindow } from "./windows/SubagentWindow";
 import type { SubagentsState } from "../state/useSubagents";
 import { findSubagent, subagentKey } from "../subagents";
@@ -296,6 +297,16 @@ export function WindowStackHost({
             // so a second "+ subagent" raises the one already open rather than
             // stacking a second blank form over it.
             onCreate={() => openWindow("subagent", "", "new subagent")}
+          />
+        )}
+        {windowState.kind === "gitConfig" && (
+          <GitConfigWindow
+            access={wizard.gitAccess}
+            test={wizard.gitSshTest}
+            onGenerate={wizard.generateGitKey}
+            onRemove={wizard.removeGitKey}
+            onTest={wizard.testGitKey}
+            onSaveIdentity={wizard.saveGitIdentity}
           />
         )}
         {windowState.kind === "subagent" && (

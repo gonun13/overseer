@@ -39,6 +39,12 @@ export const COMMANDS: Command[] = [
     action: { type: "open", kind: "project" },
   },
   {
+    name: "git",
+    aliases: ["gitconfig"],
+    help: "ssh key, host tests, and the identity commits carry",
+    action: { type: "open", kind: "gitConfig" },
+  },
+  {
     name: "capabilities",
     aliases: ["mcp", "skills", "subagents", "agents"],
     help: "mcp servers, skills, subagents",

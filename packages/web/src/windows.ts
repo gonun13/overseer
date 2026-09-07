@@ -13,7 +13,8 @@ export type WindowKind =
   | "diff"
   | "loopModels"
   | "projectCreate"
-  | "project";
+  | "project"
+  | "gitConfig";
 
 export interface OpenWindow {
   id: string;
@@ -101,4 +102,10 @@ export const WINDOW_SPEC: Record<
   // readout it answers for: x is the 9999 sentinel, since the spawn is
   // centred on the viewport in useWindows rather than at one assumed width.
   project: { title: "project", x: 9999, y: 96, w: 520 },
+  // Opened from the settings panel's "configure git" button, or the `/git`
+  // command. Settings keeps only a status summary of what this window holds —
+  // the same split it draws with capabilities, whose own detail lives in a
+  // window and not the panel. Fixed mid-field spawn: it has no instrument on
+  // the furniture to anchor near, the same reasoning `help`/`context` use.
+  gitConfig: { title: "git config", x: 300, y: 180, w: 520 },
 };
