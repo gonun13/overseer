@@ -1,11 +1,8 @@
-import { execFile } from "node:child_process";
 import { mkdir, rm, stat, writeFile } from "node:fs/promises";
 import path from "node:path";
-import { promisify } from "node:util";
 import { PROJECT_FOLDER_PATTERN } from "@overseer/protocol";
+import { projectGit } from "./vcs/index.js";
 import { WORKSPACE_ROOT, scanWorkspace } from "./workspace.js";
-
-const run = promisify(execFile);
 
 /** Below this, a spammed retry loop cannot outrun a human reading the error
  * and stopping. Above it, an operator naming several projects in a row is
@@ -38,11 +35,11 @@ export interface CreateProjectDeps {
   now?: () => number;
 }
 
+/** Delegates to `vcs`, so that every `git` the server runs comes from the one
+ * module. The `gitInit` dependency seam above stays exactly as it was — tests
+ * still inject their own and never reach a real repository. */
 async function defaultGitInit(dir: string): Promise<void> {
-  // -b main: don't inherit whatever init.defaultBranch happens to be, and
-  // don't emit git's "using master" advice — same reasoning as
-  // memory/personality/scaffold.ts's own `git init -q -b main`.
-  await run("git", ["init", "-b", "main"], { cwd: dir, timeout: 5_000 });
+  await projectGit.init(dir);
 }
 
 /**

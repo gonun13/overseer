@@ -55,7 +55,7 @@ import {
 import { refreshPendingUsage } from "./usage-refresh.js";
 import { createProject } from "./project-create.js";
 import { subagents } from "./subagents.js";
-import { projectGit, type GitOpResult } from "./project-git.js";
+import { projectGit, type GitOpResult } from "./vcs/index.js";
 import { isInsideWorkspace } from "./workspace.js";
 
 /**

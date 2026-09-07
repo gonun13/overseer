@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import type { Stats } from "node:fs";
-import { createGitProbe } from "../src/git-probe.js";
+import { createGitProbe } from "../src/vcs/probe.js";
 
 /** A `.git` directory whose HEAD/packed-refs identity the test controls. */
 function fakeStat(head: { mtimeMs: number; size: number } | null) {

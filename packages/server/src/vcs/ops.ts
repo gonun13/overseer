@@ -244,6 +244,21 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     }
   }
 
+  /**
+   * `git init -b main` in an existing directory.
+   *
+   * `-b main`: don't inherit whatever `init.defaultBranch` happens to be, and
+   * don't emit git's "using master" advice — the same reasoning
+   * `memory/personality/scaffold.ts` gives for its own `git init -q -b main`.
+   *
+   * Lives here rather than in `project-create.ts` so that every git invocation
+   * the server makes goes through this module; `project-create` keeps its
+   * `gitInit` dependency seam and simply defaults to this.
+   */
+  async function init(dir: string): Promise<void> {
+    await run(dir, ["init", "-b", "main"]);
+  }
+
   async function revert(dir: string): Promise<GitOpResult> {
     try {
       await run(dir, ["reset", "--hard", "HEAD"]);
@@ -262,7 +277,7 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     }
   }
 
-  return { status, commit, push, defaultBranch, mergeToDefault, revert };
+  return { status, commit, push, defaultBranch, mergeToDefault, revert, init };
 }
 
 function statusFromCode(code: string): GitFileChange["status"] {
