@@ -51,13 +51,13 @@ services:
       - DOCKER_HOST=tcp://dind:2375
       # From project .env (see .env.example). Unset → UTC.
       - TZ=${TZ:-UTC}
-      # Optional, from .env: authorship on the commits loop/bin/land writes,
-      # and the token loop/bin/publish needs before it can push anything.
+      # Optional, from .env: authorship on the commits loop/bin/land writes.
+      # Pushing is authenticated by the ssh key the operator generates in
+      # settings, not by a token.
       - GIT_AUTHOR_NAME=${GIT_AUTHOR_NAME:-}
       - GIT_AUTHOR_EMAIL=${GIT_AUTHOR_EMAIL:-}
       - GIT_COMMITTER_NAME=${GIT_COMMITTER_NAME:-}
       - GIT_COMMITTER_EMAIL=${GIT_COMMITTER_EMAIL:-}
-      - GH_TOKEN=${GH_TOKEN:-}
     depends_on:
       dind:
         condition: service_started

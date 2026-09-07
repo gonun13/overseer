@@ -58,7 +58,7 @@ export const COMMANDS: Command[] = [
   {
     name: "settings",
     aliases: ["system"],
-    help: "auth, runtime, workspace, theme",
+    help: "auth, runtime, workspace, git access, theme",
     action: { type: "settings" },
   },
   {

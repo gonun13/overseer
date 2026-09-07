@@ -262,6 +262,41 @@ refresh the same windows live. Persist token usage and estimated cost from
 cumulative for the process: store non-negative deltas and treat a lower
 value after resume as a counter reset.
 
+### 2.2 Git access
+
+Pushing and pulling need a credential the container does not otherwise have.
+It gets one ed25519 keypair, **generated in place** by the operator from
+settings › git access and written to `$HOME/.ssh` on the `agent-home` volume.
+Only the public half is ever shown; no message in the protocol returns the
+private key and no code path reads it. Generating rather than accepting a paste
+keeps key material off the wire and out of the browser entirely.
+
+`$HOME` rather than `/app/.overseer` because that is the one location every git
+in the container finds unaided — the server's own operations, the agent's
+`git push` inside a session, and anything typed into a console alike. The
+alternative is threading `GIT_SSH_COMMAND` through every spawn point and still
+missing the ones an agent invents. It sits under exactly the boundary this
+section already describes for provider auth, and `./bin/reset` discards it with
+that volume.
+
+**No passphrase.** There is no ssh-agent here and nobody present when a
+background agent pushes, so a passphrase would only move the secret somewhere
+that also has to be stored. The key's protection is the volume boundary — the
+same one holding every provider's subscription token, per §6.
+
+**Host keys** are trusted on first use (`StrictHostKeyChecking accept-new`) and
+pinned in `known_hosts` after. That is not `no`: a host whose key *changes* is
+still refused, which is the attack that matters once enrolled. Pinning forge
+keys into the image was rejected — they rotate, and it would cover only the
+public forges rather than the self-hosted remotes this mostly exists for.
+
+**Commit identity** (`user.name`/`user.email`) is set in the same place and
+stored in internal memory, then applied as `GIT_AUTHOR_*`/`GIT_COMMITTER_*`
+environment overrides. It cannot be a config file: the compose files pass those
+variables through from the host and default them to empty strings, and git
+reads them ahead of every config file, so a config identity would be silently
+overridden and `git commit` would fail with "empty ident name".
+
 ---
 
 ## 3. Feature Map
@@ -392,7 +427,7 @@ Two services. The Node server serves the built SPA and handles `/api/*` + `/ws` 
 - `/workspace/<project>/` — one git project per directory. Session creation picks one; it becomes the process `cwd`.
 - `/workspace/_overseer/` — import/export staging only.
 - `/app/.overseer/` — internal memory plus SQLite usage history, session index, and search index.
-- The image is a plain Debian base with Node copied in from the pinned official image, not a `node:` base: this container is an agent host, and Node is one runtime among several — the provider CLIs between them ship npm globals and a self-contained bundle with its own node. Alongside Node it needs `git`, `ripgrep` and a shell, which the CLIs shell out to; `jq`, `flock`, GNU `find`/`sed`/`awk` and `shellcheck`, which the dev loop's bash does (§9); `gh`, which the loop's `publish` does; and the Docker client (§6.3). Auth login uses plain pipes (§2). The raw OPEN CONSOLE escape hatch uses `node-pty` (native module), so image builds include a short-lived native toolchain for that dependency. Run as non-root, at the host user's uid (§6.2).
+- The image is a plain Debian base with Node copied in from the pinned official image, not a `node:` base: this container is an agent host, and Node is one runtime among several — the provider CLIs between them ship npm globals and a self-contained bundle with its own node. Alongside Node it needs `git`, `ripgrep` and a shell, which the CLIs shell out to; `jq`, `flock`, GNU `find`/`sed`/`awk` and `shellcheck`, which the dev loop's bash does (§9); `openssh-client`, which git over ssh does (§2); and the Docker client (§6.3). Auth login uses plain pipes (§2). The raw OPEN CONSOLE escape hatch uses `node-pty` (native module), so image builds include a short-lived native toolchain for that dependency. Run as non-root, at the host user's uid (§6.2).
 - The remaining shared-write risk is host-side git activity while an agent edits the same project. Show each session's branch and dirty state so conflicts are visible.
 
 ---
@@ -739,21 +774,26 @@ outside a session; neither marks anything verified.
 
 **Nothing is public until a human approves it.** A request's work moves in
 three separately-refusable stages: `land` commits it to a local branch,
-`publish` pushes that branch and opens the pull request, `close` merges it.
-Only the last two are visible to anyone else, and `publish` is refused until a
-recorded `review` says the human approved the work — a `rejected` review
-publishes nothing at all.
+`publish` pushes that branch to origin, `close` ends the request once its work
+has landed on the default branch. Only `publish` is visible to anyone else, and
+it is refused until a recorded `review` says the human approved the work — a
+`rejected` review publishes nothing at all.
 
-That ordering is why `review` reads a local branch rather than a pull request.
-A review that runs after the pull request is open is a formality: the mistake
-is already public, and withdrawing it is its own announcement. Auditing a local
+Opening the pull request is deliberately a human's job. The loop has no opinion
+about which forge a remote lives on, and needs no credential for one beyond the
+ssh key that pushes (§2) — which is also what keeps this working for a
+self-hosted remote rather than one vendor's API.
+
+That ordering is why `review` reads a local branch rather than a pushed one. A
+review that runs after the work is public is a formality: the mistake is
+already out, and withdrawing it is its own announcement. Auditing a local
 branch makes the human's approval the act that publishes. The cost is that the
 `commit` step writes a pull-request title and body that may never be used —
 cheap, and it is `review` that most wants them, since a body describing what
 changed and what to look at is exactly a reviewer's briefing.
 
 **The train, and where branch metadata lives.** Past `commit` several requests
-are alive at once, each on its own branch with a pull request open. They do not
+are alive at once, each on its own branch. They do not
 collide because every request's branch is cut off the one in front of it — a
 train of stacked branches ending at the default branch. `loop/bin/step` cuts it
 at *phase entry* rather than at commit, so a request's diff is exactly its own
@@ -761,7 +801,7 @@ work against exactly the tree it was written on, and a dirty tree is refused
 there because whatever is in it belongs to somebody else.
 
 That chain is stored in the workspace repo's own `.git/config` —
-`branch.<b>.looprequest`, `.loopbase`, `.looppr` — which is **the one place the
+`branch.<b>.looprequest` and `.loopbase` — which is **the one place the
 tool writes outside `db/`**, and a deliberate exception to the rule stated
 above. The rule exists so the tool's bookkeeping is never mistaken for project
 source or committed into someone's app repo; `.git/config` is neither tracked
@@ -812,9 +852,12 @@ the whole request's diff for security and performance in a delegated subagent,
 walks the operator through manual QA in a throwaway `git worktree` at that
 request's branch, and records the outcome they chose — captured first,
 verbatim, by `loop/bin/signoff` into the second of the two `.txt` kinds.
-`loop/bin/publish` pushes the branch and opens the pull request, and is refused
+`loop/bin/publish` pushes the branch to origin, and is refused
 unless that review recorded `approved` or `followups`. `loop/bin/close` then
-ends the request once the pull request has landed. A per-slug `running.json` lease surfaces an active overseer
+ends the request once its work has landed on the default branch — judged by
+ancestry, and failing that by an in-memory merge (`git merge-tree
+--write-tree`) that produces no change, which is what makes a squash or rebase
+merge count. A per-slug `running.json` lease surfaces an active overseer
 session to other terminals. Adding a step is a row in `bin/lib/db.sh`'s
 `LOOP_STEPS` table plus a `loop/steps/<step>.md`, and a name in
 `LOOP_EXCLUSIVE_STEPS` if it takes the working tree.

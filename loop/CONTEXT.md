@@ -29,8 +29,8 @@ word for a concept, or when a term's meaning is unclear from context.
 - **Train**: the chain of stacked branches for requests that have passed
   `commit` but not yet `close`d — each cut from the tip of the one ahead of
   it. `loop/bin/train` shows it. A request leaves the train only when `close`
-  says its pull request landed (true even for a `rejected` review, whose
-  branch stays local but stays in the train).
+  says its work landed on the default branch (true even for a `rejected`
+  review, whose branch stays local but stays in the train).
 - **Tracer**: one unit of implementation work in a plan, grouped with other
   tracers that touch disjoint files into a **tracer group** — everything
   `implement --tracer` builds in one run. `loop/bin/tracers --next` /

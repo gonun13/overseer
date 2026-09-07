@@ -1,16 +1,21 @@
 #!/usr/bin/env bash
-# Push a reviewed request's branch and open its pull request.
+# Push a reviewed request's branch to origin.
 #
 # This is the first moment anything about a request leaves this machine, and it
-# is deliberately the last step before merging. `implement` writes the code,
+# is deliberately the last step the loop takes. `implement` writes the code,
 # `land` commits it to a local branch, `review` audits that branch and puts it
 # in front of a human — and only if they approved it does this run. A rejected
 # review pushes nothing, so a bad run costs a local branch delete rather than a
-# public pull request somebody has to be told to ignore.
+# pushed branch somebody has to be told to ignore.
 #
-# The pull-request title and body were written by the `commit` step, long
-# before anyone approved anything. That is fine: writing them is free and
-# opening the pull request is what is public.
+# The loop stops here. Opening a pull request, and merging it, are a human's to
+# do on whichever forge this remote lives on — the loop has no opinion about
+# which one that is, and needs no credentials for it beyond the ssh key the
+# operator generates in settings.
+#
+# The `pr_title` and `## PR body` the `commit` step wrote are kept: they are
+# the description a human pastes when they open the pull request, and keeping
+# them is what makes restoring automatic PR creation a small change.
 #
 # Usage: loop/bin/publish <workspace-name> <request-id> [--dry-run] [--force]
 set -euo pipefail
@@ -44,8 +49,7 @@ request's url.
 
 Exit codes: 0 ok, 1 general/validation failure, 2 workspace not found,
 3 the request has not been reviewed, or its review rejected the work,
-4 not a git repository, or no origin remote,
-6 gh is missing or not authenticated.
+4 not a git repository, or no origin remote.
 USAGE
 }
 
@@ -115,32 +119,11 @@ pr_body=$(record_section "$file" "PR body")
 [ -n "$pr_title" ] || die "the commit record has no pr_title" 1
 [ -n "$pr_body" ] || die "the commit record has no '## PR body' section" 1
 
-command -v gh >/dev/null 2>&1 || die "gh is not on PATH
-The loop opens the pull request itself rather than leaving one for you to
-remember, so this needs the GitHub CLI:
-  https://cli.github.com" 6
-gh auth status >/dev/null 2>&1 || die "gh is not authenticated
-  gh auth login" 6
-
-# Check gh can actually reach this repository *before* pushing anything. The
-# push and the pull request are one intention, and finding out only after the
-# push that gh cannot see the remote leaves a branch on origin with nothing
-# attached to explain it — a public artefact of a failure, which is the one
-# thing this whole command is arranged to avoid.
-(cd "$repo" && gh repo view --json name >/dev/null 2>&1) || die "gh cannot see the repository behind origin
-  $(git_ws "$repo" remote get-url origin)
-Nothing has been pushed. Either origin does not point at a GitHub host gh knows
-about, or your token cannot read it:
-  gh auth status
-  gh auth login --hostname <host>" 6
-
 sha=$(git_ws "$repo" rev-parse "$branch")
 
 if [ "$dry" -eq 1 ]; then
   log_info "would run, in workspace/$name:"
   printf '  git push -u origin %s\n' "$branch"
-  printf "  gh pr create --base %s --head %s --title '%s' --body-file -\n" \
-    "${base#origin/}" "$branch" "$pr_title"
   exit 0
 fi
 
@@ -152,10 +135,11 @@ else
   log_info "pushed $branch to origin"
 fi
 
-# --- pull request --------------------------------------------------------
-# The base is pushed too when it is another request's branch: GitHub cannot
-# open a pull request against a branch it has never seen, and a stacked request
-# is the normal case rather than the exception.
+# --- the stacked base ----------------------------------------------------
+# The base is pushed too when it is another request's branch. A stacked request
+# is the normal case rather than the exception, and a human opening the pull
+# request needs the branch it targets to exist on origin — otherwise the forge
+# offers only the default branch and the diff is everything, not this request.
 if [ "$base" != "${base#origin/}" ]; then
   : # already a remote-tracking ref — the default branch, nothing to do
 elif ! git_ws "$repo" rev-parse --quiet --verify "refs/remotes/origin/$base" >/dev/null 2>&1; then
@@ -163,23 +147,13 @@ elif ! git_ws "$repo" rev-parse --quiet --verify "refs/remotes/origin/$base" >/d
   git_ws "$repo" push --quiet -u origin "$base"
 fi
 
-pr_url=$(git_branch_meta "$repo" "$branch" "$LOOP_GIT_KEY_PR")
-if [ -z "$pr_url" ]; then
-  pr_url=$(cd "$repo" && gh pr view "$branch" --json url --jq '.url' 2>/dev/null || true)
-fi
-if [ -n "$pr_url" ]; then
-  log_info "pull request already open: $pr_url"
-else
-  pr_url=$(printf '%s\n' "$pr_body" | (cd "$repo" && gh pr create \
-    --base "${base#origin/}" --head "$branch" --title "$pr_title" --body-file -))
-  log_info "opened $pr_url"
-fi
-git_set_branch_meta "$repo" "$branch" "$LOOP_GIT_KEY_PR" "$pr_url"
+log_info "open the pull request on your forge: $branch → ${base#origin/}"
+log_info "title: $pr_title"
 
 title=$(printf '%s' "$event" | jq -r '.title')
 append_event "$slug" "$id" "$(iso_now)" review published published "$title" \
   "$(artifact_ref "$slug" raw "$id")" "$(artifact_ref "$slug" review "$id")"
 
 jq -n --arg id "$id" --arg branch "$branch" --arg base "$base" \
-  --arg sha "$sha" --arg pr "$pr_url" \
-  '{published:true, id:$id, branch:$branch, base:$base, sha:$sha, pr:$pr}'
+  --arg sha "$sha" \
+  '{published:true, id:$id, branch:$branch, base:$base, sha:$sha}'

@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# Close a request whose pull request has landed: drop its branch out of the
-# train and append the terminal event.
+# Close a request whose work has landed: drop its branch out of the train and
+# append the terminal event.
 #
 # A request stops affecting the loop when its work is in the default branch —
 # until then it stays the base that later requests are stacked on, because
@@ -8,7 +8,7 @@
 # a deliberate verb rather than something inferred, because "has this landed"
 # has two possible answers and only one of them is reliable (see below).
 #
-# Usage: loop/bin/close <workspace-name> <request-id> [--merge] [--abandon] [--yes]
+# Usage: loop/bin/close <workspace-name> <request-id> [--abandon] [--yes]
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,7 +19,7 @@ source "$LOOP_BIN_DIR/lib/db.sh"
 
 usage() {
   cat >&2 <<'USAGE'
-usage: loop/bin/close <workspace-name> <request-id> [--merge] [--abandon] [--yes]
+usage: loop/bin/close <workspace-name> <request-id> [--abandon] [--yes]
 
 Ends a request: prunes the loop's metadata from its branch so it leaves the
 train, deletes the local branch, and appends a `closed` event. From then on no
@@ -29,32 +29,26 @@ With no flag it only closes a request whose work has already landed on the
 default branch — fetch first, then check. That is the "somebody merged it in
 the browser" path.
 
---merge    merge the pull request first, with `gh pr merge --merge`.
-           A real merge commit, never a squash or a rebase: those rewrite the
-           commits, so the branch never becomes an ancestor of the default
-           branch and the stacked requests behind it lose their footing.
 --abandon  close without landing — the work is dropped. The branch leaves the
-           train and the pull request is left open for a human to deal with.
+           train and any pull request is left open for a human to deal with.
            Requires --yes.
 --yes      skip the confirmation prompt (required in a non-interactive shell)
 
-The branch is deleted locally; the remote branch and the pull request are left
-alone unless --merge deleted them. Nothing here deletes work you might want.
+The branch is deleted locally; the remote branch and any pull request are left
+alone. Nothing here deletes work you might want.
 
 Exit codes: 0 closed, 1 general failure, 2 workspace not found,
-3 the work has not landed and neither --merge nor --abandon was given,
-4 not a git repository, or no origin remote,
-6 gh is missing or not authenticated.
+3 the work has not landed and --abandon was not given,
+4 not a git repository, or no origin remote.
 USAGE
 }
 
 require_cmd jq
 require_cmd git
 
-name="" id="" do_merge=0 abandon=0 yes=0
+name="" id="" abandon=0 yes=0
 while [ $# -gt 0 ]; do
   case "$1" in
-    --merge)   do_merge=1; shift ;;
     --abandon) abandon=1; shift ;;
     --yes)     yes=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -70,7 +64,6 @@ while [ $# -gt 0 ]; do
 done
 
 [ -n "$name" ] && [ -n "$id" ] || { usage; exit 1; }
-[ $((do_merge + abandon)) -le 1 ] || die "pass either --merge or --abandon, not both" 1
 
 repo=$(resolve_workspace "$name")
 slug=$(slugify "$name")
@@ -85,27 +78,6 @@ branch=$(git_request_branch "$repo" "$id")
 
 default_ref=$(git_require_default_ref "$repo" "$name")
 
-need_gh() {
-  command -v gh >/dev/null 2>&1 || die "gh is not on PATH: https://cli.github.com" 6
-  gh auth status >/dev/null 2>&1 || die "gh is not authenticated:  gh auth login" 6
-}
-
-if [ "$do_merge" -eq 1 ]; then
-  need_gh
-  if [ "$yes" -ne 1 ]; then
-    if [ ! -t 0 ]; then
-      die "refusing to merge without --yes in a non-interactive shell" 1
-    fi
-    read -r -p "loop: merge '$branch' into ${default_ref#origin/}? [y/N] " reply
-    case "$reply" in
-      y|Y|yes|YES) ;;
-      *) log_info "aborted — nothing changed"; exit 0 ;;
-    esac
-  fi
-  (cd "$repo" && gh pr merge "$branch" --merge --delete-branch) \
-    || die "gh could not merge '$branch' — merge it yourself, then run this again without --merge" 1
-fi
-
 landed=0
 if [ "$abandon" -eq 1 ]; then
   [ "$yes" -eq 1 ] || die "--abandon drops this request's work out of the train; pass --yes to mean it" 1
@@ -115,19 +87,14 @@ else
     || log_info "could not fetch origin — judging against the local view of it"
   if git_branch_landed "$repo" "$branch" "$default_ref"; then
     landed=1
-  elif command -v gh >/dev/null 2>&1 && gh auth status >/dev/null 2>&1; then
-    # Ancestry is the reliable answer only for a real merge commit. A squash or
-    # rebase merge rewrites the commits, so the branch is never an ancestor
-    # however genuinely merged it is — ask GitHub itself before refusing.
-    if [ -n "$(cd "$repo" && gh pr view "$branch" --json mergedAt --jq '.mergedAt // empty' 2>/dev/null)" ]; then
-      landed=1
-      log_info "merged by squash or rebase — ancestry does not hold, closing on the pull request's own state"
-    fi
+  elif git_branch_absorbed "$repo" "$branch" "$default_ref"; then
+    landed=1
+    log_info "squash- or rebase-merged — ancestry does not hold, but the branch adds nothing to ${default_ref#origin/}"
   fi
   [ "$landed" -eq 1 ] || die "request $id has not landed on ${default_ref#origin/}
-Its branch '$branch' is not contained there and no merged pull request was
-found for it. Merge it, then close:
-  $LOOP_BIN_DIR/close $name $id --merge --yes
+Its branch '$branch' is not contained there, and merging it would still change
+the tree. Merge it on your forge, then close:
+  $LOOP_BIN_DIR/close $name $id
 Or drop the work entirely:
   $LOOP_BIN_DIR/close $name $id --abandon --yes" 3
 fi
