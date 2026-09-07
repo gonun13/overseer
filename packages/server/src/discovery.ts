@@ -24,6 +24,7 @@ import {
 import {
   readSnapshot,
   recordAction,
+  gitIdentityForSnapshot,
   themeForSnapshot,
   writeRunLog,
   writeSnapshot,
@@ -385,6 +386,7 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
   });
 
   const theme = themeForSnapshot(previous);
+  const gitIdentity = gitIdentityForSnapshot(previous);
   await Promise.all([
     writeRunLog(runId, log),
     writeSnapshot({
@@ -395,6 +397,7 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
       last_active_project: activeProjectPath,
       attached_provider: attachedProviderId,
       ...(theme !== undefined ? { theme } : {}),
+      ...(gitIdentity !== undefined ? { git_identity: gitIdentity } : {}),
     }),
   ]);
 

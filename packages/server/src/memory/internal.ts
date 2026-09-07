@@ -101,12 +101,27 @@ export interface WorldSnapshot {
   attached_provider?: string;
   /** Last theme the operator chose. Absent means samaritan (the default). */
   theme?: OverseerTheme;
+  /**
+   * Who the app's own commits are authored as. Absent means the operator has
+   * not said, and `vcs` falls back to its own identity rather than failing.
+   *
+   * Kept here rather than in a git config file because the compose files pass
+   * `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL` through from the host and default
+   * them to empty strings, and git reads those env vars ahead of every config
+   * file — so a config-file identity would be silently overridden. See
+   * `vcs/env.ts`.
+   */
+  git_identity?: { name: string; email: string };
 }
 
 /** Theme chosen before the first discovery snapshot exists — stamped in when
  * discovery writes `state.json`, the same way a mid-pass project pick would
  * otherwise be lost. Cleared by `themeForSnapshot`. */
 let pendingTheme: OverseerTheme | undefined;
+
+/** The same holding pen for a git identity set before the first snapshot
+ * exists. Cleared by `gitIdentityForSnapshot`. */
+let pendingGitIdentity: { name: string; email: string } | undefined;
 
 let ensured: Promise<void> | undefined;
 /** Directory the memoised `ensureDirs` last prepared — invalidate when the
@@ -365,19 +380,30 @@ export function writeSnapshot(
 }
 
 /**
- * Read-modify-write one field of the snapshot under the lock. `mutate` must
- * stay synchronous: the whole point is that nothing else runs between the read
- * and the write, and an await inside it would reopen the window this closes.
+ * Read-modify-write part of the snapshot under the lock. `mutate` must stay
+ * synchronous: the whole point is that nothing else runs between the read and
+ * the write, and an await inside it would reopen the window this closes.
+ * Returning `undefined` abandons the write.
+ *
+ * `mutate` returns only the fields it changes; everything else is carried over
+ * from `previous`. It used to return a whole snapshot, which meant six call
+ * sites each re-listing every field by hand — and a field added to
+ * `WorldSnapshot` was silently dropped by whichever of them was not updated to
+ * carry it. Patching makes that class of bug unrepresentable.
  */
 function updateSnapshot(
-  mutate: (previous: WorldSnapshot) => Omit<WorldSnapshot, "at"> | undefined,
+  mutate: (
+    previous: WorldSnapshot,
+  ) => Partial<Omit<WorldSnapshot, "at">> | undefined,
 ): Promise<boolean> {
   return serialized(async () => {
     const previous = await readSnapshot();
     if (!previous) return false;
-    const next = mutate(previous);
-    if (!next) return false;
-    await publishSnapshot(next);
+    const patch = mutate(previous);
+    if (!patch) return false;
+    // `at` is stamped by publishSnapshot, so it must not be carried forward.
+    const { at: _stamped, ...carried } = previous;
+    await publishSnapshot({ ...carried, ...patch });
     return true;
   });
 }
@@ -402,6 +428,7 @@ export async function hasRunBefore(): Promise<boolean> {
 export function clearSnapshot(): Promise<void> {
   return serialized(async () => {
     pendingTheme = undefined;
+    pendingGitIdentity = undefined;
     await rm(stateFile(), { force: true });
   });
 }
@@ -457,15 +484,7 @@ export async function setActiveProjectPath(
       reason = "not a discovered project";
       return undefined;
     }
-    return {
-      runCount: previous.runCount,
-      workspaceRoot: previous.workspaceRoot,
-      projects: previous.projects,
-      providers: previous.providers,
-      last_active_project: projectPath,
-      attached_provider: previous.attached_provider,
-      theme: previous.theme,
-    };
+    return { last_active_project: projectPath };
   });
 
   if (!written) {
@@ -496,15 +515,7 @@ export async function setActiveProjectPath(
  * snapshot, so a settings toggle mid-pass is not lost.
  */
 export async function setTheme(theme: OverseerTheme): Promise<MemoryWrite> {
-  const written = await updateSnapshot((previous) => ({
-    runCount: previous.runCount,
-    workspaceRoot: previous.workspaceRoot,
-    projects: previous.projects,
-    providers: previous.providers,
-    last_active_project: previous.last_active_project,
-    attached_provider: previous.attached_provider,
-    theme,
-  }));
+  const written = await updateSnapshot(() => ({ theme }));
 
   if (!written) {
     pendingTheme = theme;
@@ -526,6 +537,50 @@ export async function setTheme(theme: OverseerTheme): Promise<MemoryWrite> {
   return { ok: true };
 }
 
+/**
+ * Record the identity the app's own commits are authored under.
+ *
+ * Same pre-discovery handling as `setTheme`: settings can be opened before the
+ * first snapshot exists, and an identity typed then must not be lost.
+ */
+export async function setGitIdentity(
+  name: string,
+  email: string,
+): Promise<MemoryWrite> {
+  const identity = { name, email };
+  const written = await updateSnapshot(() => ({ git_identity: identity }));
+
+  if (!written) pendingGitIdentity = identity;
+  await recordAction({
+    actor: "operator",
+    action: "git:identity",
+    outcome: "ok",
+    // The address is the operator's own and goes in the commits themselves;
+    // recording it here is no wider a disclosure than the log it authors.
+    detail: written ? `${name} <${email}>` : `${name} <${email}> · pending discovery`,
+  });
+  return { ok: true };
+}
+
+/** The identity `vcs` should author with, or undefined when unset. Reads the
+ * pending value too, so an identity set before discovery is honoured by the
+ * very next commit rather than only after the first snapshot lands. */
+export async function readGitIdentity(): Promise<
+  { name: string; email: string } | undefined
+> {
+  if (pendingGitIdentity) return pendingGitIdentity;
+  return (await readSnapshot())?.git_identity;
+}
+
+/** Git identity to include when discovery (re)writes the world snapshot. */
+export function gitIdentityForSnapshot(
+  previous: WorldSnapshot | undefined,
+): { name: string; email: string } | undefined {
+  const pending = pendingGitIdentity;
+  pendingGitIdentity = undefined;
+  return pending ?? previous?.git_identity;
+}
+
 /** Theme to include when discovery (re)writes the world snapshot. */
 export function themeForSnapshot(
   previous: WorldSnapshot | undefined,
@@ -537,15 +592,7 @@ export function themeForSnapshot(
 
 /** Record which provider the operator connected. Discovery must have run first. */
 export async function setAttachedProvider(id: string): Promise<boolean> {
-  const written = await updateSnapshot((previous) => ({
-    runCount: previous.runCount,
-    workspaceRoot: previous.workspaceRoot,
-    projects: previous.projects,
-    providers: previous.providers,
-    last_active_project: previous.last_active_project,
-    attached_provider: id,
-    theme: previous.theme,
-  }));
+  const written = await updateSnapshot(() => ({ attached_provider: id }));
   if (!written) {
     console.error("overseer: cannot attach a provider before the first discovery pass");
     return false;
@@ -584,9 +631,6 @@ export async function setProviderAuthenticated(
   return updateSnapshot((previous) => {
     if (!previous.providers.some((provider) => provider.id === id)) return undefined;
     return {
-      runCount: previous.runCount,
-      workspaceRoot: previous.workspaceRoot,
-      projects: previous.projects,
       providers: previous.providers.map((provider) => {
         if (provider.id !== id) return provider;
         // `authExpired` is dropped on both paths: a fresh login is not expired,
@@ -594,9 +638,6 @@ export async function setProviderAuthenticated(
         const { authExpired: _dropped, ...rest } = provider;
         return { ...rest, status: { ...provider.status, authenticated } };
       }),
-      last_active_project: previous.last_active_project,
-      attached_provider: previous.attached_provider,
-      theme: previous.theme,
     };
   });
 }
@@ -614,15 +655,9 @@ export async function setProviderStatus(
       return undefined;
     }
     return {
-      runCount: previous.runCount,
-      workspaceRoot: previous.workspaceRoot,
-      projects: previous.projects,
       providers: previous.providers.map((provider) =>
         provider.id === id ? { ...provider, status } : provider,
       ),
-      last_active_project: previous.last_active_project,
-      attached_provider: previous.attached_provider,
-      theme: previous.theme,
     };
   });
 }
@@ -635,13 +670,8 @@ export async function syncSnapshotProjects(
   active?: { path: string | undefined },
 ): Promise<boolean> {
   return updateSnapshot((previous) => ({
-    runCount: previous.runCount,
-    workspaceRoot: previous.workspaceRoot,
     projects,
-    providers: previous.providers,
     last_active_project:
       active !== undefined ? active.path : previous.last_active_project,
-    attached_provider: previous.attached_provider,
-    theme: previous.theme,
   }));
 }

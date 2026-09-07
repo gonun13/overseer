@@ -249,7 +249,23 @@ export type ClientMessage =
   | { type: "project.git.merge"; path: string }
   /** Discard every uncommitted change in `path` — `git reset --hard` plus a
    * clean of untracked files. */
-  | { type: "project.git.revert"; path: string };
+  | { type: "project.git.revert"; path: string }
+  /** Read the container's git access: whether an ssh key exists, the public
+   * half of it, and the identity commits are made under. Never carries the
+   * private key — nothing in the protocol can ask for it. */
+  | { type: "git.access.read" }
+  /** Generate the container's ssh keypair. Refused when one already exists:
+   * replacing a working key is `git.ssh.remove` first, so it cannot happen by
+   * a stray double-click. */
+  | { type: "git.ssh.generate" }
+  /** Authenticate against one host to prove the key was added there. `host` is
+   * offered by the client from the remotes the workspace actually uses, not
+   * typed freehand; `port` is present for a remote that names one. */
+  | { type: "git.ssh.test"; host: string; port?: number }
+  /** Delete the keypair. `known_hosts` is deliberately left alone. */
+  | { type: "git.ssh.remove" }
+  /** The name and email commits the app makes are authored under. */
+  | { type: "git.identity.set"; name: string; email: string };
 
 export interface ConnectedMessage {
   type: "connected";
@@ -361,6 +377,51 @@ export interface ProjectGitMergedMessage {
 export interface ProjectGitRevertedMessage {
   type: "project.git.reverted";
   path: string;
+}
+
+/** One ssh host a workspace remote points at, for the client to offer as a
+ * test target. `port` only when the remote names a non-default one. */
+export interface GitRemoteHost {
+  host: string;
+  port?: number;
+}
+
+/**
+ * The container's git access, as one frame — the settings panel's whole `git
+ * access` section reads from this.
+ *
+ * `key` is absent when none has been generated. Only ever the *public* half:
+ * the private key is never read into a response, and there is no message that
+ * could ask for it.
+ *
+ * `permissionsOk` is false when the key exists but ssh will refuse it — the
+ * mode is wrong, or the volume's files are owned by a uid the container no
+ * longer runs as (which happens when the host's uid changes between builds).
+ * The panel must offer to regenerate rather than render this as healthy.
+ */
+export interface GitAccessStateMessage {
+  type: "git.access.state";
+  key?: {
+    publicKey: string;
+    fingerprint: string;
+    createdAt: string;
+  };
+  permissionsOk: boolean;
+  identity?: { name: string; email: string };
+  /** Hosts the workspace's own remotes use — the test targets on offer. */
+  hosts: GitRemoteHost[];
+}
+
+/** The result of one `git.ssh.test`. Transient feedback for the tab that
+ * asked, never broadcast. `account` is who the host said you are, when it
+ * greeted by name. */
+export interface GitSshTestResultMessage {
+  type: "git.ssh.test.result";
+  host: string;
+  ok: boolean;
+  account?: string;
+  hostFingerprint?: string;
+  message: string;
 }
 
 /** Ack that the theme was recorded in internal memory. */
@@ -655,6 +716,8 @@ export type ServerMessage =
   | ProjectGitPushedMessage
   | ProjectGitMergedMessage
   | ProjectGitRevertedMessage
+  | GitAccessStateMessage
+  | GitSshTestResultMessage
   | ThemeSelectedMessage
   | ProviderConnectedMessage
   | ProviderStatusMessage
@@ -737,6 +800,11 @@ export const PROJECT_MAX_DESCRIPTION_CHARS = 4_000;
  * magnitude as `PROJECT_MAX_FOLDER_CHARS` plus room for the workspace root. */
 export const GIT_MAX_PATH_CHARS = 4_096;
 export const GIT_MAX_COMMIT_MESSAGE_CHARS = 4_000;
+/** A hostname's own limit, brackets of an IPv6 literal included. */
+export const GIT_SSH_MAX_HOST_CHARS = 253;
+export const GIT_MAX_IDENTITY_NAME_CHARS = 128;
+/** RFC 5321's cap on an address. */
+export const GIT_MAX_IDENTITY_EMAIL_CHARS = 254;
 
 /** A subagent name is also its filename; kebab-case at this length covers
  * every real agent name and keeps the path short. */
@@ -979,6 +1047,21 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       msg.message.length <= GIT_MAX_COMMIT_MESSAGE_CHARS
     );
   }
+  if (
+    type === "git.access.read" ||
+    type === "git.ssh.generate" ||
+    type === "git.ssh.remove"
+  ) {
+    return true;
+  }
+  if (type === "git.ssh.test") {
+    const msg = value as { host?: unknown; port?: unknown };
+    return isSshHost(msg.host) && isSshPort(msg.port);
+  }
+  if (type === "git.identity.set") {
+    const msg = value as { name?: unknown; email?: unknown };
+    return isGitIdentityName(msg.name) && isGitIdentityEmail(msg.email);
+  }
   if (type === "subagent.list") return true;
   if (type === "subagent.write") {
     const msg = value as {
@@ -1012,6 +1095,82 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     return isSubagentName(msg.name) && SUBAGENT_SCOPES.has(msg.scope as string);
   }
   return false;
+}
+
+/** A DNS label: alphanumeric, inner hyphens, never leading or trailing one. */
+const DNS_LABEL = /^[a-z0-9]([a-z0-9-]*[a-z0-9])?$/i;
+
+/**
+ * An ssh host the client may ask us to authenticate against.
+ *
+ * Deliberately broader than a public-forge hostname. A naive
+ * `/^[a-z0-9.-]+$/` passes `github.com` and quietly rejects two of the shapes
+ * a real workspace uses: a private single-label host (`gitlab.local`) and a
+ * bracketed IPv6 literal (`git@[2001:db8::1]:repos/x.git`). Both are ordinary
+ * git remotes, so both have to be testable.
+ *
+ * The literal is validated by parsing what is inside the brackets rather than
+ * by pattern — an address is not a thing a regex should be asked to judge.
+ * `isIPv6` is inlined instead of imported so `protocol` stays free of `node:`
+ * (the web bundle imports this module too).
+ */
+function isSshHost(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (value.length === 0 || value.length > GIT_SSH_MAX_HOST_CHARS) return false;
+  if (value.startsWith("[") && value.endsWith("]")) {
+    return isIPv6Literal(value.slice(1, -1));
+  }
+  return value.split(".").every((label) => DNS_LABEL.test(label));
+}
+
+/** Enough to reject anything that is not an address; the ssh client does the
+ * authoritative parse. Accepts the compressed and IPv4-mapped forms. */
+function isIPv6Literal(value: unknown): value is string {
+  if (typeof value !== "string" || value.length === 0) return false;
+  if (!/^[0-9a-f:.]+$/i.test(value)) return false;
+  // At most one "::", and at least two groups to be an address at all.
+  if (value.split("::").length > 2) return false;
+  return value.includes(":");
+}
+
+function isSshPort(value: unknown): boolean {
+  if (value === undefined) return true;
+  return (
+    typeof value === "number" &&
+    Number.isInteger(value) &&
+    value >= 1 &&
+    value <= 65535
+  );
+}
+
+/**
+ * Identity values reach a git config file, so a newline or a section bracket
+ * would let one field forge another. Rejected here rather than escaped: there
+ * is no legitimate name or address containing them, and a frame that carries
+ * one is not a mistake worth explaining back.
+ */
+function hasConfigInjection(value: string): boolean {
+  return /[\n\r[\]]/.test(value);
+}
+
+function isGitIdentityName(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    value.length <= GIT_MAX_IDENTITY_NAME_CHARS &&
+    !hasConfigInjection(value)
+  );
+}
+
+function isGitIdentityEmail(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.trim().length > 0 &&
+    value.length <= GIT_MAX_IDENTITY_EMAIL_CHARS &&
+    !hasConfigInjection(value) &&
+    !/\s/.test(value) &&
+    value.includes("@")
+  );
 }
 
 /**

@@ -1,6 +1,8 @@
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import type { GitFileChange } from "@overseer/protocol";
+import { readGitIdentity } from "../memory/internal.js";
+import { resolveIdentityEnv, type GitIdentity } from "./env.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -33,6 +35,9 @@ export interface ProjectGitDeps {
     args: string[],
     env?: NodeJS.ProcessEnv,
   ) => Promise<{ stdout: string; stderr: string }>;
+  /** The operator's configured commit identity. Injectable so tests need
+   * neither internal memory nor a real snapshot. */
+  readIdentity?: () => Promise<GitIdentity | undefined>;
 }
 
 async function defaultRun(
@@ -47,25 +52,23 @@ async function defaultRun(
   });
 }
 
-/** Overseer's fallback identity, applied as environment overrides rather than
- * `-c user.name=`/`user.email=` — the dev/prod compose files pass
- * `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL`/`GIT_COMMITTER_*` through from the
- * host and default them to *empty strings* when the host has none set, and
- * git resolves identity from those env vars before `-c` config, so an empty
- * env var beats a `-c` override and still fails with "empty ident name".
- * Overriding the env vars directly is the only fallback that actually wins. */
-const FALLBACK_IDENTITY_ENV: NodeJS.ProcessEnv = {
-  GIT_AUTHOR_NAME: "overseer",
-  GIT_AUTHOR_EMAIL: "overseer@localhost",
-  GIT_COMMITTER_NAME: "overseer",
-  GIT_COMMITTER_EMAIL: "overseer@localhost",
-};
+/** The operator's configured identity, if they have set one. Injectable so
+ * tests never touch internal memory; defaults to reading the snapshot. */
+async function defaultReadIdentity(): Promise<GitIdentity | undefined> {
+  return readGitIdentity();
+}
 
 /** Builds the project-git operations with an injectable git runner — the same
  * DI shape `project-create.ts` uses, so each operation is testable against
  * canned git output instead of a real repository. */
 export function createProjectGit(deps: ProjectGitDeps = {}) {
   const run = deps.run ?? defaultRun;
+  const readIdentity = deps.readIdentity ?? defaultReadIdentity;
+
+  /** The identity overrides for a write in `dir` — see `env.ts` for why this
+   * is environment rather than config. */
+  const identityFor = (dir: string) =>
+    resolveIdentityEnv(dir, readIdentity, hasIdentity);
 
   async function status(dir: string): Promise<GitStatus> {
     const { stdout } = await run(dir, [
@@ -136,12 +139,7 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
 
     try {
       await run(dir, ["add", "-A"]);
-      const identity = await hasIdentity(dir);
-      await run(
-        dir,
-        ["commit", "-m", message],
-        identity ? undefined : FALLBACK_IDENTITY_ENV,
-      );
+      await run(dir, ["commit", "-m", message], await identityFor(dir));
       return { ok: true };
     } catch (error) {
       return { ok: false, benign: false, reason: describe(error) };
@@ -154,7 +152,59 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
       await run(dir, ["push", "-u", "origin", branch]);
       return { ok: true };
     } catch (error) {
-      return { ok: false, benign: true, reason: describe(error) };
+      return {
+        ok: false,
+        benign: true,
+        // Classified against the *whole* of stderr, not `describe`'s first
+        // line: git prints a multi-line warning banner ahead of "Host key
+        // verification failed", so the signature is never on line one.
+        reason: await explainPushFailure(dir, stderrOf(error), describe(error)),
+      };
+    }
+  }
+
+  /**
+   * Turn a push failure into something the operator can act on.
+   *
+   * Raw git says `Permission denied (publickey)`, which names the mechanism
+   * and not the fix. Since the container's key is generated in settings, an
+   * operator who has never opened that panel has no way to connect the two —
+   * this is the only place the feature announces where it lives.
+   *
+   * The https case is the one that would otherwise be genuinely baffling: the
+   * key is set up correctly and simply is not used, because git does not
+   * authenticate an https remote with it.
+   */
+  async function explainPushFailure(
+    dir: string,
+    full: string,
+    summary: string,
+  ): Promise<string> {
+    if (/host key verification failed/i.test(full)) {
+      return `the remote's host key changed — check settings › git access · ${summary}`;
+    }
+    if (/could not read from remote repository|permission denied \(publickey\)/i.test(full)) {
+      if (await hasHttpsOrigin(dir)) {
+        return `this project's remote uses https, so the ssh key does not apply — switch the remote to ssh to use it · ${summary}`;
+      }
+      return `no ssh key is set up for this remote — add one in settings › git access · ${summary}`;
+    }
+    return summary;
+  }
+
+  /** The `origin` URL, verbatim. Throws when there is no origin, which is an
+   * ordinary state for a project the operator has not pushed anywhere. */
+  async function remoteUrl(dir: string): Promise<{ stdout: string }> {
+    const { stdout } = await run(dir, ["remote", "get-url", "origin"]);
+    return { stdout: stdout.trim() };
+  }
+
+  async function hasHttpsOrigin(dir: string): Promise<boolean> {
+    try {
+      const { stdout } = await remoteUrl(dir);
+      return /^https?:\/\//i.test(stdout);
+    } catch {
+      return false;
     }
   }
 
@@ -225,14 +275,9 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
 
     try {
       // --no-ff always makes a real merge commit, even when the merge would
-      // otherwise fast-forward — so it needs the same identity fallback
+      // otherwise fast-forward — so it needs the same identity resolution
       // `commit` does.
-      const identity = await hasIdentity(dir);
-      await run(
-        dir,
-        ["merge", "--no-ff", branch],
-        identity ? undefined : FALLBACK_IDENTITY_ENV,
-      );
+      await run(dir, ["merge", "--no-ff", branch], await identityFor(dir));
       return { ok: true, from: branch, into: target };
     } catch (error) {
       await run(dir, ["merge", "--abort"]).catch(() => {});
@@ -277,7 +322,16 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     }
   }
 
-  return { status, commit, push, defaultBranch, mergeToDefault, revert, init };
+  return {
+    status,
+    commit,
+    push,
+    defaultBranch,
+    mergeToDefault,
+    revert,
+    init,
+    remoteUrl,
+  };
 }
 
 function statusFromCode(code: string): GitFileChange["status"] {
@@ -287,6 +341,16 @@ function statusFromCode(code: string): GitFileChange["status"] {
   if (code.includes("A")) return "added";
   if (code.includes("D")) return "deleted";
   return "modified";
+}
+
+/** The whole of a failed command's stderr, for matching signatures that git
+ * does not print on the first line. */
+function stderrOf(error: unknown): string {
+  if (error && typeof error === "object" && "stderr" in error) {
+    const stderr = (error as { stderr?: unknown }).stderr;
+    if (typeof stderr === "string") return stderr;
+  }
+  return error instanceof Error ? error.message : "";
 }
 
 function describe(error: unknown): string {

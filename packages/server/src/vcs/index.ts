@@ -39,6 +39,22 @@ export {
 } from "./ops.js";
 
 export {
+  createGitSsh,
+  gitSsh,
+  parseRemoteHost,
+  type GitSshDeps,
+  type SshKeyState,
+  type SshTestResult,
+} from "./ssh.js";
+
+export {
+  FALLBACK_IDENTITY,
+  identityEnv,
+  resolveIdentityEnv,
+  type GitIdentity,
+} from "./env.js";
+
+export {
   createGitProbe,
   gitProbe,
   DIRTY_MIN_MS,
