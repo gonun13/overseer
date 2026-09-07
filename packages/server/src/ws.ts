@@ -667,6 +667,17 @@ export function attachWebSocketServer(httpServer: Server): {
         }
         case "git.identity.set": {
           await setGitIdentity(parsed.name, parsed.email);
+          // Also into the container's global git config, so the agent's own
+          // commits inside a session carry it too — those are separate child
+          // processes that resolve identity for themselves.
+          try {
+            await projectGit.setGlobalIdentity({
+              name: parsed.name,
+              email: parsed.email,
+            });
+          } catch (error) {
+            console.error("overseer: could not write the global git identity", error);
+          }
           await announceGitAccess();
           return;
         }

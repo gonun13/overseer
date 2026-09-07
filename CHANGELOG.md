@@ -17,6 +17,13 @@ rules for writing an entry live in
 
 - A push that fails now says why and what to do — a key that has not been added yet, a remote whose
   host key changed, or an https remote the key cannot apply to.
+- Commits the agent makes in a session are authored as you, instead of failing or falling back to
+  the machine's own identity.
+
+### Removed
+
+- GitHub CLI support and pull-request creation. The dev loop pushes the reviewed branch and you open
+  the pull request on your own git host; closing a request still recognises a squash or rebase merge.
 
 ## 0.2.3 — 2026-09-05
 

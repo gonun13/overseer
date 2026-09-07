@@ -192,6 +192,27 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     return summary;
   }
 
+  /**
+   * Also record the identity in the container's global git config.
+   *
+   * The env overrides above cover what *this server* runs. They do not reach
+   * the agent's own `git commit` inside a session, the console, or the dev
+   * loop — all of which are separate children that resolve identity for
+   * themselves. Writing `~/.gitconfig` covers those without threading
+   * overrides through every spawn point.
+   *
+   * This only works because `dropEmptyIdentityEnv` runs at boot: with an empty
+   * `GIT_AUTHOR_NAME` still inherited, git would ignore this file entirely.
+   *
+   * Written with `git config` rather than by hand so the rest of the file is
+   * preserved and the values are escaped by git itself.
+   */
+  async function setGlobalIdentity(identity: GitIdentity): Promise<void> {
+    const home = process.env.HOME ?? "/home/overseer";
+    await run(home, ["config", "--global", "user.name", identity.name]);
+    await run(home, ["config", "--global", "user.email", identity.email]);
+  }
+
   /** The `origin` URL, verbatim. Throws when there is no origin, which is an
    * ordinary state for a project the operator has not pushed anywhere. */
   async function remoteUrl(dir: string): Promise<{ stdout: string }> {
@@ -331,6 +352,7 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     revert,
     init,
     remoteUrl,
+    setGlobalIdentity,
   };
 }
 

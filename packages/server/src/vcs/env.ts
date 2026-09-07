@@ -17,6 +17,39 @@
  * rather than reading `user.name`: only that respects the real precedence.
  */
 
+/** The four variables git resolves an identity from, ahead of any config. */
+export const IDENTITY_VARS = [
+  "GIT_AUTHOR_NAME",
+  "GIT_AUTHOR_EMAIL",
+  "GIT_COMMITTER_NAME",
+  "GIT_COMMITTER_EMAIL",
+] as const;
+
+/**
+ * Drop identity variables that arrived empty, once, at boot.
+ *
+ * The compose files pass these through from the host as `${VAR:-}`, so on a
+ * host with no git identity they arrive as empty strings rather than absent.
+ * An empty one is worse than nothing: git prefers it over every config file
+ * and then fails with "empty ident name (for <>)", so a perfectly good
+ * `~/.gitconfig` or repository config is overridden by a value nobody set.
+ *
+ * Every child process inherits this environment — the agent's own sessions,
+ * the console, the dev loop — so removing them here is what lets a config file
+ * work at all for anything the server did not spawn with explicit overrides.
+ * A *non-empty* value is left alone: that is a host that meant it.
+ */
+export function dropEmptyIdentityEnv(env: NodeJS.ProcessEnv = process.env): string[] {
+  const dropped: string[] = [];
+  for (const name of IDENTITY_VARS) {
+    if (env[name] === "") {
+      delete env[name];
+      dropped.push(name);
+    }
+  }
+  return dropped;
+}
+
 /** The identity to fall back on when nobody has said who is committing. */
 export const FALLBACK_IDENTITY: GitIdentity = {
   name: "overseer",

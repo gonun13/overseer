@@ -7,6 +7,17 @@ import { listAdapters } from "./adapters.js";
 import { startTranscriptMonitor } from "./transcript-monitor.js";
 import { startUsageRefresh } from "./usage-refresh.js";
 import { startWorkspaceMonitor } from "./workspace-monitor.js";
+import { dropEmptyIdentityEnv } from "./vcs/env.js";
+
+// Before anything spawns a child: an empty GIT_AUTHOR_* inherited from the
+// host beats every git config file and then fails the commit outright. See
+// `vcs/env.ts`.
+const droppedIdentityVars = dropEmptyIdentityEnv();
+if (droppedIdentityVars.length > 0) {
+  console.error(
+    `overseer: ignoring empty ${droppedIdentityVars.join(", ")} from the environment`,
+  );
+}
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, "../../web/dist");
