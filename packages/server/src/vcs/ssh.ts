@@ -104,6 +104,20 @@ function defaultRun(
   });
 }
 
+/**
+ * The `SHA256:…` token out of ssh-keygen output, found by prefix rather than
+ * by column. The two commands that print one disagree about where it sits:
+ *
+ *   ssh-keygen -lf key.pub   →  256 SHA256:abc… overseer (ED25519)
+ *   ssh-keygen -F host -l …  →  github.com ED25519 SHA256:abc…
+ *
+ * Taking a fixed index reads the algorithm name as the fingerprint for the
+ * second one, which is exactly what it did before this existed.
+ */
+function hashToken(stdout: string): string | undefined {
+  return stdout.split(/\s+/).find((token) => token.startsWith("SHA256:"));
+}
+
 export function createGitSsh(deps: GitSshDeps = {}) {
   const run = deps.run ?? defaultRun;
   const dir = deps.sshDir ?? defaultSshDir();
@@ -168,8 +182,7 @@ export function createGitSsh(deps: GitSshDeps = {}) {
       KEYGEN_TIMEOUT_MS,
     );
     if (code !== 0) return "unknown";
-    // "256 SHA256:abc… comment (ED25519)" — the fingerprint is the useful half.
-    return stdout.trim().split(/\s+/)[1] ?? "unknown";
+    return hashToken(stdout) ?? "unknown";
   }
 
   async function generate(): Promise<
@@ -310,10 +323,7 @@ export function createGitSsh(deps: GitSshDeps = {}) {
       KEYGEN_TIMEOUT_MS,
     );
     if (code !== 0) return undefined;
-    const line = stdout
-      .split("\n")
-      .find((entry) => entry.includes("SHA256:"));
-    return line?.trim().split(/\s+/)[1];
+    return hashToken(stdout);
   }
 
   /**

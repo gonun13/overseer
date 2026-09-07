@@ -190,6 +190,33 @@ describe("git ssh connection test", () => {
     assert.match(result.message, /could not reach/);
   });
 
+  it("reads the host fingerprint out of ssh-keygen -F, not the algorithm name", async () => {
+    // The two ssh-keygen commands put the SHA256 token in different columns:
+    //   -lf key.pub  →  "256 SHA256:… overseer (ED25519)"
+    //   -F host -l   →  "github.com ED25519 SHA256:…"
+    // Indexing by column read "ED25519" as the fingerprint here.
+    const dir = await scratchDir();
+    const ssh = createGitSsh({
+      sshDir: dir,
+      run: scriptedRun((file, args) => {
+        if (file === "ssh") return { stderr: "Hi octocat!\n", code: 1 };
+        if (args[0] === "-F") {
+          return {
+            stdout:
+              "# Host github.com found: line 1 \ngithub.com ED25519 SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU\n",
+          };
+        }
+        return {};
+      }),
+    });
+
+    const result = await ssh.test("github.com");
+    assert.equal(
+      result.hostFingerprint,
+      "SHA256:+DiY3wvvV6TuJJhbpZisF/zLDA0zPMSvHdkr4UvCOqU",
+    );
+  });
+
   it("passes a non-default port through to ssh", async () => {
     const dir = await scratchDir();
     const run = scriptedRun((file) =>

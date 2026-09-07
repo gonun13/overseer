@@ -5,6 +5,19 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
 
+## 0.2.4 — 2026-09-07
+
+### Added
+
+- Settings has a git access section: generate an ssh key inside the container, copy its public half
+  to your git host, and test the connection against the hosts your own projects point at.
+- Set the name and email that commits made from here are authored under.
+
+### Fixed
+
+- A push that fails now says why and what to do — a key that has not been added yet, a remote whose
+  host key changed, or an https remote the key cannot apply to.
+
 ## 0.2.3 — 2026-09-05
 
 ### Added
