@@ -8,8 +8,8 @@ import { passWizardOpening, SETTLED } from "./shell";
  * wording, which changes every release.
  *
  * The running version has to be a heading in it: a bump that ships without a
- * section is exactly the omission the standing rule in CLAUDE.md exists to
- * prevent, and this is where it should fail.
+ * section is exactly the omission docs/architecture-design.md §8.3 step 3
+ * exists to prevent, and this is where it should fail.
  */
 const changelog = (page: import("@playwright/test").Page) =>
   page

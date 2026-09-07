@@ -3,7 +3,8 @@
  * operator-facing release notes the `changelog` window renders.
  *
  * Deliberately line-based rather than a markdown dependency: the file's shape
- * is fixed by CLAUDE.md § Changelog, and the window renders it as plain text.
+ * is fixed by docs/architecture-design.md §8.4, and the window renders it as
+ * plain text.
  * Nothing here throws — a malformed file yields fewer releases, never a blank
  * app.
  */

@@ -87,6 +87,29 @@ the source tree is bind-mounted and watched.
 | `./bin/loop <ws>`  | Open a dev-loop session on `workspace/<ws>`, inside the running stack        |
 | `./bin/reset`      | Tear down the dev stack and discard volumes, including agent auth            |
 
+The dev stack is three services: `deps` builds `protocol` and the adapters under `tsc --watch`,
+`server` runs `tsx watch`, and `web` runs Vite proxying `/api` and `/ws` to it. `./bin/test-e2e`
+brings up a fourth on its own.
+
+**Always install through `./bin/npm`** — never host `npm`. The tree is only ever read by Linux
+inside the container, and host `npm` writes native binaries for your own platform into it.
+`package-lock.json` is bind-mounted, so lockfile changes still land on the host to commit.
+
+To run one test file, invoke `tsx` directly in that package. Each workspace's `test` script is a
+glob (`tsx --test test/**/*.test.ts`), and arguments after `--` are *appended* to it rather than
+replacing it — so `./bin/npm test -- one.test.ts` runs the whole suite and then that file again:
+
+```sh
+./bin/sh                                    # a shell in the server container
+cd packages/server && npx tsx --test test/git-ssh.test.ts
+
+./bin/test-e2e tests/smoke.spec.ts          # e2e args do pass straight through
+```
+
+Design docs, which are the spec rather than a summary of it:
+[architecture](docs/architecture-design.md) (system, container, versioning) ·
+[UI](docs/ui-ux-design.md) · [behavior](docs/overseer-behavior.md) (the overseer's own voice).
+
 ## Features
 
 - **Overseer space** — ranks what needs attention and opens the surface it refers to.

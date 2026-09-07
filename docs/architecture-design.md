@@ -264,6 +264,19 @@ value after resume as a counter reset.
 
 ### 2.2 Git access
 
+**Every `git` the server runs goes through `packages/server/src/vcs/`.** Do not spawn `git`
+anywhere else. The module splits into `ops.ts` (on-demand operator operations, always fresh because
+someone is waiting), `probe.ts` (the cached, gated read behind the project list), `ssh.ts` (the key
+store below) and `env.ts` (commit identity). Before it existed the server spawned `git` from three
+unrelated places with three different runners, and nothing made a change to *how* git is invoked
+reach all of them.
+
+Two deliberate exceptions. `workspace.ts` stays outside: it owns `WORKSPACE_ROOT`,
+`isInsideWorkspace` and `scanWorkspace` — filesystem-containment concerns that happen to be asked
+about repositories — and its `readGitState` is a thin delegate to the probe. And the dev loop's
+`loop/bin/lib/git.sh` (§9) is a separate bash implementation carrying loop-specific concepts (the
+train, per-branch metadata); it is not a duplicate awaiting consolidation.
+
 Pushing and pulling need a credential the container does not otherwise have.
 It gets one ed25519 keypair, **generated in place** by the operator from
 settings › git access and written to `$HOME/.ssh` on the `agent-home` volume.
@@ -563,7 +576,7 @@ the tier already claimed by the current version.
 | `0.0.x`   | —               | Scaffold only: repo layout, container, no behavioral spec live. |
 | `0.1.x`   | [overseer-behavior.md](overseer-behavior.md) | **Overseer shell** — wizard phases (§4), progressive furniture (§4), internal memory (§6.2), `overseer-personality` (§6.3), workspace discovery, provider status surfacing via `getStatus()`. The overseer path uses real server state; other windows stay empty until live APIs land. |
 | `0.2.x`   | §1 (process model), §3 rows 1–2 + 5, §9 | **Live sessions & providers** — stream-json sessions that spawn, stream, resume and delete, for **two** real adapters (`claude-code`, `cursor`), each declaring its own `AdapterCapabilities`; session controls populated from the CLI's own report; runtime `set_model` and `set_permission_mode`; project creation into `/workspace`; the dev loop (§9) driven from inside the app. Approvals, capabilities, turn context and diffs are **not** in this tier — their windows exist and declare themselves unavailable. |
-| `0.3+`    | TBD             | Reserve the next MINOR for the next coherent pre-MVP tier once it is written into a design doc and listed under README [Status](../README.md#status). Do not invent a number in advance. |
+| `0.3+`    | TBD             | Reserve the next MINOR for the next coherent pre-MVP tier once it is written into a design doc and given a row in this table. Do not invent a number in advance. |
 | `1.0.0`   | §3 **MVP**      | **Core loop** — every row in the MVP table (§3) works end-to-end for `claude-code`: spawn/resume sessions, stream transcript + tools, inline approval, model/mode controls, subscription login from the UI, usage surfacing, crash/auth failure handling. |
 | `1.x`     | §3 **Important**| Additive features from the Important tier. Each MINOR should map to a closed subset of that table (call it out in release notes). |
 | `2.x+`    | §3 **Nice to have** + later providers | Major product expansion; breaking protocol or UX contract bumps MAJOR. |
@@ -579,8 +592,10 @@ empty frame that reads as a working-but-idle surface
 
 ### 8.3 Release checklist
 
-1. Walk the milestone table: does the product meet the ship bar for the target version?
-2. Update README [Status](../README.md#status) if the "in place" / "still missing" lists changed.
+1. Walk the milestone table (§8.2): does the product meet the ship bar for the target version?
+2. Update §8.2's row for the current tier if what is live, or what is still missing, changed. The
+   milestone table is where that is recorded — **not** the README, which carries no version or
+   status claims at all, so that it never disagrees with this document about what shipped.
 3. Open a `##` section for the new version at the top of [CHANGELOG.md](../CHANGELOG.md) and check
    that every operator-visible change since the last release has an entry under it (§8.4).
 4. Bump the same version in root and every `@overseer/*` `package.json`; sync `package-lock.json`
