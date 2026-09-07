@@ -38,8 +38,10 @@ import {
   clearSnapshot,
   readSnapshot,
   recordAction,
+  readGitIdentity,
   setActiveProjectPath,
   setAttachedProvider,
+  setGitIdentity,
   setTheme,
 } from "./memory/internal.js";
 import {
@@ -55,8 +57,8 @@ import {
 import { refreshPendingUsage } from "./usage-refresh.js";
 import { createProject } from "./project-create.js";
 import { subagents } from "./subagents.js";
-import { projectGit, type GitOpResult } from "./project-git.js";
-import { isInsideWorkspace } from "./workspace.js";
+import { gitSsh, parseRemoteHost, projectGit, type GitOpResult } from "./vcs/index.js";
+import { isInsideWorkspace, scanWorkspace } from "./workspace.js";
 
 /**
  * Any page in the browser can otherwise open a socket to localhost — check
@@ -222,6 +224,48 @@ export function attachWebSocketServer(httpServer: Server): {
       detail: result.ok ? detail : result.reason,
     });
   };
+
+  /**
+   * The whole `git access` section as one frame.
+   *
+   * The host list is derived from the remotes the workspace actually uses
+   * rather than a fixed set of public forges: a self-hosted GitLab on a
+   * non-default port is exactly the case an ssh key is most needed for, and a
+   * hardcoded github/gitlab menu would never offer it. Only ssh remotes
+   * contribute — an https one cannot use the key at all.
+   */
+  const readGitAccess = async (): Promise<ServerMessage> => {
+    const [state, identity, scan] = await Promise.all([
+      gitSsh.status(),
+      readGitIdentity(),
+      scanWorkspace(undefined, { git: false }),
+    ]);
+
+    const seen = new Map<string, { host: string; port?: number }>();
+    await Promise.all(
+      scan.projects.map(async (project) => {
+        try {
+          const { stdout } = await projectGit.remoteUrl(project.path);
+          const parsed = parseRemoteHost(stdout);
+          if (parsed) seen.set(`${parsed.host}:${parsed.port ?? ""}`, parsed);
+        } catch {
+          // A project with no origin is ordinary, not an error.
+        }
+      }),
+    );
+
+    return {
+      type: "git.access.state",
+      ...(state.key ? { key: state.key } : {}),
+      permissionsOk: state.permissionsOk,
+      ...(identity ? { identity } : {}),
+      hosts: [...seen.values()].sort((a, b) => a.host.localeCompare(b.host)),
+    };
+  };
+
+  /** A key appearing or disappearing is machine state every tab must see —
+   * the same reasoning the auth frames are broadcast under. */
+  const announceGitAccess = async () => broadcast(await readGitAccess());
 
   httpServer.on("upgrade", (req: IncomingMessage, socket, head) => {
     if (
@@ -554,6 +598,87 @@ export function attachWebSocketServer(httpServer: Server): {
             return;
           }
           send({ type: "project.git.reverted", path: parsed.path });
+          return;
+        }
+        case "git.access.read": {
+          send(await readGitAccess());
+          return;
+        }
+        case "git.ssh.generate": {
+          const result = await gitSsh.generate();
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "git.ssh.generate",
+              benign: true,
+              message: result.reason,
+            });
+            return;
+          }
+          // The fingerprint identifies the key; the key itself is never
+          // logged, and there is no path that could read it back.
+          const fingerprint = result.state.key?.fingerprint ?? "unknown";
+          void recordAction({
+            actor: "operator",
+            action: "git:ssh-generate",
+            outcome: "ok",
+            detail: fingerprint,
+          });
+          broadcast({
+            type: "overseer.step",
+            id: randomUUID(),
+            label: "generated an ssh key",
+            outcome: "ok",
+            detail: fingerprint,
+          });
+          await announceGitAccess();
+          return;
+        }
+        case "git.ssh.remove": {
+          await gitSsh.remove();
+          void recordAction({
+            actor: "operator",
+            action: "git:ssh-remove",
+            outcome: "ok",
+            detail: "ssh key removed",
+          });
+          broadcast({
+            type: "overseer.step",
+            id: randomUUID(),
+            label: "removed the ssh key",
+            outcome: "ok",
+            detail: "pushes will need a new one",
+          });
+          await announceGitAccess();
+          return;
+        }
+        case "git.ssh.test": {
+          // A probe, not a change: recorded, but it earns no step and the
+          // result goes only to the tab that asked.
+          const result = await gitSsh.test(parsed.host, parsed.port);
+          void recordAction({
+            actor: "operator",
+            action: "git:ssh-test",
+            outcome: result.ok ? "ok" : "blocked",
+            detail: `${parsed.host} · ${result.message}`,
+          });
+          send({ type: "git.ssh.test.result", ...result });
+          return;
+        }
+        case "git.identity.set": {
+          await setGitIdentity(parsed.name, parsed.email);
+          // Also into the container's global git config, so the agent's own
+          // commits inside a session carry it too — those are separate child
+          // processes that resolve identity for themselves.
+          try {
+            await projectGit.setGlobalIdentity({
+              name: parsed.name,
+              email: parsed.email,
+            });
+          } catch (error) {
+            console.error("overseer: could not write the global git identity", error);
+          }
+          await announceGitAccess();
           return;
         }
         case "theme.select": {

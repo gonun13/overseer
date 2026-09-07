@@ -40,7 +40,7 @@ and a "tidier" branch name is simply wrong.
 1. **Do not run a git command that writes.** No `add`, `commit`, `push`,
    `branch`, `checkout`, `switch`, `stash`, `merge`, `rebase`, `reset`, `tag`.
    A message you write is not a commit you make. Bash commits, pushes and
-   opens the pull request, so that the verbs nobody can undo stay somewhere
+   pushes the branch, so that the verbs nobody can undo stay somewhere
    deterministic.
 2. **Read the repository freely.** These are the ones you want, and they are
    how you write a message worth reading:
@@ -50,10 +50,10 @@ and a "tidier" branch name is simply wrong.
    - `git -C <workspace_dir> log --oneline -10`
    Read the actual diff. A message written only from the implement record
    describes what was planned, not what was written.
-3. **Do not use `gh`, and do not push.** The branch stays on this machine until
+3. **Do not push.** The branch stays on this machine until
    a human has reviewed it and approved it; `loop/bin/publish` opens the pull
    request then. You write the title and body it will use — writing them is
-   free, opening the pull request is what is public.
+   free, pushing is what is public.
 4. **Change no file under `workspace_dir`**, and write nothing anywhere except
    `output_file`.
 5. **Write for a stranger.** No tracer ids, no phase numbers, no request id, no
@@ -80,7 +80,7 @@ and a "tidier" branch name is simply wrong.
 Reminder before you write: one Write to `output_file` only — no code fences, no
 commentary before or after. Every `{{…}}` is a value from the step context;
 substitute it verbatim, `branch` and `base_branch` included. Still no git that
-writes, still no `gh`, still nothing edited under `workspace_dir`.
+writes, still no push, still nothing edited under `workspace_dir`.
 
 The two `##` sections below are parsed by `loop/bin/land` — the commit message
 and the pull-request body are taken from them literally. Keep the headings

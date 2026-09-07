@@ -12,7 +12,7 @@ import {
   personalityDir,
 } from "./memory/personality/api.js";
 import { closeWatcher, watchWithRetry } from "./fs-watch.js";
-import { gitProbe, type ProbeEvent } from "./git-probe.js";
+import { gitProbe, type ProbeEvent } from "./vcs/index.js";
 import { WORKSPACE_ROOT, scanWorkspace } from "./workspace.js";
 
 type Broadcast = (message: ServerMessage) => void;

@@ -4,7 +4,7 @@ import type {
   DiscoveredProject,
   UntrackedFolder,
 } from "@overseer/protocol";
-import { gitProbe } from "./git-probe.js";
+import { gitProbe } from "./vcs/index.js";
 
 /**
  * The workspace root — the only surface shared with the host. A deployment

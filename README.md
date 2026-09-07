@@ -105,6 +105,8 @@ the source tree is bind-mounted and watched.
 - **Dev loop tool, in-app** — `/loop` runs the dev loop in a console window.
 - **Inline approvals** — permission requests are answered right in the session that
   raised them.
+- **Git over ssh** — generate a key in settings, add its public half to your git host,
+  and push from the app or the agent. Works with any host, self-hosted included.
 - **Theme support** — samaritan (default) and machine already included.
 - And much more to come...
 

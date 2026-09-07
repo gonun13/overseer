@@ -51,6 +51,14 @@ export interface DiscoveryController extends WizardState {
   }) => void;
   /** Persist the theme into internal memory. */
   selectTheme: (theme: OverseerTheme) => void;
+  /** Make the container's ssh keypair. Refused if one already exists. */
+  generateGitKey: () => void;
+  /** Delete the keypair. `known_hosts` is kept. */
+  removeGitKey: () => void;
+  /** Authenticate against one host to prove the key was added there. */
+  testGitKey: (host: string, port?: number) => void;
+  /** The name and email the app's own commits are authored under. */
+  saveGitIdentity: (name: string, email: string) => void;
   /** Attach a provider from the picker (auth is a separate later step). */
   connectProvider: (id: string) => void;
   /** Start (or join) the provider's login. The URL comes back over the socket. */
@@ -210,6 +218,31 @@ export function useDiscovery(): DiscoveryController {
         dispatch({ type: "theme.selected", theme: message.theme });
         return;
       }
+      if (message.type === "git.access.state") {
+        dispatch({
+          type: "git.access",
+          state: {
+            ...(message.key ? { key: message.key } : {}),
+            permissionsOk: message.permissionsOk,
+            ...(message.identity ? { identity: message.identity } : {}),
+            hosts: message.hosts,
+          },
+        });
+        return;
+      }
+      if (message.type === "git.ssh.test.result") {
+        dispatch({
+          type: "git.ssh.tested",
+          host: message.host,
+          ok: message.ok,
+          message: message.message,
+          ...(message.account !== undefined ? { account: message.account } : {}),
+          ...(message.hostFingerprint !== undefined
+            ? { hostFingerprint: message.hostFingerprint }
+            : {}),
+        });
+        return;
+      }
       if (message.type === "provider.connected") {
         dispatch({ type: "provider.connected", id: message.id });
         return;
@@ -364,6 +397,35 @@ export function useDiscovery(): DiscoveryController {
     [send],
   );
 
+  const generateGitKey = useCallback(() => {
+    send({ type: "git.ssh.generate" });
+  }, [send]);
+
+  const removeGitKey = useCallback(() => {
+    send({ type: "git.ssh.remove" });
+  }, [send]);
+
+  const testGitKey = useCallback(
+    (host: string, port?: number) => {
+      // Marked working locally: the result frame is the only thing that ends
+      // it, and the operator should see the attempt start.
+      dispatch({ type: "git.ssh.testing", host });
+      send({
+        type: "git.ssh.test",
+        host,
+        ...(port !== undefined ? { port } : {}),
+      });
+    },
+    [send],
+  );
+
+  const saveGitIdentity = useCallback(
+    (name: string, email: string) => {
+      send({ type: "git.identity.set", name, email });
+    },
+    [send],
+  );
+
   const connectProvider = useCallback(
     (id: string) => {
       dispatch({ type: "provider.connected", id });
@@ -459,6 +521,9 @@ export function useDiscovery(): DiscoveryController {
     if (phase !== "discovery" || !connected) return;
     const request: ClientMessage = { type: "discovery.run" };
     send(request);
+    // Settings can be opened at any moment after this, and the git access
+    // section must not have to guess between "no key" and "not asked yet".
+    send({ type: "git.access.read" });
     // Guarded so a re-render mid-pass cannot fire a second request; the server
     // refuses concurrent passes anyway, but this keeps it from having to.
   }, [phase, connected, send]);
@@ -475,6 +540,10 @@ export function useDiscovery(): DiscoveryController {
       selectProject,
       createProject,
       selectTheme,
+      generateGitKey,
+      removeGitKey,
+      testGitKey,
+      saveGitIdentity,
       connectProvider,
       startLogin,
       submitAuthCode,
@@ -496,6 +565,10 @@ export function useDiscovery(): DiscoveryController {
       selectProject,
       createProject,
       selectTheme,
+      generateGitKey,
+      removeGitKey,
+      testGitKey,
+      saveGitIdentity,
       connectProvider,
       startLogin,
       submitAuthCode,

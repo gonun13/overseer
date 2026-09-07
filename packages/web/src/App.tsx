@@ -683,6 +683,12 @@ export default function App() {
             if (shell.provider.name) wizard.signOut(shell.provider.name);
           }}
           onResetOverseer={startReset}
+          gitAccess={wizard.gitAccess}
+          gitTest={wizard.gitSshTest}
+          onGenerateGitKey={wizard.generateGitKey}
+          onRemoveGitKey={wizard.removeGitKey}
+          onTestGitKey={wizard.testGitKey}
+          onSaveGitIdentity={wizard.saveGitIdentity}
         />
       </div>
 

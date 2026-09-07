@@ -87,10 +87,8 @@ if [ "$as_json" -eq 1 ]; then
     IFS=$'\t' read -r branch id base state <<<"$row"
     [ -z "$want_id" ] || [ "$want_id" = "$id" ] || continue
     jq -nc --arg r "$id" --arg b "$branch" --arg base "$base" \
-      --arg pr "$(git_branch_meta "$repo" "$branch" "$LOOP_GIT_KEY_PR")" \
       --arg state "$state" --argjson tip "$([ "$branch" = "$tip" ] && echo true || echo false)" \
-      '{request:$r, branch:$b, base:$base,
-        pr:(if $pr == "" then null else $pr end), state:$state, tip:$tip}'
+      '{request:$r, branch:$b, base:$base, state:$state, tip:$tip}'
   done | jq -s --arg tip "$tip" '{tip:$tip, branches:.}'
   exit 0
 fi
@@ -105,12 +103,11 @@ for row in "${rows[@]}"; do
   IFS=$'\t' read -r branch id base state <<<"$row"
   [ -z "$want_id" ] || [ "$want_id" = "$id" ] || continue
   if [ "$found" -eq 0 ]; then
-    printf '%-32s %-44s %-24s %-8s %s\n' REQUEST BRANCH BASE STATE PR
+    printf '%-32s %-44s %-24s %s\n' REQUEST BRANCH BASE STATE
   fi
   found=1
-  pr=$(git_branch_meta "$repo" "$branch" "$LOOP_GIT_KEY_PR")
-  printf '%-32s %-44s %-24s %-8s %s\n' \
-    "$id" "$branch$([ "$branch" = "$tip" ] && printf ' *')" "$base" "$state" "${pr:--}"
+  printf '%-32s %-44s %-24s %s\n' \
+    "$id" "$branch$([ "$branch" = "$tip" ] && printf ' *')" "$base" "$state"
 done
 
 [ "$found" -eq 1 ] || { log_info "no branch tracked for ${want_id:-that request}"; exit 0; }

@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import { createProjectGit } from "../src/project-git.js";
+import { createProjectGit } from "../src/vcs/ops.js";
 
 type Response = { stdout: string; stderr?: string } | Error;
 
@@ -21,6 +21,11 @@ function scriptedRun(responses: Response[]) {
   return run;
 }
 
+/** No identity configured in settings — the default for every test that is
+ * not specifically about the operator's own identity. Injected rather than
+ * left to the real reader so the suite never touches internal memory. */
+const noIdentity = async () => undefined;
+
 describe("projectGit.status", () => {
   it("parses branch, ahead/behind, remote presence, and file statuses", async () => {
     const run = scriptedRun([
@@ -35,7 +40,7 @@ describe("projectGit.status", () => {
       },
       { stdout: "origin\n" },
     ]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.status("/workspace/demo");
 
@@ -57,7 +62,7 @@ describe("projectGit.status", () => {
 
   it("reports a clean repo with no remote and no ahead/behind", async () => {
     const run = scriptedRun([{ stdout: "## main\n" }, { stdout: "" }]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.status("/workspace/demo");
 
@@ -73,7 +78,7 @@ describe("projectGit.status", () => {
 describe("projectGit.commit", () => {
   it("refuses when there is nothing to commit, without running add/commit", async () => {
     const run = scriptedRun([{ stdout: "" }]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.commit("/workspace/demo", "message");
 
@@ -92,7 +97,7 @@ describe("projectGit.commit", () => {
       { stdout: "Me <me@example.com> 1700000000 +0000\n" }, // var GIT_AUTHOR_IDENT
       { stdout: "" }, // commit
     ]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.commit("/workspace/demo", "fix things");
 
@@ -113,7 +118,7 @@ describe("projectGit.commit", () => {
       new Error("fatal: empty ident name (for <>) not allowed"), // var GIT_AUTHOR_IDENT
       { stdout: "" }, // commit
     ]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.commit("/workspace/demo", "fix things");
 
@@ -126,6 +131,90 @@ describe("projectGit.commit", () => {
       GIT_COMMITTER_EMAIL: "overseer@localhost",
     });
   });
+
+  it("prefers the operator's configured identity over the repository's own", async () => {
+    // The third branch, and the reason the other two are not enough: an
+    // identity set in settings has to beat both the repo config *and* the
+    // empty GIT_AUTHOR_* the compose files pass in, so it is applied
+    // unconditionally and `git var` is never consulted.
+    const run = scriptedRun([
+      { stdout: " M src/app.ts\n" }, // status --porcelain
+      { stdout: "" }, // add -A
+      { stdout: "" }, // commit
+    ]);
+    const projectGit = createProjectGit({
+      run,
+      readIdentity: async () => ({ name: "Nuno", email: "ada@example.com" }),
+    });
+
+    const result = await projectGit.commit("/workspace/demo", "fix things");
+
+    assert.deepEqual(result, { ok: true });
+    // No `git var GIT_AUTHOR_IDENT` probe: there is nothing it could change.
+    assert.deepEqual(run.mock.calls[2]?.arguments[1], ["commit", "-m", "fix things"]);
+    assert.deepEqual(run.mock.calls[2]?.arguments[2], {
+      GIT_AUTHOR_NAME: "Nuno",
+      GIT_AUTHOR_EMAIL: "ada@example.com",
+      GIT_COMMITTER_NAME: "Nuno",
+      GIT_COMMITTER_EMAIL: "ada@example.com",
+    });
+  });
+});
+
+describe("projectGit.push failure messages", () => {
+  const pushFailing = (stderr: string, origin = "git@github.com:o/r.git") => {
+    const responses: Response[] = [
+      { stdout: "## main...origin/main\n" }, // status --porcelain --branch
+      { stdout: "origin\n" }, // remote
+      Object.assign(new Error("Command failed"), { stderr }), // push
+      { stdout: `${origin}\n` }, // remote get-url origin
+    ];
+    const run = scriptedRun(responses);
+    return createProjectGit({ run, readIdentity: noIdentity });
+  };
+
+  it("points a refused key at the settings panel that makes one", async () => {
+    const result = await pushFailing(
+      "git@github.com: Permission denied (publickey).\nfatal: Could not read from remote repository.\n",
+    ).push("/workspace/demo");
+
+    assert.equal(result.ok, false);
+    assert.match(
+      (result as { reason: string }).reason,
+      /no ssh key is set up for this remote — add one in settings/,
+    );
+  });
+
+  it("says an https remote cannot use the key at all", async () => {
+    // Otherwise the most confusing possible outcome: the key is set up
+    // correctly and simply is not consulted.
+    const result = await pushFailing(
+      "fatal: Could not read from remote repository.\n",
+      "https://github.com/o/r.git",
+    ).push("/workspace/demo");
+
+    assert.equal(result.ok, false);
+    assert.match((result as { reason: string }).reason, /uses https/);
+  });
+
+  it("names a changed host key", async () => {
+    const result = await pushFailing(
+      "@@@ WARNING @@@\nHost key verification failed.\n",
+    ).push("/workspace/demo");
+
+    assert.equal(result.ok, false);
+    assert.match((result as { reason: string }).reason, /host key changed/);
+  });
+
+  it("passes an unrelated failure through untouched", async () => {
+    const result = await pushFailing(
+      "error: failed to push some refs\n",
+    ).push("/workspace/demo");
+
+    assert.equal(result.ok, false);
+    assert.match((result as { reason: string }).reason, /failed to push some refs/);
+    assert.doesNotMatch((result as { reason: string }).reason, /settings/);
+  });
 });
 
 describe("projectGit.push", () => {
@@ -135,7 +224,7 @@ describe("projectGit.push", () => {
       { stdout: "origin\n" }, // remote
       { stdout: "" }, // push
     ]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.push("/workspace/demo");
 
@@ -154,7 +243,7 @@ describe("projectGit.push", () => {
       { stdout: "" },
       new Error("could not resolve host"),
     ]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.push("/workspace/demo");
 
@@ -168,7 +257,7 @@ describe("projectGit.defaultBranch", () => {
     const run = scriptedRun([
       { stdout: "refs/remotes/origin/trunk\n" }, // symbolic-ref origin/HEAD
     ]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.defaultBranch("/workspace/demo");
 
@@ -181,7 +270,7 @@ describe("projectGit.defaultBranch", () => {
       new Error("fatal: ref refs/remotes/origin/HEAD is not a symbolic ref"),
       { stdout: "develop\nmain\n" }, // branch --format
     ]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.defaultBranch("/workspace/demo");
 
@@ -193,7 +282,7 @@ describe("projectGit.defaultBranch", () => {
       new Error("fatal: ref refs/remotes/origin/HEAD is not a symbolic ref"),
       { stdout: "develop\nmaster\n" },
     ]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.defaultBranch("/workspace/demo");
 
@@ -206,7 +295,7 @@ describe("projectGit.defaultBranch", () => {
       { stdout: "develop\nfeature-x\n" },
       { stdout: "feature-x\n" }, // branch --show-current
     ]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.defaultBranch("/workspace/demo");
 
@@ -220,7 +309,7 @@ describe("projectGit.mergeToDefault", () => {
       { stdout: "## feature-x\n" }, // status --branch
       { stdout: "origin\n" }, // remote
     ]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.mergeToDefault("/workspace/demo");
 
@@ -238,7 +327,7 @@ describe("projectGit.mergeToDefault", () => {
       new Error("fatal: ref refs/remotes/origin/HEAD is not a symbolic ref"),
       { stdout: "main\n" }, // branch --format
     ]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.mergeToDefault("/workspace/demo");
 
@@ -259,7 +348,7 @@ describe("projectGit.mergeToDefault", () => {
       { stdout: "Me <me@example.com> 1700000000 +0000\n" }, // var GIT_AUTHOR_IDENT
       { stdout: "" }, // merge --no-ff feature-x
     ]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.mergeToDefault("/workspace/demo");
 
@@ -283,7 +372,7 @@ describe("projectGit.mergeToDefault", () => {
       { stdout: "Me <me@example.com> 1700000000 +0000\n" }, // var GIT_AUTHOR_IDENT
       { stdout: "" }, // merge --no-ff feature-x
     ]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.mergeToDefault("/workspace/demo");
 
@@ -304,7 +393,7 @@ describe("projectGit.mergeToDefault", () => {
       new Error("fatal: empty ident name (for <>) not allowed"), // var GIT_AUTHOR_IDENT
       { stdout: "" }, // merge --no-ff feature-x
     ]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.mergeToDefault("/workspace/demo");
 
@@ -328,7 +417,7 @@ describe("projectGit.mergeToDefault", () => {
       new Error("CONFLICT (content): Merge conflict in src/app.ts"),
       { stdout: "" }, // merge --abort
     ]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.mergeToDefault("/workspace/demo");
 
@@ -341,7 +430,7 @@ describe("projectGit.mergeToDefault", () => {
 describe("projectGit.revert", () => {
   it("resets and cleans the worktree", async () => {
     const run = scriptedRun([{ stdout: "" }, { stdout: "" }]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.revert("/workspace/demo");
 
@@ -358,7 +447,7 @@ describe("projectGit.revert", () => {
     const run = scriptedRun([
       new Error("fatal: ambiguous argument 'HEAD': unknown revision"),
     ]);
-    const projectGit = createProjectGit({ run });
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.revert("/workspace/demo");
 

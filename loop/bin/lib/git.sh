@@ -12,7 +12,6 @@
 #
 #   branch.<branch>.looprequest   the request id that owns this branch
 #   branch.<branch>.loopbase      what it was cut from (a branch, or origin/<default>)
-#   branch.<branch>.looppr        the PR url (written by loop/bin/land)
 #
 # That is a linked list, and the list *is* the train:
 #   origin/main <- feature/a <- hotfix/b <- change/c
@@ -31,7 +30,6 @@
 
 LOOP_GIT_KEY_REQUEST=looprequest
 LOOP_GIT_KEY_BASE=loopbase
-LOOP_GIT_KEY_PR=looppr
 
 # git_ws <repo> <args…> — git, in that repo. Every call goes through here so
 # no caller has to remember -C, and so a `cd` can never leak between them.
@@ -178,13 +176,13 @@ git_set_branch_meta() {
   git_ws "$1" config --local "branch.$2.$3" "$4"
 }
 
-# git_unset_branch_meta <repo> <branch> — drop all three loop keys. This is how
+# git_unset_branch_meta <repo> <branch> — drop both loop keys. This is how
 # a request leaves the train: `loop/bin/close` calls it, and from then on the
 # branch is invisible to git_train_rows. Keeping the "is it closed?" question
 # out of this file is what lets it stay pure git — it never reads index.jsonl.
 git_unset_branch_meta() {
   local repo=$1 branch=$2 key
-  for key in "$LOOP_GIT_KEY_REQUEST" "$LOOP_GIT_KEY_BASE" "$LOOP_GIT_KEY_PR"; do
+  for key in "$LOOP_GIT_KEY_REQUEST" "$LOOP_GIT_KEY_BASE"; do
     git_ws "$repo" config --local --unset "branch.$branch.$key" 2>/dev/null || true
   done
 }
@@ -197,6 +195,32 @@ git_unset_branch_meta() {
 # is why loop/bin/close does not treat this as the sole authority.
 git_branch_landed() {
   git_ws "$1" merge-base --is-ancestor "$2" "$3" 2>/dev/null
+}
+
+# git_branch_absorbed <repo> <branch> <default-ref> — 0 when merging that
+# branch into the default ref would change nothing, i.e. every one of its
+# patches is already upstream however the forge chose to apply them.
+#
+# This is the squash/rebase answer. `git_branch_landed` above is ancestry, and
+# ancestry is only ever true for a real merge commit — a squash collapses the
+# commits into a new one and a rebase rewrites them, so the branch is never an
+# ancestor however genuinely merged it is. Refusing to close on that basis
+# alone would strand every request merged the way most projects merge.
+#
+# The test is a merge performed in memory: `merge-tree --write-tree` prints the
+# tree that merging would produce, and if that equals the default ref's own
+# tree then the branch contributes nothing. This replaces an earlier
+# `gh pr view --json mergedAt` check, and is strictly better than it — it is
+# git rather than one forge's API, so it answers for a self-hosted GitLab or a
+# bare remote just as well as for GitHub, and it needs no credentials.
+#
+# A conflicting merge exits non-zero and is correctly reported as not absorbed:
+# work that will not merge cleanly has certainly not landed.
+git_branch_absorbed() {
+  local repo=$1 branch=$2 default_ref=$3 merged base
+  merged=$(git_ws "$repo" merge-tree --write-tree "$default_ref" "$branch" 2>/dev/null) || return 1
+  base=$(git_ws "$repo" rev-parse "$default_ref^{tree}" 2>/dev/null) || return 1
+  [ -n "$merged" ] && [ "$merged" = "$base" ]
 }
 
 # git_request_branch <repo> <id> — the branch that request owns, or empty.
@@ -454,17 +478,12 @@ $(git_dirty_paths "$repo" | sed 's/^/  /')" 5
 # exactly the presence-only hole the whole compare-don't-count rule exists to
 # close.
 git_derived_value() {
-  local repo=$1 id=$2 key=$3 branch value
+  local repo=$1 id=$2 key=$3 branch
   branch=$(git_request_branch "$repo" "$id")
   [ -n "$branch" ] || die "no branch recorded for $id — it has not taken the working tree yet" 1
   case "$key" in
     branch)      printf '%s' "$branch" ;;
     base_branch) printf '%s' "$(git_base_ref "$repo" "$branch")" ;;
-    pr_url)
-      value=$(git_branch_meta "$repo" "$branch" "$LOOP_GIT_KEY_PR")
-      [ -n "$value" ] || die "no pull request recorded for $id — $LOOP_BIN_DIR/land opens it" 1
-      printf '%s' "$value"
-      ;;
     *) die "unknown git-derived frontmatter key: $key" 1 ;;
   esac
 }

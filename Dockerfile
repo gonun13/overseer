@@ -2,7 +2,7 @@
 
 # Node and the Docker client come in as pinned artefacts, not as the base
 # image. This container is an agent host, not a Node service: it carries a bash
-# toolchain, git, gh, the Docker client, and several provider CLIs with three
+# toolchain, git, the Docker client, and several provider CLIs with three
 # different runtimes between them (npm globals, a self-contained bundle with its
 # own node, and whatever the next one ships). Node is one of those runtimes.
 ARG NODE_IMAGE=node:24-trixie-slim
@@ -15,7 +15,7 @@ FROM ${DOCKER_CLI_IMAGE} AS dockercli
 FROM debian:trixie-slim AS base
 
 # git, ripgrep: the provider CLIs shell out to both.
-# curl: script-based CLI installs (Cursor) and the pinned gh .deb.
+# curl: script-based CLI installs (Cursor).
 # python3/make/g++: node-pty (the raw OPEN CONSOLE PTY) is a native module.
 #   The runtime stage purges them again after its own `npm ci`.
 # tzdata: IANA zones for TZ=… from .env, so provider CLIs format reset times in
@@ -44,17 +44,6 @@ COPY --from=nodedist /usr/local /usr/local
 COPY --from=dockercli /usr/local/bin/docker /usr/local/bin/docker
 COPY --from=dockercli /usr/local/libexec/docker/cli-plugins/docker-compose \
                       /usr/local/libexec/docker/cli-plugins/docker-compose
-
-# gh, pinned. The loop's `publish` and `close --merge` use it; the app has no
-# wiring for it yet. A release .deb rather than GitHub's apt repo, for the same
-# reason node comes from an image: one pinned artefact, no keyring to manage.
-ARG GH_VERSION=2.98.0
-RUN arch="$(dpkg --print-architecture)" \
-    && curl -fsSL -o /tmp/gh.deb \
-         "https://github.com/cli/cli/releases/download/v${GH_VERSION}/gh_${GH_VERSION}_linux_${arch}.deb" \
-    && dpkg -i /tmp/gh.deb \
-    && rm -f /tmp/gh.deb \
-    && gh --version
 
 # The user runs as the host's uid so bind mounts are writable and git does not
 # refuse the workspace as dubiously owned. ./bin/_lib.sh fills these from

@@ -287,3 +287,19 @@
   color: var(--ink-dim);
 }
 
+
+/* The public half of the ssh key. A textarea rather than a one-line input so
+   the whole value is visible at once — the operator's next move is to copy all
+   of it into a form on their git host, and a value they cannot see in full is
+   one they cannot check they pasted correctly. Wrapping on any character
+   because a key is one unbroken token. */
+.w-key {
+  display: block;
+  width: 100%;
+  margin: 4px 0 8px;
+  resize: vertical;
+  font-family: inherit;
+  font-size: 10px;
+  line-height: 1.4;
+  overflow-wrap: anywhere;
+}

@@ -6,7 +6,7 @@ the human at this terminal, then their decision — recorded, not made by you.
 Exactly one review record.
 
 **Nothing about this request is public yet, and this step does not make it so.**
-The branch has not been pushed and there is no pull request. `loop/bin/publish`
+The branch has not been pushed anywhere. `loop/bin/publish`
 opens one *after* this record says the human approved the work — which is what
 makes this review the gate rather than a formality after the fact. A rejected
 review pushes nothing at all.
@@ -67,8 +67,8 @@ LOOP_SIGNOFF_EOF
 1. **Change nothing, anywhere.** Not the project, not the worktree, not a
    dependency, not a config. The worktree is a read-only copy; a fix made in it
    goes nowhere and confuses the next person who looks.
-2. **Do not run a git command that writes**, in either tree, and **do not use
-   `gh` at all**. Do not push. Pushing and opening the pull request are
+2. **Do not run a git command that writes**, in either tree. Reading is fine —
+   that is most of the job. Do not push: pushing the branch is
    `loop/bin/publish`'s job, and it runs after this record exists and only if
    it says the work was approved — that ordering is the whole point.
 3. **Do not decide the outcome.** `outcome` transcribes what the human said in
@@ -149,12 +149,12 @@ Put the outcome to them as a choice:
 
 | `outcome` | What it means |
 |---|---|
-| `approved` | push it and open the pull request, as it stands |
+| `approved` | push it, as it stands |
 | `followups` | the same, and open the findings as new requests |
 | `rejected` | publish nothing. The branch stays local and stays in the train, and the findings are opened as requests cut off it. |
 
 Say plainly which one they are choosing: `approved` and `followups` are what
-put this work on GitHub, `rejected` keeps it on this machine.
+put this work on your git host, `rejected` keeps it on this machine.
 
 Then, for every audit finding and every QA problem worth its own request,
 propose it and let them approve or drop each one. For each approved one:
@@ -194,7 +194,7 @@ Reminder before you write: one Write to `output_file` only — no code fences, n
 commentary before or after. Every `{{…}}` is a value from the step context;
 substitute it verbatim. `outcome` is the human's, not yours — copy it from
 `inputs.signoff_file`. `findings` is `none`, or a count with its severity
-breakdown. Still nothing edited, still no `gh`, still no fix applied.
+breakdown. Still nothing edited, still no push, still no fix applied.
 
 **Write telegraphically.** Every line is a fragment, not a sentence.
 

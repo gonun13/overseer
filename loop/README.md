@@ -32,15 +32,16 @@ host terminal too.
 
 - `<workspace-name>` must already exist as a directory under `workspace/`.
 - Prereqs: Docker, and the active provider's CLI signed in. Everything else the
-  loop needs — `jq`, `flock`, `git`, `gh`, the provider CLIs — is in the image.
+  loop needs — `jq`, `flock`, `git`, the provider CLIs — is in the image.
   Sign in once, from either the app or here; they share the auth volume.
 - An interactive terminal is required — the overseer needs to talk to you.
 - One overseer per workspace at a time. `loop/run` takes a session lease so a
   second terminal is told who holds it rather than racing; `loop/bin/list`
   shows it too.
-- `loop/bin/publish` pushes and opens a pull request, which needs a GitHub
-  token the container does not have by default. `land` commits locally and
-  nothing leaves the machine; set `GH_TOKEN` in `.env` to change that.
+- `loop/bin/publish` pushes the branch to origin, which needs an ssh key the
+  container does not have by default. `land` commits locally and nothing leaves
+  the machine; generate a key in settings › git access to change that. Opening
+  the pull request is yours to do, on whichever forge the remote lives on.
 
 Anything under `loop/bin/` can be run the same way — `./bin/loop list personal`
 reads what is open without starting a session.
@@ -84,11 +85,11 @@ loop/bin/check
 | `tracers` | That request's tracers, from its plan, with the phase they belong to, whether the plan declared them parallel, and their status from the implement record's ledger. `--next` prints just the group to implement next, comma-separated and ready for `step --tracer`; `--last` prints the group the implement record says was actually built, which is what `verify` checks and what a rework redoes. Read-only, and the only place plan markdown is parsed. |
 | `stint` | Reports who holds the stint, how far through the current lap of the cycle they are, and which tracers are pending. `--release` hands the stint back — an administrative hatch for a human cleaning up outside a session, refused while the holder still has pending tracers unless `--force`, and never a statement that a run was good. Changes nothing else — no artifact, no status, no `index.jsonl` line. |
 | `land` | The irreversible half of `commit`, run after `record`: stages everything, commits it to the request's branch with the message the commit record carries, appends a `landed` event, and releases the stint. **Local only** — nothing is pushed. Skipped when it has already happened, so an interrupted run is retried by running it again. |
-| `publish` | Pushes the branch and opens the pull request, using the title and body the commit record carries. Refused until a recorded `review` says the human approved the work. This is the first moment anything about a request leaves the machine, and the only command that makes it public. Requires `gh`. |
-| `train` | The stacked branches this workspace's requests own — each one's base, its pull request, whether it has landed, and which is the tip a new request would be cut from. Read-only, and the only place branch metadata is read outside the libs. |
+| `publish` | Pushes the branch to origin and prints the title the commit record carries, for the pull request you open yourself. Refused until a recorded `review` says the human approved the work. This is the first moment anything about a request leaves the machine, and the only command that makes it public. |
+| `train` | The stacked branches this workspace's requests own — each one's base, whether it has landed, and which is the tip a new request would be cut from. Read-only, and the only place branch metadata is read outside the libs. |
 | `worktree` | Stands up, tears down, or locates the throwaway checkout a `review` is QA'd in — detached at that request's branch, under `db/<slug>/worktrees/<id>/`. `--create` is idempotent, so a review abandoned mid-way costs the next one nothing. |
 | `signoff` | Writes the human's review decision to `db/<slug>/signoff/<id>.txt`, verbatim. The mirror of `new`, for the other end of the loop and for the same reason. Nothing is recorded in `index.jsonl`. |
-| `close` | Ends a request whose pull request has landed: prunes the loop's metadata from its branch so it leaves the train, deletes the local branch, and appends a `closed` event. `--merge` merges it first; `--abandon` drops the work. |
+| `close` | Ends a request whose work has landed on the default branch: prunes the loop's metadata from its branch so it leaves the train, deletes the local branch, and appends a `closed` event. `--abandon` drops the work instead. |
 | `clear` | Deletes a request's artifacts and appends a `cleared` event. Requires `--id` or `--all`, prints what it's about to delete, and asks for confirmation unless `--yes` (mandatory in a non-interactive shell). `index.jsonl` is never rewritten; `memory.md` is never touched. Releases the lock if the cleared request held it. |
 | `memory` | The workspace's accumulated knowledge at `db/<slug>/memory.md`, which every step is handed and none writes directly. `--show` prints it. `--merge` takes a sectioned delta on stdin: each `## Section` it names replaces that section's body, every section it does not name is kept untouched, and bash writes the title and provenance line itself. `--decision` appends one entry under `## Past Decisions & Rationale`. Reports the document's size, and which sections to prune when it is over budget. |
 | `provider` | Lists bundles under `providers/` and writes the chosen id to `loop/.provider`. `LOOP_PROVIDER` still overrides at runtime. |
@@ -445,7 +446,6 @@ workspace repo's own config:
 ```
 branch.<branch>.looprequest   the request that owns it
 branch.<branch>.loopbase      what it was cut from
-branch.<branch>.looppr        the pull request url
 ```
 
 That is the linked list, and it is the exception to "centralized `db/` instead
@@ -467,11 +467,14 @@ bases on it again. Requests already stacked behind it keep their recorded base
 even though it has gone: their history is written, and the base falls back to
 the default branch, which is where the vanished commits now live.
 
-Ancestry is the reliable test only for a real merge commit, which is why
-`close --merge` uses `gh pr merge --merge` and never `--squash` or `--rebase`:
-those rewrite the commits, so the branch never becomes an ancestor however
-genuinely merged it is. For a pull request somebody squash-merged in the
-browser, `close` falls back to asking GitHub whether it was merged at all.
+Ancestry is the reliable test only for a real merge commit: a squash collapses
+the commits into a new one and a rebase rewrites them, so the branch never
+becomes an ancestor however genuinely merged it is. So `close` has a second
+test — it merges the branch into the default ref *in memory*
+(`git merge-tree --write-tree`) and treats a result identical to the default
+ref's own tree as proof that every patch is already upstream. That is plain
+git, so it answers for a self-hosted remote as readily as for a public forge,
+and it needs no credentials.
 
 ### Nothing is public until a human says so
 
@@ -481,8 +484,8 @@ only the third one is visible to anyone else:
 | | What it does | Where it is |
 |---|---|---|
 | `land` | commits the work to the request's branch | this machine |
-| `publish` | pushes the branch and opens the pull request | GitHub |
-| `close` | merges the pull request and ends the request | GitHub |
+| `publish` | pushes the branch to origin | your git host |
+| `close` | ends the request once its work has landed | this machine |
 
 `publish` is refused until `db/<slug>/review/<id>.md` exists and its `outcome`
 is `approved` or `followups`. A review that came back `rejected` publishes
@@ -490,10 +493,14 @@ nothing at all: its branch stays local, stays in the train, and the findings
 become requests cut off it.
 
 That split is why `review` reads a local branch rather than a pull request. A
-review that runs *after* the pull request is open is a formality — the blunder
-is already visible, and withdrawing it is its own small announcement. Running
-the audit and the QA against a local branch makes the human's approval the
-thing that publishes, rather than something that follows publication.
+review that runs *after* the work is pushed is a formality — the blunder is
+already visible, and withdrawing it is its own small announcement. Running the
+audit and the QA against a local branch makes the human's approval the thing
+that publishes, rather than something that follows publication.
+
+Opening the pull request itself is deliberately left to a human. The loop has
+no opinion about which forge a remote lives on, and needs no credentials for
+one beyond the ssh key that pushes.
 
 The cost is that the `commit` step writes a pull-request title and body for a
 pull request that may never be opened. That is the right trade: writing them is

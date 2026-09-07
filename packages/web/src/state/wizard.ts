@@ -7,6 +7,7 @@ import type {
   DiscoveryEvent,
   DiscoveryOutcome,
   FurnitureReveal,
+  GitRemoteHost,
   OverseerTheme,
   RejectedCustomization,
   UntrackedFolder,
@@ -179,6 +180,31 @@ export interface WizardState {
   /** State of the create-project form's one in-flight request, if any. Not
    * persisted — a fresh window always starts idle. */
   projectCreate: ProjectCreateState;
+  /** The container's git access — ssh key, commit identity, and the hosts the
+   * workspace's own remotes use. Undefined until the server answers, which is
+   * different from "no key": the panel must not claim either until it knows. */
+  gitAccess?: GitAccessState;
+  /** The last connection test, for the panel to report. Not persisted — a
+   * result is about the moment it was asked for. */
+  gitSshTest?: GitSshTestState;
+}
+
+/** Mirrors the server's `git.access.state` frame, plus the local busy flag the
+ * panel needs while a generate or remove is in flight. */
+export interface GitAccessState {
+  key?: { publicKey: string; fingerprint: string; createdAt: string };
+  permissionsOk: boolean;
+  identity?: { name: string; email: string };
+  hosts: GitRemoteHost[];
+}
+
+export interface GitSshTestState {
+  status: "working" | "done";
+  host: string;
+  ok?: boolean;
+  account?: string;
+  hostFingerprint?: string;
+  message?: string;
 }
 
 /** `"idle"` also covers "never asked" and "the last one finished" — the
@@ -341,7 +367,18 @@ export type WizardAction =
   /** The operator answered yes. `memory.reset` is on the wire. */
   | { type: "reset.confirmed" }
   /** The server finished erasing. Only the goodbye is left. */
-  | { type: "reset.done" };
+  | { type: "reset.done" }
+  /** The server's whole `git access` picture, replacing whatever was held. */
+  | { type: "git.access"; state: GitAccessState }
+  | { type: "git.ssh.testing"; host: string }
+  | {
+      type: "git.ssh.tested";
+      host: string;
+      ok: boolean;
+      account?: string;
+      hostFingerprint?: string;
+      message: string;
+    };
 
 /** Which welcome beat a freshly-connected session should land on. */
 function initialWelcomeBeat(state: WizardState): WelcomeBeat {
@@ -591,6 +628,27 @@ export function wizardReducer(
       if (state.reset !== "working") return state;
       // Whatever furniture outlasted the delete steps goes with the last one.
       return { ...state, reset: "goodbye", revealed: { ...NO_REVEAL } };
+
+    case "git.access":
+      return { ...state, gitAccess: action.state };
+
+    case "git.ssh.testing":
+      return { ...state, gitSshTest: { status: "working", host: action.host } };
+
+    case "git.ssh.tested":
+      return {
+        ...state,
+        gitSshTest: {
+          status: "done",
+          host: action.host,
+          ok: action.ok,
+          message: action.message,
+          ...(action.account !== undefined ? { account: action.account } : {}),
+          ...(action.hostFingerprint !== undefined
+            ? { hostFingerprint: action.hostFingerprint }
+            : {}),
+        },
+      };
 
     case "server.event":
       return applyEvent(state, action.event);

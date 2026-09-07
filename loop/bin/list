@@ -80,9 +80,7 @@ event_branch() {
   fi
   base=$(git_branch_meta "$repo" "$branch" "$LOOP_GIT_KEY_BASE")
   jq -nc --arg n "$branch" --arg b "$base" --arg state "$state" \
-    --arg pr "$(git_branch_meta "$repo" "$branch" "$LOOP_GIT_KEY_PR")" \
-    '{name:$n, base:(if $b == "" then null else $b end),
-      pr:(if $pr == "" then null else $pr end), state:$state}'
+    '{name:$n, base:(if $b == "" then null else $b end), state:$state}'
 }
 
 # workspace_dir_of <slug-or-name> — the project directory if it still exists,
