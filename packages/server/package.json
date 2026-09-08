@@ -1,6 +1,6 @@
 {
   "name": "@overseer/server",
-  "version": "0.2.4",
+  "version": "0.2.5",
   "description": "Node WS + REST server — session supervisor, adapter registry, static SPA host.",
   "type": "module",
   "main": "./dist/index.js",

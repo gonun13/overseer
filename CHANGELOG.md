@@ -5,6 +5,13 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
 
+## 0.2.5 — 2026-09-07
+
+### Fixed
+
+- Text inside a window can be selected and copied — paths, ids, log lines, diffs and transcript
+  text. Tabs and the resize grip stay unselectable so dragging a window leaves no stray highlight.
+
 ## 0.2.4 — 2026-09-07
 
 ### Added

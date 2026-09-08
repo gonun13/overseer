@@ -106,6 +106,10 @@
   overflow-x: hidden;
   overflow-y: auto;
   transition: max-height 0.5s ease-out;
+  /* Window contents are readable material — paths, ids, diffs, log lines — so
+     the operator can select and copy them. The chrome (tab, grip) stays
+     unselectable so a drag never leaves a stray highlight behind. */
+  user-select: text;
 }
 
 .window-body.expanded {
@@ -685,6 +689,13 @@ a.w-btn {
   font-size: 11px;
   line-height: 1.5;
   color: var(--ink-dim);
+}
+
+/* A note (or run of notes) following a btn-row — same top gap the row itself
+   opens below the content before it, so the notes read as their own block
+   rather than crowding the buttons' clickable edge. */
+.w-note-group {
+  margin-top: 10px;
 }
 
 /* ---- console -------------------------------------------------------------

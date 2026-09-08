@@ -345,6 +345,7 @@ export interface ProjectGitStatusMessage {
   branch: string;
   dirty: boolean;
   hasRemote: boolean;
+  remoteUrl?: string;
   ahead?: number;
   behind?: number;
   defaultBranch: string;

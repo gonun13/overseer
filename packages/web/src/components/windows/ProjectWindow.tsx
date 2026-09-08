@@ -19,6 +19,7 @@ interface GitStatusState {
   branch: string;
   dirty: boolean;
   hasRemote: boolean;
+  remoteUrl?: string;
   ahead?: number;
   behind?: number;
   defaultBranch: string;
@@ -57,8 +58,8 @@ export function ProjectWindow({
     if (!path) return;
     return subscribe((frame) => {
       if (frame.type === "project.git.status" && frame.path === path) {
-        const { branch, dirty, hasRemote, ahead, behind, defaultBranch, files } = frame;
-        setStatus({ branch, dirty, hasRemote, ahead, behind, defaultBranch, files });
+        const { branch, dirty, hasRemote, remoteUrl, ahead, behind, defaultBranch, files } = frame;
+        setStatus({ branch, dirty, hasRemote, remoteUrl, ahead, behind, defaultBranch, files });
         return;
       }
       if (
@@ -137,7 +138,7 @@ export function ProjectWindow({
               value={`${status.ahead ?? 0} ahead · ${status.behind ?? 0} behind`}
             />
           )}
-          <WInline label="remote" value={status.hasRemote ? "attached" : "none"} />
+          <WInline label="remote" value={status.remoteUrl ?? (status.hasRemote ? "attached" : "none")} />
 
           {status.files.length === 0 ? (
             <div className="w-empty">clean — nothing changed</div>
@@ -215,7 +216,7 @@ export function ProjectWindow({
             </div>
           )}
           {status.hasRemote && (
-            <>
+            <div className="w-note-group">
               {status.dirty ? (
                 <p className="w-note">
                   commit first · push sends commits, not working changes.
@@ -225,8 +226,8 @@ export function ProjectWindow({
                   <p className="w-note">nothing to push · the remote is up to date.</p>
                 )
               )}
-              <p className="w-note">merge happens through the PR process upstream.</p>
-            </>
+              <p className="w-note">merge happens upstream.</p>
+            </div>
           )}
 
           {confirming === "merge" && (

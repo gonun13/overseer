@@ -10,6 +10,7 @@ export interface GitStatus {
   branch: string;
   dirty: boolean;
   hasRemote: boolean;
+  remoteUrl?: string;
   ahead?: number;
   behind?: number;
   files: GitFileChange[];
@@ -101,11 +102,25 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     }
 
     const { stdout: remoteOut } = await run(dir, ["remote"]);
+    const hasRemote = remoteOut.trim().length > 0;
+
+    // `origin` specifically, for display — a remote can exist under another
+    // name (or origin can point somewhere `get-url` still rejects), so this
+    // failing is ordinary and just leaves the URL out.
+    let originUrl: string | undefined;
+    if (hasRemote) {
+      try {
+        originUrl = (await remoteUrl(dir)).stdout;
+      } catch {
+        // no origin, or another remote-only setup — hasRemote still stands.
+      }
+    }
 
     return {
       branch,
       dirty: files.length > 0,
-      hasRemote: remoteOut.trim().length > 0,
+      hasRemote,
+      ...(originUrl !== undefined ? { remoteUrl: originUrl } : {}),
       ...(ahead !== undefined ? { ahead } : {}),
       ...(behind !== undefined ? { behind } : {}),
       files,
