@@ -10,7 +10,11 @@ import { SessionPanel } from "./components/SessionPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { WindowStackHost } from "./components/WindowStackHost";
 import type { Project, Session } from "./domain";
-import { SESSION_CONTROL_KEYS, type SessionOptionKey } from "./session";
+import {
+  SESSION_CONTROL_KEYS,
+  stoppableSessions,
+  type SessionOptionKey,
+} from "./session";
 import type { Signal } from "./state/signals";
 import type { WindowKind } from "./windows";
 import { useChatSessions } from "./state/useChatSessions";
@@ -166,6 +170,7 @@ export default function App() {
     setSessionSetting,
     chatFor,
     send: sendChat,
+    stopSession,
     deleteSession,
     resolveApproval,
   } = useChatSessions(
@@ -304,6 +309,14 @@ export default function App() {
     },
     [windows, close, deleteSession],
   );
+
+  // Every session a stop would actually reach, read once: the settings sweep
+  // fires on it and the button's own count comes off the same list, so the
+  // number the operator reads is the number that gets interrupted.
+  const stoppable = useMemo(() => stoppableSessions(sessions), [sessions]);
+  const onStopAllSessions = useCallback(() => {
+    for (const session of stoppable) stopSession(session.id);
+  }, [stoppable, stopSession]);
 
   // One pass over the projects instead of a linear find per session. The sweep
   // still re-runs whenever a status light repaints a project object, but
@@ -599,6 +612,7 @@ export default function App() {
             onToggle={toggleSessions}
             onSelect={openSessionRow}
             onNew={startChat}
+            onStop={stopSession}
             onDelete={onDeleteSession}
           />
         )}
@@ -642,6 +656,7 @@ export default function App() {
           chatFor={chatFor}
           sendChat={sendChat}
           onDeleteSession={onDeleteSession}
+          onStopSession={stopSession}
           onResolveApproval={resolveApproval}
           plans={plans}
           plansError={plansError}
@@ -686,6 +701,8 @@ export default function App() {
           onSignOut={() => {
             if (shell.provider.name) wizard.signOut(shell.provider.name);
           }}
+          onStopAllSessions={onStopAllSessions}
+          stoppableCount={stoppable.length}
           onResetOverseer={startReset}
           gitAccess={wizard.gitAccess}
         />

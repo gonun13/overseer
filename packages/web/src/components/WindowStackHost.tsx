@@ -63,6 +63,8 @@ interface WindowStackHostProps {
   chatFor: (id: string) => Chat | undefined;
   sendChat: (id: string, input: string) => void;
   onDeleteSession: (id: string) => void;
+  /** Interrupt the turn a session has in flight. */
+  onStopSession: (id: string) => void;
   onResolveApproval: (
     sessionId: string,
     requestId: string,
@@ -130,6 +132,7 @@ export function WindowStackHost({
   chatFor,
   sendChat,
   onDeleteSession,
+  onStopSession,
   onResolveApproval,
   plans,
   plansError,
@@ -252,6 +255,7 @@ export function WindowStackHost({
               if (chat) openChat(chat.session);
             }}
             onNewSession={startChat}
+            onStopSession={onStopSession}
             onDeleteSession={onDeleteSession}
           />
         )}
@@ -279,6 +283,7 @@ export function WindowStackHost({
             }
             onOpenSessionContext={() => onOpenSessionContext(chat.session.id)}
             onSubmit={(input) => sendChat(chat.session.id, input)}
+            onStop={() => onStopSession(chat.session.id)}
             onInspect={(turnId) => {
               const turn = chat.turns.find(
                 (candidate) => candidate.id === turnId,

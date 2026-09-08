@@ -1,6 +1,7 @@
 import { useState } from "react";
 import type { PermissionDecision } from "@overseer/protocol";
 import { Composer } from "../Composer";
+import { StopIcon } from "../icons";
 import { SessionControls } from "../SessionControls";
 import { Transcript } from "../Transcript";
 import type { Turn } from "../../domain";
@@ -37,6 +38,7 @@ export function SessionWindow({
   onSelectSessionControl,
   onOpenSessionContext,
   onSubmit,
+  onStop,
   onInspect,
   onResolveApproval,
   note,
@@ -55,6 +57,9 @@ export function SessionWindow({
   onSelectSessionControl: (key: SessionOptionKey, value: string) => void;
   onOpenSessionContext: () => void;
   onSubmit: (input: string) => void;
+  /** Stop the turn in flight. Only reachable while `busy` — the button is not
+   * rendered otherwise, since the supervisor has nothing to interrupt. */
+  onStop: () => void;
   onInspect: (id: string) => void;
   onResolveApproval: (id: string, decision: PermissionDecision) => void;
 }) {
@@ -93,13 +98,29 @@ export function SessionWindow({
         // each row is set to, and saying it twice makes the operator check
         // which one is authoritative.
         meta={
-          awaitingApproval ? (
-            <span>waiting on your approval</span>
-          ) : busy ? (
-            <span>turn in flight</span>
-          ) : (
-            <span>enter to send · shift+enter for a newline</span>
-          )
+          <>
+            {awaitingApproval ? (
+              <span>waiting on your approval</span>
+            ) : busy ? (
+              <span>turn in flight</span>
+            ) : (
+              <span>enter to send · shift+enter for a newline</span>
+            )}
+            {/* The meta row is already `space-between`, so the stop lands
+                flush right of whatever the line says — and only while there
+                is a turn to stop. */}
+            {busy && (
+              <button
+                type="button"
+                className="composer-stop"
+                aria-label="stop this turn"
+                onClick={onStop}
+              >
+                <StopIcon />
+                stop
+              </button>
+            )}
+          </>
         }
       />
 

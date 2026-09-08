@@ -340,7 +340,7 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 | Live todo checklist                                | Console  | `TodoWrite` tool calls → `todo.update`                            |
 | Tool approval, inline                              | Console  | `can_use_tool` control request (see §6.1)                         |
 | Permission mode selector                           | Top bar  | startup flag + runtime `set_permission_mode` control request      |
-| Interrupt turn                                     | Console  | `interrupt` control request                                      |
+| Interrupt turn                                     | Console  | `interrupt` control request, from the composer, either session list, or the settings sweep |
 | Queue message during a turn                        | Console  | buffer in `SessionHandle.send`                                    |
 | Model + effort selector                            | Console  | startup flags + runtime control updates                           |
 | Create session in a project                        | Sessions | pick a dir under `/workspace`; mint `--session-id`                 |

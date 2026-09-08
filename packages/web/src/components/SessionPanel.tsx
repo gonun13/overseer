@@ -1,5 +1,6 @@
 import { StatusLight } from "./StatusLight";
-import { ChevronIcon, TrashIcon } from "./icons";
+import { ChevronIcon, StopIcon, TrashIcon } from "./icons";
+import { isStoppable } from "../session";
 import type { Session } from "../domain";
 
 /**
@@ -18,6 +19,7 @@ export function SessionPanel({
   onToggle,
   onSelect,
   onNew,
+  onStop,
   onDelete,
 }: {
   sessions: Session[];
@@ -26,6 +28,8 @@ export function SessionPanel({
   onToggle: () => void;
   onSelect: (session: Session) => void;
   onNew: () => void;
+  /** Interrupt the turn this session has in flight. */
+  onStop: (id: string) => void;
   onDelete: (id: string) => void;
 }) {
   const active = sessions.find((session) => session.id === activeId);
@@ -58,6 +62,21 @@ export function SessionPanel({
             <span className="session-row-note">
               {session.branch || "branch unknown"}
             </span>
+            {/* Only while a turn is actually in flight: a row that offered a
+                stop with nothing running would be a button that answers with
+                an error. */}
+            {isStoppable(session) && (
+              <button
+                className="session-row-stop"
+                aria-label={`stop ${session.name}`}
+                onClick={(e) => {
+                  e.stopPropagation();
+                  onStop(session.id);
+                }}
+              >
+                <StopIcon />
+              </button>
+            )}
             {/* A loop's transcript belongs to a live CLI — deleting it from
                 under that process is not offered here either. */}
             {session.origin !== "loop" && (

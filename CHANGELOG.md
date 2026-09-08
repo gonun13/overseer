@@ -5,6 +5,16 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
 
+## 0.3.2 — 2026-09-08
+
+### Added
+
+- Stop a turn without waiting it out. A session running something shows a stop next to its
+  composer, and its row in the sessions panel and the sessions window shows one too — the agent
+  drops what it is doing and the session stays open, ready for the next thing you say.
+- `stop all sessions` in settings now works: it stops every session that has a turn running, says
+  how many that is, and asks for a second click before doing it.
+
 ## 0.3.1 — 2026-09-08
 
 ### Fixed

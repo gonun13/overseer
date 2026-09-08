@@ -141,7 +141,8 @@
 
 /* Trailing icon button, subtle at rest so the row still reads as the branch
    note first — it only announces itself as destructive on hover. */
-.session-row-delete {
+.session-row-delete,
+.session-row-stop {
   display: flex;
   align-items: center;
   justify-content: center;
@@ -151,7 +152,8 @@
   color: var(--ink-faint);
 }
 
-.session-row-delete:hover {
+.session-row-delete:hover,
+.session-row-stop:hover {
   color: var(--accent-fill);
 }
 

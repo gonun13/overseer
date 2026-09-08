@@ -425,6 +425,26 @@ export function useChatSessions(
     [send],
   );
 
+  /** Stop the turn in flight. The supervisor only accepts this for a live
+   * session, so callers gate on `isStoppable` — an idle or dormant session
+   * would come back as a benign error frame and nothing else. */
+  const stopSession = useCallback(
+    (id: string) => {
+      send({ type: "session.interrupt", sessionId: id });
+      // The light stays lit until the CLI's own `turn.end` lands — only the
+      // caption changes, so the row admits the stop was heard without
+      // claiming the turn is already over.
+      setChats((current) =>
+        current.map((chat) =>
+          chat.session.id === id
+            ? { ...chat, session: { ...chat.session, doing: "stopping..." } }
+            : chat,
+        ),
+      );
+    },
+    [send],
+  );
+
   const deleteSession = useCallback(
     (id: string) => {
       send({ type: "session.delete", sessionId: id });
@@ -448,6 +468,7 @@ export function useChatSessions(
     chatFor,
     send: sendChat,
     requestList,
+    stopSession,
     deleteSession,
     resolveApproval,
   };

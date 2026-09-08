@@ -7,6 +7,7 @@
  * lists fill in once the provider reports them. */
 
 import type { ProviderOption, ProviderOptions } from "@overseer/protocol";
+import type { Session } from "./domain";
 
 export type SessionOptionKey = "model" | "mode" | "agent";
 
@@ -117,4 +118,20 @@ export function headLabel(
   if (label === undefined) return undefined;
   const trimmed = label.replace(/\s*\([^)]*\)\s*$/, "").trim();
   return trimmed === "" ? label : trimmed;
+}
+
+/**
+ * Whether a stop would actually reach this session. Two conditions, both
+ * necessary: a turn has to be in flight (`interrupt` on an idle session is a
+ * refusal from the supervisor, not a no-op), and the session has to be one the
+ * supervisor owns. A dev-loop run is not — its CLI is leased to a console of
+ * its own, which is why the row withholds delete from it as well.
+ */
+export function isStoppable(session: Session): boolean {
+  return session.activity === "working" && session.origin !== "loop";
+}
+
+/** The same read over a list — what `stop all sessions` sweeps. */
+export function stoppableSessions(sessions: Session[]): Session[] {
+  return sessions.filter(isStoppable);
 }

@@ -77,3 +77,14 @@ export function BranchIcon() {
     </svg>
   );
 }
+
+/** A stop square — outline only, like the rest. Deliberately *not* ringed: the
+ * round light is the only circle in the interface, and a second meaning of
+ * round would cost that one its reading. */
+export function StopIcon() {
+  return (
+    <svg {...base} width={12} height={12}>
+      <rect x="3.5" y="3.5" width="9" height="9" />
+    </svg>
+  );
+}

@@ -1,8 +1,8 @@
 import { WProviderNote, WRow } from "./bits";
-import { TrashIcon } from "../icons";
+import { StopIcon, TrashIcon } from "../icons";
 import type { Project, ProviderInfo, Session } from "../../domain";
 import type { ProviderOption } from "@overseer/protocol";
-import { findOption } from "../../session";
+import { findOption, isStoppable } from "../../session";
 
 export function SessionsWindow({
   sessions,
@@ -11,6 +11,7 @@ export function SessionsWindow({
   models,
   onOpenSession,
   onNewSession,
+  onStopSession,
   onDeleteSession,
 }: {
   sessions: Session[];
@@ -21,6 +22,8 @@ export function SessionsWindow({
   models: ProviderOption[];
   onOpenSession: (id: string) => void;
   onNewSession: () => void;
+  /** Interrupt the turn this session has in flight. */
+  onStopSession: (id: string) => void;
   onDeleteSession: (id: string) => void;
 }) {
   return (
@@ -53,6 +56,16 @@ export function SessionsWindow({
                 <button className="w-btn" onClick={() => onOpenSession(s.id)}>
                   {s.origin === "loop" ? "console" : "open"}
                 </button>
+                {isStoppable(s) && (
+                  <button
+                    className="w-btn"
+                    onClick={() => onStopSession(s.id)}
+                    aria-label={`stop ${s.name}`}
+                  >
+                    <StopIcon />
+                    stop
+                  </button>
+                )}
                 {/* No delete for a loop run: its transcript belongs to a live
                     interactive CLI, and removing it out from under that
                     process is not something to offer as a row action. */}

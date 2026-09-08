@@ -9,7 +9,7 @@ import {
   providerUsageDisplay,
   usageRetrieveLabel,
 } from "./usageDisplay";
-import { WInline, WTitle } from "./windows/bits";
+import { WConfirmButton, WInline, WTitle } from "./windows/bits";
 import { CloseIcon } from "./icons";
 import { StatusLight } from "./StatusLight";
 
@@ -31,6 +31,8 @@ export function SettingsPanel({
   onOpenGitConfig,
   onStartLogin,
   onSignOut,
+  onStopAllSessions,
+  stoppableCount,
   onResetOverseer,
 }: {
   open: boolean;
@@ -49,6 +51,12 @@ export function SettingsPanel({
   onStartLogin: () => void;
   /** `claude auth logout` on the container's CLI. Idempotent. */
   onSignOut: () => void;
+  /** Interrupt every session with a turn in flight. Sweeps what the client
+   * already knows is running — there is no server-side "stop everything". */
+  onStopAllSessions: () => void;
+  /** How many sessions that sweep would actually reach. Zero disables the
+   * button rather than letting it promise an action with no target. */
+  stoppableCount: number;
   /** Close settings and put the reset decision up. The panel never wipes
    * anything itself — it only asks. */
   onResetOverseer: () => void;
@@ -218,7 +226,16 @@ export function SettingsPanel({
 
         <WTitle>danger</WTitle>
         <div className="btn-row">
-          <button className="w-btn danger">stop all sessions</button>
+          <WConfirmButton
+            label={
+              stoppableCount === 0
+                ? "stop all sessions"
+                : `stop all sessions (${stoppableCount})`
+            }
+            confirmLabel="stop them all"
+            disabled={stoppableCount === 0}
+            onConfirm={onStopAllSessions}
+          />
           <button className="w-btn danger" onClick={onResetOverseer}>
             reset overseer
           </button>

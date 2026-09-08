@@ -4,10 +4,13 @@ import type { ProviderOptions, SessionMeta } from "@overseer/protocol";
 import {
   BLANK_SESSION_SETTINGS,
   headLabel,
+  isStoppable,
   labelForValue,
   SESSION_CONTROL_KEYS,
   sessionOptionsFrom,
+  stoppableSessions,
 } from "../src/session.ts";
+import type { Session } from "../src/domain.ts";
 import { settingsFromMeta } from "../src/state/session-events.ts";
 
 const REPORTED: ProviderOptions = {
@@ -185,6 +188,55 @@ describe("settingsFromMeta", () => {
     assert.equal(
       "agent" in settingsFromMeta(meta({ model: "x", permissionMode: "auto" })),
       false,
+    );
+  });
+});
+
+function session(over: Partial<Session> = {}): Session {
+  return {
+    id: "s1",
+    activity: "idle",
+    name: "a session",
+    projectId: "p1",
+    branch: "main",
+    model: "",
+    cost: "",
+    doing: "",
+    ...over,
+  };
+}
+
+describe("stoppableSessions", () => {
+  it("takes a session with a turn in flight", () => {
+    assert.equal(isStoppable(session({ activity: "working" })), true);
+  });
+
+  it("leaves alone a session with nothing running", () => {
+    // `interrupt` on one of these is refused by the supervisor, so offering
+    // the button would be offering an error.
+    for (const activity of ["idle", "done", "waiting", "attention"] as const) {
+      assert.equal(isStoppable(session({ activity })), false);
+    }
+  });
+
+  it("never offers to stop a loop run, however busy it looks", () => {
+    // Its CLI is leased to a console of its own — not the supervisor's to
+    // interrupt, the same reason the row withholds delete from it.
+    assert.equal(
+      isStoppable(session({ activity: "working", origin: "loop" })),
+      false,
+    );
+  });
+
+  it("sweeps only what a stop would reach", () => {
+    assert.deepEqual(
+      stoppableSessions([
+        session({ id: "idle", activity: "idle" }),
+        session({ id: "busy", activity: "working" }),
+        session({ id: "loop", activity: "working", origin: "loop" }),
+        session({ id: "approval", activity: "approval" }),
+      ]).map((s) => s.id),
+      ["busy"],
     );
   });
 });
