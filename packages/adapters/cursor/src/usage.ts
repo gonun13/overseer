@@ -1,28 +1,62 @@
 import { spawn } from "node:child_process";
 import type { AdapterUsageCheck, AdapterUsageWindow } from "@overseer/protocol";
+import { readDashboardUsage, type DashboardDeps } from "./usage-api.js";
 
 /**
- * On-demand `checkUsage`: `agent -p "/usage"`.
+ * On-demand `checkUsage` for cursor, in two layers.
  *
- * Unlike claude-code's `/usage`, this is not a client-intercepted command —
- * verified live (2026.08.31-4057e58): the CLI hands the literal string
- * `/usage` to the model as an ordinary prompt, which then reasons about what
- * it means, tries to fetch account usage, and writes up a markdown report.
- * Real tokens (~37k observed), real latency (~46s observed), and no
- * guaranteed shape — so this is never scheduled automatically and the result
- * is shown as-is rather than parsed into `AdapterUsageWindow` gauges.
+ * 1. `usage-api.ts` reads the account's current period straight from the
+ *    dashboard service with the token `agent login` stored — sub-second, free,
+ *    the same numbers the CLI itself shows.
+ * 2. Only when that comes back empty, the CLI is asked (`agent -p …`) — and
+ *    the ask is a written brief with a JSON schema in it, not the bare string
+ *    `/usage`.
  *
- * No `--force`: an unattended tool call (e.g. shell access to fetch live
- * usage) is left for the CLI to refuse on its own rather than granted wholesale
- * for a read-only ask — observed live, it falls back to cached/local data and
- * still produces a report. `--trust` alone avoids the workspace trust dialog,
- * which would otherwise hang a headless run forever.
+ * Why the second layer changed shape: `/usage` is not a client-intercepted
+ * command here, the CLI hands the literal string to the model. That used to
+ * produce a markdown write-up; verified live against 2026.09.02-c22c1a3 it now
+ * produces a *refusal* ("`/usage` is built-in, run it interactively"), which
+ * is why the widget went blank. Asked properly — told to fetch the real
+ * figures and to answer in one fenced JSON block — the same CLI returns the
+ * numbers again. That turn needs shell access (`--force`), and costs real
+ * tokens (~100k observed) and real time (~160s observed), which is exactly why
+ * it sits behind the direct read and is never scheduled.
+ *
+ * Reading the answer is layered the same way: the briefed JSON block first,
+ * the older markdown-table parse second, prose with no gauges last. A shape
+ * nobody anticipated costs the operator a gauge, never a wrong one.
  */
 
 const CLI = "agent";
 
-/** Generous: a real run was observed to take ~46s. */
-export const USAGE_CHECK_TIMEOUT_MS = 120_000;
+/**
+ * The brief. Explicit about *fetching* — the model's first instinct now is to
+ * send the operator to the dashboard — and explicit about the answer's shape,
+ * so parsing reads a contract instead of guessing at prose.
+ */
+export const USAGE_PROMPT = `Report this Cursor account's current usage.
+
+Get the real figures with the tools you have: read the local Cursor credentials (~/.config/cursor/auth.json) and POST them as a bearer token to https://api2.cursor.sh/aiserver.v1.DashboardService/GetCurrentPeriodUsage and .../GetPlanInfo. If those fail, find the figures another way. Do not guess, and do not tell me to look them up myself.
+
+Answer with exactly one fenced json code block, in this shape:
+
+\`\`\`json
+{
+  "plan": "Pro",
+  "resets": "Oct 4, 2026",
+  "spend": "$0.38",
+  "pools": [
+    { "label": "included", "used_percent": 1.9 },
+    { "label": "auto", "used_percent": 0 },
+    { "label": "api", "used_percent": 0.8 }
+  ]
+}
+\`\`\`
+
+used_percent is a number from 0 to 100. Use null for any field you could not determine, and [] for pools if you obtained no figures at all.`;
+
+/** Generous: a real fetching turn was observed to take ~160s. */
+export const USAGE_CHECK_TIMEOUT_MS = 240_000;
 
 /** How long SIGTERM gets before SIGKILL — same rationale as login.ts. */
 const KILL_GRACE_MS = 2_000;
@@ -30,8 +64,8 @@ const KILL_GRACE_MS = 2_000;
 // ---- reading gauges out of the model's write-up ---------------------------
 
 /**
- * The report is prose a model wrote, not a fixed report, so this parses the
- * *form* it reached for — a markdown table of pools against percentages —
+ * The fallback shape: prose a model wrote, not a fixed report, so this parses
+ * the *form* it reached for — a markdown table of pools against percentages —
  * rather than any particular set of pool names. Captured live (Pro account,
  * 2026-09-02):
  *
@@ -75,8 +109,9 @@ function rowCells(line: string): string[] | undefined {
 }
 
 /**
- * Read whatever gauges (and cycle spend) the report exposes. Never throws;
- * an unreadable report is an empty `windows`, never an invented reading.
+ * Read whatever gauges (and cycle spend) a markdown report exposes. Never
+ * throws; an unreadable report is an empty `windows`, never an invented
+ * reading.
  */
 export function parseUsageReport(text: string): {
   windows: AdapterUsageWindow[];
@@ -155,11 +190,154 @@ function slug(value: string): string {
   return compact === "" ? "pool" : compact;
 }
 
+// ---- reading the answer the brief asked for -------------------------------
+
+/** A reply big enough to hide a report in, but not a whole transcript. */
+const MAX_SPANS = 40;
+
+/**
+ * Pull the briefed object out of the model's reply. The reply is never only
+ * that object — the CLI prepends the model's narration of its own tool calls,
+ * and the fence is only *usually* there — so this scans for balanced `{…}`
+ * spans and takes the first that parses and carries a `pools` array, the
+ * field the brief made the contract.
+ */
+export function parseStructuredUsage(text: string):
+  | {
+      windows: AdapterUsageWindow[];
+      spend?: string;
+    }
+  | undefined {
+  for (const candidate of jsonSpans(text)) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(candidate);
+    } catch {
+      continue;
+    }
+    if (typeof parsed !== "object" || parsed === null) continue;
+    const pools = (parsed as { pools?: unknown }).pools;
+    if (!Array.isArray(pools)) continue;
+
+    const resets = readString((parsed as { resets?: unknown }).resets);
+    const windows: AdapterUsageWindow[] = [];
+    const seen = new Set<string>();
+    for (const entry of pools) {
+      if (windows.length >= MAX_WINDOWS) break;
+      if (typeof entry !== "object" || entry === null) continue;
+      const label = readString((entry as { label?: unknown }).label);
+      const percent = readNumber(
+        (entry as { used_percent?: unknown }).used_percent,
+      );
+      if (label === undefined || percent === undefined) continue;
+      if (percent < 0 || percent > 100) continue;
+      const id = slug(label);
+      if (seen.has(id)) continue;
+      seen.add(id);
+      windows.push({
+        id,
+        label: shorten(label),
+        used: percent / 100,
+        ...(resets !== undefined ? { resets } : {}),
+      });
+    }
+
+    // An object in the briefed shape that yielded nothing is still an answer:
+    // no gauges is the honest outcome, and falling through to the markdown
+    // parse would only re-read the same figures the model already declined to
+    // give.
+    const spend = readString((parsed as { spend?: unknown }).spend);
+    return spend !== undefined ? { windows, spend } : { windows };
+  }
+  return undefined;
+}
+
+/** Every balanced `{…}` span in the text, outermost first. */
+function jsonSpans(text: string): string[] {
+  const spans: string[] = [];
+  for (let i = 0; i < text.length; i += 1) {
+    if (text[i] !== "{") continue;
+    let depth = 0;
+    let inString = false;
+    let escaped = false;
+    for (let j = i; j < text.length; j += 1) {
+      const char = text[j];
+      if (inString) {
+        if (escaped) escaped = false;
+        else if (char === "\\") escaped = true;
+        else if (char === '"') inString = false;
+        continue;
+      }
+      if (char === '"') inString = true;
+      else if (char === "{") depth += 1;
+      else if (char === "}") {
+        depth -= 1;
+        if (depth === 0) {
+          spans.push(text.slice(i, j + 1));
+          i = j; // Past this object; nested ones ride along inside it.
+          break;
+        }
+      }
+    }
+    if (spans.length >= MAX_SPANS) break;
+  }
+  return spans;
+}
+
+function readString(value: unknown): string | undefined {
+  return typeof value === "string" && value.trim() !== ""
+    ? value.trim()
+    : undefined;
+}
+
+function readNumber(value: unknown): number | undefined {
+  if (typeof value === "number") {
+    return Number.isFinite(value) ? value : undefined;
+  }
+  if (typeof value === "string") {
+    const parsed = Number(value.replace(/%$/, "").trim());
+    return Number.isFinite(parsed) ? parsed : undefined;
+  }
+  return undefined;
+}
+
+/**
+ * The whole ladder for one CLI answer: the briefed JSON, then the markdown
+ * table an older CLI wrote, then nothing.
+ */
+export function readUsageAnswer(text: string): {
+  windows: AdapterUsageWindow[];
+  spend?: string;
+} {
+  return parseStructuredUsage(text) ?? parseUsageReport(text);
+}
+
 export async function checkUsage(opts: {
   projectDir: string;
   timeoutMs?: number;
   killGraceMs?: number;
+  /** Test seam for the direct read; `false` skips it and asks the CLI. */
+  dashboard?: DashboardDeps | false;
 }): Promise<AdapterUsageCheck> {
+  if (opts.dashboard !== false) {
+    // A surprise here (DNS down, a thrown fetch) must not cost the operator
+    // the CLI fallback.
+    let direct;
+    try {
+      direct = await readDashboardUsage(opts.dashboard ?? {});
+    } catch {
+      direct = undefined;
+    }
+    if (direct !== undefined && direct.windows.length > 0) {
+      return {
+        ok: true,
+        report: direct.report,
+        windows: direct.windows,
+        ...(direct.spend !== undefined ? { spend: direct.spend } : {}),
+      };
+    }
+  }
+
   const timeoutMs = opts.timeoutMs ?? USAGE_CHECK_TIMEOUT_MS;
   const killGraceMs = opts.killGraceMs ?? KILL_GRACE_MS;
 
@@ -168,8 +346,13 @@ export async function checkUsage(opts: {
 }
 
 /**
- * Spawn `agent -p "/usage"` and always settle within timeout+grace: on
+ * Spawn the briefed CLI turn and always settle within timeout+grace: on
  * success with stdout, on timeout after killing the process group.
+ *
+ * `--force` is what makes this layer work at all: the figures sit behind a
+ * credential read and an HTTPS call, and without it the model declines those
+ * tool calls and writes a report with no numbers in it. `--trust` keeps the
+ * workspace-trust dialog from hanging a headless run forever.
  */
 function runUsageCli(
   projectDir: string,
@@ -181,7 +364,14 @@ function runUsageCli(
     // if the ask never settles.
     const child = spawn(
       CLI,
-      ["-p", "/usage", "--output-format", "json", "--trust"],
+      [
+        "-p",
+        USAGE_PROMPT,
+        "--output-format",
+        "json",
+        "--trust",
+        "--force",
+      ],
       {
         cwd: projectDir,
         detached: true,
@@ -246,33 +436,61 @@ function runUsageCli(
   });
 }
 
+/**
+ * The `{type:"result", is_error, result}` envelope, found rather than assumed:
+ * the CLI has been seen to put trace lines on stdout alongside it, and
+ * `--output-format json` is one object today but was NDJSON in stream mode
+ * yesterday. So every balanced object on stdout is a candidate and the last
+ * one carrying a `result` wins.
+ */
+function readEnvelope(
+  stdout: string,
+): { isError: boolean; result?: string } | undefined {
+  let found: { isError: boolean; result?: string } | undefined;
+  for (const span of jsonSpans(stdout)) {
+    let parsed: unknown;
+    try {
+      parsed = JSON.parse(span);
+    } catch {
+      continue;
+    }
+    if (typeof parsed !== "object" || parsed === null) continue;
+    const envelope = parsed as { is_error?: unknown; result?: unknown };
+    if (!("result" in envelope) && !("is_error" in envelope)) continue;
+    found = {
+      isError: envelope.is_error === true,
+      ...(typeof envelope.result === "string"
+        ? { result: envelope.result }
+        : {}),
+    };
+  }
+  return found;
+}
+
 function extractReport(stdout: string): AdapterUsageCheck {
-  const trimmed = stdout.trim();
-  if (trimmed === "") {
+  if (stdout.trim() === "") {
     return { ok: false, reason: "agent did not answer" };
   }
-  let parsed: { is_error?: unknown; result?: unknown };
-  try {
-    parsed = JSON.parse(trimmed) as typeof parsed;
-  } catch {
+  const envelope = readEnvelope(stdout);
+  if (envelope === undefined) {
     return { ok: false, reason: "could not read agent's usage output" };
   }
-  if (parsed.is_error === true) {
+  if (envelope.isError) {
     return {
       ok: false,
       reason:
-        typeof parsed.result === "string" && parsed.result.trim() !== ""
-          ? parsed.result
+        envelope.result !== undefined && envelope.result.trim() !== ""
+          ? envelope.result
           : "agent reported an error",
     };
   }
-  if (typeof parsed.result === "string" && parsed.result.trim() !== "") {
-    // A report that defeats the parser is still worth returning: the prose is
-    // the operator's answer even when no gauge can be drawn from it.
-    const { windows, spend } = parseUsageReport(parsed.result);
+  if (envelope.result !== undefined && envelope.result.trim() !== "") {
+    // An answer that defeats both parsers is still worth returning: the prose
+    // is the operator's answer even when no gauge can be drawn from it.
+    const { windows, spend } = readUsageAnswer(envelope.result);
     return {
       ok: true,
-      report: parsed.result,
+      report: envelope.result,
       windows,
       ...(spend !== undefined ? { spend } : {}),
     };

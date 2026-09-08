@@ -3,15 +3,22 @@ import { mkdtemp, writeFile, chmod } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
-import { checkUsage, parseUsageReport } from "../src/usage.js";
+import {
+  checkUsage,
+  parseStructuredUsage,
+  parseUsageReport,
+  readUsageAnswer,
+} from "../src/usage.js";
 
 /**
- * `checkUsage` spawns `agent -p "/usage" --output-format json --trust` and
- * reads back the same `{type:"result", is_error, result}` envelope
- * claude-code's own `/usage` uses — verified live against
- * 2026.08.31-4057e58 (see `usage.ts`'s module doc): `result` is the model's
- * own markdown prose, not a fixed report, but the JSON wrapper around it is
- * consistent.
+ * `checkUsage` reads the dashboard API first and only falls back to a CLI
+ * turn; these tests drive that fallback with `dashboard: false`, and the
+ * direct read has its own file (`usage-api.test.ts`).
+ *
+ * The CLI answers in the `{type:"result", is_error, result}` envelope —
+ * verified live against 2026.09.02-c22c1a3 (see `usage.ts`'s module doc):
+ * `result` is the model's own text, and since the brief asks for JSON it is
+ * usually a fenced block behind a preamble of tool-call narration.
  */
 
 /**
@@ -144,13 +151,93 @@ describe("parseUsageReport", () => {
   });
 });
 
+/**
+ * The real answer to the brief, captured from
+ * `agent -p "<USAGE_PROMPT>" --output-format json --trust --force` against
+ * 2026.09.02-c22c1a3 on 2026-09-08 (Pro account). Kept whole, including the
+ * model's narration of its own tool calls ahead of the block, because that
+ * preamble is exactly what the span scanner has to walk past.
+ */
+const PINNED_ANSWER = `I'll pull your Cursor credentials from local config and call the usage API for real figures.I have credentials; next I'll find the usage API endpoint and fetch the live numbers.Calling the known Dashboard usage endpoints with the local token.
+\`\`\`json
+{
+  "plan": "Pro",
+  "resets": "Oct 4, 2026",
+  "spend": "$0.38",
+  "pools": [
+    { "label": "total", "used_percent": 1.9, "detail": "$0.38 of $20.00 included" },
+    { "label": "auto", "used_percent": 0, "detail": null },
+    { "label": "api", "used_percent": 0.8, "detail": null }
+  ]
+}
+\`\`\``;
+
+describe("parseStructuredUsage", () => {
+  it("reads the briefed block out of the model's narration", () => {
+    assert.deepEqual(parseStructuredUsage(PINNED_ANSWER), {
+      windows: [
+        { id: "total", label: "total", used: 0.019, resets: "Oct 4, 2026" },
+        { id: "auto", label: "auto", used: 0, resets: "Oct 4, 2026" },
+        { id: "api", label: "api", used: 0.008, resets: "Oct 4, 2026" },
+      ],
+      spend: "$0.38",
+    });
+  });
+
+  it("declines an object that is not the briefed shape", () => {
+    assert.equal(parseStructuredUsage('{"plan":"Pro"}'), undefined);
+    assert.equal(parseStructuredUsage("no json here at all"), undefined);
+  });
+
+  it("keeps the pools it can read and drops the ones it cannot", () => {
+    const answer = `{"pools":[
+      {"label":"auto","used_percent":"12%"},
+      {"label":"api","used_percent":"unknown"},
+      {"label":null,"used_percent":5},
+      {"label":"over","used_percent":140},
+      {"label":"auto","used_percent":99}
+    ]}`;
+    assert.deepEqual(parseStructuredUsage(answer)?.windows, [
+      { id: "auto", label: "auto", used: 0.12 },
+    ]);
+  });
+
+  it("reports no gauges rather than none at all for an empty pools list", () => {
+    // The model answered in the briefed shape and said it got nothing. That
+    // is an answer, not a parse failure to fall through on.
+    assert.deepEqual(parseStructuredUsage('{"pools":[],"spend":null}'), {
+      windows: [],
+    });
+  });
+});
+
+describe("readUsageAnswer", () => {
+  it("prefers the briefed block", () => {
+    assert.equal(readUsageAnswer(PINNED_ANSWER).windows.length, 3);
+  });
+
+  it("falls back to the markdown table an older CLI wrote", () => {
+    assert.deepEqual(readUsageAnswer(PINNED_REPORT).spend, "$45.13");
+  });
+
+  it("reads nothing out of a refusal", () => {
+    // What the CLI actually started answering, and the reason this was broken.
+    assert.deepEqual(
+      readUsageAnswer(
+        "I can't pull your account usage meters from this session. In an interactive Cursor CLI session, run `/usage`.",
+      ),
+      { windows: [] },
+    );
+  });
+});
+
 describe("checkUsage", () => {
   it("reads the model's prose out of the result envelope", async () => {
     const report = "## Usage\\n\\n**Account:** ada@example.com";
     await writeStub(`#!/bin/sh
 printf '%s' '{"type":"result","is_error":false,"result":"${report}"}'
 `);
-    const result = await checkUsage({ projectDir });
+    const result = await checkUsage({ projectDir, dashboard: false });
     assert.deepEqual(result, {
       ok: true,
       report: "## Usage\n\n**Account:** ada@example.com",
@@ -159,11 +246,27 @@ printf '%s' '{"type":"result","is_error":false,"result":"${report}"}'
     });
   });
 
+  it("finds the envelope even when the CLI prints noise around it", async () => {
+    // Observed live: the retrieval tracer writes a line of its own before the
+    // envelope, and a whole-stdout JSON.parse would call that unreadable.
+    await writeStub(`#!/bin/sh
+echo "cursor-retrieval: tracing to '/tmp/cursor_retrieval.log'"
+printf '%s' '{"type":"result","is_error":false,"result":"{\\"pools\\":[{\\"label\\":\\"auto\\",\\"used_percent\\":25}]}"}'
+`);
+    const result = await checkUsage({ projectDir, dashboard: false });
+    assert.equal(result.ok, true);
+    if (result.ok) {
+      assert.deepEqual(result.windows, [
+        { id: "auto", label: "auto", used: 0.25 },
+      ]);
+    }
+  });
+
   it("passes the project dir as cwd", async () => {
     await writeStub(`#!/bin/sh
 printf '%s' "{\\"type\\":\\"result\\",\\"is_error\\":false,\\"result\\":\\"$(pwd)\\"}"
 `);
-    const result = await checkUsage({ projectDir });
+    const result = await checkUsage({ projectDir, dashboard: false });
     assert.equal(result.ok, true);
     if (result.ok) assert.equal(result.report, projectDir);
   });
@@ -172,7 +275,7 @@ printf '%s' "{\\"type\\":\\"result\\",\\"is_error\\":false,\\"result\\":\\"$(pwd
     await writeStub(`#!/bin/sh
 printf '%s' '{"type":"result","is_error":true,"result":"model refused"}'
 `);
-    const result = await checkUsage({ projectDir });
+    const result = await checkUsage({ projectDir, dashboard: false });
     assert.deepEqual(result, { ok: false, reason: "model refused" });
   });
 
@@ -180,7 +283,7 @@ printf '%s' '{"type":"result","is_error":true,"result":"model refused"}'
     await writeStub(`#!/bin/sh
 printf 'not json at all'
 `);
-    const result = await checkUsage({ projectDir });
+    const result = await checkUsage({ projectDir, dashboard: false });
     assert.equal(result.ok, false);
     if (!result.ok) assert.match(result.reason, /could not read/);
   });
@@ -189,7 +292,7 @@ printf 'not json at all'
     await writeStub(`#!/bin/sh
 exit 0
 `);
-    const result = await checkUsage({ projectDir });
+    const result = await checkUsage({ projectDir, dashboard: false });
     assert.deepEqual(result, { ok: false, reason: "agent did not answer" });
   });
 
@@ -200,6 +303,7 @@ sleep 30
 `);
     const result = await checkUsage({
       projectDir,
+      dashboard: false,
       timeoutMs: 40,
       killGraceMs: 20,
     });

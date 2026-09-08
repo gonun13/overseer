@@ -6,6 +6,38 @@ let seq = 0;
  * carry this inline, so it — not the .window rule — decides the stack. */
 let zSeq = 100;
 
+/** The gutter the right-hand column keeps, matching the provider instrument. */
+const RIGHT_MARGIN = 26;
+/** No window spawns under the clock/settings corner. */
+const TOP_CLEARANCE = 56;
+/**
+ * How tall the providers window is taken to be when centring it. It has no
+ * fixed `h` — the body grows with the provider list — so this is an
+ * assumption, not a measurement of a window that has not rendered yet.
+ *
+ * Deliberately short of the ~420 a full provider list actually renders at: a
+ * low figure biases the spawn *down* the field, which keeps the top edge clear
+ * of the overseer report in the same top-right corner. Measured on a 900-tall
+ * viewport, it lands the frame at y 320 with the widget still uncovered below.
+ */
+const PROVIDERS_ASSUMED_HEIGHT = 260;
+
+/** Right edge of the field, less the gutter — clamped onto narrow viewports. */
+function rightAlignedX(width: number): number {
+  return Math.max(24, window.innerWidth - width - RIGHT_MARGIN);
+}
+
+/**
+ * Vertically centred for a window of `assumedHeight`, nudged by `cascade` for
+ * repeats of the same kind and kept clear of the top corner.
+ */
+function midRightY(assumedHeight: number, cascade: number): number {
+  return Math.max(
+    TOP_CLEARANCE,
+    Math.round((window.innerHeight - assumedHeight) / 2) + cascade,
+  );
+}
+
 export function useWindows() {
   const [windows, setWindows] = useState<OpenWindow[]>([]);
 
@@ -40,13 +72,11 @@ export function useWindows() {
         const detailFields =
           detail !== undefined ? ({ detail } as const) : ({} as const);
 
-        // Providers opens from the instrument that summoned it: right-aligned
-        // with the bottom-right widget, sitting just above it rather than at a
-        // fixed mid-field y (design-system.md §6.2).
+        // Providers opens mid-right: right-aligned with the instrument that
+        // summoned it (design-system.md §6.2), but vertically centred rather
+        // than stacked directly above the widget — the operator reads it at
+        // eye level, and the bottom-right corner stays the instrument's.
         if (kind === "providers") {
-          const margin = 26;
-          const widgetClearance = 250; // widget + optional console + gap
-          const assumedHeight = 260;
           return [
             ...current,
             {
@@ -54,11 +84,8 @@ export function useWindows() {
               kind,
               title: title ?? spec.title,
               ...detailFields,
-              x: Math.max(24, window.innerWidth - width - margin),
-              y: Math.max(
-                56,
-                window.innerHeight - widgetClearance - assumedHeight + cascade,
-              ),
+              x: rightAlignedX(width),
+              y: midRightY(PROVIDERS_ASSUMED_HEIGHT, cascade),
               w: width,
               z: ++zSeq,
               payload,
@@ -68,15 +95,13 @@ export function useWindows() {
 
         // Loop models opens from a row in the providers window's loop tab —
         // right-aligned the same way, with its top edge a fixed step above
-        // providers' own (assumed) top edge. A fixed offset rather than
-        // providers' assumed height *plus* this window's own (its `h` is tall
-        // enough, at ~380, that subtracting both pushed the window up near
-        // the very top of the viewport on an ordinary screen height — nowhere
-        // close to "just above").
+        // providers' own (assumed) top edge, so it follows providers wherever
+        // that lands. A fixed offset rather than providers' assumed height
+        // *plus* this window's own (its `h` is tall enough, at ~380, that
+        // subtracting both pushed the window up near the very top of the
+        // viewport on an ordinary screen height — nowhere close to "just
+        // above").
         if (kind === "loopModels") {
-          const margin = 26;
-          const widgetClearance = 250; // matches the providers case above
-          const providersAssumedHeight = 260;
           const stackAbove = 70;
           const bodyH = height ?? spec.h ?? 380;
           return [
@@ -86,14 +111,10 @@ export function useWindows() {
               kind,
               title: title ?? spec.title,
               ...detailFields,
-              x: Math.max(24, window.innerWidth - width - margin),
+              x: rightAlignedX(width),
               y: Math.max(
                 56,
-                window.innerHeight -
-                  widgetClearance -
-                  providersAssumedHeight -
-                  stackAbove +
-                  cascade,
+                midRightY(PROVIDERS_ASSUMED_HEIGHT, cascade) - stackAbove,
               ),
               w: width,
               h: bodyH,

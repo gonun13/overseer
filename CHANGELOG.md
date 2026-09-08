@@ -5,6 +5,15 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
 
+## 0.2.7 — 2026-09-08
+
+### Fixed
+
+- The usage widget reads Cursor's plan usage again — included spend, auto and API pools, and the
+  billing-cycle reset — now taken straight from your Cursor account in under a second instead of
+  costing a slow, billed agent turn. If that read is ever unavailable the check falls back to
+  asking the CLI, and a report it cannot read is reported as no figures rather than an empty gauge.
+
 ## 0.2.6 — 2026-09-08
 
 ### Added

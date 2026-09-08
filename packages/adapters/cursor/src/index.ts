@@ -52,10 +52,10 @@ import { checkUsage as runUsageCheck } from "./usage.js";
  *   dollar figure; reporting a permanent `$0.00` would be a false zero, not
  *   an honest "unavailable".
  * - `usageCheck: true` — no `refreshUsage` (see `getStatus` below), but
- *   `checkUsage` (`usage.ts`) is real: `/usage` is not a client-intercepted
- *   command here, it is a plain prompt the model answers with a real turn —
- *   verified live, ~46s and ~37k tokens for one ask. Manual and unscheduled
- *   for exactly that reason.
+ *   `checkUsage` (`usage.ts`) is real: the account's period is read straight
+ *   from the dashboard service with the CLI's own stored token, and only if
+ *   that fails does it fall back to a real CLI turn (~160s, ~100k tokens for
+ *   one ask). Manual and unscheduled because of that fallback.
  */
 const capabilities: AdapterCapabilities = {
   streamingDeltas: true,

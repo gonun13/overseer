@@ -53,8 +53,9 @@ export const WINDOW_SPEC: Record<
   // clears both the clock (top 20, ~42 tall) and the centred active-project
   // readout (top 18, ~60 tall).
   overseer: { title: "overseer", x: 9999, y: 96, w: 460 },
-  // Bottom-right, above the provider widget — spawn position is computed in
-  // useWindows from the viewport so it clears the instrument on any height.
+  // Mid-right: right-aligned with the provider instrument that summons it,
+  // vertically centred — spawn position is computed in useWindows from the
+  // viewport, and loopModels rides a fixed step above it.
   providers: { title: "providers", x: 9999, y: 9999, w: 420 },
   sessions: { title: "sessions", x: 96, y: 168, w: 620 },
   // Mid-bottom: spawn position is computed in useWindows from the viewport so
