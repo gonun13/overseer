@@ -55,9 +55,29 @@ describe("projectGit.status", () => {
         { path: "src/new.ts", status: "added" },
         { path: "old.ts", status: "deleted" },
         { path: "scratch.md", status: "untracked" },
-        { path: "from.ts -> to.ts", status: "renamed" },
+        { path: "to.ts", previousPath: "from.ts", status: "renamed" },
       ],
     });
+  });
+
+  it("keeps an arrow that is part of a filename out of the rename split", async () => {
+    // ` -> ` is a separator only on a rename line. On any other status it is
+    // just characters in a name, and splitting there would report a file that
+    // does not exist.
+    const run = scriptedRun([
+      { stdout: "## main\n" + " M src/a -> b.ts\n" + "R  old -> x.ts -> new.ts\n" },
+      { stdout: "" },
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.status("/workspace/demo");
+
+    assert.deepEqual(result.files, [
+      { path: "src/a -> b.ts", status: "modified" },
+      // Split on the *last* separator: the old name is the one that may itself
+      // contain an arrow.
+      { path: "new.ts", previousPath: "old -> x.ts", status: "renamed" },
+    ]);
   });
 
   it("reports a clean repo with no remote and no ahead/behind", async () => {
@@ -450,6 +470,201 @@ describe("projectGit.revert", () => {
     const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.revert("/workspace/demo");
+
+    assert.equal(result.ok, false);
+    assert.equal((result as { benign: boolean }).benign, true);
+  });
+});
+
+describe("projectGit.diffFile", () => {
+  const DIFF =
+    "diff --git a/src/app.ts b/src/app.ts\n" +
+    "index 1111111..2222222 100644\n" +
+    "--- a/src/app.ts\n" +
+    "+++ b/src/app.ts\n" +
+    "@@ -1,3 +1,3 @@\n" +
+    " context\n" +
+    "-gone\n" +
+    "+added\n";
+
+  /** Every diff read probes for a commit first, so the scripts here lead with
+   * that call's answer. A non-empty stdout means `HEAD` resolved. */
+  const headExists = { stdout: "abc123\n" };
+
+  it("diffs the file against HEAD, with the hardening flags", async () => {
+    const run = scriptedRun([headExists, { stdout: DIFF }]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.diffFile("/workspace/demo", "src/app.ts");
+
+    assert.deepEqual(result, { ok: true, text: DIFF, truncated: false });
+    const argv = run.mock.calls[1]?.arguments[1] ?? [];
+    assert.deepEqual(argv.slice(-3), ["HEAD", "--", "src/app.ts"]);
+    // A repo's own config must not get to choose what this spawns.
+    for (const flag of ["--no-ext-diff", "--no-textconv", "--no-color"]) {
+      assert.ok(argv.includes(flag), `expected ${flag} in ${argv.join(" ")}`);
+    }
+  });
+
+  it("names both sides of a rename so git reports it as one", async () => {
+    const run = scriptedRun([headExists, { stdout: DIFF }]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    await projectGit.diffFile("/workspace/demo", "to.ts", "from.ts");
+
+    const argv = run.mock.calls[1]?.arguments[1] ?? [];
+    assert.deepEqual(argv.slice(-4), ["HEAD", "--", "from.ts", "to.ts"]);
+    assert.ok(argv.includes("-M"));
+  });
+
+  it("falls back to a --no-index diff for an untracked file", async () => {
+    // The revision diff returns nothing for a path git has never seen, and the
+    // fallback exits 1 to mean "they differ" — a normal answer that `execFile`
+    // reports as a rejection, with the diff still on the error.
+    const noIndex = "diff --git a/scratch.md b/scratch.md\n+++ b/scratch.md\n+new\n";
+    const run = scriptedRun([
+      headExists,
+      { stdout: "" },
+      Object.assign(new Error("Command failed: exit 1"), { stdout: noIndex }),
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.diffFile("/workspace/demo", "scratch.md");
+
+    assert.deepEqual(result, { ok: true, text: noIndex, truncated: false });
+    const argv = run.mock.calls[2]?.arguments[1] ?? [];
+    assert.ok(argv.includes("--no-index"));
+    assert.deepEqual(argv.slice(-3), ["--", "/dev/null", "scratch.md"]);
+  });
+
+  it("still fails when the fallback produced no diff at all", async () => {
+    const run = scriptedRun([
+      headExists,
+      { stdout: "" },
+      Object.assign(new Error("boom"), { stderr: "fatal: unreadable\n" }),
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.diffFile("/workspace/demo", "scratch.md");
+
+    assert.deepEqual(result, {
+      ok: false,
+      benign: true,
+      reason: "fatal: unreadable",
+    });
+  });
+
+  it("diffs against the empty tree in a repo with no commits", async () => {
+    const run = scriptedRun([new Error("fatal: bad revision"), { stdout: DIFF }]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.diffFile("/workspace/demo", "src/app.ts");
+
+    assert.equal(result.ok, true);
+    const argv = run.mock.calls[1]?.arguments[1] ?? [];
+    assert.ok(argv.includes("4b825dc642cb6eb9a060e54bf8d69288fbee4904"));
+    assert.ok(!argv.includes("HEAD"));
+  });
+
+  it("passes a binary verdict through as the text it is", async () => {
+    const binary = "Binary files a/logo.png and b/logo.png differ\n";
+    const run = scriptedRun([headExists, { stdout: binary }]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.diffFile("/workspace/demo", "logo.png");
+
+    assert.deepEqual(result, { ok: true, text: binary, truncated: false });
+  });
+
+  it("clips an oversized diff and says that it did", async () => {
+    const huge = Array.from({ length: 2_050 }, (_, n) => `+line ${n}`).join("\n");
+    const run = scriptedRun([headExists, { stdout: huge }]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.diffFile("/workspace/demo", "big.txt");
+
+    assert.equal(result.ok, true);
+    const shown = result as { text: string; truncated: boolean };
+    assert.equal(shown.truncated, true);
+    assert.equal(shown.text.split("\n").length, 2_000);
+  });
+
+  it("reports a git failure as a benign refusal", async () => {
+    const run = scriptedRun([
+      headExists,
+      Object.assign(new Error("boom"), {
+        stderr: "fatal: path 'nope.ts' does not exist\nsecond line\n",
+      }),
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.diffFile("/workspace/demo", "nope.ts");
+
+    assert.deepEqual(result, {
+      ok: false,
+      benign: true,
+      reason: "fatal: path 'nope.ts' does not exist",
+    });
+  });
+});
+
+describe("projectGit.readFile", () => {
+  const never = async () => {
+    throw new Error("git should not be spawned to read a working-tree file");
+  };
+
+  it("reads the file from the worktree, resolved against the project", async () => {
+    const seen: string[] = [];
+    const projectGit = createProjectGit({
+      run: never,
+      readIdentity: noIdentity,
+      readFile: async (absolute) => {
+        seen.push(absolute);
+        return Buffer.from("hello\nworld\n", "utf8");
+      },
+    });
+
+    const result = await projectGit.readFile("/workspace/demo", "src/app.ts");
+
+    assert.deepEqual(result, { ok: true, text: "hello\nworld\n", truncated: false });
+    assert.deepEqual(seen, ["/workspace/demo/src/app.ts"]);
+  });
+
+  it("refuses a binary file rather than rendering replacement characters", async () => {
+    const projectGit = createProjectGit({
+      run: never,
+      readIdentity: noIdentity,
+      readFile: async () => Buffer.from([0x89, 0x50, 0x00, 0x4e, 0x47]),
+    });
+
+    const result = await projectGit.readFile("/workspace/demo", "logo.png");
+
+    assert.deepEqual(result, { ok: false, benign: true, reason: "binary file" });
+  });
+
+  it("clips an oversized file", async () => {
+    const projectGit = createProjectGit({
+      run: never,
+      readIdentity: noIdentity,
+      readFile: async () =>
+        Buffer.from(Array.from({ length: 2_050 }, (_, n) => `line ${n}`).join("\n")),
+    });
+
+    const result = await projectGit.readFile("/workspace/demo", "big.txt");
+
+    assert.equal((result as { truncated: boolean }).truncated, true);
+  });
+
+  it("reports an unreadable file as a benign refusal", async () => {
+    const projectGit = createProjectGit({
+      run: never,
+      readIdentity: noIdentity,
+      readFile: async () => {
+        throw new Error("ENOENT: no such file or directory");
+      },
+    });
+
+    const result = await projectGit.readFile("/workspace/demo", "gone.ts");
 
     assert.equal(result.ok, false);
     assert.equal((result as { benign: boolean }).benign, true);

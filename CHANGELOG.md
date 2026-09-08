@@ -5,6 +5,19 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
 
+## 0.3.0 — 2026-09-08
+
+### Added
+
+- Clicking a changed file in the project window opens it, showing what changed since the last
+  commit — added lines in green, removed in red — with a toggle to read the file's current contents
+  instead. New, deleted and renamed files all show, and a diff too large to display is cut off with
+  a note saying so.
+
+### Fixed
+
+- A renamed file is listed under its new name instead of as `old -> new`, so it can be opened.
+
 ## 0.2.7 — 2026-09-08
 
 ### Fixed

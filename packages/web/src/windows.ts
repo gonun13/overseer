@@ -85,7 +85,17 @@ export const WINDOW_SPEC: Record<
   // the `/changelog` command or by clicking the version in the footer. Height
   // is operator-resizable: the list grows by one section every release.
   changelog: { title: "changelog", x: 420, y: 220, w: 560, h: 400 },
-  diff: { title: "diff", x: 700, y: 260, w: 580 },
+  // Opened by clicking a changed file in the project window — the payload
+  // carries the project and the file, and doubles as the dedupe key, so a
+  // second click on the same row raises the window it already opened. Also
+  // opened from a tool turn's inspect control, which passes a bare target and
+  // still gets the unavailable note.
+  //
+  // Wider and taller than the fixed kinds: a diff's line length is the file's
+  // and not ours, so a narrow frame wraps every line twice, and its length has
+  // no bound at all — the same reasoning console and changelog are resizable
+  // under.
+  diff: { title: "diff", x: 700, y: 260, w: 640, h: 400 },
   // Opened from the providers window's loop tab, one per provider (the
   // payload — a provider id — is also useWindows' dedupe key, so a second
   // click on the same provider raises the existing window). Height is

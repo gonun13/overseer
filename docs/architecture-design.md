@@ -588,13 +588,16 @@ the tier already claimed by the current version.
 | --------- | --------------- | -------- |
 | `0.0.x`   | —               | Scaffold only: repo layout, container, no behavioral spec live. |
 | `0.1.x`   | [overseer-behavior.md](overseer-behavior.md) | **Overseer shell** — wizard phases (§4), progressive furniture (§4), internal memory (§6.2), `overseer-personality` (§6.3), workspace discovery, provider status surfacing via `getStatus()`. The overseer path uses real server state; other windows stay empty until live APIs land. |
-| `0.2.x`   | §1 (process model), §3 rows 1–2 + 5, §9 | **Live sessions & providers** — stream-json sessions that spawn, stream, resume and delete, for **two** real adapters (`claude-code`, `cursor`), each declaring its own `AdapterCapabilities`; session controls populated from the CLI's own report; runtime `set_model` and `set_permission_mode`; project creation into `/workspace`; the dev loop (§9) driven from inside the app. Approvals, capabilities, turn context and diffs are **not** in this tier — their windows exist and declare themselves unavailable. |
-| `0.3+`    | TBD             | Reserve the next MINOR for the next coherent pre-MVP tier once it is written into a design doc and given a row in this table. Do not invent a number in advance. |
+| `0.2.x`   | §1 (process model), §3 rows 1–2 + 5, §9 | **Live sessions & providers** — stream-json sessions that spawn, stream, resume and delete, for **two** real adapters (`claude-code`, `cursor`), each declaring its own `AdapterCapabilities`; session controls populated from the CLI's own report; runtime `set_model` and `set_permission_mode`; project creation into `/workspace`; the dev loop (§9) driven from inside the app. Approvals, capabilities and turn context are **not** in this tier — their windows exist and declare themselves unavailable. |
+| `0.3.x`   | [ui-ux-design.md](ui-ux-design.md) §5.5 | **The working tree, readable** — a changed file in the project window opens to its unified diff against the last commit, with a toggle to the file's current contents. Modified, added, deleted, renamed, untracked, binary and no-commits-yet all render honestly rather than as an empty frame, and a diff too large to show is clipped and says so. Diffs of a *tool turn's* own `Edit`/`Write` input stay out of tier — that entry point keeps its unavailable note until a turn target can be resolved to a project and a file. |
+| `0.4+`    | TBD             | Reserve the next MINOR for the next coherent pre-MVP tier once it is written into a design doc and given a row in this table. Do not invent a number in advance. |
 | `1.0.0`   | §3 **MVP**      | **Core loop** — every row in the MVP table (§3) works end-to-end for `claude-code`: spawn/resume sessions, stream transcript + tools, inline approval, model/mode controls, subscription login from the UI, usage surfacing, crash/auth failure handling. |
 | `1.x`     | §3 **Important**| Additive features from the Important tier. Each MINOR should map to a closed subset of that table (call it out in release notes). |
 | `2.x+`    | §3 **Nice to have** + later providers | Major product expansion; breaking protocol or UX contract bumps MAJOR. |
 
-**Explicit non-goals for `0.2.x`:** diff rendering for `Edit` / `Write`, the capabilities
+**Explicit non-goals for `0.3.x`:** diff rendering of a *tool turn's* own `Edit` / `Write` input
+(the project window's own file diffs ship in `0.3.x` — this is the other entry point into the same
+window, which still has no way to resolve a turn target to a project and a file), the capabilities
 inventory and its editor, turn context attachment, and §5 provider-backed querying in
 [overseer-behavior.md](overseer-behavior.md) ("planned, not built"). Every one of those has a
 window already; each carries a `WUnavailable` note naming what is missing rather than rendering an

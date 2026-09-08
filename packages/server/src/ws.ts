@@ -1,4 +1,5 @@
 import { randomUUID } from "node:crypto";
+import { realpath } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
 import type { Server } from "node:http";
 import path from "node:path";
@@ -459,10 +460,26 @@ export function attachWebSocketServer(httpServer: Server): {
           try {
             const result = await projectGit.status(parsed.path);
             const defaultBranch = await projectGit.defaultBranch(parsed.path);
+            // The origin URL is for the window to display, and only this frame
+            // wants it — asking for it inside `status()` would spend a spawn on
+            // every `push` and `merge`, which read that status only for the
+            // branch name. Read here, beside `defaultBranch`, for the same
+            // reason and in the same shape. A project with no `origin` (or one
+            // whose only remote is named something else) is ordinary, not an
+            // error, so a failure just leaves the URL out.
+            let remoteUrl: string | undefined;
+            if (result.hasRemote) {
+              try {
+                remoteUrl = (await projectGit.remoteUrl(parsed.path)).stdout;
+              } catch {
+                // No origin to name — `hasRemote` still stands on its own.
+              }
+            }
             send({
               type: "project.git.status",
               path: parsed.path,
               ...result,
+              ...(remoteUrl !== undefined ? { remoteUrl } : {}),
               defaultBranch,
             });
           } catch (error) {
@@ -598,6 +615,99 @@ export function attachWebSocketServer(httpServer: Server): {
             return;
           }
           send({ type: "project.git.reverted", path: parsed.path });
+          return;
+        }
+        case "project.git.show": {
+          if (!(await isInsideWorkspace(parsed.path))) {
+            send({
+              type: "error",
+              about: "project.git.show",
+              benign: true,
+              message: "a project must be a path inside the workspace",
+            });
+            return;
+          }
+          // Second stage. The frame guard proved `file` is relative and free
+          // of `..`, which is not the same as proving where it lands once
+          // joined — so it is resolved against the *real* project directory
+          // and checked again here, before anything reads it.
+          //
+          // Compared lexically rather than through `isInsideWorkspace`, which
+          // realpaths its candidate and so requires the path to exist: a
+          // deleted file is precisely the case an operator most wants a diff
+          // for, and it has nothing left on disk to resolve. The existence-
+          // dependent check belongs to the content read, which cannot run on a
+          // missing file anyway, and `readFile` does it there.
+          let projectDir: string;
+          try {
+            projectDir = await realpath(parsed.path);
+          } catch {
+            send({
+              type: "error",
+              about: "project.git.show",
+              benign: true,
+              message: "that project is no longer on disk",
+            });
+            return;
+          }
+          const target = path.resolve(projectDir, parsed.file);
+          if (!target.startsWith(projectDir + path.sep)) {
+            send({
+              type: "error",
+              about: "project.git.show",
+              benign: true,
+              message: "a file must be inside the project",
+            });
+            return;
+          }
+          // Third stage, for anything still on disk: a name that lands inside
+          // the project can still *point* outside it. Reading content follows
+          // symlinks, so `ln -s /etc/passwd notes.md` inside a project would
+          // otherwise be served verbatim — the same escape the workspace guard
+          // exists to stop one level up, and the agent writes into these
+          // directories. A file that does not resolve is a deleted one, which
+          // the lexical check above has already cleared and which no read can
+          // reach anyway. (Git needs no such guard: it records a symlink as
+          // its target string, so a diff shows the link, never what it aims
+          // at.)
+          try {
+            const real = await realpath(target);
+            if (!real.startsWith(projectDir + path.sep)) {
+              send({
+                type: "error",
+                about: "project.git.show",
+                benign: true,
+                message: "a file must be inside the project",
+              });
+              return;
+            }
+          } catch {
+            // Not on disk — nothing to resolve, and nothing to leak.
+          }
+          // Deliberately no `announceGitOp`: this reads, it does not act, and
+          // a broadcast step per file click would raise the overseer's own
+          // window every time an operator glanced at a diff.
+          const result =
+            parsed.mode === "content"
+              ? await projectGit.readFile(projectDir, parsed.file)
+              : await projectGit.diffFile(projectDir, parsed.file, parsed.previousPath);
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "project.git.show",
+              benign: result.benign,
+              message: result.reason,
+            });
+            return;
+          }
+          send({
+            type: "project.git.show",
+            path: parsed.path,
+            file: parsed.file,
+            mode: parsed.mode,
+            text: result.text,
+            truncated: result.truncated,
+          });
           return;
         }
         case "git.access.read": {

@@ -250,6 +250,23 @@ export type ClientMessage =
   /** Discard every uncommitted change in `path` — `git reset --hard` plus a
    * clean of untracked files. */
   | { type: "project.git.revert"; path: string }
+  /** Read one file out of `path`'s worktree — either its unified diff against
+   * the last commit (which is what a commit made from here would record, since
+   * `project.git.commit` stages everything first) or its current contents.
+   *
+   * `file` is repo-relative: never absolute, never containing `..`. The
+   * project directory is checked for workspace containment the same way every
+   * other frame in this family is, and the file is checked against the project
+   * directory in turn — this field is the second half of that question, so it
+   * is validated rather than trusted. `previousPath` is the pre-rename name,
+   * present only for a renamed file. */
+  | {
+      type: "project.git.show";
+      path: string;
+      file: string;
+      mode: "diff" | "content";
+      previousPath?: string;
+    }
   /** Read the container's git access: whether an ssh key exists, the public
    * half of it, and the identity commits are made under. Never carries the
    * private key — nothing in the protocol can ask for it. */
@@ -326,10 +343,14 @@ export interface ProjectCreatedMessage {
 }
 
 /** One changed path from `git status --porcelain`, reduced to the one status
- * word the project window shows next to it. */
+ * word the project window shows next to it. `previousPath` is the name a
+ * renamed file used to have — carried because a diff of the new path alone
+ * reads as a whole-file addition, and git only detects the rename when both
+ * sides are named. Absent for every other status. */
 export interface GitFileChange {
   path: string;
   status: "modified" | "added" | "deleted" | "renamed" | "untracked" | "unmerged";
+  previousPath?: string;
 }
 
 /** Reply to `project.git.status`. `ahead`/`behind` are absent when the branch
@@ -350,6 +371,21 @@ export interface ProjectGitStatusMessage {
   behind?: number;
   defaultBranch: string;
   files: GitFileChange[];
+}
+
+/** Reply to `project.git.show`.
+ *
+ * `mode` is echoed rather than assumed: the operator can flip the view faster
+ * than the reads come back, so the window matches a reply to what it is
+ * currently showing instead of trusting arrival order. `truncated` means the
+ * caps in this file clipped the text — not that the file ends there. */
+export interface ProjectGitShowMessage {
+  type: "project.git.show";
+  path: string;
+  file: string;
+  mode: "diff" | "content";
+  text: string;
+  truncated: boolean;
 }
 
 /** Ack that `path` was committed. The file list itself follows via a fresh
@@ -713,6 +749,7 @@ export type ServerMessage =
   | ProjectSelectedMessage
   | ProjectCreatedMessage
   | ProjectGitStatusMessage
+  | ProjectGitShowMessage
   | ProjectGitCommittedMessage
   | ProjectGitPushedMessage
   | ProjectGitMergedMessage
@@ -801,6 +838,14 @@ export const PROJECT_MAX_DESCRIPTION_CHARS = 4_000;
  * magnitude as `PROJECT_MAX_FOLDER_CHARS` plus room for the workspace root. */
 export const GIT_MAX_PATH_CHARS = 4_096;
 export const GIT_MAX_COMMIT_MESSAGE_CHARS = 4_000;
+/** A diff or a file view is a document the operator reads in one window, not
+ * an archive. Past this the frame costs more than the reading is worth, so the
+ * text is clipped and the reply says it was. Both caps live here rather than
+ * on the server so the window can name the same number it is held to. */
+export const GIT_MAX_DIFF_CHARS = 200_000;
+/** One DOM node per line: the line cap is the render cost, the char cap the
+ * frame cost, and either can be the one that trips first. */
+export const GIT_MAX_DIFF_LINES = 2_000;
 /** A hostname's own limit, brackets of an IPv6 literal included. */
 export const GIT_SSH_MAX_HOST_CHARS = 253;
 export const GIT_MAX_IDENTITY_NAME_CHARS = 128;
@@ -1048,6 +1093,20 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       msg.message.length <= GIT_MAX_COMMIT_MESSAGE_CHARS
     );
   }
+  if (type === "project.git.show") {
+    const msg = value as {
+      path?: unknown;
+      file?: unknown;
+      mode?: unknown;
+      previousPath?: unknown;
+    };
+    return (
+      isGitPath(msg.path) &&
+      isRepoRelativePath(msg.file) &&
+      (msg.mode === "diff" || msg.mode === "content") &&
+      (msg.previousPath === undefined || isRepoRelativePath(msg.previousPath))
+    );
+  }
   if (
     type === "git.access.read" ||
     type === "git.ssh.generate" ||
@@ -1197,6 +1256,28 @@ function isGitPath(value: unknown): value is string {
   return (
     typeof value === "string" && value.length > 0 && value.length <= GIT_MAX_PATH_CHARS
   );
+}
+
+/**
+ * A path *inside* a project, as opposed to `isGitPath`'s project directory
+ * itself: relative, with no `..` segment, no leading slash, and no NUL.
+ *
+ * The server resolves this against the real project directory and re-checks
+ * containment before it reads anything — this is the cheaper half of that
+ * defence, refusing a frame that could not possibly name a file inside a
+ * project before it reaches the code that would have to prove it does not.
+ *
+ * Backslashes are rejected too. Git pathspecs are `/`-separated on every
+ * platform, so a backslash is never load-bearing here, and `..\` is the same
+ * escape wearing a different separator. A leading `-` is refused so the value
+ * cannot be read as a flag even if a caller forgets the `--` separator.
+ */
+function isRepoRelativePath(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (value.length === 0 || value.length > GIT_MAX_PATH_CHARS) return false;
+  if (value.startsWith("/") || value.startsWith("-")) return false;
+  if (value.includes("\0") || value.includes("\\")) return false;
+  return value.split("/").every((segment) => segment !== ".." && segment !== "");
 }
 
 function isPlanId(value: unknown): value is string {

@@ -1,4 +1,4 @@
-import { useEffect, useState, type ReactNode } from "react";
+import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { StatusLight } from "../StatusLight";
 import { ACTIVITY_STEP_WORD, type Activity } from "../../status";
 import type { ProviderInfo } from "../../domain";
@@ -93,10 +93,30 @@ export function WRow({
   tone?: RowTone;
   onClick?: () => void;
 }) {
+  // A row that does something is a control and is reachable like one: the
+  // whole row is the target (a button beside the label would compete with the
+  // row it sits in), so the role and the keys are put on the row itself. A row
+  // that does nothing stays a plain div — an inert row is not a control, and
+  // giving it a button's role would only add noise to the tab order.
+  const controlProps = onClick
+    ? ({
+        role: "button",
+        tabIndex: 0,
+        onClick,
+        onKeyDown: (event: KeyboardEvent<HTMLDivElement>) => {
+          if (event.key !== "Enter" && event.key !== " ") return;
+          // Space would otherwise scroll the window body out from under the
+          // thing the operator just activated.
+          event.preventDefault();
+          onClick();
+        },
+      } as const)
+    : {};
+
   return (
     <div
       className={`w-row ${onClick ? "clickable" : ""} ${tone ? `tone-${tone}` : ""}`}
-      onClick={onClick}
+      {...controlProps}
     >
       <StatusLight activity={activity} />
       <span className="w-row-main">

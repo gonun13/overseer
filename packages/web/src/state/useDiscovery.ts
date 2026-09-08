@@ -154,6 +154,10 @@ export function useDiscovery(): DiscoveryController {
         message.type === "subagent.written" ||
         message.type === "subagent.deleted" ||
         message.type === "project.git.status" ||
+        // One file's diff or contents, for the window a file row opens. A read
+        // whose refusals ("binary file", a path git no longer knows) are
+        // benign in exactly the same way the rest of this channel's are.
+        message.type === "project.git.show" ||
         message.type === "project.git.committed" ||
         message.type === "project.git.pushed" ||
         message.type === "project.git.merged" ||

@@ -43,10 +43,14 @@ export function ProjectWindow({
   path,
   send,
   subscribe,
+  onOpenFile,
 }: {
   path: string;
   send: (message: ClientMessage) => void;
   subscribe: (listener: (message: ServerMessage) => void) => () => void;
+  /** Open one changed file's diff. The whole row is the target, so this is
+   * handed the file rather than just its path — a rename needs both names. */
+  onOpenFile: (file: GitFileChange) => void;
 }) {
   const [status, setStatus] = useState<GitStatusState>();
   const [error, setError] = useState<string>();
@@ -150,6 +154,7 @@ export function ProjectWindow({
                 primary={file.path}
                 right={file.status}
                 tone={FILE_TONE[file.status]}
+                onClick={() => onOpenFile(file)}
               />
             ))
           )}

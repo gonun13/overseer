@@ -374,6 +374,53 @@
   user-select: text;
 }
 
+/* ---- unified diff ---------------------------------------------------------
+   The `w-pre` contract with one span per line, so a line can carry its own
+   ink. No background bands: a filled row is a stamp, and these are content
+   (§7.1). Added and removed take the same two colours the file rows in the
+   project window already use for new and gone (`.tone-new` / `.tone-gone`
+   below), so a green row and its green `+` lines read as one fact.
+
+   The `+`/`-` sits on the first visual row only, and a wrapped continuation
+   hangs one character in behind it — the colour is what carries the rest. The
+   alternative would be letting long lines run off the side, and a horizontal
+   scrollbar is always a layout bug (ui-ux-design.md §10). */
+.w-diff-line {
+  display: block;
+  padding-left: 1ch;
+  text-indent: -1ch;
+}
+
+.w-diff-line.is-add {
+  color: var(--ok-fill);
+}
+
+.w-diff-line.is-del {
+  color: var(--accent-fill);
+}
+
+/* The hunk header is the seam between two readings of the same file — ruled
+   like a row boundary rather than coloured, since it is punctuation and not a
+   change. */
+.w-diff-line.is-hunk {
+  margin-top: 8px;
+  padding-top: 8px;
+  border-top: 1px solid var(--ink-rule);
+  color: var(--ink-dim);
+}
+
+.w-diff-line.is-hunk:first-child {
+  margin-top: 0;
+  padding-top: 0;
+  border-top: none;
+}
+
+/* Blob hashes, mode bits, and the binary verdict — kept so the diff is not
+   lying by omission, dimmed so they are not what gets read first. */
+.w-diff-line.is-meta {
+  color: var(--ink-faint);
+}
+
 /* ---- changelog carousel ---------------------------------------------------
    One release fills the window; the arrows step the filmstrip left/right
    rather than swapping the body, so moving through history reads as travel
@@ -504,6 +551,12 @@
   gap: 10px;
   padding: 8px 0;
   border-bottom: 1px solid var(--ink-rule);
+}
+
+/* A row that acts is a control, and the pointer is the only thing that says so
+   before the click — the hover wash alone reads as highlight, not affordance. */
+.w-row.clickable {
+  cursor: pointer;
 }
 
 .w-row.clickable:hover {

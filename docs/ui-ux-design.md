@@ -240,6 +240,28 @@ is an acceptable way to answer "erase everything I know".
 - The decision states facts in plain machine copy. Personality belongs to the headline, never to the terms
   (§2.3 of [overseer-behavior.md](overseer-behavior.md)).
 
+### 5.5 The file view
+
+Opened by clicking a changed file in the project window. It shows that file's diff against the last commit —
+the change a commit made from that window would record, since committing there stages everything first — with
+a choice group switching to the file's current contents.
+
+- **Unified, never side-by-side.** The frame width is the contract (§5) and a horizontal scrollbar is always a
+  layout bug (§10), so a two-column diff has nowhere to go. Long lines wrap on the `w-pre` contract (§5.2),
+  and a wrapped continuation hangs one character in behind the `+`/`-` so the marker stays on the first
+  visual row only.
+- **Added and removed reuse the file-row tones** — `--ok-fill` for added, `--accent-fill` for removed, the
+  same two colours the project window's rows already carry for new and gone. A green row and its green `+`
+  lines are one fact, not two conventions. Hunk headers are ruled like a row boundary rather than coloured;
+  blob hashes and mode lines are dimmed, present but not read first.
+- **No background bands and no syntax highlighting.** A filled row is a stamp and these are content (§7.1);
+  the app has one family (§8) and a highlighter would bring a second palette that answers to nothing here.
+- **The mode toggle is a choice group** (§6.3): both options inline, the current one marked, no hover fill.
+- **Too large to show is said, not hidden.** A diff past the cap is clipped and carries a note giving the
+  number of lines shown — a surface that silently truncates is lying about what changed.
+- The view is **read once, on open and on each toggle**. It does not follow the file: an agent editing
+  underneath leaves it stale, and reopening is the refresh.
+
 ---
 
 ## 6. Permanent furniture

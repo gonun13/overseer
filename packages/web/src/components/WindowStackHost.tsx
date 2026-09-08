@@ -21,6 +21,7 @@ import { GitConfigWindow } from "./windows/GitConfigWindow";
 import { SubagentWindow } from "./windows/SubagentWindow";
 import type { SubagentsState } from "../state/useSubagents";
 import { findSubagent, subagentKey } from "../subagents";
+import { fileViewKey } from "../fileview";
 import { ConsoleWindow } from "./windows/ConsoleWindow";
 import { ContextWindow } from "./windows/ContextWindow";
 import { DiffWindow } from "./windows/DiffWindow";
@@ -34,10 +35,14 @@ import { ProvidersWindow } from "./windows/ProvidersWindow";
 import { SessionWindow } from "./windows/SessionWindow";
 import { SessionsWindow } from "./windows/SessionsWindow";
 
+/** Mirrors `useWindows`' own `open`. `detail` is the dim secondary on the tab —
+ * needed wherever the title alone is ambiguous, as it is for a file view whose
+ * title is a basename two different files can share. */
 type OpenWindowAction = (
   kind: WindowKind,
   payload?: unknown,
   title?: string,
+  detail?: string,
 ) => void;
 
 interface WindowStackHostProps {
@@ -340,7 +345,11 @@ export function WindowStackHost({
         {windowState.kind === "help" && <HelpWindow provider={provider} />}
         {windowState.kind === "changelog" && <ChangelogWindow />}
         {windowState.kind === "diff" && (
-          <DiffWindow target={String(windowState.payload ?? "")} />
+          <DiffWindow
+            target={String(windowState.payload ?? "")}
+            send={send}
+            subscribe={subscribeSession}
+          />
         )}
         {windowState.kind === "projectCreate" && (
           <ProjectCreateWindow
@@ -353,6 +362,21 @@ export function WindowStackHost({
             path={String(windowState.payload ?? "")}
             send={send}
             subscribe={subscribeSession}
+            onOpenFile={(file) =>
+              openWindow(
+                "diff",
+                fileViewKey(
+                  String(windowState.payload ?? ""),
+                  file.path,
+                  file.previousPath,
+                ),
+                // The tab takes the basename and the full path goes in the
+                // dim detail beside it: a deep path would otherwise fill the
+                // field and crowd out every other window's tab.
+                file.path.split("/").pop(),
+                file.path,
+              )
+            }
           />
         )}
       </Window>
