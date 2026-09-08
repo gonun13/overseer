@@ -88,6 +88,16 @@ async function runModels(
   }
 }
 
+/** The agent row for a provider that picks its own. `value: ""` is the same
+ * "no agent pinned" this protocol uses everywhere, so nothing downstream has
+ * to learn a new word — cursor's spawn has no `--agent` to put it in either
+ * way, which makes selecting it the no-op it should be. */
+const AUTO_AGENT: ProviderOption = {
+  value: "",
+  label: "auto subagent",
+  detail: "cursor delegates to your .cursor/agents files on its own",
+};
+
 export async function readProviderOptions(
   opts: { projectDir: string },
   options?: { timeoutMs?: number },
@@ -98,10 +108,20 @@ export async function readProviderOptions(
   return {
     models: probe.models,
     permissionModes: PERMISSION_MODES,
-    // No `--agent` flag exists to force one at session-spawn time (unlike
-    // claude's), so a list here would name rows nothing here could act on —
-    // "report nothing rather than a guess".
-    agents: [],
+    // Exactly one row, and it is not a choice.
+    //
+    // No `--agent` flag exists to pin one at spawn time (verified against the
+    // real CLI: the only `--agent*` string in the 2026.09.02 bundle is
+    // `--agent-endpoint`). Cursor hands the operator's `.cursor/agents` files
+    // to the model as dynamic context and the model delegates to them itself
+    // through its task tool — so the selection genuinely belongs to the
+    // provider, not the operator.
+    //
+    // Reported as a named row rather than an empty list because those two
+    // states look identical in the control bar and mean opposite things: an
+    // empty list draws a bare dash, which reads as "your subagents are not
+    // working". They are — this row says who is choosing.
+    agents: [AUTO_AGENT],
     ...(probe.defaultModel !== undefined ? { defaultModel: probe.defaultModel } : {}),
   };
 }

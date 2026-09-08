@@ -140,25 +140,27 @@ export function SubagentWindow({
         />
       </div>
 
-      <WTitle>where it lives</WTitle>
-      <div className="btn-row">
-        {(
-          [
-            ["project", "this project only"],
-            ["user", "every project"],
-          ] as const
-        ).map(([value, help]) => (
-          <button
-            key={value}
-            className="w-btn"
-            title={help}
-            onClick={() => setScope(value)}
-          >
-            <span className="w-btn-mark">{scope === value ? "▪" : ""}</span>
-            {value}
-          </button>
-        ))}
-      </div>
+      {/* Only drawn when there is a choice: a provider that keeps subagents in
+          one place (cursor) would otherwise show a row whose other option the
+          adapter refuses. */}
+      {subagents.scopes.length > 1 && (
+        <>
+          <WTitle>where it lives</WTitle>
+          <div className="btn-row">
+            {subagents.scopes.map((value) => (
+              <button
+                key={value}
+                className="w-btn"
+                title={value === "project" ? "this project only" : "every project"}
+                onClick={() => setScope(value)}
+              >
+                <span className="w-btn-mark">{scope === value ? "▪" : ""}</span>
+                {value}
+              </button>
+            ))}
+          </div>
+        </>
+      )}
       {willRename && (
         <p className="w-note">
           saving moves the file — the old one is removed once the new one is

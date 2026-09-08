@@ -1,6 +1,13 @@
 import assert from "node:assert/strict";
-import { describe, it } from "node:test";
-import { normalizePermissionMode, parseModelsOutput } from "../src/options.js";
+import { mkdtemp, rm, writeFile } from "node:fs/promises";
+import { tmpdir } from "node:os";
+import path from "node:path";
+import { after, before, describe, it } from "node:test";
+import {
+  normalizePermissionMode,
+  parseModelsOutput,
+  readProviderOptions,
+} from "../src/options.js";
 
 // Captured live from `agent models` against `2026.08.31-4057e58`.
 const REAL_OUTPUT = `Available models
@@ -68,5 +75,41 @@ describe("normalizePermissionMode", () => {
     assert.equal(normalizePermissionMode("auto-review"), undefined);
     assert.equal(normalizePermissionMode(""), undefined);
     assert.equal(normalizePermissionMode(undefined), undefined);
+  });
+});
+
+describe("readProviderOptions agents", () => {
+  /** A stand-in `agent` on PATH, so `models` resolves without the real CLI. */
+  let dir = "";
+  let originalPath: string | undefined;
+
+  before(async () => {
+    dir = await mkdtemp(path.join(tmpdir(), "cursor-agent-stub-"));
+    await writeFile(
+      path.join(dir, "agent"),
+      "#!/bin/sh\necho 'auto - Auto (current, default)'\n",
+      { mode: 0o755 },
+    );
+    originalPath = process.env.PATH;
+    process.env.PATH = `${dir}:${process.env.PATH ?? ""}`;
+  });
+
+  after(async () => {
+    if (originalPath === undefined) delete process.env.PATH;
+    else process.env.PATH = originalPath;
+    await rm(dir, { recursive: true, force: true });
+  });
+
+  it("names the one agent row rather than reporting an empty list", async () => {
+    // An empty list draws a bare dash in the control bar, which reads as
+    // "your subagents are not working" — they are, cursor just chooses.
+    const { agents } = await readProviderOptions({ projectDir: dir });
+    assert.equal(agents.length, 1);
+    assert.equal(agents[0]?.label, "auto subagent");
+  });
+
+  it("keeps the unset value, so selecting it arms no flag", async () => {
+    const { agents } = await readProviderOptions({ projectDir: dir });
+    assert.equal(agents[0]?.value, "");
   });
 });

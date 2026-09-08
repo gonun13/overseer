@@ -26,7 +26,7 @@ import type { SessionMeta, TurnWire } from "@overseer/protocol";
 
 const MAX_TITLE_LEN = 35;
 
-function cursorHome(): string {
+export function cursorHome(): string {
   return process.env.HOME ?? "/home/overseer";
 }
 

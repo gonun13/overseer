@@ -19,8 +19,8 @@ packages/
   web/                React + Vite + Tailwind SPA
   server/             Node: WS + REST, static SPA host, adapter registry, session supervisor
   adapters/
-    claude-code/      Claude Code adapter — login, console, stream-json sessions
-    cursor/           Cursor adapter — login, console, stream-json sessions
+    claude-code/      Claude Code adapter — login, console, stream-json sessions, plans, subagents
+    cursor/           Cursor adapter — login, console, stream-json sessions, plans, subagents
   e2e/                Playwright acceptance tests (container-only)
 loop/                 the dev-loop CLI — bash, a provider CLI, and plain files
 workspace/            host-shared dir — git projects live here, mounted into the container
@@ -51,23 +51,32 @@ interface AgentAdapter {
   // that cannot enumerate omits it and the server refuses the request rather
   // than filling menus with values the CLI would reject.
   listOptions?(opts: { projectDir: string }): Promise<ProviderOptions>;
+  // The operator's own subagent files, and the plans their sessions produced.
+  // Optional for the same reason: an adapter with no such folder omits them
+  // and the server refuses rather than reporting an empty inventory.
+  listSubagents?(opts: { projectDir: string }): Promise<Subagent[]>;
+  writeSubagent?(opts: { ... }): Promise<Subagent>;
+  deleteSubagent?(opts: { ... }): Promise<void>;
 }
 
 interface SessionHandle {
   events: AsyncIterable<AgentEvent>;
   send(msg: UserMessage): void; // queues if a turn is in flight
-  interrupt(): Promise<void>;
-  setModel(model: string): Promise<void>;
-  setEffort(effort: string): Promise<void>;
-  setPermissionMode(mode: PermissionMode): Promise<void>;
-  resolvePermission(id: string, d: PermissionDecision): Promise<void>;
+  interrupt(): void;
+  setModel(model: string): void;
+  setPermissionMode(mode: PermissionMode): void;
+  resolvePermission(id: string, d: PermissionDecision): void;
   close(): Promise<void>;
 }
 ```
 
-The three runtime setters are still unbuilt: a session runs on what it spawned
-with, and a control-row pick arms the *next* session rather than retargeting the
-one in flight.
+The setters are fire-and-forget: they return `void`, and whether the provider
+accepted is reported back asynchronously on the event stream as `session.model`
+/ `session.mode`, or as an `error`. `setModel` and `setPermissionMode` are built
+for both adapters — claude-code sends a control request mid-session, cursor
+(which has no such channel) arms the *next* spawn and says so immediately.
+There is no `setEffort`: effort is a `listOptions` value folded into the model
+or a spawn flag, never a runtime control.
 
 ### 1.1.1 Discovering what a provider offers
 
@@ -123,9 +132,9 @@ moment, so a cached list would go on offering agents they deleted; the ask is
 free and happens on human timescales (attaching a provider, changing project, opening
 a control row). The server single-flights it so two tabs cannot spawn two children.
 
-`AdapterCapabilities` contains `streamingDeltas`, `permissionPrompts`, `interrupt`, `subagents`, `mcp`, `skills`, `effortLevels`, `costReporting`, `checkpoints`, and `backgroundAgents`. The UI renders only supported controls.
+`AdapterCapabilities` contains `streamingDeltas`, `permissionPrompts`, `interrupt`, `subagents`, `mcp`, `skills`, `effortLevels`, `costReporting`, `checkpoints`, `backgroundAgents`, `login`, and `usageCheck`. The UI renders only supported controls. `subagents` claims the *file editor* — reading and writing the operator's agent files — not that the event stream distinguishes a subagent's work (cursor's does not).
 
-Normalized event union: `session.init`, `text.delta`, `thinking.delta`, `tool.start` / `tool.delta` / `tool.end`, `permission.request`, `todo.update`, `subagent.start` / `subagent.text` / `subagent.end`, `turn.end` (usage + cumulative process cost), `usage.limit`, `error`, `exit`.
+Normalized event union: `session.init`, `text.delta`, `thinking.delta`, `tool.start` / `tool.delta` / `tool.end`, `permission.request`, `todo.update`, `subagent.start` / `subagent.text` / `subagent.end`, `session.model`, `session.mode`, `turn.end` (usage + cumulative process cost), `error`, `exit`.
 
 ### 1.1.2 The provider registry
 
@@ -148,8 +157,12 @@ A provider can be implemented on one side, the other, or both, which is what the
 two role fields say. `app` is `adapter` when this server has real wiring,
 `stub` when the CLI is in the image but sessions/auth/console are not built yet,
 `none` when the app should not list it at all. `loop` is `bundle` when the
-directory carries `provider.sh`, `none` otherwise. `cursor` today is
-`stub`/`bundle`: the loop runs on it, the app only lists it.
+directory carries `provider.sh`, `none` otherwise. `claude-code` and `cursor`
+are both `adapter`/`bundle` today: the loop runs on either and the app has real
+wiring for either. `loopSubagents: "unverified"` on `cursor` is a narrower
+claim than its adapter's `subagents` capability — the adapter reads and writes
+`.cursor/agents` files, but whether the *loop* delegates to them on cursor has
+not been confirmed.
 
 Three consumers, no duplication between them:
 

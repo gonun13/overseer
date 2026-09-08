@@ -5,6 +5,18 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
 
+## 0.2.6 — 2026-09-08
+
+### Added
+
+- The plans window lists plans when Cursor is the attached provider, reading both the plans Cursor
+  writes itself and older ones sitting in the project. A plan that still knows the chat it came
+  from resumes that chat when you implement it; one that does not starts a fresh session with the
+  plan text carried in.
+- Subagents can be created, edited and removed under Cursor, from the same capabilities window
+  Claude Code uses. Cursor keeps them with the project, so the "where it lives" choice is not
+  offered — and settings only Cursor understands survive an edit here untouched.
+
 ## 0.2.5 — 2026-09-07
 
 ### Fixed

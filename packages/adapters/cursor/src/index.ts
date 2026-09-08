@@ -7,14 +7,20 @@ import type {
   ConsoleHandle,
   ConsoleOpts,
   ProviderOptions,
+  Subagent,
+  SubagentDraft,
+  SubagentScope,
   SessionHandle,
   SessionMeta,
   SessionOpts,
 } from "@overseer/protocol";
 import { openConsole } from "./console.js";
+import { readSubagents } from "./custom-agents.js";
 import { readAuthStatus, signOut, startLogin } from "./login.js";
 import { readProviderOptions } from "./options.js";
+import { listProjectPlans } from "./plans.js";
 import { createSessionHandle, mintSessionId, openSession } from "./session-handle.js";
+import { deleteSubagentFile, writeSubagentFile } from "./subagent-files.js";
 import {
   deleteSession,
   findProjectDirForSession,
@@ -33,11 +39,12 @@ import { checkUsage as runUsageCheck } from "./usage.js";
  *   `--print` (verified: an untrusted cwd just hard-fails asking for
  *   `--trust`/`--force`, there is no per-tool-call prompt to answer). This
  *   adapter always spawns with `--trust --force`.
- * - `subagents: false` — cursor's CLI can genuinely spawn subagents
- *   (`.cursor/agents/*.md`, verified in the shipped bundle), but this
- *   adapter's `normalize.ts` does not distinguish a subagent's `tool_call`
- *   from an ordinary one, so setting this true would grow a UI zone that
- *   never populates.
+ * - `subagents: true` — the operator's `.cursor/agents/*.md` files are read
+ *   and written here (`custom-agents.ts`, `subagent-files.ts`), against the
+ *   one folder the CLI itself resolves. Note what this flag does *not* claim:
+ *   `normalize.ts` still cannot tell a subagent's `tool_call` from an ordinary
+ *   one, so no `subagent.start`/`.text`/`.end` events are emitted. The
+ *   capability is the editor, not the live reporting.
  * - `mcp` / `skills` / `effortLevels` — nothing here enumerates or reports
  *   any of the three; `session.init` carries no equivalent field and no
  *   `--effort` flag exists (effort is baked into a model's own id string).
@@ -54,7 +61,7 @@ const capabilities: AdapterCapabilities = {
   streamingDeltas: true,
   permissionPrompts: false,
   interrupt: true,
-  subagents: false,
+  subagents: true,
   mcp: false,
   skills: false,
   effortLevels: false,
@@ -100,6 +107,29 @@ export const cursorAdapter: AgentAdapter = {
   listOptions(opts: { projectDir: string }): Promise<ProviderOptions> {
     return readProviderOptions(opts);
   },
+  async listSubagents(opts: { projectDir: string }): Promise<Subagent[]> {
+    // Never throws, per the interface: an unreadable folder is reported as no
+    // agents, the same way `readSubagents` treats a missing one.
+    try {
+      return await readSubagents(opts);
+    } catch {
+      return [];
+    }
+  },
+  writeSubagent(opts: {
+    projectDir: string;
+    draft: SubagentDraft;
+    previous?: { name: string; scope: SubagentScope };
+  }): Promise<Subagent> {
+    return writeSubagentFile(opts);
+  },
+  deleteSubagent(opts: {
+    projectDir: string;
+    name: string;
+    scope: SubagentScope;
+  }): Promise<void> {
+    return deleteSubagentFile(opts);
+  },
   login: {
     start: startLogin,
     signOut,
@@ -117,6 +147,7 @@ export const cursorAdapter: AgentAdapter = {
     mintSessionId,
     lookupSessionTitle,
     deleteSession,
+    listProjectPlans,
   } satisfies AdapterSessionStore,
 };
 

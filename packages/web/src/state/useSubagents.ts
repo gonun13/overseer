@@ -26,6 +26,10 @@ export interface SubagentsState {
   status: "idle" | "working" | "done" | "error";
   /** Last refusal, in the server's words. */
   error: string | undefined;
+  /** The scopes this provider actually has a folder for. Cursor resolves
+   * subagents only under the workspace, so offering "every project" would put
+   * a control on the form whose every use the adapter refuses. */
+  scopes: SubagentScope[];
   refresh: () => void;
   write: (
     draft: SubagentDraft,
@@ -138,8 +142,24 @@ export function useSubagents(
     unavailable,
     status,
     error,
+    scopes: scopesFor(providerId),
     refresh,
     write,
     remove,
   };
+}
+
+/**
+ * Where a provider keeps subagents.
+ *
+ * Read off the provider id rather than a capability flag: `AdapterCapabilities`
+ * answers whether subagents can be managed at all, and splitting that into a
+ * per-scope flag would be a wire change for one provider's folder layout. The
+ * adapter refuses a scope it has no folder for regardless — this only keeps the
+ * form from offering the operator a choice that cannot land.
+ */
+function scopesFor(providerId: string | undefined): SubagentScope[] {
+  // Verified against the CLI's own `computeAgentsDirs()`: cursor resolves
+  // `<workspace>/.cursor/agents` and nothing under the operator's home.
+  return providerId === "cursor" ? ["project"] : ["project", "user"];
 }
