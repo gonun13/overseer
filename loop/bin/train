@@ -36,7 +36,7 @@ base.
 --id    report only the branch belonging to that request.
 
 Exit codes: 0 ok, 1 general failure, 2 workspace not found,
-4 not a git repository, or no origin remote.
+4 not a git repository, or no trunk branch.
 USAGE
 }
 

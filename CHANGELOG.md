@@ -5,6 +5,19 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
 
+## 0.3.1 — 2026-09-08
+
+### Fixed
+
+- The dev loop runs against a project that has no remote. It no longer refuses to start work on
+  one, stacking each request's branch on the local trunk instead, and approving a review merges
+  the work into that trunk rather than pushing it — so a purely local project goes from request to
+  landed change without a git host. A project with a remote is unaffected: its branches are still
+  pushed for you to open the pull request yourself.
+- A project you have only just `git init`ed no longer stops the loop to ask you for a first
+  commit. It makes one itself, from whatever the project already contains, so there is a trunk to
+  branch from — and the request's own changes still show up as just their own diff.
+
 ## 0.3.0 — 2026-09-08
 
 ### Added

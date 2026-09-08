@@ -46,7 +46,7 @@ own commands are recognized as such and don't need approving one at a time.
 | `$LOOP_DIR/bin/tracers <ws> <id> [--next\|--last]` | the plan's tracers; `--next` the group to implement, `--last` the one just built |
 | `$LOOP_DIR/bin/stint <ws>` | who holds the stint, and what is still pending in it |
 | `$LOOP_DIR/bin/land <ws> <id>` | commit to the branch and release the tree. Local; nothing is pushed |
-| `$LOOP_DIR/bin/publish <ws> <id>` | push the branch to origin. Only after a review approved it |
+| `$LOOP_DIR/bin/publish <ws> <id>` | act on an approved review: push the branch to origin, or merge it into the trunk when the project has no remote |
 | `$LOOP_DIR/bin/memory <ws> --show` | the workspace's accumulated knowledge. Steps maintain it; you rarely need it |
 | `$LOOP_DIR/bin/train <ws>` | the stacked branches, and which one the next request is cut from |
 | `$LOOP_DIR/bin/worktree <ws> <id> --create` | the throwaway checkout a review is QA'd in |
@@ -65,10 +65,10 @@ directory. You read state and run commands; you do not write code.
 
 **And you never run a git verb by hand.** Not `commit`, not `push`, not
 `branch`, not `checkout`, not `merge`. `loop/bin/step` puts the tree on the
-right branch, `land` commits, `publish` pushes, `close` ends the request once
-its work has landed. Those are the only four things that move a repository, and
-each one refuses what it should. Reach for `train` when you want to know where
-things stand.
+right branch, `land` commits, `publish` pushes or merges, `close` ends the
+request once its work has landed. Those are the only four things that move a
+repository, and each one refuses what it should. Reach for `train` when you want
+to know where things stand.
 
 ## Offering a choice
 
@@ -95,7 +95,7 @@ On startup, and after every completed step, run
 | `committed` | `land` — the record is written but the repository has not moved |
 | `landed` | `review` — the work is on its branch, on this machine only |
 | `reviewed` | act on its `outcome` — see below |
-| `published` | nothing from you. The branch is on origin; the human opens the pull request and merges it, then `close`. |
+| `published` | nothing from you. With a remote, the branch is on origin and the human opens the pull request and merges it, then `close`. With none, `publish` already merged it into the trunk, so it is ready to `close`. |
 | `closed` | nothing. The request is finished and out of the train. |
 
 ### Acting on a route
@@ -140,9 +140,10 @@ You run `review` yourself, like `scope` — read `$LOOP_DIR/steps/review.md` and
 follow it. An audit you delegate, QA you walk the operator through, and their
 decision, which you record but do not make.
 
-**This is the gate before anything becomes public.** Say so plainly: approving
-puts it on GitHub, rejecting keeps it on this machine. Two things are unlike
-every other step:
+**This is the gate.** Say so plainly: approving publishes the work — pushed to
+your git host, or merged into the trunk in a project with no remote — and
+rejecting leaves it exactly where it is. Two things are unlike every other
+step:
 
 - **The sign-off comes first.** `step <ws> <id> review` refuses until `signoff`
   has put the human's words on disk. So: audit, QA, capture the decision, *then*
@@ -154,24 +155,36 @@ every other step:
 |---|---|
 | `approved` | `publish <ws> <id>` |
 | `followups` | the same, then `new` for each finding they approved |
-| `rejected` | **publish nothing.** The branch stays local and stays in the train. Open the findings as requests. |
+| `rejected` | **publish nothing.** The branch stays where it is and stays in the train. Open the findings as requests. |
 
 `publish` refuses a request that was not reviewed, or whose review rejected it.
 That refusal is the safety rail — never reach for `--force`.
 
-Once the human has merged the work on their forge:
+**What `publish` does depends on the project, and it tells you which.** With an
+`origin` remote it pushes the branch and the human opens the pull request. With
+no remote there is no forge to open one on, so it merges the branch into the
+trunk itself and the work is landed the moment it succeeds. You do not choose
+between them and you do not check first — run `publish` and read what it says.
+
+Then, once the work is on the trunk — merged by the human on their forge, or by
+`publish` itself:
 
 ```sh
 "$LOOP_DIR"/bin/close <ws> <id>
 ```
 
-`close` checks that the work really is on the default branch before pruning
-anything — a squash or a rebase merge counts, not just a merge commit.
+`close` checks that the work really is on the trunk before pruning anything — a
+squash or a rebase merge counts, not just a merge commit. If it says the work
+has not landed and the human wants it landed here rather than on a forge,
+`close <ws> <id> --merge` does the merge and then closes; it refuses a conflict
+rather than resolving one.
 
 ### The train
 
 Past `commit`, several requests are alive at once, each on its own branch cut
-off the one in front of it. `loop/bin/step` arranges that; you do not.
+off the one in front of it, the first cut off the trunk — `origin`'s default
+branch, or the local `main` when the project has no remote. `loop/bin/step`
+arranges that; you do not.
 
 - `train <ws>` shows the chain and the tip. Never run git to find out.
 - A request leaves the train only when `close` says its work landed — true of a

@@ -11,10 +11,13 @@
 # three. They live in the workspace repo's own config:
 #
 #   branch.<branch>.looprequest   the request id that owns this branch
-#   branch.<branch>.loopbase      what it was cut from (a branch, or origin/<default>)
+#   branch.<branch>.loopbase      what it was cut from (a branch, or the trunk)
 #
 # That is a linked list, and the list *is* the train:
-#   origin/main <- feature/a <- hotfix/b <- change/c
+#   main <- feature/a <- hotfix/b <- change/c
+#
+# The trunk at the head of it is `origin/<default>` in a repo with a remote and
+# a plain local branch in one without; see git_default_ref.
 #
 # This looks like a violation of the README's "centralized db/ instead of
 # writing into the workspace" rule. It is not: that rule exists so the tool's
@@ -39,6 +42,24 @@ git_ws() {
   git -C "$repo" "$@"
 }
 
+# git_authored_ws <repo> <args…> — git_ws, for a command that writes a commit.
+#
+# Committing needs an author, and the loop runs in a container where neither the
+# repo nor the user necessarily has one configured — `git commit` and
+# `git commit-tree` both fail outright when they cannot work one out. So a tool
+# identity is supplied as a fallback, and *only* as a fallback: an identity the
+# human has configured is never overridden, because their commits should carry
+# their name and not this tool's.
+git_authored_ws() {
+  local repo=$1
+  shift
+  if git_ws "$repo" var GIT_AUTHOR_IDENT >/dev/null 2>&1; then
+    git_ws "$repo" "$@"
+  else
+    git_ws "$repo" -c user.name=overseer -c user.email=overseer@localhost "$@"
+  fi
+}
+
 # git_is_repo <repo> — 0 if that directory is the root of a git work tree.
 git_is_repo() {
   [ -d "$1/.git" ] || git_ws "$1" rev-parse --git-dir >/dev/null 2>&1
@@ -50,26 +71,71 @@ git_has_origin() {
 }
 
 # git_require_repo <repo> <workspace-name> — die unless the workspace is a git
-# repo with an origin. Both are hard preconditions for the commit step: a
-# request's work has to go onto a branch and out to a pull request, and neither
-# is possible without them. Exit 4, distinct from the stint's own refusals, so
-# a caller can tell "this project is not set up for it" from "not right now".
+# work tree. That is the one hard precondition: a request's work goes onto its
+# own branch, cut from the trunk, and neither is possible without a repository.
+# Exit 4, distinct from the stint's own refusals, so a caller can tell "this
+# project is not set up for it" from "not right now".
+#
+# A remote is deliberately *not* required. Everything the loop does up to and
+# including the review is local — branches stacked on a trunk, commits, a
+# worktree — and the one remote-dependent verb, `publish`, merges into the
+# trunk instead of pushing when there is nothing to push to. Requiring an
+# origin here would refuse a perfectly ordinary local project at `implement`.
 git_require_repo() {
   local repo=$1 name=$2
   git_is_repo "$repo" || die "workspace '$name' is not a git repository
-The loop commits a request's work to its own branch and opens a pull request,
-which needs a repository to do it in:
+The loop commits a request's work to its own branch, cut from this project's
+trunk, which needs a repository to do it in:
   git -C $repo init" 4
-  git_has_origin "$repo" || die "workspace '$name' has no 'origin' remote
-A request's branch is pushed to origin and its pull request opened there, so
-the loop cannot take this project past 'implement' without one:
-  git -C $repo remote add origin <url>" 4
 }
 
-# git_default_ref <repo> — the remote-tracking ref new work ultimately targets,
-# as a name usable with merge-base: origin/HEAD's target when it resolves, then
-# origin/main, then origin/master. Prints nothing and returns 1 when none of
-# them exist, which is a repo that has an origin it has never fetched.
+# git_unborn_head <repo> — the branch HEAD points at when the repo has no
+# commits yet, or empty with rc 1. `git init` leaves exactly this state: HEAD is
+# a symbolic ref to refs/heads/main and that ref does not exist.
+git_unborn_head() {
+  local repo=$1 name
+  git_ws "$repo" rev-parse --verify --quiet HEAD >/dev/null 2>&1 && return 1
+  name=$(git_ws "$repo" symbolic-ref --quiet --short HEAD 2>/dev/null) || return 1
+  [ -n "$name" ] || return 1
+  printf '%s' "$name"
+}
+
+# git_local_default_branch <repo> — the local branch that serves as the trunk in
+# a repo with no usable remote: the first of main, master, trunk that exists,
+# then whatever init.defaultBranch names if that one exists too, and finally the
+# branch an unborn HEAD points at. Prints nothing and returns 1 when none of
+# them do — a repo whose trunk is called something nobody can guess.
+#
+# The unborn case is last but is not an error: a freshly `git init`ed project is
+# an ordinary thing to point the loop at, and its trunk is the branch it is
+# already on. git_ensure_root_commit is what gives that branch a commit.
+git_local_default_branch() {
+  local repo=$1 ref configured
+  for ref in main master trunk; do
+    if git_branch_exists "$repo" "$ref"; then
+      printf '%s' "$ref"
+      return 0
+    fi
+  done
+  configured=$(git_ws "$repo" config --get init.defaultBranch 2>/dev/null || true)
+  if [ -n "$configured" ] && git_branch_exists "$repo" "$configured"; then
+    printf '%s' "$configured"
+    return 0
+  fi
+  git_unborn_head "$repo"
+}
+
+# git_default_ref <repo> — the trunk: what new work ultimately targets, as a
+# name usable with merge-base. origin/HEAD's target when it resolves, then
+# origin/main, then origin/master — and when the repo has no remote (or has one
+# it has never fetched), the local trunk instead.
+#
+# So this prints a remote-tracking ref like `origin/main` in one repo and a bare
+# local branch like `main` in another. Callers write `${ref#origin/}` when they
+# need the branch name, which is a no-op on a bare one, so both forms work
+# everywhere a trunk is used: merge-base, ancestry, merge-tree, checkout.
+#
+# Prints nothing and returns 1 when nothing resolves at all.
 git_default_ref() {
   local repo=$1 head ref
   if head=$(git_ws "$repo" symbolic-ref --quiet refs/remotes/origin/HEAD 2>/dev/null); then
@@ -82,18 +148,30 @@ git_default_ref() {
       return 0
     fi
   done
-  return 1
+  git_local_default_branch "$repo"
 }
 
-# git_require_default_ref <repo> <workspace-name> — git_default_ref or die.
+# git_require_default_ref <repo> <workspace-name> — git_default_ref or die. The
+# advice depends on which world the repo is in: a repo with an origin that
+# resolves nothing has not been fetched, a repo without one has no trunk.
 git_require_default_ref() {
   local repo=$1 name=$2 ref
-  ref=$(git_default_ref "$repo") || die "workspace '$name' has no default branch on origin
+  if ref=$(git_default_ref "$repo"); then
+    printf '%s' "$ref"
+    return 0
+  fi
+  if git_has_origin "$repo"; then
+    die "workspace '$name' has no default branch on origin, and no local trunk
 The loop needs to know what a request's work is ultimately merged into.
 Neither origin/HEAD, origin/main nor origin/master resolves — fetch, then
 point origin/HEAD at the right branch:
   git -C $repo fetch origin && git -C $repo remote set-head origin -a" 4
-  printf '%s' "$ref"
+  fi
+  die "workspace '$name' has no trunk to stack branches on
+Every request's branch is cut from this project's trunk, and none of 'main',
+'master' or 'trunk' is here — nor is HEAD on a branch this could use. Put it on
+one:
+  git -C $repo checkout -b main" 4
 }
 
 # git_tree_clean <repo> — 0 when nothing is modified, staged or untracked.
@@ -221,6 +299,95 @@ git_branch_absorbed() {
   merged=$(git_ws "$repo" merge-tree --write-tree "$default_ref" "$branch" 2>/dev/null) || return 1
   base=$(git_ws "$repo" rev-parse "$default_ref^{tree}" 2>/dev/null) || return 1
   [ -n "$merged" ] && [ "$merged" = "$base" ]
+}
+
+# git_merge_into_trunk <repo> <branch> <trunk> — merge a request's branch into
+# the trunk, locally, without disturbing the working tree.
+#
+# This is what "publish" means in a repo with no remote: there is nowhere to
+# push, so the human's approval merges the work instead. `loop/bin/close
+# --merge` uses the same function for a repo that has a remote but is merged
+# here rather than on a forge.
+#
+# **The working tree is not ours.** By the time this runs the review has
+# finished, the stint was released at `land`, and another request may already
+# own the tree on its own branch — so a checkout of the trunk would yank it out
+# from under work in progress. The trunk is therefore moved with plumbing
+# (merge-tree, commit-tree, update-ref) whenever it is not the branch already
+# checked out. That is the same in-memory merge `git_branch_absorbed` uses, run
+# for its tree rather than for a comparison.
+#
+# Prints one of `already`, `fast-forward` or `merge` on success. Dies rather
+# than leaving a half-merge: a conflict, a dirty tree parked on the trunk, and
+# a trunk that moved under us are all refusals a human resolves.
+git_merge_into_trunk() {
+  local repo=$1 branch=$2 trunk=$3
+  local trunk_branch=${trunk#origin/}
+  local current sha trunk_sha tree commit fastforward
+
+  if git_branch_landed "$repo" "$branch" "$trunk" || git_branch_absorbed "$repo" "$branch" "$trunk"; then
+    printf 'already'
+    return 0
+  fi
+
+  git_branch_exists "$repo" "$trunk_branch" \
+    || die "cannot merge '$branch': there is no local '$trunk_branch' to merge it into
+The trunk this work targets is '$trunk', and merging happens here, so it has to
+exist as a local branch:
+  git -C $repo checkout -b $trunk_branch $trunk" 1
+
+  sha=$(git_ws "$repo" rev-parse "$branch")
+  trunk_sha=$(git_ws "$repo" rev-parse "$trunk_branch")
+  current=$(git_ws "$repo" branch --show-current)
+
+  # Whether this is a fast-forward is a fact about the two commits, so settle it
+  # before anything moves and both paths below can report the same thing.
+  fastforward=0
+  git_ws "$repo" merge-base --is-ancestor "$trunk_branch" "$branch" && fastforward=1
+
+  # The trunk is checked out: git can do it properly, but only if the tree is
+  # clean — whatever is in it belongs to somebody, and a merge would bury it.
+  if [ "$current" = "$trunk_branch" ]; then
+    git_tree_clean "$repo" || die "cannot merge '$branch' into '$trunk_branch': the working tree is dirty
+'$trunk_branch' is checked out with uncommitted changes in it. Commit, stash or
+discard them, then run this again:
+  git -C $repo status --short
+$(git_dirty_paths "$repo" | sed 's/^/  /')" 1
+    if git_authored_ws "$repo" merge --quiet --no-edit "$branch" >/dev/null 2>&1; then
+      [ "$fastforward" -eq 1 ] && { printf 'fast-forward'; return 0; }
+      printf 'merge'
+      return 0
+    fi
+    git_ws "$repo" merge --abort >/dev/null 2>&1 || true
+    git_merge_die_conflict "$repo" "$branch" "$trunk_branch"
+  fi
+
+  # The usual case: the tree is on this request's branch, or on a later
+  # request's. Move the trunk ref underneath it, touching nothing else.
+  if [ "$fastforward" -eq 1 ]; then
+    git_ws "$repo" update-ref "refs/heads/$trunk_branch" "$sha" "$trunk_sha" \
+      || die "'$trunk_branch' moved while merging '$branch' — nothing was changed. Try again." 1
+    printf 'fast-forward'
+    return 0
+  fi
+
+  tree=$(git_ws "$repo" merge-tree --write-tree "$trunk_branch" "$branch" 2>/dev/null) \
+    || git_merge_die_conflict "$repo" "$branch" "$trunk_branch"
+  commit=$(printf 'Merge %s into %s\n' "$branch" "$trunk_branch" \
+    | git_authored_ws "$repo" commit-tree "$tree" -p "$trunk_sha" -p "$sha" -F -) \
+    || die "could not build the merge commit for '$branch'" 1
+  git_ws "$repo" update-ref "refs/heads/$trunk_branch" "$commit" "$trunk_sha" \
+    || die "'$trunk_branch' moved while merging '$branch' — nothing was changed. Try again." 1
+  printf 'merge'
+}
+
+# git_merge_die_conflict <repo> <branch> <trunk-branch> — the one refusal a
+# human has to resolve by hand, so it says how.
+git_merge_die_conflict() {
+  die "'$2' does not merge cleanly into '$3' — nothing was changed
+The loop will not resolve a conflict on your behalf. Merge it yourself, then
+close the request:
+  git -C $1 checkout $3 && git -C $1 merge $2" 1
 }
 
 # git_request_branch <repo> <id> — the branch that request owns, or empty.
@@ -370,6 +537,44 @@ git_diff_range() {
   printf '%s...%s' "$(git_base_ref "$repo" "$branch")" "$branch"
 }
 
+# git_ensure_root_commit <repo> <workspace-name> — give an unborn trunk its
+# first commit, so there is something to cut a branch from.
+#
+# `git init` and nothing else is an ordinary state for a project somebody has
+# just pointed the loop at, and it used to stop `implement` dead: no commit
+# means no refs/heads/<trunk>, which means `checkout -b` has no base. Refusing
+# it put a git command in front of the human in the middle of the inner loop,
+# which is precisely what the loop exists to avoid — so bash types it instead.
+# This is the same class of thing as cutting the branch or making the commit:
+# deterministic git the tool owns, not a decision an agent improvises.
+#
+# **The existing files go into that root commit**, rather than it being empty.
+# A request's diff is `base...branch`, so leaving the project uncommitted would
+# make the first request's diff the entire project — and `commit`, `review` and
+# every human reading them would be looking at thousands of lines of somebody
+# else's code instead of the change. `git add -A` honours .gitignore, and this
+# only ever runs in a repo where nothing has ever been tracked, so there is no
+# deliberate "kept out of git" state to override.
+git_ensure_root_commit() {
+  local repo=$1 name=$2 unborn trunk files
+  unborn=$(git_unborn_head "$repo") || return 0
+  trunk=$(git_default_ref "$repo") || return 0
+  # Only when the unborn branch really is the trunk. A repo that has commits on
+  # some other branch has a base already and is none of this function's business.
+  [ "$unborn" = "$trunk" ] || return 0
+
+  files=$(git_ws "$repo" status --porcelain | wc -l | tr -d ' ')
+  if [ "$files" -gt 0 ]; then
+    git_ws "$repo" add -A
+    printf 'initial commit\n\nThe project as it stood when the loop first took it.\n' \
+      | git_authored_ws "$repo" commit --quiet -F -
+    log_info "'$name' had no commits — committed the $files existing path(s) to '$unborn' so there is a trunk to branch from"
+  else
+    git_authored_ws "$repo" commit --quiet --allow-empty -m 'initial commit'
+    log_info "'$name' was an empty repository — made an empty root commit on '$unborn' so there is a trunk to branch from"
+  fi
+}
+
 # --- Entering the stint -------------------------------------------------
 
 # git_stint_enter <repo> <workspace-name> <id> <kind> <title> <already-held>
@@ -394,6 +599,10 @@ git_stint_enter() {
 
   git_require_repo "$repo" "$name"
   git_require_default_ref "$repo" "$name" >/dev/null
+  # Before the dirty-tree check below, and deliberately: in a repo with no
+  # commits the "dirty" tree is the project itself, which belongs in the root
+  # commit rather than being something for this request to refuse over.
+  git_ensure_root_commit "$repo" "$name"
 
   branch=$(git_request_branch "$repo" "$id")
   current=$(git_ws "$repo" branch --show-current)
@@ -443,9 +652,12 @@ git_stint_enter() {
   else
     # Fetch so the tip is judged against what origin actually has. A failure is
     # a warning, never fatal — halting `implement` on a network blip is worse
-    # than a base a later rebase fixes.
-    git_ws "$repo" fetch --quiet origin 2>/dev/null \
-      || log_info "could not fetch origin — basing on the local view of it"
+    # than a base a later rebase fixes. A repo with no remote has nothing to
+    # fetch and its local trunk is already the whole truth.
+    if git_has_origin "$repo"; then
+      git_ws "$repo" fetch --quiet origin 2>/dev/null \
+        || log_info "could not fetch origin — basing on the local view of it"
+    fi
     base=$(git_train_tip "$repo")
     git_ws "$repo" checkout --quiet -b "$branch" "$base"
   fi

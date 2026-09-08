@@ -53,7 +53,7 @@ record was written" from "the work is committed" after a crash between the two.
 
 Exit codes: 0 ok, 1 general/validation failure, 2 workspace not found,
 3 this request does not hold the stint, or has not recorded `commit`,
-4 not a git repository, or no origin remote.
+4 not a git repository, or no trunk branch.
 USAGE
 }
 
@@ -152,14 +152,9 @@ That releases the working tree for the next request. Clearing deletes the
 records, so read anything worth keeping out of this one first:
   $(artifact_ref "$slug" implement "$id")" 1
   git_ws "$repo" add -A
-  # Fall back to a tool identity only when the repo and the user have none —
-  # never override an identity the human has configured.
-  if git_ws "$repo" var GIT_AUTHOR_IDENT >/dev/null 2>&1; then
-    printf '%s\n' "$message" | git_ws "$repo" commit --quiet -F -
-  else
-    printf '%s\n' "$message" | git_ws "$repo" \
-      -c user.name=overseer -c user.email=overseer@localhost commit --quiet -F -
-  fi
+  # git_authored_ws falls back to a tool identity only when the repo and the
+  # user have none — never overriding one the human has configured.
+  printf '%s\n' "$message" | git_authored_ws "$repo" commit --quiet -F -
   log_info "committed $(git_ws "$repo" rev-parse --short HEAD) on $branch"
 fi
 sha=$(git_ws "$repo" rev-parse HEAD)

@@ -38,10 +38,12 @@ host terminal too.
 - One overseer per workspace at a time. `loop/run` takes a session lease so a
   second terminal is told who holds it rather than racing; `loop/bin/list`
   shows it too.
-- `loop/bin/publish` pushes the branch to origin, which needs an ssh key the
-  container does not have by default. `land` commits locally and nothing leaves
-  the machine; generate a key in settings › git access to change that. Opening
-  the pull request is yours to do, on whichever forge the remote lives on.
+- A remote is optional. With one, `loop/bin/publish` pushes the branch to
+  origin — which needs an ssh key the container does not have by default;
+  generate one in settings › git access, and opening the pull request is yours
+  to do on whichever forge the remote lives on. With none, `publish` merges the
+  approved branch into the trunk instead, and the loop runs end to end without
+  anything leaving the machine. `land` is local in both cases.
 
 Anything under `loop/bin/` can be run the same way — `./bin/loop list personal`
 reads what is open without starting a session.
@@ -85,11 +87,11 @@ loop/bin/check
 | `tracers` | That request's tracers, from its plan, with the phase they belong to, whether the plan declared them parallel, and their status from the implement record's ledger. `--next` prints just the group to implement next, comma-separated and ready for `step --tracer`; `--last` prints the group the implement record says was actually built, which is what `verify` checks and what a rework redoes. Read-only, and the only place plan markdown is parsed. |
 | `stint` | Reports who holds the stint, how far through the current lap of the cycle they are, and which tracers are pending. `--release` hands the stint back — an administrative hatch for a human cleaning up outside a session, refused while the holder still has pending tracers unless `--force`, and never a statement that a run was good. Changes nothing else — no artifact, no status, no `index.jsonl` line. |
 | `land` | The irreversible half of `commit`, run after `record`: stages everything, commits it to the request's branch with the message the commit record carries, appends a `landed` event, and releases the stint. **Local only** — nothing is pushed. Skipped when it has already happened, so an interrupted run is retried by running it again. |
-| `publish` | Pushes the branch to origin and prints the title the commit record carries, for the pull request you open yourself. Refused until a recorded `review` says the human approved the work. This is the first moment anything about a request leaves the machine, and the only command that makes it public. |
+| `publish` | Acts on an approved review. With an `origin` remote: pushes the branch there and prints the title the commit record carries, for the pull request you open yourself — the first moment anything about a request leaves the machine. With no remote: merges the branch into the trunk instead, without touching the working tree, because there is no forge to open a pull request on. Refused either way until a recorded `review` says the human approved the work. |
 | `train` | The stacked branches this workspace's requests own — each one's base, whether it has landed, and which is the tip a new request would be cut from. Read-only, and the only place branch metadata is read outside the libs. |
 | `worktree` | Stands up, tears down, or locates the throwaway checkout a `review` is QA'd in — detached at that request's branch, under `db/<slug>/worktrees/<id>/`. `--create` is idempotent, so a review abandoned mid-way costs the next one nothing. |
 | `signoff` | Writes the human's review decision to `db/<slug>/signoff/<id>.txt`, verbatim. The mirror of `new`, for the other end of the loop and for the same reason. Nothing is recorded in `index.jsonl`. |
-| `close` | Ends a request whose work has landed on the default branch: prunes the loop's metadata from its branch so it leaves the train, deletes the local branch, and appends a `closed` event. `--abandon` drops the work instead. |
+| `close` | Ends a request whose work has landed on the trunk: prunes the loop's metadata from its branch so it leaves the train, deletes the local branch, and appends a `closed` event. `--merge` merges it into the trunk first, for work landed here rather than on a forge; `--abandon` drops the work instead. |
 | `clear` | Deletes a request's artifacts and appends a `cleared` event. Requires `--id` or `--all`, prints what it's about to delete, and asks for confirmation unless `--yes` (mandatory in a non-interactive shell). `index.jsonl` is never rewritten; `memory.md` is never touched. Releases the lock if the cleared request held it. |
 | `memory` | The workspace's accumulated knowledge at `db/<slug>/memory.md`, which every step is handed and none writes directly. `--show` prints it. `--merge` takes a sectioned delta on stdin: each `## Section` it names replaces that section's body, every section it does not name is kept untouched, and bash writes the title and provenance line itself. `--decision` appends one entry under `## Past Decisions & Rationale`. Reports the document's size, and which sections to prune when it is over budget. |
 | `provider` | Lists bundles under `providers/` and writes the chosen id to `loop/.provider`. `LOOP_PROVIDER` still overrides at runtime. |
@@ -421,14 +423,20 @@ review. What keeps them from colliding is that **every request is cut off the
 one in front of it**:
 
 ```
-origin/main <- feature/add-a-login-form-aaaa1111
-            <- hotfix/fix-the-logout-redirect-bbbb2222
-            <- change/third-thing-cccc3333          (the tip)
+main <- feature/add-a-login-form-aaaa1111
+     <- hotfix/fix-the-logout-redirect-bbbb2222
+     <- change/third-thing-cccc3333          (the tip)
 ```
 
 A train of requests, a train of stacked branches. A request's changes were
 written on top of everything before it, so that is the only base against which
 its diff means anything.
+
+At the head of the train is the **trunk**: `origin/HEAD`, `origin/main` or
+`origin/master` in a project with a remote, and the local `main`, `master` or
+`trunk` in one without. A remote is not required anywhere in the loop — the
+train is a chain of local branches either way, and `git_default_ref` is the
+single place that decides which of the two a project is.
 
 **The branch is cut at stint entry, not at commit.** `loop/bin/step` resolves
 the tip and checks out a new branch the moment a request takes the working
@@ -484,7 +492,7 @@ only the third one is visible to anyone else:
 | | What it does | Where it is |
 |---|---|---|
 | `land` | commits the work to the request's branch | this machine |
-| `publish` | pushes the branch to origin | your git host |
+| `publish` | pushes the branch to origin, or merges it into the trunk | your git host, or this machine |
 | `close` | ends the request once its work has landed | this machine |
 
 `publish` is refused until `db/<slug>/review/<id>.md` exists and its `outcome`
@@ -501,6 +509,15 @@ that publishes, rather than something that follows publication.
 Opening the pull request itself is deliberately left to a human. The loop has
 no opinion about which forge a remote lives on, and needs no credentials for
 one beyond the ssh key that pushes.
+
+**A project with no remote publishes by merging.** There is nowhere to push and
+no forge to open a pull request on, so the human's approval merges the branch
+into the trunk instead — which is the same gate doing the same job, since the
+approval is still the only thing that lands the work. The merge is done with
+plumbing rather than a checkout (`merge-tree`, `commit-tree`, `update-ref`),
+because by the time `publish` runs the stint has been released and another
+request may already own the working tree. A conflict is refused, never
+resolved: that is a human's call, and the trunk is left untouched.
 
 The cost is that the `commit` step writes a pull-request title and body for a
 pull request that may never be opened. That is the right trade: writing them is

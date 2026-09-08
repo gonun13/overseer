@@ -50,10 +50,11 @@ and a "tidier" branch name is simply wrong.
    - `git -C <workspace_dir> log --oneline -10`
    Read the actual diff. A message written only from the implement record
    describes what was planned, not what was written.
-3. **Do not push.** The branch stays on this machine until
-   a human has reviewed it and approved it; `loop/bin/publish` opens the pull
-   request then. You write the title and body it will use — writing them is
-   free, pushing is what is public.
+3. **Do not push and do not merge.** The branch stays exactly where it is until
+   a human has reviewed it and approved it; `loop/bin/publish` acts on it then —
+   pushing it to origin, or merging it into the trunk when the project has no
+   remote. You write the title and body either one uses. Writing them is free;
+   publishing is what commits you.
 4. **Change no file under `workspace_dir`**, and write nothing anywhere except
    `output_file`.
 5. **Write for a stranger.** No tracer ids, no phase numbers, no request id, no
@@ -73,7 +74,10 @@ and a "tidier" branch name is simply wrong.
 5. Write the pull-request body: what changed, how it was verified, and what a
    reviewer should look hardest at. Name the risky parts; a reviewer's
    attention is the scarce thing here, and this body is what the `review` step
-   reads before deciding whether any of this becomes public.
+   reads before deciding whether any of this goes anywhere. Write it the same
+   way whether or not the project has a remote — with one it is the pull
+   request's description, without one it is the briefing for the merge, and it
+   is the reviewer who wants it most in both cases.
 
 ## Output
 

@@ -5,11 +5,12 @@ branch. An automated audit for security and performance, then manual QA with
 the human at this terminal, then their decision — recorded, not made by you.
 Exactly one review record.
 
-**Nothing about this request is public yet, and this step does not make it so.**
-The branch has not been pushed anywhere. `loop/bin/publish`
-opens one *after* this record says the human approved the work — which is what
-makes this review the gate rather than a formality after the fact. A rejected
-review pushes nothing at all.
+**Nothing about this request has gone anywhere yet, and this step does not send
+it.** The work is a commit on a local branch and nothing more. `loop/bin/publish`
+acts on it *after* this record says the human approved it — pushing the branch
+to origin, or, in a project with no remote, merging it into the trunk. That
+ordering is what makes this review the gate rather than a formality after the
+fact. A rejected review publishes nothing at all.
 
 **You run this step yourself, in this session**, like `scope` — it ends in a
 conversation and a human's decision. The one part you delegate is the audit,
@@ -68,7 +69,7 @@ LOOP_SIGNOFF_EOF
    dependency, not a config. The worktree is a read-only copy; a fix made in it
    goes nowhere and confuses the next person who looks.
 2. **Do not run a git command that writes**, in either tree. Reading is fine —
-   that is most of the job. Do not push: pushing the branch is
+   that is most of the job. Do not push and do not merge: both are
    `loop/bin/publish`'s job, and it runs after this record exists and only if
    it says the work was approved — that ordering is the whole point.
 3. **Do not decide the outcome.** `outcome` transcribes what the human said in
@@ -149,12 +150,15 @@ Put the outcome to them as a choice:
 
 | `outcome` | What it means |
 |---|---|
-| `approved` | push it, as it stands |
+| `approved` | publish it, as it stands |
 | `followups` | the same, and open the findings as new requests |
-| `rejected` | publish nothing. The branch stays local and stays in the train, and the findings are opened as requests cut off it. |
+| `rejected` | publish nothing. The branch stays where it is and stays in the train, and the findings are opened as requests cut off it. |
 
-Say plainly which one they are choosing: `approved` and `followups` are what
-put this work on your git host, `rejected` keeps it on this machine.
+Say plainly which one they are choosing, in the terms of *this* project: with a
+remote, `approved` and `followups` push the branch to your git host; with no
+remote they merge it into the trunk. `rejected` leaves it untouched either way.
+Check which one you are in — `git -C <workspace_dir> remote get-url origin` —
+rather than promising a push that cannot happen.
 
 Then, for every audit finding and every QA problem worth its own request,
 propose it and let them approve or drop each one. For each approved one:
@@ -194,7 +198,7 @@ Reminder before you write: one Write to `output_file` only — no code fences, n
 commentary before or after. Every `{{…}}` is a value from the step context;
 substitute it verbatim. `outcome` is the human's, not yours — copy it from
 `inputs.signoff_file`. `findings` is `none`, or a count with its severity
-breakdown. Still nothing edited, still no push, still no fix applied.
+breakdown. Still nothing edited, still no push or merge, still no fix applied.
 
 **Write telegraphically.** Every line is a fragment, not a sentence.
 

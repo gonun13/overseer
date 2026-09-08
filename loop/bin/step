@@ -59,7 +59,7 @@ its pull request.
 Exit codes: 0 ok, 1 general/validation failure, 2 workspace not found,
 3 the stint is unavailable — another request holds it, or this
   request has already recorded this step on the current lap of the cycle,
-4 the workspace is not a git repository, or has no origin remote,
+4 the workspace is not a git repository, or has no trunk branch,
 5 the working tree is not clean, so the request cannot enter the stint.
 USAGE
 }

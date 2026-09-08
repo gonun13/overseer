@@ -8,7 +8,7 @@
 # a deliberate verb rather than something inferred, because "has this landed"
 # has two possible answers and only one of them is reliable (see below).
 #
-# Usage: loop/bin/close <workspace-name> <request-id> [--abandon] [--yes]
+# Usage: loop/bin/close <workspace-name> <request-id> [--merge] [--abandon] [--yes]
 set -euo pipefail
 
 SCRIPT_DIR="$(CDPATH='' cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
@@ -19,16 +19,21 @@ source "$LOOP_BIN_DIR/lib/db.sh"
 
 usage() {
   cat >&2 <<'USAGE'
-usage: loop/bin/close <workspace-name> <request-id> [--abandon] [--yes]
+usage: loop/bin/close <workspace-name> <request-id> [--merge] [--abandon] [--yes]
 
 Ends a request: prunes the loop's metadata from its branch so it leaves the
 train, deletes the local branch, and appends a `closed` event. From then on no
 other request bases on it.
 
 With no flag it only closes a request whose work has already landed on the
-default branch — fetch first, then check. That is the "somebody merged it in
-the browser" path.
+trunk — fetch first, then check. That is the "somebody merged it in the
+browser" path.
 
+--merge    merge the branch into the trunk first, here, then close. For a repo
+           with no forge to merge on, and for work you would rather land
+           locally than in a browser. Refuses a conflict rather than resolving
+           one, and never touches the working tree unless the trunk is the
+           branch checked out in it.
 --abandon  close without landing — the work is dropped. The branch leaves the
            train and any pull request is left open for a human to deal with.
            Requires --yes.
@@ -38,17 +43,18 @@ The branch is deleted locally; the remote branch and any pull request are left
 alone. Nothing here deletes work you might want.
 
 Exit codes: 0 closed, 1 general failure, 2 workspace not found,
-3 the work has not landed and --abandon was not given,
-4 not a git repository, or no origin remote.
+3 the work has not landed and neither --merge nor --abandon was given,
+4 not a git repository, or no trunk branch.
 USAGE
 }
 
 require_cmd jq
 require_cmd git
 
-name="" id="" abandon=0 yes=0
+name="" id="" abandon=0 yes=0 merge=0
 while [ $# -gt 0 ]; do
   case "$1" in
+    --merge)   merge=1; shift ;;
     --abandon) abandon=1; shift ;;
     --yes)     yes=1; shift ;;
     -h|--help) usage; exit 0 ;;
@@ -83,20 +89,38 @@ if [ "$abandon" -eq 1 ]; then
   [ "$yes" -eq 1 ] || die "--abandon drops this request's work out of the train; pass --yes to mean it" 1
   log_info "abandoning $id — its work is not on ${default_ref#origin/}"
 else
-  git_ws "$repo" fetch --quiet origin 2>/dev/null \
-    || log_info "could not fetch origin — judging against the local view of it"
+  if git_has_origin "$repo"; then
+    git_ws "$repo" fetch --quiet origin 2>/dev/null \
+      || log_info "could not fetch origin — judging against the local view of it"
+  fi
+  # --merge lands it here rather than waiting for somebody to land it
+  # elsewhere. It runs before the check below, which then passes for the
+  # ordinary reason: the work really is on the trunk now.
+  if [ "$merge" -eq 1 ]; then
+    result=$(git_merge_into_trunk "$repo" "$branch" "$default_ref")
+    case "$result" in
+      already) : ;;
+      *) log_info "merged $branch into ${default_ref#origin/} ($result)" ;;
+    esac
+  fi
   if git_branch_landed "$repo" "$branch" "$default_ref"; then
     landed=1
   elif git_branch_absorbed "$repo" "$branch" "$default_ref"; then
     landed=1
     log_info "squash- or rebase-merged — ancestry does not hold, but the branch adds nothing to ${default_ref#origin/}"
   fi
-  [ "$landed" -eq 1 ] || die "request $id has not landed on ${default_ref#origin/}
+  if [ "$landed" -ne 1 ]; then
+    where="Merge it on your forge, then close:"
+    git_has_origin "$repo" || where="Merge it into ${default_ref#origin/}, then close:"
+    die "request $id has not landed on ${default_ref#origin/}
 Its branch '$branch' is not contained there, and merging it would still change
-the tree. Merge it on your forge, then close:
+the tree. $where
   $LOOP_BIN_DIR/close $name $id
+Or have this command merge it for you:
+  $LOOP_BIN_DIR/close $name $id --merge
 Or drop the work entirely:
   $LOOP_BIN_DIR/close $name $id --abandon --yes" 3
+  fi
 fi
 
 # A branch cannot be deleted while it is checked out, and it usually is — this

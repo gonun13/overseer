@@ -1,21 +1,34 @@
 #!/usr/bin/env bash
-# Push a reviewed request's branch to origin.
+# Act on an approved review: push the request's branch to origin, or — in a repo
+# with no remote — merge it into the trunk.
 #
-# This is the first moment anything about a request leaves this machine, and it
-# is deliberately the last step the loop takes. `implement` writes the code,
-# `land` commits it to a local branch, `review` audits that branch and puts it
-# in front of a human — and only if they approved it does this run. A rejected
-# review pushes nothing, so a bad run costs a local branch delete rather than a
-# pushed branch somebody has to be told to ignore.
+# This is deliberately the last step the loop takes. `implement` writes the
+# code, `land` commits it to a local branch, `review` audits that branch and
+# puts it in front of a human — and only if they approved it does this run. A
+# rejected review publishes nothing, so a bad run costs a local branch delete
+# rather than something somebody has to be told to ignore.
 #
-# The loop stops here. Opening a pull request, and merging it, are a human's to
-# do on whichever forge this remote lives on — the loop has no opinion about
-# which one that is, and needs no credentials for it beyond the ssh key the
-# operator generates in settings.
+# **What "publish" means depends on whether there is anywhere to push.**
 #
-# The `pr_title` and `## PR body` the `commit` step wrote are kept: they are
-# the description a human pastes when they open the pull request, and keeping
-# them is what makes restoring automatic PR creation a small change.
+#   with an origin     push the branch. The loop stops there: opening the pull
+#                      request, and merging it, are a human's to do on whichever
+#                      forge the remote lives on. The loop has no opinion about
+#                      which one that is, and needs no credentials for it beyond
+#                      the ssh key the operator generates in settings.
+#
+#   no origin          merge the branch into the trunk, here. A pull request
+#                      needs a forge and there isn't one; the human's approval is
+#                      still the gate, and merging is what it now opens. The
+#                      merge never touches the working tree — see
+#                      git_merge_into_trunk — because by now another request may
+#                      hold it.
+#
+# Either way the request ends up `published`, which is the state the overseer
+# reads, and `close` ends it once the work is on the trunk.
+#
+# The `pr_title` and `## PR body` the `commit` step wrote are kept in both
+# worlds: they are the description a human pastes when they open the pull
+# request, or the briefing for the merge when there is none.
 #
 # Usage: loop/bin/publish <workspace-name> <request-id> [--dry-run] [--force]
 set -euo pipefail
@@ -30,18 +43,20 @@ usage() {
   cat >&2 <<'USAGE'
 usage: loop/bin/publish <workspace-name> <request-id> [--dry-run] [--force]
 
-Pushes that request's branch to origin and opens a pull request against the
-branch it was cut from, using the title and body its commit record carries.
+Acts on an approved review. With an `origin` remote, pushes that request's
+branch there and prints the title its commit record carries, for the pull
+request you open yourself. With no remote, merges the branch into the trunk
+instead — there is no forge to open a pull request on, and the approval is what
+lands the work.
 
 Refused until the request has a recorded `review` whose outcome is `approved`
-or `followups`. Nothing about a request is public before a human has looked at
-it and said yes — that is the whole reason this is a separate verb from
+or `followups`. Nothing about a request goes anywhere before a human has looked
+at it and said yes — that is the whole reason this is a separate verb from
 loop/bin/land rather than the end of it.
 
-Both stages are skipped when they have already happened — a remote branch
-already at this sha, a pull request already open — so an interrupted run is
-retried by running it again. Appends a `published` event carrying the pull
-request's url.
+Work already done is skipped — a remote branch already at this sha, a branch
+already contained in the trunk — so an interrupted run is retried by running it
+again. Appends a `published` event either way.
 
 --dry-run  print the exact commands and change nothing
 --force    publish without a review. For a human who means it; the refusal
@@ -49,7 +64,7 @@ request's url.
 
 Exit codes: 0 ok, 1 general/validation failure, 2 workspace not found,
 3 the request has not been reviewed, or its review rejected the work,
-4 not a git repository, or no origin remote.
+4 not a git repository, or no trunk branch.
 USAGE
 }
 
@@ -111,6 +126,7 @@ branch=$(git_request_branch "$repo" "$id")
 [ -n "$branch" ] || die "request $id has no branch to publish
   $LOOP_BIN_DIR/train $name" 1
 base=$(git_base_ref "$repo" "$branch")
+trunk=$(git_require_default_ref "$repo" "$name")
 
 file=$(artifact_path "$slug" commit "$id")
 [ -f "$file" ] || die "no commit record at $(artifact_ref "$slug" commit "$id")" 1
@@ -120,40 +136,67 @@ pr_body=$(record_section "$file" "PR body")
 [ -n "$pr_body" ] || die "the commit record has no '## PR body' section" 1
 
 sha=$(git_ws "$repo" rev-parse "$branch")
+merged=false
+merge_result=""
 
 if [ "$dry" -eq 1 ]; then
   log_info "would run, in workspace/$name:"
-  printf '  git push -u origin %s\n' "$branch"
+  if git_has_origin "$repo"; then
+    printf '  git push -u origin %s\n' "$branch"
+  else
+    printf '  # no origin remote — merge %s into %s instead\n' "$branch" "${trunk#origin/}"
+  fi
   exit 0
 fi
 
-# --- push ----------------------------------------------------------------
-if [ "$(git_ws "$repo" rev-parse --quiet --verify "refs/remotes/origin/$branch" 2>/dev/null)" = "$sha" ]; then
-  log_info "already pushed: origin/$branch is at $(git_ws "$repo" rev-parse --short "$branch")"
+if git_has_origin "$repo"; then
+  # --- push --------------------------------------------------------------
+  if [ "$(git_ws "$repo" rev-parse --quiet --verify "refs/remotes/origin/$branch" 2>/dev/null)" = "$sha" ]; then
+    log_info "already pushed: origin/$branch is at $(git_ws "$repo" rev-parse --short "$branch")"
+  else
+    git_ws "$repo" push --quiet -u origin "$branch"
+    log_info "pushed $branch to origin"
+  fi
+
+  # --- the stacked base --------------------------------------------------
+  # The base is pushed too when it is another request's branch. A stacked
+  # request is the normal case rather than the exception, and a human opening
+  # the pull request needs the branch it targets to exist on origin —
+  # otherwise the forge offers only the default branch and the diff is
+  # everything, not this request.
+  #
+  # The test is the loop's own metadata, not the shape of the name: a base with
+  # no `looprequest` key is the trunk, which is the forge's business and never
+  # ours to push.
+  if [ -n "$(git_branch_meta "$repo" "$base" "$LOOP_GIT_KEY_REQUEST")" ] \
+    && ! git_ws "$repo" rev-parse --quiet --verify "refs/remotes/origin/$base" >/dev/null 2>&1; then
+    log_info "base '$base' is not on origin yet — pushing it so the pull request has something to target"
+    git_ws "$repo" push --quiet -u origin "$base"
+  fi
+
+  log_info "open the pull request on your forge: $branch → ${base#origin/}"
+  log_info "title: $pr_title"
 else
-  git_ws "$repo" push --quiet -u origin "$branch"
-  log_info "pushed $branch to origin"
+  # --- merge -------------------------------------------------------------
+  # No remote, so there is nothing to push and no forge to open a pull request
+  # on. The approval merges the work into the trunk instead. The working tree
+  # is left exactly as it was: another request may already hold it.
+  merge_result=$(git_merge_into_trunk "$repo" "$branch" "$trunk")
+  merged=true
+  case "$merge_result" in
+    already) log_info "'$branch' is already contained in ${trunk#origin/} — nothing to merge" ;;
+    *)       log_info "merged $branch into ${trunk#origin/} ($merge_result) — this repo has no origin, so nothing was pushed" ;;
+  esac
+  log_info "end it when you are ready: $LOOP_BIN_DIR/close $name $id"
 fi
-
-# --- the stacked base ----------------------------------------------------
-# The base is pushed too when it is another request's branch. A stacked request
-# is the normal case rather than the exception, and a human opening the pull
-# request needs the branch it targets to exist on origin — otherwise the forge
-# offers only the default branch and the diff is everything, not this request.
-if [ "$base" != "${base#origin/}" ]; then
-  : # already a remote-tracking ref — the default branch, nothing to do
-elif ! git_ws "$repo" rev-parse --quiet --verify "refs/remotes/origin/$base" >/dev/null 2>&1; then
-  log_info "base '$base' is not on origin yet — pushing it so the pull request has something to target"
-  git_ws "$repo" push --quiet -u origin "$base"
-fi
-
-log_info "open the pull request on your forge: $branch → ${base#origin/}"
-log_info "title: $pr_title"
 
 title=$(printf '%s' "$event" | jq -r '.title')
 append_event "$slug" "$id" "$(iso_now)" review published published "$title" \
   "$(artifact_ref "$slug" raw "$id")" "$(artifact_ref "$slug" review "$id")"
 
 jq -n --arg id "$id" --arg branch "$branch" --arg base "$base" \
-  --arg sha "$sha" \
-  '{published:true, id:$id, branch:$branch, base:$base, sha:$sha}'
+  --arg sha "$sha" --arg trunk "${trunk#origin/}" \
+  --argjson merged "$merged" --arg merge "$merge_result" \
+  '{published:true, id:$id, branch:$branch, base:$base, sha:$sha,
+    trunk:$trunk, merged:$merged}
+   + (if $merged then {merge:$merge} else {} end)'
