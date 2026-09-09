@@ -192,6 +192,18 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
         // "main...origin/main [ahead 1, behind 2]" | "main" | "HEAD (no branch)"
         const branchPart = header.split("...")[0]?.trim();
         if (branchPart && branchPart !== "HEAD (no branch)") branch = branchPart;
+        // git prints the divergence bracket only when there *is* divergence:
+        // an upstream that matches HEAD exactly prints nothing after the
+        // "branch...upstream" pair. So presence of the pair — not of the
+        // bracket — is what says a comparison happened, and a branch with an
+        // upstream and no bracket is 0 ahead, 0 behind rather than unknown.
+        // "[gone]" is the exception: the upstream is configured but no longer
+        // exists, so there is nothing to compare against and both stay absent.
+        const hasUpstream = header.includes("...") && !header.includes("[gone]");
+        if (hasUpstream) {
+          ahead = 0;
+          behind = 0;
+        }
         const aheadMatch = header.match(/ahead (\d+)/);
         const behindMatch = header.match(/behind (\d+)/);
         if (aheadMatch) ahead = Number(aheadMatch[1]);

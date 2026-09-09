@@ -12,7 +12,7 @@ cat >&2 <<'EOF'
 overseer: refusing to run outside the container.
 
   This project never runs on the host, dev included. Overseer and the agents it
-  spawns live inside Docker (docs/architecture-design.md §6): only ./workspace
+  spawns live inside Docker (docs/architecture-design.md §6): only the workspace
   is shared with the host. Starting Node/npm here skips the container entirely.
 
   Use instead:

@@ -355,7 +355,9 @@ export interface GitFileChange {
 
 /** Reply to `project.git.status`. `ahead`/`behind` are absent when the branch
  * has no upstream to compare against — never collapsed to `0`, the same rule
- * `DiscoveredProject.dirty` already follows. `defaultBranch` is this
+ * `DiscoveredProject.dirty` already follows. A branch that *does* track an
+ * upstream and matches it reports `0`/`0`: "in sync" and "nothing to compare"
+ * are different states, and the push button reads them differently. `defaultBranch` is this
  * project's trunk — `main` in the common case, but `master` or whatever a
  * clone's `origin/HEAD` names for one that predates that convention — and is
  * what `project.git.merge` targets, and what the merge button labels itself

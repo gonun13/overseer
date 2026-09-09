@@ -11,7 +11,7 @@
 # it learned, and an action register that outlived the machine it describes
 # would be a record of something that no longer exists.
 #
-# ./workspace is a host bind mount and is not touched. Neither is loop/db —
+# The workspace is a host bind mount outside the repo and is not touched. Neither is loop/db —
 # in dev it lives in the repo through the same bind mount, so a reset does not
 # throw away the dev loop's request history.
 . "$(dirname -- "$0")/_lib.sh"

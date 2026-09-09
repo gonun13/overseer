@@ -18,7 +18,7 @@ usage() {
 usage: loop/bin/clear <workspace-name> (--id <request-id> | --all) [--yes]
 
 Stops and deletes open (not yet cleared) requests for
-workspace/<workspace-name>. For each one: deletes every artifact it owns
+the workspace <workspace-name>. For each one: deletes every artifact it owns
 (the raw text, the human's sign-off, and each step's record), takes down its
 QA worktree, prunes the loop's metadata from its branch so it leaves the
 train, and appends a "cleared" event to db/<slug>/index.jsonl.

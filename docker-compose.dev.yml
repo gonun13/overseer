@@ -7,6 +7,12 @@
 # only shared surface (design doc §6) still holds for the *agent* — it is
 # handed /workspace, not /app — but a dev container does hold the repo. Do
 # not model production blast radius on this file.
+#
+# The workspace lives outside the repo, so /app does not contain it and a
+# project has exactly one container path. While it was ./workspace, this file
+# mounted it twice — as /workspace and, inside the repo bind, as
+# /app/workspace — and only the first name passes the containment check in
+# packages/server/src/workspace.ts.
 name: overseer-dev
 
 # Every service builds from the same Dockerfile and must run as the same user:
@@ -23,7 +29,7 @@ x-build: &app-build
 services:
   # The Docker daemon the *workspace projects* build and test against —
   # `loop/steps/verify.md` runs each project's own commands, and several of
-  # those are `docker compose` (workspace/design-patterns/bin/test). A sidecar
+  # those are `docker compose` (a project's own bin/test). A sidecar
   # rather than a bind of /var/run/docker.sock: the host socket is
   # root-equivalent, and handing it to a container that runs an agent with
   # unprefixed Bash would undo the sandbox this stack exists to be.
@@ -44,7 +50,7 @@ services:
     volumes:
       # Named, not a bind: overlayfs will not run on a bind mount.
       - dind-storage:/var/lib/docker
-      - ./workspace:/workspace
+      - ${OVERSEER_WORKSPACE_HOST:-../overseer-workspace}:/workspace
       - ./loop:/app/loop
 
   # Builds protocol + adapters once, then holds them in tsc --watch. server and
@@ -124,7 +130,7 @@ services:
       # named volume shadowing it the overseer's private store would be written
       # straight into the host working tree — exactly the thing it must not be.
       - overseer-memory:/app/.overseer
-      - ./workspace:/workspace # the only surface the agent gets
+      - ${OVERSEER_WORKSPACE_HOST:-../overseer-workspace}:/workspace # the only surface the agent gets
       - node-modules-root:/app/node_modules
       - node-modules-protocol:/app/packages/protocol/node_modules
       - node-modules-web:/app/packages/web/node_modules

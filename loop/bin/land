@@ -114,7 +114,7 @@ this after the review." 1
 subject=$(printf '%s\n' "$message" | head -n1)
 
 if [ "$dry" -eq 1 ]; then
-  log_info "would run, in workspace/$name (on branch $branch, base $base):"
+  log_info "would run, in $name (on branch $branch, base $base):"
   printf '  git add -A\n'
   printf '  git commit -F -   # %s\n' "$subject"
   printf '  # then: release the stint for %s\n' "$name"

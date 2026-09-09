@@ -2,7 +2,7 @@
 
 **What it is:** a single-page, fullscreen web console for driving CLI coding agents. Claude Code is the first fully wired provider; the catalog also lists stub providers whose CLIs ship in the image but whose adapters are not implemented yet. The architecture assumes more full adapters will follow.
 
-**Shape:** one Docker container holds the agent CLIs, their state, and the web server. The only bind mount is `./workspace`, which contains git projects and an import/export staging directory. Auth and application state live in container-owned volumes.
+**Shape:** one Docker container holds the agent CLIs, their state, and the web server. The only bind mount is the workspace — a directory *outside* this repo, which contains git projects and an import/export staging directory. Auth and application state live in container-owned volumes.
 
 **Aesthetic:** a surveillance console, not a chat app — dense, monospace, border-only chrome, one focus zone at a time. See [ui-ux-design.md](ui-ux-design.md).
 
@@ -23,7 +23,8 @@ packages/
     cursor/           Cursor adapter — login, console, stream-json sessions, plans, subagents
   e2e/                Playwright acceptance tests (container-only)
 loop/                 the dev-loop CLI — bash, a provider CLI, and plain files
-workspace/            host-shared dir — git projects live here, mounted into the container
+                      the workspace is not in here — it is a host directory beside the repo
+                      (OVERSEER_WORKSPACE_HOST, §6.2), mounted at /workspace
 ```
 
 **Frontend-first, provider-agnostic.** `protocol/` is written to serve the UI, not to mirror any one CLI's output. Adapters translate provider-specific behavior into it. Catalog stubs live in the server registry (`stub-adapters.ts`) until they earn a real `packages/adapters/<id>/` package.
@@ -429,7 +430,7 @@ services:
     privileged: true
     volumes:
       - dind-storage:/var/lib/docker
-      - ./workspace:/workspace # same path the app sees, or bind mounts break
+      - ${OVERSEER_WORKSPACE_HOST:-../overseer-workspace}:/workspace # same path the app sees, or bind mounts break
       - loop-db:/app/loop/db
   overseer:
     build: .
@@ -438,7 +439,7 @@ services:
       - agent-home:/home/overseer # every provider's auth; never bound to host
       - overseer-memory:/app/.overseer
       - loop-db:/app/loop/db
-      - ./workspace:/workspace # the only shared surface
+      - ${OVERSEER_WORKSPACE_HOST:-../overseer-workspace}:/workspace # the only shared surface
     environment:
       - DOCKER_HOST=tcp://dind:2375
 volumes:
@@ -487,9 +488,19 @@ rebuild replaces and what survives it is load-bearing:
 |---|---|---|
 | `/app` | code — `packages/`, `loop/`, `providers/` | image; a bind mount of the repo in dev |
 | `/home/overseer` | every provider CLI's config and auth | the `agent-home` volume |
-| `/workspace` | the one surface shared with the host | host bind mount |
+| `/workspace` | the one surface shared with the host | host bind mount, from `OVERSEER_WORKSPACE_HOST` |
 | `/app/.overseer` | internal memory (docs/overseer.md §6.2) | the `overseer-memory` volume |
 | `/app/loop/db` | the dev loop's file store | the repo in dev, the `loop-db` volume in prod |
+
+`OVERSEER_WORKSPACE_HOST` is the one path the image cannot state, because it names a
+directory on the *host* — where the operator keeps their projects. It is read by `bin/*`
+and by Compose, never by the container, which knows only `/workspace`. It defaults to
+`../overseer-workspace`, a sibling of the repo: inside the repo, the dev stack's `.:/app`
+mount made every project reachable a second time as `/app/workspace/<name>`, a path
+`isInsideWorkspace` rejects, and put the operator's work inside the tree that `bin/reset`
+and a stray `git clean` operate on. `bin/*` creates it at the caller's uid before the
+first compose call — a bare `docker compose` gets the default but not that, which is one
+more reason `bin/` is the only supported way to run anything (§1).
 
 **Nothing that an image rebuild must be able to replace may live under
 `/home/overseer`.** A named volume mounts there and shadows the image's copy
@@ -510,7 +521,7 @@ other than 1000 are unwritable and git refuses the workspace as dubiously owned.
 ### 6.3 The daemon that builds workspace projects
 
 `loop/steps/verify.md` runs each project's own commands, and some of those are
-`docker compose` — `workspace/design-patterns/bin/test` is. So the stack ships a
+`docker compose` — a project's own `bin/test` is. So the stack ships a
 `dind` sidecar, and the app container gets the Docker client plus
 `DOCKER_HOST=tcp://dind:2375`.
 
@@ -584,6 +595,15 @@ Each **MINOR** pre-1.0 marks a doc-defined tier becoming operator-visible. **PAT
 refactors, or docs within the current tier. Do not bump MINOR for work that only closes gaps inside
 the tier already claimed by the current version.
 
+A change that makes an existing operator do something by hand before the stack will run again — a
+moved directory, a renamed setting — is **still PATCH** when it closes a gap inside the current
+tier. The §8 table's MAJOR is about breaking *consumers of a published artifact*, and this repo is
+private and unpublished (§8.1), so there are none; and the next MINOR is reserved for the next tier
+(below), which a migration does not make. That means the version number is not the thing carrying
+the warning, and cannot be: nobody reads it before pulling. Two things carry it instead, and a
+change like this ships with both — a changelog entry that says plainly that an upgrade needs work,
+and a startup check that refuses to run and prints what to do. Neither is optional.
+
 | Version   | Design-doc tier | Ship bar |
 | --------- | --------------- | -------- |
 | `0.0.x`   | —               | Scaffold only: repo layout, container, no behavioral spec live. |
@@ -654,7 +674,7 @@ capability → `MINOR`; fix or internal cleanup → `PATCH`.
 ## 9. Dev Loop CLI (`loop/`)
 
 A command-line tool, at `loop/` in this repo, that runs development loops —
-feature requests, fixes, changes — against a project under `workspace/<name>/`.
+feature requests, fixes, changes — against a project under `/workspace/<name>/`.
 It is **not** a `packages/*` workspace: it uses only bash scripts, a provider
 CLI, and plain files, and is versioned/released independently of the §8.1
 package table. It's incubating — see §3's Feature Map row — with the intent to

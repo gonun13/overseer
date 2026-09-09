@@ -21,7 +21,7 @@ export const SETTLED = new RegExp(
  * opening it was.
  *
  * The stack keeps state between runs (`overseer-memory` holds the world
- * snapshot, `./workspace` holds `overseer-personality`), so a run legitimately
+ * snapshot, `/workspace` holds `overseer-personality`), so a run legitimately
  * opens either on the first-turn ask or on a returning greet. Which one it is
  * gets read, not guessed and not caught: wait until one of the three possible
  * openings is on screen, then assert the branch that appeared. The try/catch

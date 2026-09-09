@@ -23,7 +23,7 @@ usage() {
   cat >&2 <<'USAGE'
 usage: loop/bin/stint <workspace-name> [--release] [--yes] [--force]
 
-Shows which request holds the stint on workspace/<workspace-name>,
+Shows which request holds the stint on the workspace <workspace-name>,
 whether its last run has already recorded, and which of its tracers are still
 pending. With no --release it only reports.
 

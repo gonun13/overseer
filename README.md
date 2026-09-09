@@ -30,12 +30,25 @@ projects on external git remotes so a bad run is recoverable.
 
 Nothing else. Node, npm, and the agent CLIs all live inside the container.
 
+## Where your projects go
+
+Your projects do **not** live in this repo. The first run creates
+`../overseer-workspace` — a directory next to this clone — and mounts it into the
+container as `/workspace`, the only surface the agents get. Put a project there (clone
+it, or create one from the UI) and it shows up in the panel.
+
+It sits outside the repo on purpose: inside, a dev container saw every project twice,
+and your work sat in the blast radius of the resets and cleans that overseer's own code
+tree invites. To keep it elsewhere, set `OVERSEER_WORKSPACE_HOST` in `.env` — see
+`.env.example`.
+
 ## This never runs on the host
 
 Overseer and the agents it spawns always run **inside Docker**.
 Provider auth lives inside the container volume not your real `~/.<agent>` folder.
 
-They cannot reach your machine except through the `./workspace` bind mount;
+They cannot reach your machine except through the workspace bind mount, which lives
+outside this repo;
 Workspace projects whose test commands are themselves `docker compose` get a
 Docker-in-Docker sidecar rather than a bind of your host's daemon socket.
 
@@ -58,9 +71,10 @@ Docker-in-Docker sidecar rather than a bind of your host's daemon socket.
 Open http://127.0.0.1:3000. The compiled SPA is served by the Node server. The container
 owns the agents as named volumes;
 
-Provider usage and limit reset phrases follow the container timezone (`TZ`). Default is
-UTC. To use your local zone, copy `.env.example` to `.env` and uncomment a `TZ=…` line
-(Compose loads it automatically).
+Configuration is optional and lives in `.env` — copy `.env.example` and uncomment what
+you need (Compose loads it automatically). `OVERSEER_WORKSPACE_HOST` moves the workspace;
+`TZ` sets the container timezone, which is what provider usage and limit reset phrases
+follow. Default is UTC.
 
 ```sh
 ./bin/stop
@@ -89,7 +103,7 @@ the source tree is bind-mounted and watched.
 | `./bin/check`      | Typecheck + lint                                                             |
 | `./bin/test`       | Run all unit and integration tests                                           |
 | `./bin/test-e2e`   | Playwright acceptance tests (args pass through to `playwright test`)         |
-| `./bin/loop <ws>`  | Open a dev-loop session on `workspace/<ws>`, inside the running stack        |
+| `./bin/loop <ws>`  | Open a dev-loop session on that workspace project, inside the running stack  |
 | `./bin/reset`      | Tear down the dev stack and discard volumes, including agent auth            |
 
 ## Features

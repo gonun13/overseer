@@ -3,7 +3,6 @@ node_modules
 **/dist
 .git
 docs
-workspace
 *.md
 # …except the loop's, which are not documentation: overseer.md is the session's
 # instructions and steps/*.md are what each step is told to do. The blanket rule

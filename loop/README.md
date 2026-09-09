@@ -1,8 +1,8 @@
 # loop — dev-loop CLI
 
 A standalone command-line tool that runs development loops — feature requests,
-fixes, changes — against a project living under `workspace/<name>/` in this
-repo. It exists outside the main Overseer app on purpose: it uses **only
+fixes, changes — against a project living under `/workspace/<name>/`, the host
+directory beside this repo. It exists outside the main Overseer app on purpose: it uses **only
 available system commands, bash scripts, a provider CLI (Claude Code or Cursor
 Agent), and plain files** — no Node/TS, no database server, nothing routes
 through npm. **It runs directly on the host for now.** It should run inside
@@ -30,7 +30,7 @@ registry, one set of signed-in CLIs. The `loop/bin/*` commands below are not
 guarded — they read and record state and open no session, so they work from a
 host terminal too.
 
-- `<workspace-name>` must already exist as a directory under `workspace/`.
+- `<workspace-name>` must already exist as a directory under `/workspace/`.
 - Prereqs: Docker, and the active provider's CLI signed in. Everything else the
   loop needs — `jq`, `flock`, `git`, the provider CLIs — is in the image.
   Sign in once, from either the app or here; they share the auth volume.
@@ -578,7 +578,7 @@ depends on what its CLI offers: `claude-code` is handed its settings file by
 name with discovery switched off entirely, while `cursor` has no config-path
 flag, so its bundle keeps the process's working directory on itself.
 
-**The session's workspace is the project**, `workspace/<name>/` — the directory
+**The session's workspace is the project**, `/workspace/<name>/` — the directory
 the operator named and the one `implement` edits. Only the weaker of the two
 CLIs ties config to that same directory, and it is the one whose cwd therefore
 stays on the bundle; neither opens the operator onto a config folder.

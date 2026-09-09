@@ -80,6 +80,49 @@ describe("projectGit.status", () => {
     ]);
   });
 
+  it("reports an in-sync tracking branch as 0 ahead, 0 behind", async () => {
+    // git omits the divergence bracket entirely when the branch matches its
+    // upstream. Left as `undefined`, that is indistinguishable from a branch
+    // that has never been pushed, and the push button goes live on a branch
+    // with nothing to send.
+    const run = scriptedRun([
+      { stdout: "## main...origin/main\n" },
+      { stdout: "origin\n" },
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.status("/workspace/demo");
+
+    assert.deepEqual(result, {
+      branch: "main",
+      dirty: false,
+      hasRemote: true,
+      ahead: 0,
+      behind: 0,
+      files: [],
+    });
+  });
+
+  it("leaves ahead/behind absent when the upstream is gone", async () => {
+    // The upstream is still configured but the remote branch was deleted, so
+    // there is nothing to compare against — the same unknown a never-pushed
+    // branch reports, and the same `push -u` that answers it.
+    const run = scriptedRun([
+      { stdout: "## feature-x...origin/feature-x [gone]\n" },
+      { stdout: "origin\n" },
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.status("/workspace/demo");
+
+    assert.deepEqual(result, {
+      branch: "feature-x",
+      dirty: false,
+      hasRemote: true,
+      files: [],
+    });
+  });
+
   it("reports a clean repo with no remote and no ahead/behind", async () => {
     const run = scriptedRun([{ stdout: "## main\n" }, { stdout: "" }]);
     const projectGit = createProjectGit({ run, readIdentity: noIdentity });

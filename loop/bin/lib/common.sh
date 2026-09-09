@@ -10,9 +10,11 @@ LOOP_BIN_DIR="$(CDPATH='' cd -- "$LOOP_LIB_DIR/.." && pwd)"
 LOOP_DIR="$(CDPATH='' cd -- "$LOOP_BIN_DIR/.." && pwd)"
 REPO_ROOT="$(CDPATH='' cd -- "$LOOP_DIR/.." && pwd)"
 # The app states this in the container (packages/server/src/workspace.ts reads
-# the same variable), so both sides resolve a project to one path. Derived from
-# the repo layout when it is unset, which is how the loop used to find it.
-WORKSPACE_ROOT="${OVERSEER_WORKSPACE:-$REPO_ROOT/workspace}"
+# the same variable), so both sides resolve a project to one path. No fallback:
+# the workspace lives outside the repo now, so there is nothing to derive it
+# from, and the loop only ever runs where the image states it. Checked below,
+# once die() exists.
+WORKSPACE_ROOT="${OVERSEER_WORKSPACE:-}"
 export LOOP_LIB_DIR LOOP_BIN_DIR LOOP_DIR REPO_ROOT WORKSPACE_ROOT
 
 log_info() { printf 'loop: %s\n' "$*" >&2; }
@@ -24,6 +26,8 @@ die() {
   log_error "$msg"
   exit "$code"
 }
+
+[ -n "$WORKSPACE_ROOT" ] || die "OVERSEER_WORKSPACE is unset — the loop runs inside the container, where the image states it"
 
 # require_cmd <name> — fail fast with a clear message if a binary isn't on PATH.
 require_cmd() {
@@ -38,7 +42,7 @@ slugify() {
 
 # validate_workspace_name <name> — charset check only, no existence check.
 # Split out of resolve_workspace so tools that operate on db/ records (list,
-# clear) can validate a name without requiring workspace/<name> to still
+# clear) can validate a name without requiring /workspace/<name> to still
 # exist — e.g. clearing requests left behind after a workspace was removed.
 validate_workspace_name() {
   local name=$1

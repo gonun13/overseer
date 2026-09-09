@@ -140,7 +140,7 @@ merged=false
 merge_result=""
 
 if [ "$dry" -eq 1 ]; then
-  log_info "would run, in workspace/$name:"
+  log_info "would run, in $name:"
   if git_has_origin "$repo"; then
     printf '  git push -u origin %s\n' "$branch"
   else

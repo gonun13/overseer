@@ -19,7 +19,7 @@ usage() {
   cat >&2 <<'USAGE'
 usage: loop/bin/train <workspace-name> [--json | --tip] [--id <request-id>]
 
-Lists the branches the loop tracks in workspace/<workspace-name>, bases before
+Lists the branches the loop tracks in the workspace <workspace-name>, bases before
 the branches stacked on them, with the request each belongs to, the pull
 request opened for it, and whether it has landed on the default branch.
 

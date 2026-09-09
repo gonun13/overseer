@@ -5,6 +5,23 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
 
+## 0.3.4 — 2026-09-09
+
+### Changed
+
+- Your projects now live in a folder beside overseer instead of inside it, so nothing you own sits
+  in the folder overseer tears down and rebuilds. If you already have projects, overseer stops on
+  the next start and tells you how to move them — nothing is lost in the meantime.
+
+## 0.3.3 — 2026-09-08
+
+### Fixed
+
+- The project window no longer offers a push on a branch that has nothing to send. A branch that
+  tracks a remote and matches it now reads as `0 ahead · 0 behind` and greys the push out, saying
+  the remote is up to date — previously git's silence about an in-sync branch was read as "never
+  pushed", so a clean, fully-pushed branch showed a live push button.
+
 ## 0.3.2 — 2026-09-08
 
 ### Added

@@ -21,7 +21,7 @@ usage() {
 usage: loop/run <workspace-name>
 
 Opens an interactive overseer session on the configured provider agent for
-workspace/<workspace-name>. The overseer picks up whatever is open — resuming
+the workspace <workspace-name>. The overseer picks up whatever is open — resuming
 a request mid-flight, planning one already scoped — or asks for a new request
 when nothing is pending, and keeps going until you stop it.
 

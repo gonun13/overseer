@@ -17,7 +17,7 @@ services:
     volumes:
       # Named, not a bind: overlayfs will not run on a bind mount.
       - dind-storage:/var/lib/docker
-      - ./workspace:/workspace
+      - ${OVERSEER_WORKSPACE_HOST:-../overseer-workspace}:/workspace
       - loop-db:/app/loop/db
 
   overseer:
@@ -41,7 +41,7 @@ services:
       - agent-home:/home/overseer
       - overseer-memory:/app/.overseer # the overseer's internal memory (docs/overseer.md §6.2)
       - loop-db:/app/loop/db # the dev loop's file store
-      - ./workspace:/workspace # the only shared surface
+      - ${OVERSEER_WORKSPACE_HOST:-../overseer-workspace}:/workspace # the only shared surface
     environment:
       # Where code, state and the workspace live is stated by the image
       # (CLAUDE_CONFIG_DIR, OVERSEER_WORKSPACE, OVERSEER_PROVIDERS_DIR,
