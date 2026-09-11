@@ -8,6 +8,9 @@ import type {
   ConsoleHandle,
   ConsoleOpts,
   ProviderOptions,
+  Skill,
+  SkillImportOutcome,
+  SkillScope,
   Subagent,
   SubagentDraft,
   SubagentScope,
@@ -26,6 +29,8 @@ import {
 import { readAuthStatus, signOut, startLogin } from "./login.js";
 import { listPlansForProject } from "./plans.js";
 import { readProviderOptions } from "./options.js";
+import { deleteSkillDir, importSkillDir } from "./skill-files.js";
+import { readSkills } from "./skills.js";
 import {
   deleteSubagentFile,
   writeSubagentFile,
@@ -107,6 +112,29 @@ export const claudeCodeAdapter: AgentAdapter = {
     scope: SubagentScope;
   }): Promise<void> {
     return deleteSubagentFile({ ...opts, configDir: configDir() });
+  },
+  async listSkills(opts: { projectDir: string }): Promise<Skill[]> {
+    // Never throws, per the interface — same contract as `listSubagents`.
+    try {
+      return await readSkills({ ...opts, configDir: configDir() });
+    } catch {
+      return [];
+    }
+  },
+  importSkills(opts: {
+    projectDir: string;
+    stagingDir: string;
+    scope: SkillScope;
+    name?: string;
+  }): Promise<SkillImportOutcome> {
+    return importSkillDir({ ...opts, configDir: configDir() });
+  },
+  deleteSkill(opts: {
+    projectDir: string;
+    name: string;
+    scope: SkillScope;
+  }): Promise<void> {
+    return deleteSkillDir({ ...opts, configDir: configDir() });
   },
   login: {
     start: startLogin,

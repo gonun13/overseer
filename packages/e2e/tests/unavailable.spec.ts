@@ -13,27 +13,24 @@ import { passWizardOpening, SETTLED } from "./shell";
  * be covered too — they are live now, inline in the session, so there is no
  * unavailable surface left to assert on.
  *
- * The capabilities window is now partly live — its subagents tab reads real
- * files — so the two tabs that are not carry the note instead of the window,
- * and `tab` says which one to open first. When one of those goes live, this
- * expectation is what should fail.
+ * The capabilities window is now mostly live — its subagents tab reads real
+ * files and its skills tab reads and imports them — so `mcp`, the one tab that
+ * is not, carries the note instead of the window, and `tab` says which one to
+ * open first. When it goes live, this expectation is what should fail.
+ *
+ * Skills were listed here until `0.4.0` and are covered by `skills.spec.ts`
+ * now. That the entry had to be deleted rather than edited is the point: a
+ * surface stops being unavailable exactly once.
  */
-for (const { command, window, tab, detail, label } of [
+for (const { command, window, tab, detail } of [
   {
     command: "/capabilities",
     window: "capabilities",
     tab: "mcp",
     detail: /mcp servers are not read from the provider yet/i,
   },
-  {
-    command: "/capabilities",
-    window: "capabilities",
-    tab: "skills",
-    label: "capabilities · skills",
-    detail: /skills are not read from the provider yet/i,
-  },
 ]) {
-  test(`${label ?? window} declares itself unavailable`, async ({ page }) => {
+  test(`${window} declares itself unavailable`, async ({ page }) => {
     await page.goto("/");
     await passWizardOpening(page);
     await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
@@ -49,7 +46,7 @@ for (const { command, window, tab, detail, label } of [
       .filter({ has: page.getByRole("button", { name: `close ${window}` }) });
     await expect(frame).toBeVisible();
     // A tabbed window carries the note per tab: the window as a whole is not
-    // unavailable, only these two parts of it.
+    // unavailable, only this part of it.
     if (tab !== undefined) {
       await frame.getByRole("button", { name: tab, exact: true }).click();
     }

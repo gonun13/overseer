@@ -153,6 +153,12 @@ export function useDiscovery(): DiscoveryController {
         message.type === "subagent.list" ||
         message.type === "subagent.written" ||
         message.type === "subagent.deleted" ||
+        // The same window's skill inventory, on the same terms — provider- and
+        // project-scoped, with refusals ("cannot manage skills", a url that is
+        // not https) that are benign in exactly the same way.
+        message.type === "skill.list" ||
+        message.type === "skill.imported" ||
+        message.type === "skill.deleted" ||
         message.type === "project.git.status" ||
         // One file's diff or contents, for the window a file row opens. A read
         // whose refusals ("binary file", a path git no longer knows) are
@@ -167,7 +173,8 @@ export function useDiscovery(): DiscoveryController {
         (message.type === "error" && message.about === "provider.options") ||
         (message.type === "error" && message.about === "provider.checkUsage") ||
 (message.type === "error" && message.about?.startsWith("project.git.")) ||
-        (message.type === "error" && message.about?.startsWith("subagent."))
+        (message.type === "error" && message.about?.startsWith("subagent.")) ||
+        (message.type === "error" && message.about?.startsWith("skill."))
       ) {
         for (const listener of sessionListeners.current) listener(message);
         return;

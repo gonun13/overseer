@@ -587,6 +587,36 @@
   color: var(--ink-dim);
 }
 
+/* Two lines of secondary, for rows where that text is the point rather than a
+   caption (a skill's description, which is what a task gets matched against).
+   Clamped rather than left to wrap: a row that grows to six lines stops being
+   a row, and the list stops being scannable. */
+.w-row-secondary.lines-2 {
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  line-clamp: 2;
+  -webkit-box-orient: vertical;
+  white-space: normal;
+  text-overflow: clip;
+  line-height: 1.35;
+}
+
+/* A window's own action bar, held at the top of the scrolling body.
+
+   Importing a collection lands eight or more rows in one go, and a control
+   that sits after the list is one the operator has to scroll past the result
+   to reach — worst exactly when the list is long enough to want another
+   import. Ground is `--fill-solid`, not `--fill`: the frame's fill is
+   translucent, and rows would read straight through a bar made of it. */
+.btn-row.pinned {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  margin-top: 0;
+  padding: 6px 0 8px;
+  background: var(--fill-solid);
+}
+
 .w-row-right {
   flex: none;
   font-size: 11px;

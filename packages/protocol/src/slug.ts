@@ -44,3 +44,24 @@ export function slugify(input: string): string {
  * has no separators and no `.`/`..`, and cannot leave the folder.
  */
 export const SUBAGENT_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;
+
+/**
+ * The one shared rule for a skill name.
+ *
+ * A third constant with the same body as the two above, for the same reason
+ * they are separate from each other: this one governs a *directory* inside a
+ * skills folder, holding a `SKILL.md` and whatever files sit beside it. A
+ * skill's name is its directory name in both CLIs this repo drives — verified
+ * against `claude 2.1.226` and `agent 2026.09.10-fd3934a`, which each key a
+ * skill on the folder it lives in.
+ *
+ * It carries the same containment weight as its siblings, and one more job
+ * besides. The directory does not exist at validation time, so it cannot be
+ * `realpath`-checked; a string matching this has no separators and no
+ * `.`/`..`, so `path.join(skillsDir, name)` cannot leave the folder. The extra
+ * job is that an *imported* skill's name can come from a git URL or an
+ * uploaded file's path rather than from a form the operator typed — input this
+ * layer never saw being composed — which is exactly when a shape rule stops
+ * being a nicety.
+ */
+export const SKILL_NAME_PATTERN = /^[a-z0-9]+(-[a-z0-9]+)*$/;

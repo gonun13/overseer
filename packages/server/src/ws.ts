@@ -8,6 +8,7 @@ import {
   type DiscoveryEvent,
   type DiscoveryOutcome,
   type ServerMessage,
+  type Skill,
   type Subagent,
 } from "@overseer/protocol";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -57,6 +58,7 @@ import {
 } from "./personality-file-watcher.js";
 import { refreshPendingUsage } from "./usage-refresh.js";
 import { createProject } from "./project-create.js";
+import { skills } from "./skills.js";
 import { subagents } from "./subagents.js";
 import { gitSsh, parseRemoteHost, projectGit, type GitOpResult } from "./vcs/index.js";
 import { isInsideWorkspace, scanWorkspace } from "./workspace.js";
@@ -186,6 +188,28 @@ export function attachWebSocketServer(httpServer: Server): {
   const pushSubagents = async (): Promise<void> => {
     const result = await subagents.list();
     if (result.ok) broadcastSubagents(result);
+  };
+
+  /** The skill inventory is a fact about the instance, for the same reason the
+   * subagent one is. */
+  const broadcastSkills = (result: {
+    providerId: string;
+    projectDir: string;
+    skills: Skill[];
+  }): void => {
+    broadcast({
+      type: "skill.list",
+      providerId: result.providerId,
+      projectDir: result.projectDir,
+      skills: result.skills,
+    });
+  };
+
+  /** Re-read after an import or delete, for the same reasons `pushSubagents`
+   * does — and silent on failure for the same one. */
+  const pushSkills = async (): Promise<void> => {
+    const result = await skills.list();
+    if (result.ok) broadcastSkills(result);
   };
 
   const sessionSupervisor = createSessionSupervisor(broadcast);
@@ -1128,6 +1152,63 @@ export function attachWebSocketServer(httpServer: Server): {
             scope: parsed.scope,
           });
           await pushSubagents();
+          return;
+        }
+        case "skill.list": {
+          const result = await skills.list();
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "skill.list",
+              benign: true,
+              message: result.reason,
+            });
+            return;
+          }
+          broadcastSkills(result);
+          return;
+        }
+        case "skill.import": {
+          const result = await skills.importSkill({
+            source: parsed.source,
+            scope: parsed.scope,
+            ...(parsed.name !== undefined ? { name: parsed.name } : {}),
+          });
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "skill.import",
+              benign: result.benign,
+              message: result.reason,
+            });
+            return;
+          }
+          // To the asker, so its form can close on its own request rather than
+          // on any import that happens to land.
+          send({
+            type: "skill.imported",
+            skills: result.skills,
+            skipped: result.skipped,
+          });
+          await pushSkills();
+          return;
+        }
+        case "skill.delete": {
+          const result = await skills.remove({
+            name: parsed.name,
+            scope: parsed.scope,
+          });
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "skill.delete",
+              benign: result.benign,
+              message: result.reason,
+            });
+            return;
+          }
+          send({ type: "skill.deleted", name: parsed.name, scope: parsed.scope });
+          await pushSkills();
           return;
         }
         case "provider.checkUsage": {

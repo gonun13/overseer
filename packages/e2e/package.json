@@ -1,7 +1,7 @@
 {
   "name": "@overseer/e2e",
   "private": true,
-  "version": "0.3.4",
+  "version": "0.4.0",
   "description": "Playwright acceptance tests against the dev stack — runs inside the container, never on the host.",
   "type": "module",
   "scripts": {

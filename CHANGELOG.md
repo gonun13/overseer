@@ -5,6 +5,18 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
 
+## 0.4.0 — 2026-09-11
+
+### Added
+
+- Import skills from the capabilities window: paste a repository link or pick files off your own
+  machine, and choose whether they apply to this project or to every project.
+- A link to a whole folder of skills imports all of them at once, passing over the ones you
+  already have.
+- Skills published as a single markdown file import as readily as ones published as a folder.
+- Skills your attached provider can use are listed even when a different provider installed them,
+  marked so you can tell whose they are.
+
 ## 0.3.4 — 2026-09-09
 
 ### Changed

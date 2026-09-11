@@ -23,6 +23,7 @@ import { useLoopConfig } from "./state/useLoopConfig";
 import { usePlans } from "./state/usePlans";
 import { usePromptSession } from "./state/usePromptSession";
 import { useProviderOptions } from "./state/useProviderOptions";
+import { useSkills } from "./state/useSkills";
 import { useSubagents } from "./state/useSubagents";
 import { useShellKeyboard } from "./state/useShellKeyboard";
 import { useShellPresentation } from "./state/useShellPresentation";
@@ -150,6 +151,13 @@ export default function App() {
     // A saved subagent is a new row in the session control menu, and waiting
     // for a project switch to see it is waiting for no reason.
     refreshSessionOptions,
+  );
+
+  const skills = useSkills(
+    wizard.send,
+    wizard.subscribeSession,
+    optionsProviderId,
+    wizard.activeProjectPath,
   );
 
   const usageCheck = useUsageCheck(wizard.send, wizard.subscribeSession);
@@ -665,6 +673,7 @@ export default function App() {
           onSetPlanStatus={setPlanStatus}
           sessionOptions={sessionOptions}
           subagents={subagents}
+          skills={skills}
           armedSession={armedSession}
           openSessionControls={openSessionControls}
           onToggleSessionControl={toggleSessionControl}

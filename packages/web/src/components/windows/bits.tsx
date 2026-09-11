@@ -84,6 +84,7 @@ export function WRow({
   actions,
   tone,
   onClick,
+  secondaryLines = 1,
 }: {
   activity: Activity;
   primary: string;
@@ -92,6 +93,17 @@ export function WRow({
   actions?: ReactNode;
   tone?: RowTone;
   onClick?: () => void;
+  /**
+   * How many lines the secondary may take before it is clipped. One by
+   * default: most rows carry a path or a short status, where a second line
+   * would be a ragged half-empty one.
+   *
+   * Two is for rows whose secondary is the point rather than the caption — a
+   * skill's description is what a task gets matched against, so an operator
+   * deciding whether they already have the right skill is reading exactly that
+   * sentence, and one line of it usually ends mid-clause.
+   */
+  secondaryLines?: 1 | 2;
 }) {
   // A row that does something is a control and is reachable like one: the
   // whole row is the target (a button beside the label would compete with the
@@ -121,7 +133,11 @@ export function WRow({
       <StatusLight activity={activity} />
       <span className="w-row-main">
         <span className="w-row-primary">{primary}</span>
-        {secondary && <span className="w-row-secondary">{secondary}</span>}
+        {secondary && (
+          <span className={`w-row-secondary${secondaryLines === 2 ? " lines-2" : ""}`}>
+            {secondary}
+          </span>
+        )}
       </span>
       {right && <span className="w-row-right">{right}</span>}
       {actions && <span className="w-row-actions">{actions}</span>}

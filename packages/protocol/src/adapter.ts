@@ -1,5 +1,6 @@
 import type { AgentEvent } from "./events.js";
 import type { AdapterPlan } from "./plan.js";
+import type { Skill, SkillImportOutcome, SkillScope } from "./skill.js";
 import type { Subagent, SubagentDraft, SubagentScope } from "./subagent.js";
 import type { TurnWire } from "./transcript.js";
 
@@ -454,6 +455,61 @@ export interface AgentAdapter {
     projectDir: string;
     name: string;
     scope: SubagentScope;
+  }): Promise<void>;
+  /**
+   * The operator's own skill folders for one project — both scopes.
+   *
+   * Absent when the adapter has no such concept, in which case the server
+   * refuses rather than reporting an empty inventory, exactly as with
+   * `listSubagents`. Never throws; an unreadable folder reports nothing.
+   *
+   * May include skills the CLI discovers in *another* provider's directory,
+   * marked `foreign`. Listing what the CLI will act on is the whole point of
+   * the inventory; hiding a folder the CLI reads would make the list a
+   * description of this adapter's filesystem rather than of the session's
+   * behaviour.
+   */
+  listSkills?(opts: { projectDir: string }): Promise<Skill[]>;
+  /**
+   * Install every skill an already-fetched directory holds, returning them as
+   * read back from disk rather than as asked for.
+   *
+   * `stagingDir` holds exactly what the operator's source produced — the server
+   * cloned or decoded it and owns its lifetime. This method decides what in
+   * there is a skill, where each one lands, and copies them. The split is the
+   * same one `writeSubagent` makes: the server never composes a destination
+   * path, because only the adapter knows its own layout.
+   *
+   * **Plural, because a source usually is.** Published collections are folders
+   * of skills, and both the folder-with-`SKILL.md` and the flat `<name>.md`
+   * shapes appear in the wild. Installing one and discarding the rest would
+   * make the common source the awkward case.
+   *
+   * One skill failing does not fail the rest: it lands in `skipped` with a
+   * reason. That is what makes re-importing a collection after it gained a
+   * skill do the obvious thing. Throwing is reserved for a source that yields
+   * nothing installable at all.
+   *
+   * Must not leave a partial skill behind: a half-copied folder is one the CLI
+   * would try to load.
+   */
+  importSkills?(opts: {
+    projectDir: string;
+    stagingDir: string;
+    scope: SkillScope;
+    name?: string;
+  }): Promise<SkillImportOutcome>;
+  /**
+   * Remove one skill folder. Resolves through the adapter's own listing rather
+   * than composing the path, so a name the import path would reject can still
+   * be deleted. Refuses a `foreign` skill: it belongs to another provider's
+   * directory, and deleting it here would remove it from that provider too.
+   * May throw.
+   */
+  deleteSkill?(opts: {
+    projectDir: string;
+    name: string;
+    scope: SkillScope;
   }): Promise<void>;
   /** Present only when `capabilities.login` is true. */
   login?: AdapterLogin;

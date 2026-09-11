@@ -10,6 +10,7 @@ import type {
 } from "./adapter.js";
 import type { AgentEvent } from "./events.js";
 import type { PlanMeta, PlanStatusOverride } from "./plan.js";
+import type { Skill, SkillScope, SkillSkipped, SkillSource } from "./skill.js";
 import type { Subagent, SubagentScope } from "./subagent.js";
 import type { TurnWire } from "./transcript.js";
 import type {
@@ -203,6 +204,32 @@ export type ClientMessage =
    * adapter's own listing rather than composing a path from it.
    */
   | { type: "subagent.delete"; name: string; scope: SubagentScope }
+  /**
+   * List the operator's own skill folders for the active project — both
+   * scopes. Same reasoning as `subagent.list`: explicit, cheap, and only a
+   * client with the capabilities window open needs it.
+   */
+  | { type: "skill.list" }
+  /**
+   * Install one skill.
+   *
+   * The frame carries a *source*, not a skill: a git repository to clone or a
+   * set of files read in the browser. The server fetches it into a staging
+   * directory and the adapter decides where it lands, so nothing here is a
+   * path the operator composed.
+   *
+   * `name` overrides what the skill calls itself; absent is the ordinary case.
+   */
+  | { type: "skill.import"; source: SkillSource; scope: SkillScope; name?: string }
+  /**
+   * Remove one skill folder.
+   *
+   * Accepts a `name` the import path would refuse, for the same reason
+   * `subagent.delete` does: a folder whose name is not kebab-case is exactly
+   * the one an operator most wants gone. Resolved through the adapter's own
+   * listing rather than composed into a path.
+   */
+  | { type: "skill.delete"; name: string; scope: SkillScope }
   | { type: "loop.config.read" }
   /** Select which provider the loop runs on next (`loop/bin/provider`). */
   | { type: "loop.provider.set"; id: string }
@@ -561,6 +588,44 @@ export interface SubagentDeletedMessage {
 }
 
 /**
+ * Every skill folder the operator has, for one project.
+ *
+ * Broadcast and re-broadcast after every import or delete, for the same reason
+ * `SubagentListMessage` is: a fact about the instance, not an answer to one
+ * tab's question.
+ */
+export interface SkillListMessage {
+  type: "skill.list";
+  providerId: string;
+  projectDir: string;
+  skills: Skill[];
+}
+
+/**
+ * What one import landed, as it reads back off disk.
+ *
+ * Sent to the socket that asked so its form can close; the `skill.list` that
+ * follows is what updates every other tab.
+ *
+ * `skills` is plural because a source usually is — a folder of them installs
+ * all of them. `skipped` carries the ones that were not installed and why,
+ * which is ordinary rather than exceptional: re-importing a collection that
+ * gained one skill skips the rest as already present.
+ */
+export interface SkillImportedMessage {
+  type: "skill.imported";
+  skills: Skill[];
+  skipped: SkillSkipped[];
+}
+
+/** One skill folder is gone. Sent to the asker, for the same reason. */
+export interface SkillDeletedMessage {
+  type: "skill.deleted";
+  name: string;
+  scope: SkillScope;
+}
+
+/**
  * The whole state of the login flow in one frame.
  *
  * One state frame rather than a stream of deltas: a tab that connects (or asks)
@@ -766,6 +831,9 @@ export type ServerMessage =
   | SubagentListMessage
   | SubagentWrittenMessage
   | SubagentDeletedMessage
+  | SkillListMessage
+  | SkillImportedMessage
+  | SkillDeletedMessage
   | AuthStateMessage
   | WorkspaceProjectsMessage
   | OverseerStepMessage
@@ -867,6 +935,90 @@ export const SUBAGENT_MAX_TOOLS_CHARS = 1_000;
 
 /** Mirrors `SubagentScope`. */
 const SUBAGENT_SCOPES = new Set<string>(["project", "user"]);
+
+/** A skill name is also its directory name — same reasoning and same bound as
+ * `SUBAGENT_MAX_NAME_CHARS`. */
+export const SKILL_MAX_NAME_CHARS = 64;
+/** A clone URL. Generous next to `GIT_MAX_PATH_CHARS` because a forge URL
+ * carries a ref and a subpath through the same string. */
+export const SKILL_MAX_URL_CHARS = 2_048;
+/** A ref is a branch, tag or sha. */
+export const SKILL_MAX_REF_CHARS = 256;
+/** A path inside the repository, or inside the uploaded skill. */
+export const SKILL_MAX_SUBPATH_CHARS = 1_024;
+/**
+ * An upload is a skill an operator assembled by hand, not an archive: a
+ * `SKILL.md` and the handful of files it references. These three caps bound
+ * the frame, and the server re-checks the total after decoding — a client that
+ * satisfies each file's cap can still overrun the sum.
+ */
+export const SKILL_MAX_UPLOAD_FILES = 50;
+export const SKILL_MAX_UPLOAD_FILE_CHARS = 256_000;
+export const SKILL_MAX_UPLOAD_TOTAL_CHARS = 1_000_000;
+
+/** Mirrors `SkillScope`. Separate from `SUBAGENT_SCOPES` despite the identical
+ * body: the two unions are free to diverge. */
+const SKILL_SCOPES = new Set<string>(["project", "user"]);
+
+/**
+ * A path inside an uploaded skill's own folder.
+ *
+ * The whole containment story for an upload, and the reason it is a shape rule
+ * rather than a `realpath` check: none of these files exist at validation time.
+ * Rejects an absolute path, a Windows separator, a drive letter, any `.`/`..`
+ * segment, and any empty segment — what survives can only be joined *downward*
+ * from the skill's directory.
+ */
+function isSkillUploadPath(value: unknown): value is string {
+  if (typeof value !== "string") return false;
+  if (value === "" || value.length > SKILL_MAX_SUBPATH_CHARS) return false;
+  if (value.includes("\\") || value.includes("\0")) return false;
+  if (value.startsWith("/")) return false;
+  if (/^[A-Za-z]:/.test(value)) return false;
+  const segments = value.split("/");
+  return segments.every(
+    (segment) => segment !== "" && segment !== "." && segment !== "..",
+  );
+}
+
+function isSkillSource(value: unknown): value is SkillSource {
+  if (typeof value !== "object" || value === null) return false;
+  const source = value as Record<string, unknown>;
+
+  if (source.kind === "git") {
+    return (
+      typeof source.url === "string" &&
+      source.url.trim().length > 0 &&
+      source.url.length <= SKILL_MAX_URL_CHARS &&
+      !hasConfigInjection(source.url) &&
+      (source.ref === undefined ||
+        (typeof source.ref === "string" &&
+          source.ref.length <= SKILL_MAX_REF_CHARS)) &&
+      // A subpath is a path *inside the clone*, so it takes the same downward
+      // rule an upload path does.
+      (source.subpath === undefined || isSkillUploadPath(source.subpath))
+    );
+  }
+
+  if (source.kind === "upload") {
+    if (!Array.isArray(source.files)) return false;
+    if (source.files.length === 0) return false;
+    if (source.files.length > SKILL_MAX_UPLOAD_FILES) return false;
+    let total = 0;
+    for (const entry of source.files) {
+      if (typeof entry !== "object" || entry === null) return false;
+      const file = entry as Record<string, unknown>;
+      if (!isSkillUploadPath(file.path)) return false;
+      if (typeof file.text !== "string") return false;
+      if (file.text.length > SKILL_MAX_UPLOAD_FILE_CHARS) return false;
+      total += file.text.length;
+      if (total > SKILL_MAX_UPLOAD_TOTAL_CHARS) return false;
+    }
+    return true;
+  }
+
+  return false;
+}
 
 function isConsoleSize(cols: unknown, rows: unknown): boolean {
   return (
@@ -1156,6 +1308,20 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     const msg = value as { name?: unknown; scope?: unknown };
     return isSubagentName(msg.name) && SUBAGENT_SCOPES.has(msg.scope as string);
   }
+  if (type === "skill.list") return true;
+  if (type === "skill.import") {
+    const msg = value as { source?: unknown; scope?: unknown; name?: unknown };
+    return (
+      isSkillSource(msg.source) &&
+      SKILL_SCOPES.has(msg.scope as string) &&
+      // Absent is the ordinary case: the skill names itself.
+      (msg.name === undefined || isSkillName(msg.name))
+    );
+  }
+  if (type === "skill.delete") {
+    const msg = value as { name?: unknown; scope?: unknown };
+    return isSkillName(msg.name) && SKILL_SCOPES.has(msg.scope as string);
+  }
   return false;
 }
 
@@ -1251,6 +1417,28 @@ function isSubagentName(value: unknown): value is string {
     typeof value === "string" &&
     value.length > 0 &&
     value.length <= SUBAGENT_MAX_NAME_CHARS
+  );
+}
+
+/**
+ * Shape and length only — deliberately not `SKILL_NAME_PATTERN`, for exactly
+ * the reasons `isSubagentName` is not `SUBAGENT_NAME_PATTERN`.
+ *
+ * One addition: a skill name is a directory name, so a frame that slipped a
+ * separator through here would reach a `path.join`. The format check on the
+ * *import* path is the server's (with a sentence explaining the rule), but no
+ * name that could traverse is worth carrying even as far as a refusal.
+ */
+function isSkillName(value: unknown): value is string {
+  return (
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= SKILL_MAX_NAME_CHARS &&
+    !value.includes("/") &&
+    !value.includes("\\") &&
+    !value.includes("\0") &&
+    value !== "." &&
+    value !== ".."
   );
 }
 

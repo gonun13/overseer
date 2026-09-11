@@ -30,6 +30,13 @@
  */
 
 export {
+  cloneInto,
+  isAllowedCloneUrl,
+  type CloneDeps,
+  type CloneResult,
+} from "./clone.js";
+
+export {
   createProjectGit,
   projectGit,
   type GitStatus,

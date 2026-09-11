@@ -18,6 +18,8 @@ import { Window } from "./Window";
 import { CapabilitiesWindow } from "./windows/CapabilitiesWindow";
 import { ChangelogWindow } from "./windows/ChangelogWindow";
 import { GitConfigWindow } from "./windows/GitConfigWindow";
+import { SkillImportWindow } from "./windows/SkillImportWindow";
+import type { SkillsState } from "../state/useSkills";
 import { SubagentWindow } from "./windows/SubagentWindow";
 import type { SubagentsState } from "../state/useSubagents";
 import { findSubagent, subagentKey } from "../subagents";
@@ -78,6 +80,7 @@ interface WindowStackHostProps {
   onSetPlanStatus: (planId: string, status: "done" | "open") => void;
   sessionOptions: SessionOption[];
   subagents: SubagentsState;
+  skills: SkillsState;
   /** Provider defaults plus the operator's picks — the fallback for a row a
    * session has not reported on yet. */
   armedSession: SessionSettings;
@@ -141,6 +144,7 @@ export function WindowStackHost({
   onSetPlanStatus,
   sessionOptions,
   subagents,
+  skills,
   armedSession,
   openSessionControls,
   onToggleSessionControl,
@@ -300,6 +304,7 @@ export function WindowStackHost({
           <CapabilitiesWindow
             provider={provider}
             subagents={subagents}
+            skills={skills}
             onEdit={(subagent) =>
               openWindow("subagent", subagentKey(subagent), subagent.name)
             }
@@ -307,6 +312,10 @@ export function WindowStackHost({
             // so a second "+ subagent" raises the one already open rather than
             // stacking a second blank form over it.
             onCreate={() => openWindow("subagent", "", "new subagent")}
+            // One import window, keyed on nothing: a second "import skill"
+            // raises the one already open rather than stacking a blank form
+            // over it, the same rule "+ subagent" follows.
+            onImportSkill={() => openWindow("skillImport", "", "import skill")}
           />
         )}
         {windowState.kind === "gitConfig" && (
@@ -317,6 +326,12 @@ export function WindowStackHost({
             onRemove={wizard.removeGitKey}
             onTest={wizard.testGitKey}
             onSaveIdentity={wizard.saveGitIdentity}
+          />
+        )}
+        {windowState.kind === "skillImport" && (
+          <SkillImportWindow
+            skills={skills}
+            onClose={() => closeWindow(windowState.id)}
           />
         )}
         {windowState.kind === "subagent" && (

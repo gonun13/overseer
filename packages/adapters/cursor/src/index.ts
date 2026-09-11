@@ -7,6 +7,9 @@ import type {
   ConsoleHandle,
   ConsoleOpts,
   ProviderOptions,
+  Skill,
+  SkillImportOutcome,
+  SkillScope,
   Subagent,
   SubagentDraft,
   SubagentScope,
@@ -20,6 +23,8 @@ import { readAuthStatus, signOut, startLogin } from "./login.js";
 import { readProviderOptions } from "./options.js";
 import { listProjectPlans } from "./plans.js";
 import { createSessionHandle, mintSessionId, openSession } from "./session-handle.js";
+import { deleteSkillDir, importSkillDir } from "./skill-files.js";
+import { readSkills } from "./skills.js";
 import { deleteSubagentFile, writeSubagentFile } from "./subagent-files.js";
 import {
   deleteSession,
@@ -63,7 +68,7 @@ const capabilities: AdapterCapabilities = {
   interrupt: true,
   subagents: true,
   mcp: false,
-  skills: false,
+  skills: true,
   effortLevels: false,
   costReporting: false,
   checkpoints: false,
@@ -129,6 +134,29 @@ export const cursorAdapter: AgentAdapter = {
     scope: SubagentScope;
   }): Promise<void> {
     return deleteSubagentFile(opts);
+  },
+  async listSkills(opts: { projectDir: string }): Promise<Skill[]> {
+    // Never throws, per the interface.
+    try {
+      return await readSkills(opts);
+    } catch {
+      return [];
+    }
+  },
+  importSkills(opts: {
+    projectDir: string;
+    stagingDir: string;
+    scope: SkillScope;
+    name?: string;
+  }): Promise<SkillImportOutcome> {
+    return importSkillDir(opts);
+  },
+  deleteSkill(opts: {
+    projectDir: string;
+    name: string;
+    scope: SkillScope;
+  }): Promise<void> {
+    return deleteSkillDir(opts);
   },
   login: {
     start: startLogin,

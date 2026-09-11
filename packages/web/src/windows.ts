@@ -6,6 +6,7 @@ export type WindowKind =
   | "chat"
   | "capabilities"
   | "subagent"
+  | "skillImport"
   | "context"
   | "console"
   | "help"
@@ -74,6 +75,9 @@ export const WINDOW_SPEC: Record<
   // Resizable, unlike most: the instructions box is the point of the window,
   // and a long prompt in a fixed body is what would make it unusable.
   subagent: { title: "subagent", x: 260, y: 200, w: 560, h: 420 },
+  // Not resizable, unlike the subagent editor: there is no prose box here, so
+  // the window is as tall as its two short forms and no taller.
+  skillImport: { title: "import skill", x: 280, y: 220, w: 560 },
   context: { title: "context", x: 120, y: 300, w: 500 },
   // Mid-right: spawn position is computed in useWindows from the viewport so
   // it sits on the right edge, vertically centred. Height is operator-
