@@ -60,10 +60,23 @@ async function getStatus(): Promise<AdapterStatus> {
   return withPendingUsage(await readAuthStatus());
 }
 
+/**
+ * Windows only, plus the one question an empty report cannot answer on its own.
+ *
+ * A report that came back with gauges proves the CLI is signed in, so the happy
+ * path costs nothing extra. An *empty* one has two very different causes — a
+ * parse miss on a signed-in CLI, or a session that is gone — and asserting
+ * `authenticated: true` for both is what left the widget saying "signed in ·
+ * usage currently not available" while the console refused with "provider is
+ * not signed in". So the empty path re-asks `claude auth status`, which is the
+ * same cheap check `getStatus` uses, and reports what it actually finds.
+ */
 async function refreshUsage(): Promise<AdapterStatus> {
   const usage = await readUsageWindows();
   if (usage.length === 0) {
-    return { authenticated: true, usageState: "unavailable" };
+    const status = await readAuthStatus();
+    if (!status.authenticated) return status;
+    return { ...status, usageState: "unavailable" };
   }
   return { authenticated: true, usage, usageState: "ready" };
 }

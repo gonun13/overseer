@@ -43,6 +43,31 @@ export function cancelUsageRefresh(providerId: string): void {
 }
 
 /**
+ * Record a signed-out answer that some *other* path just got from the CLI.
+ *
+ * Auth can lapse between refreshes, and the caller that trips over it first is
+ * usually not this module: opening the console, starting a session or asking
+ * for usage all read a fresh status and then refuse. Before this, that refusal
+ * went only to the operator who pressed the button, while the snapshot kept
+ * the last good answer — so the widget still said "signed in" while the console
+ * said the opposite. Writing it here puts one answer on both surfaces, and
+ * stops the refresh loop that would otherwise keep asking on a dead session.
+ *
+ * Signed-in statuses are ignored: this is the repair path, not a second place
+ * where usage state gets decided.
+ */
+export async function noteProviderSignedOut(
+  providerId: string,
+  status: AdapterStatus,
+): Promise<void> {
+  if (status.authenticated) return;
+  cancelUsageRefresh(providerId);
+  const { usage: _drop, usageState: _dropState, ...rest } = status;
+  await setProviderStatus(providerId, rest);
+  broadcast?.({ type: "provider.status", id: providerId, status: rest });
+}
+
+/**
  * Ask (or re-ask) subscription windows for one provider. `delayMs` lets the
  * caller defer a recheck without blocking the event that noticed the miss.
  */
@@ -99,9 +124,11 @@ function delay(ms: number): Promise<void> {
   return new Promise((resolve) => setTimeout(resolve, ms));
 }
 
+// A timeout or a thrown probe says nothing about auth, so the prior answer
+// stands rather than a fresh assertion that the operator is signed in.
 function asUnavailable(prior: AdapterStatus | undefined): AdapterStatus {
   return {
-    authenticated: true,
+    authenticated: prior?.authenticated ?? true,
     ...(prior?.version !== undefined ? { version: prior.version } : {}),
     ...(prior?.detail !== undefined ? { detail: prior.detail } : {}),
     usageState: "unavailable",
@@ -157,6 +184,13 @@ async function runRefresh(providerId: string): Promise<void> {
       authenticated: status.authenticated,
       version: status.version ?? prior?.version,
       detail: status.detail ?? prior?.detail,
+      // Carried so a probe that found the CLI gone still reads as unreachable
+      // in the widget instead of flattening to a plain "not signed in".
+      ...(status.reachable !== undefined
+        ? { reachable: status.reachable }
+        : prior?.reachable !== undefined
+          ? { reachable: prior.reachable }
+          : {}),
       usageState: status.usageState,
       ...(status.usage !== undefined && status.usage.length > 0
         ? { usage: status.usage }

@@ -1,5 +1,6 @@
 import type { AgentAdapter } from "@overseer/protocol";
 import { getAdapter } from "./adapters.js";
+import { noteProviderSignedOut } from "./usage-refresh.js";
 import { readSnapshot, type WorldSnapshot } from "./memory/internal.js";
 import { isInsideWorkspace } from "./workspace.js";
 
@@ -75,6 +76,7 @@ export async function resolveProviderContext(
       };
     }
     if (!status.authenticated) {
+      await noteProviderSignedOut(adapter.id, status);
       return { ok: false, reason: "provider is not signed in" };
     }
   }

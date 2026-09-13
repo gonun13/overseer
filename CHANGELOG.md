@@ -5,6 +5,15 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
 
+## 0.4.2 — 2026-09-13
+
+### Fixed
+
+- The provider readout now says "not signed in" when your provider's session has lapsed, instead
+  of holding on to "signed in · usage currently not available" until you opened the console and
+  were told the opposite. Anything that finds the session gone — opening the console, starting a
+  session, asking for usage — now corrects the readout on the spot.
+
 ## 0.4.1 — 2026-09-11
 
 ### Fixed

@@ -11,6 +11,7 @@ import type {
   ServerMessage,
 } from "@overseer/protocol";
 import { getAdapter } from "./adapters.js";
+import { noteProviderSignedOut } from "./usage-refresh.js";
 import {
   loopSessionIndex,
   loopSessionName,
@@ -176,6 +177,7 @@ export function createSessionSupervisor(
       };
     }
     if (!status.authenticated) {
+      await noteProviderSignedOut(providerId, status);
       return { ok: false, reason: "provider is not signed in" };
     }
     if (adapter.sessions === undefined) {

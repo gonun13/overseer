@@ -180,6 +180,38 @@ exit 1
     assert.equal(refreshed.usage?.[1]?.used, 0.11);
   });
 
+  it("refreshUsage reports a lost session instead of asserting signed in", async () => {
+    // The failure this guards: a lapsed login makes `/usage` come back empty,
+    // and the old refresh answered `authenticated: true, usage unavailable` —
+    // so the widget read "signed in · usage currently not available" while the
+    // console, which asks auth directly, refused with "not signed in".
+    const claude = path.join(binDir, "claude");
+    const previousClaude = await readFile(claude, "utf8");
+    await writeFile(
+      claude,
+      `#!/bin/sh
+if [ "$1" = "--version" ]; then echo "2.1.226 (Claude Code)"; exit 0; fi
+if [ "$1" = "auth" ] && [ "$2" = "status" ]; then
+  printf '%s\\n' '{"loggedIn":false}'
+  exit 1
+fi
+if [ "$1" = "-p" ]; then printf '%s\\n' '{"type":"result","is_error":false,"result":"nope"}'; exit 0; fi
+exit 1
+`,
+      "utf8",
+    );
+    await chmod(claude, 0o755);
+    try {
+      const status = await claudeCodeAdapter.refreshUsage!();
+      assert.equal(status.authenticated, false);
+      assert.equal(status.usageState, undefined);
+      assert.equal(status.usage, undefined);
+    } finally {
+      await writeFile(claude, previousClaude, "utf8");
+      await chmod(claude, 0o755);
+    }
+  });
+
   it("settles unavailable when the CLI ignores SIGTERM past the deadline", async () => {
     const claude = path.join(binDir, "claude");
     const previousClaude = await readFile(claude, "utf8");

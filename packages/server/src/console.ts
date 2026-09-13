@@ -11,6 +11,7 @@ import type {
   ServerMessage,
 } from "@overseer/protocol";
 import { getAdapter } from "./adapters.js";
+import { noteProviderSignedOut } from "./usage-refresh.js";
 import { openLoopConsole } from "./loop-console.js";
 import { takeoverLoop } from "./loop-sessions.js";
 import {
@@ -176,6 +177,7 @@ export function createConsoleSession(
           return { ok: false, reason };
         }
         if (!status.authenticated) {
+          await noteProviderSignedOut(providerId, status);
           return { ok: false, reason: "provider is not signed in" };
         }
 

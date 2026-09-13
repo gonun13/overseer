@@ -1,5 +1,6 @@
 import type { AdapterUsageWindow, AgentAdapter } from "@overseer/protocol";
 import { getAdapter } from "./adapters.js";
+import { noteProviderSignedOut } from "./usage-refresh.js";
 import { readSnapshot, type WorldSnapshot } from "./memory/internal.js";
 import { isInsideWorkspace } from "./workspace.js";
 
@@ -76,6 +77,7 @@ export function createUsageCheck(deps: UsageCheckDeps = {}) {
       };
     }
     if (!status.authenticated) {
+      await noteProviderSignedOut(providerId, status);
       return { ok: false, reason: "provider is not signed in" };
     }
     return { ok: true, adapter, projectDir };
