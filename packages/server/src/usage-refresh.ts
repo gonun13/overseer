@@ -1,6 +1,12 @@
-import type { AdapterStatus, ServerMessage } from "@overseer/protocol";
+import type {
+  AdapterStatus,
+  ServerMessage,
+  SpaceMessage,
+} from "@overseer/protocol";
 import { getAdapter } from "./adapters.js";
 import { readSnapshot, setProviderStatus } from "./memory/internal.js";
+import { refreshProviderRows } from "./overseer/provider-status.js";
+import type { OverseerSpace } from "./overseer/space.js";
 
 type Broadcast = (message: ServerMessage) => void;
 
@@ -19,13 +25,36 @@ const RECHECK_MS = 5 * 60_000;
 const HARD_TIMEOUT_MS = 30_000;
 
 let broadcast: Broadcast | undefined;
+let space: OverseerSpace | undefined;
 const timers = new Map<string, ReturnType<typeof setTimeout>>();
 const inFlight = new Set<string>();
 /** Bumped on cancel/sign-out so a late result cannot overwrite. */
 const generation = new Map<string, number>();
 
-export function startUsageRefresh(bcast: Broadcast): void {
+export function startUsageRefresh(bcast: Broadcast, os: OverseerSpace): void {
   broadcast = bcast;
+  space = os;
+}
+
+/**
+ * Tell the space that provider auth moved.
+ *
+ * Every path that writes provider auth to the snapshot calls this, which is
+ * what stops the status window from outliving the fact it describes. Safe to
+ * call on a status that did not actually change — `space.status` drops an
+ * unchanged `state` row, so this never stutters the window open.
+ */
+export function noteProviderAuthChanged(
+  action?: string,
+  say?: SpaceMessage,
+): void {
+  if (space === undefined) return;
+  const os = space;
+  void refreshProviderRows(os, action !== undefined ? { action } : {}).then(
+    () => {
+      if (say !== undefined) os.say(say);
+    },
+  );
 }
 
 function clearTimer(providerId: string): void {
@@ -65,6 +94,7 @@ export async function noteProviderSignedOut(
   const { usage: _drop, usageState: _dropState, ...rest } = status;
   await setProviderStatus(providerId, rest);
   broadcast?.({ type: "provider.status", id: providerId, status: rest });
+  noteProviderAuthChanged("provider:signed-out");
 }
 
 /**

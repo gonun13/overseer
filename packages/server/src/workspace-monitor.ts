@@ -2,6 +2,7 @@ import type { ServerMessage } from "@overseer/protocol";
 import { readSnapshot } from "./memory/internal.js";
 import { createPersonalityFileWatcher } from "./personality-file-watcher.js";
 import { createWorkspaceMembershipWorker } from "./workspace-membership-worker.js";
+import type { OverseerSpace } from "./overseer/space.js";
 
 /**
  * Supervisor worker: keep the project list honest while the process is up.
@@ -9,7 +10,7 @@ import { createWorkspaceMembershipWorker } from "./workspace-membership-worker.j
  * Discovery is a one-shot pass; this is the continuous half — create/delete
  * (and "became a git project" / "stopped being one") under the workspace root
  * update every connected client without replaying the wizard. Diffs also land
- * as `overseer.step` lines so the operations window reports what changed.
+ * as `overseer.step` lines so the status window reports what changed.
  * `personality.json` is tracked directly: edits are re-read live; deletion
  * complains and asks for a restart (discovery restores defaults on the next
  * boot — no silent live repair).
@@ -42,6 +43,7 @@ export interface WorkspaceMonitorDeps {
 
 export function startWorkspaceMonitor(
   broadcast: Broadcast,
+  space: OverseerSpace,
   deps: WorkspaceMonitorDeps = {},
 ): () => void {
   const readSnapshotFn = deps.readSnapshot ?? readSnapshot;
@@ -93,6 +95,7 @@ export function startWorkspaceMonitor(
         const state = membership.getState();
         const personalityResult = await personality.refresh({
           broadcast,
+          space,
           snapshot,
           lastProjects: state.lastProjects,
           lastUntracked: state.lastUntracked,
@@ -100,6 +103,7 @@ export function startWorkspaceMonitor(
 
         await membership.refresh({
           broadcast,
+          space,
           snapshot,
           personalityMissing: personalityResult.personalityMissing,
           justNoticedMissing: personalityResult.justNoticedMissing,

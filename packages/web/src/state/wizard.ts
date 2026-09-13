@@ -5,7 +5,6 @@ import type {
   DiscoveredProject,
   DiscoveredProvider,
   DiscoveryEvent,
-  DiscoveryOutcome,
   FurnitureReveal,
   GitRemoteHost,
   OverseerTheme,
@@ -14,13 +13,21 @@ import type {
 } from "@overseer/protocol";
 import { message } from "../lang";
 import type { Activity } from "../status";
-import type { OperationStep, Project } from "../domain";
+import type { Project } from "../domain";
+import {
+  EMPTY_SPACE,
+  applyDiscoveryStep,
+  emptySpace,
+  applySpaceFrame,
+  type SpaceState,
+} from "./space";
+import type { SpaceFrame } from "@overseer/protocol";
 
 /**
  * The wizard's state machine. One place decides which furniture is mounted,
- * what the headline says and what the operations window shows — the alternative
+ * what the message says and what the status window shows — the alternative
  * is those three answers drifting apart in separate conditionals scattered
- * through App.tsx, which is how a "boots into headline-only state" rule quietly
+ * through App.tsx, which is how a "boots into message-only state" rule quietly
  * stops being true.
  *
  * Everything here is derived from server events or the explicit absence of
@@ -35,7 +42,7 @@ import type { OperationStep, Project } from "../domain";
  * requires the socket: connection wait belongs here — on the loading bar —
  * not in discovery, where the wizard should already be running. If `/ws` is
  * queued behind Firefox connection slots the bar sits full past this mark
- * with headline "connecting" until the socket opens.
+ * with message "connecting" until the socket opens.
  *
  * `LoadingBar` fills over exactly this long; it reads the value from here so
  * the animation and the minimum beat cannot drift apart.
@@ -46,10 +53,10 @@ export type WizardPhase =
   /** Boot beat + socket gate. Stays until BOOT_MS has elapsed *and* connected. */
   | "boot"
   /** Connected. First-run walks name → tone → greet; returns skip to the
-   * first missing beat. "I AM THE OVERSEER" is the tone-pick headline, not a
+   * first missing beat. "I AM THE OVERSEER" is the tone-pick message, not a
    * beat of its own. */
   | "welcome"
-  /** Discovery running; the operations window is up and steps are arriving. */
+  /** Discovery running; the status window is up and steps are arriving. */
   | "discovery"
   /** Discovery complete; furniture mounting per resolved capability. */
   | "settling"
@@ -77,7 +84,7 @@ export type ResetStage =
   | "declined"
   /** The wipe is running: steps arrive, furniture leaves. */
   | "working"
-  /** Everything is gone. One last headline, then the reload. */
+  /** Everything is gone. One last message, then the reload. */
   | "goodbye";
 
 /**
@@ -114,7 +121,10 @@ export interface WizardState {
   phase: WizardPhase;
   /** Only set while `phase === "welcome"`. */
   welcomeBeat?: WelcomeBeat;
-  steps: OperationStep[];
+  /** The overseer space: status rows, the last message, and the summon tick.
+   * Was `steps: OperationStep[]` — an append-only array that could not revise
+   * a row, which is why a boot-time line outlived the fact behind it. */
+  space: SpaceState;
   projects: DiscoveredProject[];
   /** Workspace folders that are not git projects — drive signals. */
   untrackedFolders: UntrackedFolder[];
@@ -145,9 +155,6 @@ export interface WizardState {
   theme: OverseerTheme;
   /** Furniture unlocked so far this pass. Permanent once true. */
   revealed: Record<FurnitureReveal, boolean>;
-  /** Bumps when a worker appends an operations line — App summons the
-   * overseer window for that run (docs/overseer.md §3). */
-  operationTick: number;
   /** Undefined until known. `false` is a real answer; "not yet asked" is not. */
   returning?: boolean;
   personality: AppliedPersonality;
@@ -157,16 +164,16 @@ export interface WizardState {
   personalityMissing: boolean;
   /** True after a returning discovery recreated it from defaults. */
   personalityRescued: boolean;
-  /** One of the alarm headline words, picked once when the complaint lands
+  /** One of the alarm message words, picked once when the complaint lands
    * so re-renders do not shuffle `DANGER` → `WHY???`. */
-  personalityRescueHeadline?: string;
+  personalityRescueMessage?: string;
   /** How far the reset flow has got. Undefined when none has been asked for. */
   reset?: ResetStage;
-  /** Force the next headline change to type out. Set when a refused reset
-   * hands the headline back to derivation — otherwise `blocked` (and the
+  /** Force the next message change to type out. Set when a refused reset
+   * hands the message back to derivation — otherwise `blocked` (and the
    * rest of the activity words) land as an instant swap and the reset's
    * typing register breaks. */
-  forceHeadlineType: boolean;
+  forceMessageType: boolean;
   /** Set when the socket or the pass itself failed. The wizard reports it
    * rather than hanging on a step that will never resolve. */
   error?: string;
@@ -238,7 +245,7 @@ const NO_REVEAL: Record<FurnitureReveal, boolean> = {
 
 export const INITIAL_WIZARD: WizardState = {
   phase: "boot",
-  steps: [],
+  space: EMPTY_SPACE,
   projects: [],
   untrackedFolders: [],
   providers: [],
@@ -249,50 +256,42 @@ export const INITIAL_WIZARD: WizardState = {
   rejected: [],
   personalityMissing: false,
   personalityRescued: false,
-  forceHeadlineType: false,
+  forceMessageType: false,
   connected: false,
   bootMinElapsed: false,
-  operationTick: 0,
   projectCreate: { status: "idle" },
 };
 
 /**
- * Headline words when `overseer-personality` is gone or had to be restored.
+ * Message words when `overseer-personality` is gone or had to be restored.
  * Deliberately not the activity vocabulary — deleting the brain is not merely
  * `blocked`. CSS uppercases them; `why???` keeps its punctuation.
  */
-export const PERSONALITY_RESCUE_HEADLINES = [
+export const PERSONALITY_RESCUE_MESSAGES = [
   "danger",
   "braindead",
   "why???",
 ] as const;
 
-export function pickPersonalityRescueHeadline(
+export function pickPersonalityRescueMessage(
   random: () => number = Math.random,
 ): string {
-  const i = Math.floor(random() * PERSONALITY_RESCUE_HEADLINES.length);
-  return PERSONALITY_RESCUE_HEADLINES[i] ?? PERSONALITY_RESCUE_HEADLINES[0];
+  const i = Math.floor(random() * PERSONALITY_RESCUE_MESSAGES.length);
+  return PERSONALITY_RESCUE_MESSAGES[i] ?? PERSONALITY_RESCUE_MESSAGES[0];
 }
 
-/** First time the complaint lands, pick a headline and keep it stable. */
-function personalityAlarmHeadline(
+/** First time the complaint lands, pick a message and keep it stable. */
+function personalityAlarmMessage(
   state: WizardState,
-): Pick<WizardState, "personalityRescueHeadline"> {
+): Pick<WizardState, "personalityRescueMessage"> {
   return {
-    personalityRescueHeadline:
-      state.personalityRescueHeadline ?? pickPersonalityRescueHeadline(),
+    personalityRescueMessage:
+      state.personalityRescueMessage ?? pickPersonalityRescueMessage(),
   };
 }
 
 /** Discovery outcomes are the same five activities in a different register —
  * no second vocabulary (docs/overseer.md §3). */
-const OUTCOME_ACTIVITY: Record<DiscoveryOutcome, Activity> = {
-  ok: "done",
-  blocked: "waiting",
-  failed: "attention",
-  skipped: "idle",
-};
-
 export type WizardAction =
   /** Socket is up *and* the server sent identity for the welcome beat. */
   | {
@@ -346,14 +345,11 @@ export type WizardAction =
       rejected?: RejectedCustomization[];
       personalityMissing?: true;
     }
-  /** Supervisor worker line for the operations window. */
-  | {
-      type: "overseer.step";
-      id: string;
-      label: string;
-      outcome: DiscoveryOutcome;
-      detail?: string;
-    }
+  /** A frame from the overseer space — a status row, a clear, or a message. */
+  | { type: "space.frame"; frame: SpaceFrame }
+  /** The overseer's last one-liner has been up long enough; hand the message
+   * surface back to the ranked signal list. */
+  | { type: "space.message.expired" }
   /** Furniture has finished mounting; hand back to ordinary derivation. */
   | { type: "settled" }
   /** The operator asked to reset; the decision goes up. Nothing is sent yet. */
@@ -363,7 +359,7 @@ export type WizardAction =
   /** The declined beat has been read; back to ordinary derivation. */
   | { type: "reset.dismissed" }
   /** A forced type-out finished; stop forcing. */
-  | { type: "headline.typed" }
+  | { type: "message.typed" }
   /** The operator answered yes. `memory.reset` is on the wire. */
   | { type: "reset.confirmed" }
   /** The server finished erasing. Only the goodbye is left. */
@@ -382,7 +378,7 @@ export type WizardAction =
 
 /** Which welcome beat a freshly-connected session should land on. */
 function initialWelcomeBeat(state: WizardState): WelcomeBeat {
-  // Name first. The self-introduction is the headline *behind* the tone
+  // Name first. The self-introduction is the message *behind* the tone
   // buttons — showing it alone before the ask made "I AM THE OVERSEER" land
   // twice on a first run (once here, once on tone).
   if (!state.personality.name) return "name";
@@ -548,7 +544,7 @@ export function wizardReducer(
         ...(action.personalityMissing
           ? {
               personalityMissing: true,
-              ...personalityAlarmHeadline(state),
+              ...personalityAlarmMessage(state),
             }
           : action.personality !== undefined
             ? { personalityMissing: false }
@@ -556,34 +552,36 @@ export function wizardReducer(
       };
     }
 
-    case "overseer.step":
-      // Name / tone / intro / greet own the screen. Worker lines must not fill
-      // the operations list (or summon the window) until setup has handed off.
+    case "space.frame": {
+      // Name / tone / intro / greet own the screen. Service rows must not fill
+      // the status list (or summon the window) until setup has handed off.
       if (state.phase === "boot" || state.phase === "welcome") return state;
+      const space = applySpaceFrame(state.space, action.frame);
+      if (space === state.space) return state;
+      // Each line of the wipe costs the operator a piece of the instrument,
+      // so the report and the field say the same thing at the same time. Only
+      // a row that actually landed pays — a superseded condition is not a
+      // step of the teardown.
+      const teardown =
+        state.reset === "working" && space.tick !== state.space.tick;
       return {
         ...state,
-        operationTick: state.operationTick + 1,
-        // Each line of the wipe costs the operator a piece of the instrument,
-        // so the report and the field say the same thing at the same time.
-        ...(state.reset === "working"
-          ? { revealed: withoutNextFurniture(state) }
-          : {}),
-        steps: [
-          ...state.steps,
-          {
-            id: action.id,
-            label: action.label,
-            activity: OUTCOME_ACTIVITY[action.outcome],
-            detail: action.detail,
-          },
-        ],
+        space,
+        ...(teardown ? { revealed: withoutNextFurniture(state) } : {}),
       };
+    }
+
+    case "space.message.expired": {
+      if (state.space.message === undefined) return state;
+      const { message: _read, ...space } = state.space;
+      return { ...state, space };
+    }
 
     case "discovery.requested":
       return {
         ...state,
         phase: "discovery",
-        steps: [],
+        space: { ...emptySpace(), tick: state.space.tick },
         welcomeBeat: undefined,
         revealed: { ...NO_REVEAL },
       };
@@ -603,12 +601,12 @@ export function wizardReducer(
 
     case "reset.dismissed":
       return state.reset === "declined"
-        ? { ...state, reset: undefined, forceHeadlineType: true }
+        ? { ...state, reset: undefined, forceMessageType: true }
         : state;
 
-    case "headline.typed":
-      return state.forceHeadlineType
-        ? { ...state, forceHeadlineType: false }
+    case "message.typed":
+      return state.forceMessageType
+        ? { ...state, forceMessageType: false }
         : state;
 
     case "reset.confirmed":
@@ -617,11 +615,10 @@ export function wizardReducer(
         ...state,
         reset: "working",
         // The teardown is its own report; whatever the last operation left in
-        // the window is not part of it.
-        steps: [],
-        // Summons the operations window before the first delete step lands, so
-        // the wipe is watched rather than discovered halfway through.
-        operationTick: state.operationTick + 1,
+        // the window is not part of it. The tick still advances, which summons
+        // the window before the first delete row lands — the wipe is watched
+        // rather than discovered halfway through.
+        space: { ...emptySpace(), tick: state.space.tick + 1 },
       };
 
     case "reset.done":
@@ -687,7 +684,7 @@ function applyReveal(
 
 function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
   // Discovery must not start — or stream steps — until welcome has finished.
-  // A stray frame would open the operations window over the name/tone ask.
+  // A stray frame would open the status window over the name/tone ask.
   if (
     (state.phase === "boot" || state.phase === "welcome") &&
     event.type.startsWith("discovery.")
@@ -700,18 +697,12 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
       return {
         ...state,
         phase: "discovery",
-        steps: [],
+        space: applyDiscoveryStep(state.space, event),
         revealed: { ...NO_REVEAL },
       };
 
     case "discovery.step.start":
-      return {
-        ...state,
-        steps: [
-          ...state.steps,
-          { id: event.id, label: event.label, activity: "working" },
-        ],
-      };
+      return { ...state, space: applyDiscoveryStep(state.space, event) };
 
     case "discovery.step.done": {
       // Clock detail is formatted here in the browser's locale so it matches
@@ -724,15 +715,10 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
           : event.detail;
       return {
         ...state,
-        steps: state.steps.map((step) =>
-          step.id === event.id
-            ? {
-                ...step,
-                activity: OUTCOME_ACTIVITY[event.outcome],
-                detail,
-              }
-            : step,
-        ),
+        space: applyDiscoveryStep(state.space, {
+          ...event,
+          ...(detail !== undefined ? { detail } : {}),
+        }),
         ...(event.projects !== undefined ? { projects: event.projects } : {}),
         ...(event.untrackedFolders !== undefined
           ? { untrackedFolders: event.untrackedFolders }
@@ -765,7 +751,7 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
           ? {
               personalityRescued: true,
               personalityMissing: false,
-              ...personalityAlarmHeadline(state),
+              ...personalityAlarmMessage(state),
             }
           : {}),
         revealed: applyReveal(state.revealed, event.reveal),
@@ -795,11 +781,11 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
         ...(event.personalityRescued
           ? {
               personalityRescued: true,
-              ...personalityAlarmHeadline(state),
+              ...personalityAlarmMessage(state),
             }
           : {
               personalityRescued: false,
-              personalityRescueHeadline: undefined,
+              personalityRescueMessage: undefined,
             }),
         // Complete is the backstop: anything not yet revealed becomes known.
         revealed: {
@@ -860,7 +846,7 @@ export function furnitureFor(state: WizardState): Furniture {
 
 /**
  * True while welcome is waiting for the operator to type a name. The ask is
- * rendered as an inline field in the headline, not as a typed string — see
+ * rendered as an inline field in the message, not as a typed string — see
  * OverseerSpace.
  */
 export function welcomeNeedsName(state: WizardState): boolean {
@@ -873,19 +859,19 @@ export function welcomeNeedsTone(state: WizardState): boolean {
 }
 
 /**
- * The headline while the wizard is driving. Returns undefined once it is not —
- * from `settling` on, `headlineFor` owns the headline again, so the wizard can
+ * The message while the wizard is driving. Returns undefined once it is not —
+ * from `settling` on, `messageFor` owns the message again, so the wizard can
  * never end up shadowing a real state word with a stale greeting.
  *
  * While `welcomeNeedsName` is true this returns undefined: the ask UI owns the
- * headline slot, and a string here would fight it. Copy comes from
+ * message slot, and a string here would fight it. Copy comes from
  * `packages/web/src/lang` and varies with tone.
  *
  * A reset outranks the phase entirely. The decision window states the facts;
- * the headline is the overseer reacting to being asked, which is the one thing
+ * the message is the overseer reacting to being asked, which is the one thing
  * only it can say (docs/overseer-behavior.md §2.3).
  */
-export function wizardHeadline(state: WizardState): string | undefined {
+export function wizardMessage(state: WizardState): string | undefined {
   const tone = state.personality.tone;
   switch (state.reset) {
     case "confirm":
@@ -908,7 +894,7 @@ export function wizardHeadline(state: WizardState): string | undefined {
       switch (state.welcomeBeat) {
         case "tone":
           // Self-introduction stays up through the tone pick — the buttons are
-          // the question; the headline is still who is speaking.
+          // the question; the message is still who is speaking.
           return message(tone, "intro");
         case "intro":
           // Kept so an old hold cannot strand the reducer; new sessions never

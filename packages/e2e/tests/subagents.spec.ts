@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { passWizardOpening, SETTLED } from "./shell";
+import { openCapabilities, passWizardOpening, SETTLED } from "./shell";
 
 /**
  * The capabilities window's subagents tab: the operator's own agent files, as
@@ -27,9 +27,7 @@ test("shows the subagents tab for the attached provider", async ({ page }) => {
   await passWizardOpening(page);
   await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
 
-  await page.keyboard.press("ControlOrMeta+k");
-  await page.keyboard.type("/capabilities");
-  await page.keyboard.press("Enter");
+  await openCapabilities(page);
 
   const frame = page
     .locator(".window")

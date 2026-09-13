@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { passWizardOpening } from "./shell";
+import { openProviders, passWizardOpening } from "./shell";
 
 test("switches to the loop tab and opens a provider's model window", async ({
   page,
@@ -7,13 +7,9 @@ test("switches to the loop tab and opens a provider's model window", async ({
   await page.goto("/");
   await passWizardOpening(page);
 
-  const widget = page.getByRole("button", { name: /choose provider/i });
-  await expect(widget).toBeVisible({ timeout: 45_000 });
-  await widget.click();
-  await expect(page.getByLabel("close providers")).toBeVisible();
-
-  // The providers tab is the default view.
-  await expect(page.getByText("available providers")).toBeVisible();
+  // The first tab shows the picker or the login step depending on auth; the
+  // loop tab is a sibling of both, so this spec does not care which it got.
+  await openProviders(page);
 
   await page.getByRole("button", { name: "loop", exact: true }).click();
   await expect(page.getByText("loop provider")).toBeVisible();

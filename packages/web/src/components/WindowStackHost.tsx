@@ -31,6 +31,7 @@ import { FolderWindow } from "./windows/FolderWindow";
 import { HelpWindow } from "./windows/HelpWindow";
 import { LoopModelsWindow } from "./windows/LoopModelsWindow";
 import { OverseerWindow } from "./windows/OverseerWindow";
+import { spaceRows } from "../state/space";
 import { PlansWindow } from "./windows/PlansWindow";
 import { ProjectCreateWindow } from "./windows/ProjectCreateWindow";
 import { ProjectWindow } from "./windows/ProjectWindow";
@@ -214,7 +215,7 @@ export function WindowStackHost({
         }
       >
         {windowState.kind === "overseer" && (
-          <OverseerWindow steps={wizard.steps} />
+          <OverseerWindow rows={spaceRows(wizard.space)} />
         )}
         {windowState.kind === "providers" && (
           <ProvidersWindow

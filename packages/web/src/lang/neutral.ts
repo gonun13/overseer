@@ -14,4 +14,12 @@ export const neutral: OverseerMessages = {
   resetDeclined: "still here",
   resetWorking: "forgetting",
   resetGoodbye: "goodbye",
+  idle: "nothing running",
+  ready: "ready",
+  working: "working",
+  blocked: "blocked",
+  attention: "something needs you",
+  approval: "waiting on your approval",
+  authRestored: "{provider} is signed in",
+  authLost: "{provider} lost its credential",
 };

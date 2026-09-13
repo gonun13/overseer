@@ -5,6 +5,27 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
 
+## 0.4.3 — 2026-09-13
+
+### Fixed
+
+- Signing in to your provider now clears the "checking provider auth" and "releasing the prompt"
+  lines in the overseer's status window. They used to keep saying you were not authenticated and
+  that the prompt was held, long after both had stopped being true.
+
+### Changed
+
+- The overseer now speaks in a line rather than a single word. The line above the signal list reads
+  in the tone you chose rather than reporting one fixed status word.
+- The status window keeps one line per condition instead of stacking a new one each time something
+  is re-checked: a line that describes how things stand now corrects itself, while a line about
+  something that happened stays put.
+- A folder whose git has gone slow now reports once and clears itself when git recovers, rather
+  than leaving the complaint sitting under the recovery notice.
+- The skills and subagents tabs now say when there is no signed-in provider to ask, instead of
+  showing an empty list and an enabled import button — an empty list read as "you have none" when
+  in fact nothing had been asked.
+
 ## 0.4.2 — 2026-09-13
 
 ### Fixed

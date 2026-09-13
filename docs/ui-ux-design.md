@@ -24,7 +24,7 @@ The steady-state layout is:
 │ ├ ● docs-site        main         3 files│                                    │
 │ └ ○ infra            main                │                                    │
 │                                                                                │
-│                                 ATTENTION            ← headline                │
+│                                 ATTENTION            ← message                │
 │                                 ─────────                                      │
 │                                     ▲                                          │
 │    ● APPROVAL     2 tool calls are waiting on your decision.                   │
@@ -48,7 +48,7 @@ The steady-state layout is:
 | top-left      | **project panel** — persistent status list of every project, and the selector |
 | top-centre    | **active project** — target for new prompts and sessions                       |
 | top-right     | **clock** and the **settings** gear                                           |
-| centre        | **the overseer space** — headline plus ranked, clickable signals              |
+| centre        | **the overseer space** — message plus ranked, clickable signals              |
 | bottom-left   | **prompt controls** — the numbered accordion                                  |
 | bottom-centre | **the prompt** — transcript and composer as sibling panels — and the footer   |
 | bottom-right  | **provider widget** — provider, auth, usage, spend                            |
@@ -102,7 +102,7 @@ wider numeric step to preserve the same perceived contrast; `:root` is the sourc
 Rules:
 
 - Field uses `--text*` and `--accent`; surfaces use `--ink*` and `--accent-fill`.
-- Identity triangles (headline `▲`, window/panel `▽`) and selection marks
+- Identity triangles (message `▲`, window/panel `▽`) and selection marks
   (active project, `▪` current options) use `--mark` / `--mark-fill` — red in
   samaritan, blue in machine. Danger and attention stay on `--accent*`.
 - Stamps bring `--stamp*` ground, ink, and edge tokens.
@@ -137,10 +137,9 @@ Rank order for anything that sorts by status: `attention → waiting → working
 
 The centre region: a **derived, ranked answer** to what deserves attention.
 
-- **Headline** — in steady state, one uppercase activity word (`ATTENTION`, `BLOCKED`, `WORKING`, `READY`,
-  `IDLE`) taken from the most urgent signal. Recovery may supply a stronger alert word. Onboarding uses the
-  same space for questions and choices. Beneath it, a rule widens 30→150px while busy; a loading bar replaces
-  the `▲` during boot.
+- **Message** — one uppercase line in the operator's tone, taken from the most urgent signal and set as text
+  alone. Recovery may supply a verbatim alert word. Onboarding uses the same space for questions and choices.
+  Beneath it, a rule widens 30→150px while busy; a loading bar replaces the `▲` during boot.
 - **Signals** — `[light] KICKER  sentence.` rows, most urgent first. The kicker is the category (`APPROVAL`,
   `PROVIDER`, `CAPABILITY`, `SESSION`, `USAGE`, `PROJECT`, `WORKSPACE`, `PERSONALITY`, or `STANDBY`);
   the sentence states what happened and what it means.
@@ -174,8 +173,9 @@ command, or a system escalation.
 - Dismissed by the ✕, or `Esc` for the topmost surface.
 - **Multiple windows coexist and may overlap.** They are not modal and never block the prompt.
 
-The **operations window** is summoned automatically for multi-step system work. It shows telegraphic steps
-and may be dismissed without cancelling the operation. Lifecycle rules live in
+The **status window** is summoned automatically when a service starts work — it is where trigger logs from
+every service land. It shows telegraphic rows and may be dismissed without cancelling the operation. Rows are
+either conditions (which rewrite themselves in place) or events (which append). Lifecycle rules live in
 [overseer-behavior.md](overseer-behavior.md).
 
 ### 5.1 Windows carry controls
@@ -231,13 +231,13 @@ is an acceptable way to answer "erase everything I know".
 
 - Built from the window's parts — tab, frame, `w-btn` answers — but the **tab is centred**, which is the tell
   that this is not a window the operator summoned.
-- **Centred horizontally and placed above the headline**, never over it: the overseer answers the decision in
-  the headline, so the question and its answer must be readable together.
+- **Centred horizontally and placed above the message**, never over it: the overseer answers the decision in
+  the message, so the question and its answer must be readable together.
 - **No ✕, no drag, no `Esc`, no dismiss-on-outside-click.** It is answered by its two buttons or not at all.
 - Above the settings panel in the stack, over a `--scrim` wash of the field — thin enough that the operator
   can still see what they are about to erase.
 - The field behind it is `inert`, not merely covered: a scrim stops the mouse and nothing else.
-- The decision states facts in plain machine copy. Personality belongs to the headline, never to the terms
+- The decision states facts in plain machine copy. Personality belongs to the message, never to the terms
   (§2.3 of [overseer-behavior.md](overseer-behavior.md)).
 
 ### 5.5 The file view
@@ -437,9 +437,9 @@ never in the `Esc` chain.
 ## 8. Type
 
 - **Family:** IBM Plex Mono, fallback `ui-monospace, monospace`. One family everywhere.
-- **Scale:** 34/700 headline · 19/600 active project · 17 clock · 15 project value · 14 window tab, prompt and
+- **Scale:** 34/700 message · 19/600 active project · 17 clock · 15 project value · 14 window tab, prompt and
   transcript · 13 signals and rows · 12 controls and window content · 11 secondary · 10 kickers.
-- **Case:** UPPERCASE for labels, statuses, command labels, tab titles, kickers and the headline. Left alone: agent
+- **Case:** UPPERCASE for labels, statuses, command labels, tab titles, kickers and the message. Left alone: agent
   prose, the operator's typed input, signal sentences, code, paths and diffs.
 - **Numbers:** `tabular-nums` wherever a value changes in place — clock, gauge, cost.
 - **Letter-spacing:** 1.5px on kickers, 1px on labels, 0.5px on chips, none on prose.
@@ -455,9 +455,9 @@ Motion means the system changed state. Never decoration.
 - **Tab wipe** — `clip-path: inset(0 N% 0 0)` 100→0 over ~200ms when a window opens.
 - **Body expand** — `max-height` 0→`min(420px, 52vh)`, 500ms, after the tab lands.
 - **Accordion** — `max-height` over 220ms; project list over 260ms; settings panel `translateX` over 280ms.
-- **Rule widen** — the headline rule 30→150px, 300ms, while a turn is in flight.
+- **Rule widen** — the message rule 30→150px, 300ms, while a turn is in flight.
 - **Blink** — 0.6s alternate on prompt and typing cursors.
-- **Headline typing** — about 15% of real headline changes type at ~55ms per character; never on mount or idle.
+- **Message typing** — about 15% of real message changes type at ~55ms per character; never on mount or idle.
 - **Furniture reveal** — newly knowable furniture settles into place once; it does not replay on ordinary updates.
 - **Teardown** — a confirmed reset takes one piece of furniture away per delete step, controls first and the
   clock last, so the report and the field say the same thing at the same time.
@@ -481,9 +481,9 @@ Motion means the system changed state. Never decoration.
 - A control that closes the panel it lives in as a side effect of being used.
 - Card-style layout containers: shadows, large radii, and boxed chrome.
 - A tab, chip or label that does not align to the edge of the thing it names.
-- Modals that block, and toasts. Escalations become a signal in the overseer space and change the headline.
+- Modals that block, and toasts. Escalations become a signal in the overseer space and change the message.
   The decision (§5.4) is the only exception, and only for destroying memory.
-- Spinners. Use the boot bar or headline rule.
+- Spinners. Use the boot bar or message rule.
 - Message bubbles, side-aligned turns, avatars, emoji in chrome. Authorship is carried by stamp-vs-plain.
 - A readout the operator cannot act on sitting in the overseer space.
 - Renaming things. No codenames; paths, commands, errors and diffs appear verbatim.

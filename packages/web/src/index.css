@@ -42,7 +42,7 @@
   --ok: #1e9e57;
   --warn: #a97400;
 
-  /* Identity triangles — headline ▲ and window/panel ▽. Same red as --accent
+  /* Identity triangles — message ▲ and window/panel ▽. Same red as --accent
      in samaritan; machine recolours them blue without touching danger. */
   --mark: #d0342c;
   --mark-fill: #ff4a44;
@@ -381,7 +381,7 @@ button {
     animation: none;
   }
   /* Collapses to an instant state change, not to nothing: the bar still says
-     "starting", it just stops travelling. The headline's typing pass is
+     "starting", it just stops travelling. The message's typing pass is
      dropped in useOccasionalTyping, which reads the same query. */
   .loading-bar-fill {
     width: 100%;

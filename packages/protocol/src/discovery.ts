@@ -1,4 +1,5 @@
 import type { AdapterStatus } from "./adapter.js";
+import type { SpaceService } from "./space.js";
 
 /**
  * Discovery: what the overseer learns about the world before any session
@@ -116,16 +117,43 @@ export interface DiscoveryStepUpdate {
   reveal?: FurnitureReveal[];
 }
 
+/**
+ * Where a discovery step's row lands in the overseer space.
+ *
+ * A step is both a beat in a paced pass and a row in the status window, and
+ * those two needs pull in opposite directions. The pass wants its own
+ * ordering, furniture reveals and client-side pacing; the row wants a stable
+ * `(service, key)` so a later report can revise it.
+ *
+ * Carrying the space identity on the event gives both: the client still paces
+ * the pass, and the row it writes is addressable. It is what lets a login
+ * rewrite `checking provider auth` in place instead of appending a second,
+ * contradicting line under the one discovery wrote at boot.
+ *
+ * Absent means the step is a plain `discovery`-owned row keyed by its own id.
+ */
+export interface DiscoveryStepIdentity {
+  service?: SpaceService;
+  /** Supersession key within `service`. Defaults to the step's `id`. */
+  spaceKey?: string;
+}
+
 export type DiscoveryEvent =
   | { type: "discovery.start"; runId: string }
-  | { type: "discovery.step.start"; runId: string; id: string; label: string }
+  | ({
+      type: "discovery.step.start";
+      runId: string;
+      id: string;
+      label: string;
+    } & DiscoveryStepIdentity)
   | ({
       type: "discovery.step.done";
       runId: string;
       id: string;
       outcome: DiscoveryOutcome;
       detail?: string;
-    } & DiscoveryStepUpdate)
+    } & DiscoveryStepIdentity &
+      DiscoveryStepUpdate)
   | {
       type: "discovery.complete";
       runId: string;

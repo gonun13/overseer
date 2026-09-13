@@ -121,19 +121,41 @@
   padding: 0 24px;
 }
 
-.os-headline {
+/* The overseer's one-liner. Was `.os-headline`, a single activity word at
+   34px — the word was both the voice and the instrument. Now the words carry
+   the voice, and the rule beneath carries whether anything is in motion.
+
+   Still uppercase: the shout is the field's register, not decoration on the
+   old one-word form, and a line set in sentence case reads as speech rather
+   than as the machine. Smaller than the word it replaced, and allowed to
+   wrap, because a full line at 34px does not survive a narrow viewport.
+
+   Text and nothing else. The rule beneath already widens while busy, and the
+   top signal carries its own light, so a light here would be a third reading
+   of one state on the sparest surface in the app. */
+.os-message {
   margin: 0;
-  font-size: 34px;
+  max-width: 720px;
+  font-size: 26px;
   font-weight: 700;
-  line-height: 1;
+  line-height: 1.2;
   letter-spacing: 1px;
   text-transform: uppercase;
+  text-align: center;
+  text-wrap: balance;
 }
 
 /* Goodbye hold — the line is the restart control until the unattended timer
    fires. Cursor says so; no other chrome. */
-.os-headline-restart {
+.os-message-restart {
   cursor: pointer;
+}
+
+/* The name ask is a prompt, not a sentence: it keeps the full 34px and the
+   single-line height so the typed field and the block caret line up. */
+.os-message.os-name-line {
+  font-size: 34px;
+  line-height: 1;
 }
 
 /* First-run welcome ask: prompt-shaped — typed text, blinking block cursor,
@@ -273,7 +295,7 @@
   text-align: center;
 }
 
-/* Boot only. Sits where the ▲ marker sits, so the headline block doesn't jump
+/* Boot only. Sits where the ▲ marker sits, so the message block doesn't jump
    when the wizard swaps one for the other. A segmented meter, not a sliding
    stripe: blocky and monospace-flavoured like everything else here, and
    monochrome — this is chrome, not a status light, so it doesn't reach for

@@ -1,9 +1,14 @@
 import type {
   AdapterUsageWindow,
+  SpaceMessageKey,
   RejectedCustomization,
   UntrackedFolder,
 } from "@overseer/protocol";
-import { ACTIVITY_HEADLINE, ACTIVITY_RANK, type Activity } from "../status.ts";
+import {
+  ACTIVITY_MESSAGE_KEY,
+  ACTIVITY_RANK,
+  type Activity,
+} from "../status.ts";
 import type { WindowKind } from "../windows";
 import type { Capability, Project, Session } from "../domain";
 
@@ -30,11 +35,15 @@ export interface Signal {
   /** Sentence-case line: what happened and what it means. */
   text: string;
   target: Target;
-  /** Optional system-headline override. When this signal is on top,
-   * `headlineFor` uses it instead of `ACTIVITY_HEADLINE[activity]` — so a
-   * rescued personality can read `DANGER` / `BRAINDEAD` / `WHY???` without
-   * inventing a sixth activity. */
-  headline?: string;
+  /** Optional message override. When this signal is on top, `messageFor` uses
+   * this verbatim instead of the tone pack's line for `activity` — so a
+   * rescued personality can read `danger` / `braindead` / `why???` without
+   * inventing a sixth activity.
+   *
+   * Verbatim is the point: these are alarm words, and a tone pack that could
+   * soften one would be changing severity, which personality may never do
+   * (docs/overseer-behavior.md §2.3). */
+  message?: string;
 }
 
 export interface WorldState {
@@ -59,8 +68,8 @@ export interface WorldState {
   personalityMissing?: boolean;
   /** True when discovery restored it from defaults after a deletion. */
   personalityRescued?: boolean;
-  /** Stable pick for the alarm headline — set once when the complaint lands. */
-  personalityRescueHeadline?: string;
+  /** Stable pick for the alarm message — set once when the complaint lands. */
+  personalityRescueMessage?: string;
   /** Workspace folders that are not git projects. */
   untrackedFolders?: UntrackedFolder[];
 }
@@ -96,7 +105,7 @@ export function deriveSignals(world: WorldState): Signal[] {
       kicker: "personality",
       text: "personality was deleted · restart to restore.",
       target: { kind: "restart" },
-      headline: world.personalityRescueHeadline ?? "danger",
+      message: world.personalityRescueMessage ?? "danger",
     });
   } else if (world.personalityRescued) {
     signals.push({
@@ -105,7 +114,7 @@ export function deriveSignals(world: WorldState): Signal[] {
       kicker: "personality",
       text: "overseer-personality was deleted · restored with defaults.",
       target: { kind: "selector" },
-      headline: world.personalityRescueHeadline ?? "danger",
+      message: world.personalityRescueMessage ?? "danger",
     });
   }
 
@@ -253,18 +262,29 @@ export function deriveSignals(world: WorldState): Signal[] {
   );
 }
 
-/** The single word above the signal list. Driven by the most urgent signal, so
- * the headline and the list can never disagree — and by nothing else. A
- * session working normally is not a reason for the overseer to say
- * "working": the overseer is an independent unit, not a mirror of whatever a
- * session happens to be doing (docs/overseer.md §3). A signal may carry its
- * own headline word (personality rescue); otherwise the activity vocabulary. */
-export function headlineFor(signals: Signal[]): { text: string; activity: Activity } {
+/**
+ * The one-liner above the signal list. Driven by the most urgent signal, so
+ * the message and the list can never disagree — and by nothing else. A session
+ * working normally is not a reason for the overseer to speak up: the overseer
+ * is an independent unit, not a mirror of whatever a session happens to be
+ * doing (docs/overseer-behavior.md §3).
+ *
+ * Returns what to say, not the words. The caller resolves `key` against the
+ * operator's tone pack; `text` is only set when a signal supplied a verbatim
+ * override. `activity` travels either way, because it is what the status light
+ * beside the line reads — the severity the uppercase word used to carry.
+ */
+export function messageFor(signals: Signal[]): {
+  key: SpaceMessageKey;
+  activity: Activity;
+  text?: string;
+} {
   const top = signals[0];
   const activity = top?.activity ?? "idle";
   return {
-    text: top?.headline ?? ACTIVITY_HEADLINE[activity],
+    key: ACTIVITY_MESSAGE_KEY[activity],
     activity,
+    ...(top?.message !== undefined ? { text: top.message } : {}),
   };
 }
 

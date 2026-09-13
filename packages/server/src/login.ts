@@ -7,6 +7,7 @@ import { getAdapter } from "./adapters.js";
 import { recordAction, setProviderAuthenticated } from "./memory/internal.js";
 import {
   cancelUsageRefresh,
+  noteProviderAuthChanged,
   scheduleUsageRefresh,
 } from "./usage-refresh.js";
 
@@ -31,7 +32,7 @@ import {
  * probe local ports while a login is running.
  *
  * Log hygiene: the verification URL is a PKCE challenge and the pasted code is
- * a live grant. Neither reaches the action register or the operations window —
+ * a live grant. Neither reaches the action register or the status window —
  * what is recorded is that a login started and how it ended, nothing carried in
  * it.
  */
@@ -188,6 +189,20 @@ export function startLogin(
       });
       if (status.authenticated) scheduleUsageRefresh(providerId);
       else cancelUsageRefresh(providerId);
+      // The status window still carries the rows discovery wrote at boot. A
+      // successful login makes both of them wrong, so correct them here
+      // rather than leaving `checking provider auth... [BLOCKED]` standing
+      // over a provider that is now signed in.
+      noteProviderAuthChanged(
+        "provider:login",
+        status.authenticated
+          ? {
+              key: "authRestored",
+              activity: "done",
+              vars: { provider: providerId },
+            }
+          : undefined,
+      );
     })
     .catch((error: unknown) => {
       // The flow is already over and the operator has already been told how it
@@ -266,6 +281,8 @@ export async function signOut(
     outcome: status.authenticated ? "failed" : "ok",
     detail: providerId,
   });
+
+  noteProviderAuthChanged("provider:signout");
 
   const frame: AuthStateMessage = {
     type: "auth.state",

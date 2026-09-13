@@ -92,7 +92,18 @@ export function useSubagents(
   // uses. Retrying a benign refusal on a timer would only repeat it.
   const asked = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (providerId === undefined || projectPath === undefined) return;
+    // Same reasoning as `useSkills`: with nothing to ask, an empty list is a
+    // statement the app has not earned. `providerId` is undefined whenever the
+    // attached provider is not signed in.
+    if (providerId === undefined || projectPath === undefined) {
+      asked.current = undefined;
+      setSubagents([]);
+      setLoaded(true);
+      setUnavailable(
+        providerId === undefined ? "no provider attached" : "no active project",
+      );
+      return;
+    }
     const key = `${providerId} ${projectPath}`;
     if (asked.current === key) return;
     asked.current = key;

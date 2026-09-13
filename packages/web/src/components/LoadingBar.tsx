@@ -3,12 +3,12 @@ import { BOOT_MS } from "../state/wizard";
 /**
  * The boot bar. Shown for the whole boot phase — the minimum beat plus any
  * wait for the socket — and nowhere else. This is the wizard's opening, not a
- * spinner (spinners are an anti-pattern here; the headline and its rule are
+ * spinner (spinners are an anti-pattern here; the message and its rule are
  * the progress indicator for everything else).
  *
  * It fills once over `BOOT_MS`, then sits full if boot is still waiting on the
  * socket. A looping bar would claim work of unknown length; the minimum beat
- * is known, and past that the headline switches to "connecting". Duration
+ * is known, and past that the message switches to "connecting". Duration
  * comes from `BOOT_MS` so the animation cannot drift from the minimum beat.
  *
  * Under `prefers-reduced-motion` the fill's animation is dropped in CSS and

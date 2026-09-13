@@ -157,9 +157,9 @@
   animation: settle-in 200ms ease-out both;
 }
 
-/* Above the headline, not over it: the overseer answers this in the headline
+/* Above the message, not over it: the overseer answers this in the message
    while the decision is up, so the two must be readable together. The bottom
-   edge sits clear of the vertical centre where the headline lives. */
+   edge sits clear of the vertical centre where the message lives. */
 .decision {
   position: absolute;
   left: 50%;

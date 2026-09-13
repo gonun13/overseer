@@ -15,12 +15,14 @@ import {
   readPersonality,
 } from "./memory/personality/api.js";
 import { closeWatcher, watchWithRetry } from "./fs-watch.js";
+import type { OverseerSpace } from "./overseer/space.js";
 import { WORKSPACE_ROOT } from "./workspace.js";
 
 type Broadcast = (message: ServerMessage) => void;
 
 export interface PersonalityRefreshContext {
   broadcast: Broadcast;
+  space: OverseerSpace;
   snapshot: WorldSnapshot;
   lastProjects: DiscoveredProject[];
   lastUntracked: UntrackedFolder[];
@@ -122,7 +124,7 @@ export function createPersonalityFileWatcher(
   const refresh = async (
     ctx: PersonalityRefreshContext,
   ): Promise<PersonalityRefreshResult> => {
-    const { broadcast, snapshot, lastProjects, lastUntracked } = ctx;
+    const { broadcast, space, snapshot, lastProjects, lastUntracked } = ctx;
 
     const personalityMissing = !(await d.personalityConfigExists());
     const justNoticedMissing =
@@ -136,24 +138,25 @@ export function createPersonalityFileWatcher(
       // here would show as a second, failed "personality deleted" under the
       // reset that just succeeded.
       if (!intentionalPersonalityDelete) {
-        broadcast({
-          type: "overseer.step",
-          id: randomUUID(),
+        // A condition, not a happening: the file is gone and stays gone until
+        // a restart restores it, so the row is keyed and can be cleared when
+        // the file comes back rather than being contradicted by a later line.
+        space.status({
+          service: "personality",
+          key: "missing",
+          mode: "state",
           label: "personality deleted",
           outcome: "blocked",
           detail: "restart to restore",
-        });
-        await d.recordAction({
-          actor: "overseer",
           action: "personality:missing",
-          outcome: "blocked",
-          detail: `${d.personalityConfigPath()} · deleted · restart to restore`,
         });
       }
     } else if (!personalityMissing) {
       if (personalityMissingAnnounced) {
         personalityMissingAnnounced = false;
         attachPersonalityWatcher();
+        // The complaint described a file that is no longer missing.
+        space.clear("personality", "missing");
         // The file is back — discovery already reported the restore (or the
         // operator put it back). Seed the fingerprint and push applied fields
         // quietly; another "reading personality" step would duplicate the
@@ -191,9 +194,12 @@ export function createPersonalityFileWatcher(
         const result = await d.readPersonality(WORKSPACE_ROOT, {
           scaffold: false,
         });
-        broadcast({
-          type: "overseer.step",
-          id: randomUUID(),
+        // Each re-read is the operator having saved the file again — a
+        // happening, and they should see that every save was noticed.
+        space.status({
+          service: "personality",
+          key: "reread",
+          mode: "event",
           label: "reading personality",
           outcome: result.rejected.length > 0 ? "blocked" : "ok",
           detail:
@@ -202,12 +208,7 @@ export function createPersonalityFileWatcher(
               : Object.keys(result.applied).length > 0
                 ? `${Object.keys(result.applied).length} customization(s) applied`
                 : "no customizations set",
-        });
-        await d.recordAction({
-          actor: "overseer",
           action: "personality:reread",
-          outcome: result.rejected.length > 0 ? "blocked" : "ok",
-          detail: d.personalityConfigPath(),
         });
         broadcast({
           type: "workspace.projects",

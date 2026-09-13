@@ -17,7 +17,7 @@ const CHOICE_MS = 15_000;
 /** Name used when the ask times out with nothing typed. */
 const DEFAULT_NAME = "HUMAN";
 
-/** Slower than headline typing — the operator still has a beat to interrupt. */
+/** Slower than message typing — the operator still has a beat to interrupt. */
 const TYPE_MS = 200;
 
 /** Pause after the default name has finished typing, before advancing. */
@@ -28,13 +28,13 @@ const AFTER_NAME_MS = 2000;
  * answer to "what should I be looking at?". Every line is clickable and opens
  * the thing it is talking about (design-system.md §4).
  *
- * During the wizard's opening phases the signal list is empty and the headline
- * is the whole message — that is the "headline-only" state a fresh instance
+ * During the wizard's opening phases the signal list is empty and the message
+ * is the whole message — that is the "message-only" state a fresh instance
  * boots into, not a special mode (docs/overseer.md §4).
  */
 export function OverseerSpace({
   signals,
-  headline,
+  message,
   loading = false,
   typingChance,
   holdCaret = false,
@@ -44,10 +44,10 @@ export function OverseerSpace({
   namePrefix = "welcome...",
   onSubmitTone,
   selectedTone = "neutral",
-  onHeadlineReady,
+  onMessageReady,
 }: {
   signals: Signal[];
-  headline: { text: string; activity: Activity };
+  message: { text: string; activity: Activity };
   /** Boot phase (minimum beat and any socket wait); nothing is known yet. */
   loading?: boolean;
   /** From `overseer-personality`, when the operator set one and it passed
@@ -55,10 +55,10 @@ export function OverseerSpace({
   typingChance?: number;
   /** Keep the block caret after typing finishes — the goodbye hold. */
   holdCaret?: boolean;
-  /** Goodbye hold: click the headline to reload without waiting out the timer. */
+  /** Goodbye hold: click the message to reload without waiting out the timer. */
   onGoodbyeClick?: () => void;
   onFollow: (signal: Signal) => void;
-  /** First-run welcome: ask for a name inline in the headline. */
+  /** First-run welcome: ask for a name inline in the message. */
   onSubmitName?: (name: string) => void;
   /** Tone-aware prefix for the name ask (`welcome...` and variants). */
   namePrefix?: string;
@@ -66,28 +66,28 @@ export function OverseerSpace({
   onSubmitTone?: (tone: PersonalityTone) => void;
   /** Currently highlighted tone while the picker is up. */
   selectedTone?: PersonalityTone;
-  /** Fired when the headline is fully visible — typing done, or instant. */
-  onHeadlineReady?: (text: string) => void;
+  /** Fired when the message is fully visible — typing done, or instant. */
+  onMessageReady?: (text: string) => void;
 }) {
   const asking = onSubmitName !== undefined;
   const pickingTone = onSubmitTone !== undefined;
   // The rule widens for the overseer's own urgency, not a session's — a
   // session working normally never touches this (docs/overseer.md §3).
-  const busy = ACTIVITY_PULSES[headline.activity];
+  const busy = ACTIVITY_PULSES[message.activity];
   // Keep the typing hook mounted across ask → greet so "welcome, name" types
   // out instead of appearing in one frame (useOccasionalTyping skips mount).
   const { display, typing } = useOccasionalTyping(
-    asking ? "\0" : headline.text,
+    asking ? "\0" : message.text,
     asking ? 0 : typingChance,
   );
 
   // Tell the wizard the line is readable. Intro/greet holds start here, not
   // when the beat flips — otherwise the 1s timer races the typing pass.
   useEffect(() => {
-    if (!onHeadlineReady || asking || typing) return;
-    if (!headline.text || display !== headline.text) return;
-    onHeadlineReady(headline.text);
-  }, [asking, typing, display, headline.text, onHeadlineReady]);
+    if (!onMessageReady || asking || typing) return;
+    if (!message.text || display !== message.text) return;
+    onMessageReady(message.text);
+  }, [asking, typing, display, message.text, onMessageReady]);
 
   return (
     <div className="overseer-space">
@@ -98,7 +98,7 @@ export function OverseerSpace({
           {onGoodbyeClick ? (
             <button
               type="button"
-              className="os-headline os-headline-restart"
+              className="os-message os-message-restart"
               onClick={onGoodbyeClick}
               title="click to restart"
             >
@@ -106,7 +106,7 @@ export function OverseerSpace({
               {(typing || holdCaret) && <span className="os-cursor blink" />}
             </button>
           ) : (
-            <p className="os-headline">
+            <p className="os-message">
               {display}
               {(typing || holdCaret) && <span className="os-cursor blink" />}
             </p>
@@ -253,7 +253,7 @@ function NameAsk({
       className="os-name-ask"
       onClick={() => inputRef.current?.focus()}
     >
-      <p className="os-headline os-name-line">
+      <p className="os-message os-name-line">
         <span>{prefix}</span>
         <span className="os-name-field">
           {/* Mirror is the visible glyphs; the input is an invisible hit target

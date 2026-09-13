@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { passWizardOpening, SETTLED } from "./shell";
+import { openCapabilities, passWizardOpening, SETTLED } from "./shell";
 
 /**
  * The capabilities window's skills tab, as the browser presents it.
@@ -28,9 +28,7 @@ test("shows the skills tab for the attached provider", async ({ page }) => {
   await passWizardOpening(page);
   await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
 
-  await page.keyboard.press("ControlOrMeta+k");
-  await page.keyboard.type("/capabilities");
-  await page.keyboard.press("Enter");
+  await openCapabilities(page);
 
   const frame = page
     .locator(".window")
@@ -78,9 +76,7 @@ test("opens the import form and offers both sources", async ({ page }) => {
   await passWizardOpening(page);
   await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
 
-  await page.keyboard.press("ControlOrMeta+k");
-  await page.keyboard.type("/capabilities");
-  await page.keyboard.press("Enter");
+  await openCapabilities(page);
 
   const capabilities = page
     .locator(".window")

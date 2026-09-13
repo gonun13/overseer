@@ -1,32 +1,35 @@
+import type { SpaceStatusEntry } from "@overseer/protocol";
 import { WStep } from "./bits";
-import type { OperationStep } from "../../domain";
+import { OUTCOME_ACTIVITY } from "../../status";
 
 /**
- * The overseer's report on its own multi-step work — discovery, workspace
- * monitor diffs, and any later automation (docs/overseer.md §3).
+ * The overseer's report on its own work — discovery, the workspace monitor,
+ * git operations, personality re-reads, and any later automation
+ * (docs/overseer-behavior.md §3).
  *
  * The one window kind summoned by the machine rather than the operator: no
- * footer link and no typed command opens it. It appears because the overseer
+ * footer link and no typed command opens it. It appears because a service
  * started doing something and owes the operator a view of it.
  *
- * Built for a growing list. Steps append as they arrive, and the last one is
- * normally still `working` — a finished batch rendered at the end would defeat
- * the reason for showing it at all.
+ * Rows arrive already ordered by `spaceRows` — conditions that hold right now
+ * first, then the log of what happened. A condition rewrites itself in place,
+ * so a row here can never outlive the fact behind it; that is the whole reason
+ * the space exists.
  */
-export function OverseerWindow({ steps }: { steps: OperationStep[] }) {
+export function OverseerWindow({ rows }: { rows: SpaceStatusEntry[] }) {
   return (
     <div className="w-steps">
-      {steps.length === 0 ? (
-        // Reachable for a beat before the first step arrives. Says what it is
+      {rows.length === 0 ? (
+        // Reachable for a beat before the first row arrives. Says what it is
         // waiting for rather than sitting blank.
         <span className="w-empty">standing by</span>
       ) : (
-        steps.map((step) => (
+        rows.map((row) => (
           <WStep
-            key={step.id}
-            label={step.label}
-            activity={step.activity}
-            detail={step.detail}
+            key={`${row.service}:${row.key}:${row.mode === "event" ? row.at : ""}`}
+            label={row.label}
+            activity={OUTCOME_ACTIVITY[row.outcome]}
+            detail={row.detail}
           />
         ))
       )}

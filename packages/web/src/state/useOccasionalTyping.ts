@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState } from "react";
 
 /**
- * The headline swaps instantly almost every time it changes — motion here
+ * The message swaps instantly almost every time it changes — motion here
  * means the system changed state, not decoration (design-system.md §9). Very
  * occasionally it types the new word out instead: a small tell that
  * something is watching, deliberately rare so it never reads as a feature.

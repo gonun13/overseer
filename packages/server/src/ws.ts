@@ -15,6 +15,12 @@ import { WebSocketServer, type WebSocket } from "ws";
 import { listAdapters } from "./adapters.js";
 import { consoleError, createConsoleSession } from "./console.js";
 import { runDiscovery } from "./discovery.js";
+import {
+  buildStatusEntry,
+  createOverseerSpace,
+  type OverseerSpace,
+} from "./overseer/space.js";
+import { reportProviderStatus } from "./overseer/provider-status.js";
 import { createProviderOptions } from "./provider-options.js";
 import { createUsageCheck } from "./usage-check.js";
 import {
@@ -119,7 +125,7 @@ function discoveryFailure(error: unknown): string {
  * Between the delete steps of a reset.
  *
  * Four `rm` calls finish faster than a frame, and the client does not pace
- * `overseer.step` the way it paces discovery — so without this the operator
+ * space rows the way it paces discovery — so without this the operator
  * asks to erase the overseer and is handed a finished list. The teardown is
  * the one report they cannot go back and read afterwards.
  */
@@ -208,6 +214,8 @@ async function resolveInProject(
 export function attachWebSocketServer(httpServer: Server): {
   wss: WebSocketServer;
   broadcast: (message: ServerMessage) => void;
+  /** The overseer space, for the monitors `index.ts` starts alongside. */
+  space: OverseerSpace;
   /** Rebuild and broadcast the sessions list — for monitors that notice
    * sessions the supervisor did not start (transcript-monitor.ts). */
   refreshSessions: () => Promise<unknown>;
@@ -274,6 +282,12 @@ export function attachWebSocketServer(httpServer: Server): {
     if (result.ok) broadcastSkills(result);
   };
 
+  /**
+   * The one door every service reports to the operator through. Created here
+   * because `broadcast` is here; handed to the monitors from `index.ts`.
+   */
+  const space = createOverseerSpace(broadcast);
+
   const sessionSupervisor = createSessionSupervisor(broadcast);
   const providerOptions = createProviderOptions();
   const usageCheck = createUsageCheck();
@@ -283,10 +297,9 @@ export function attachWebSocketServer(httpServer: Server): {
    * broadcast rather than sent to the asking socket alone, since a change to
    * the project's git state is a fact any tab with that project's window
    * open should see, the same reasoning `workspace-membership-worker.ts`
-   * broadcasts project add/remove steps. This is also what "highlights" the
-   * overseer for the operator: a fresh `overseer.step` bumps `operationTick`
-   * on the client, which raises the OVERSEER window on its own
-   * (`useShellPresentation.ts`).
+   * broadcasts project add/remove rows. This is also what "highlights" the
+   * overseer for the operator: a fresh space `event` row raises the OVERSEER
+   * window on its own (`useShellPresentation.ts`).
    */
   const announceGitOp = (
     verb: string,
@@ -296,19 +309,18 @@ export function attachWebSocketServer(httpServer: Server): {
     detail: string,
   ) => {
     const name = path.basename(projectPath);
-    const outcome = gitStepOutcome(result);
-    void recordAction({
-      actor: "operator",
-      action,
-      outcome,
-      detail: `${name} · ${result.ok ? detail : result.reason}`,
-    });
-    broadcast({
-      type: "overseer.step",
-      id: randomUUID(),
+    // A git operation is something that happened, not a condition that holds —
+    // an `event` row, so a second commit lands under the first instead of
+    // replacing it.
+    space.status({
+      service: "git",
+      key: action,
+      mode: "event",
       label: `${verb} ${name}`,
-      outcome,
+      outcome: gitStepOutcome(result),
       detail: result.ok ? detail : result.reason,
+      action,
+      actor: "operator",
     });
   };
 
@@ -390,6 +402,15 @@ export function attachWebSocketServer(httpServer: Server): {
       ws.ping();
     }, HEARTBEAT_MS);
     ws.on("close", () => clearInterval(heartbeat));
+
+    // Catch the new tab up on the space. Only `state` rows and the last
+    // message — event history belongs to the run that produced it, and a tab
+    // that just opened has no business being shown a git commit from before
+    // it existed.
+    const replayed = space.replay();
+    if (replayed.entries.length > 0 || replayed.message !== undefined) {
+      send({ type: "space.replay", ...replayed });
+    }
 
     // One raw CLI console per socket. Torn down with the connection so a
     // closed tab cannot leave a `claude` TUI running in the container.
@@ -784,36 +805,30 @@ export function attachWebSocketServer(httpServer: Server): {
           // The fingerprint identifies the key; the key itself is never
           // logged, and there is no path that could read it back.
           const fingerprint = result.state.key?.fingerprint ?? "unknown";
-          void recordAction({
-            actor: "operator",
-            action: "git:ssh-generate",
-            outcome: "ok",
-            detail: fingerprint,
-          });
-          broadcast({
-            type: "overseer.step",
-            id: randomUUID(),
+          space.status({
+            service: "git",
+            key: "ssh-generate",
+            mode: "event",
             label: "generated an ssh key",
             outcome: "ok",
             detail: fingerprint,
+            action: "git:ssh-generate",
+            actor: "operator",
           });
           await announceGitAccess();
           return;
         }
         case "git.ssh.remove": {
           await gitSsh.remove();
-          void recordAction({
-            actor: "operator",
-            action: "git:ssh-remove",
-            outcome: "ok",
-            detail: "ssh key removed",
-          });
-          broadcast({
-            type: "overseer.step",
-            id: randomUUID(),
+          space.status({
+            service: "git",
+            key: "ssh-remove",
+            mode: "event",
             label: "removed the ssh key",
             outcome: "ok",
             detail: "pushes will need a new one",
+            action: "git:ssh-remove",
+            actor: "operator",
           });
           await announceGitAccess();
           return;
@@ -970,12 +985,19 @@ export function attachWebSocketServer(httpServer: Server): {
             } catch (error) {
               failure = resetFailure(error);
             }
+            // Scoped to the socket that asked, not broadcast: each of these
+            // rows takes a piece of that operator's furniture away as it
+            // lands, and another tab is not being erased.
             send({
-              type: "overseer.step",
-              id: randomUUID(),
-              label,
-              outcome: failure === undefined ? "ok" : "failed",
-              ...(failure !== undefined ? { detail: failure } : {}),
+              type: "space.status",
+              entry: buildStatusEntry({
+                service: "memory",
+                key: "reset",
+                mode: "event",
+                label,
+                outcome: failure === undefined ? "ok" : "failed",
+                ...(failure !== undefined ? { detail: failure } : {}),
+              }),
             });
             await delay(RESET_STEP_MS);
           };
@@ -987,7 +1009,7 @@ export function attachWebSocketServer(httpServer: Server): {
           // worth keeping the trail.
           //
           // The personality watcher must not treat this delete as an accident
-          // — otherwise the operations window gets a second, blocked
+          // — otherwise the status window gets a second, blocked
           // "personality deleted · restart to restore" under the wipe.
           beginIntentionalPersonalityDelete();
           try {
@@ -1409,6 +1431,7 @@ export function attachWebSocketServer(httpServer: Server): {
   return {
     wss,
     broadcast,
+    space,
     // Plans are read out of the same transcripts, so whatever wakes the
     // session list wakes them too — a plan proposed in a session Overseer
     // never started still appears.

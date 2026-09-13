@@ -91,3 +91,125 @@ export function uniquePrompt(text: string): string {
 export function runTag(): string {
   return Math.random().toString(36).slice(2, 8).toUpperCase();
 }
+
+/**
+ * Whether the prompt is on screen.
+ *
+ * The prompt mounts only once the **attached** provider is signed in
+ * (`furnitureFor` in `packages/web/src/state/wizard.ts`), and the command
+ * palette lives inside it. So "can I type `/plans`?" is not a property of the
+ * build — it is a property of whether the container currently holds a working
+ * credential, and both answers are a correct build.
+ *
+ * Specs that assumed the prompt was always there turned a signed-out stack
+ * into eight failures that looked like regressions and were not.
+ */
+export async function promptAvailable(page: Page): Promise<boolean> {
+  // By CSS rather than by role: the composer's textarea carries only a
+  // placeholder, and the placeholder is copy that changes.
+  const composer = page.locator(".composer textarea");
+  // Short: by the time a caller asks, discovery has settled and the prompt is
+  // either mounted or gated. Waiting the default timeout here would add ten
+  // seconds to every signed-out run.
+  return composer
+    .first()
+    .isVisible({ timeout: 2_000 })
+    .catch(() => false);
+}
+
+/**
+ * Run a slash command, or report that there is no prompt to run it in.
+ *
+ * Returns false when the shell is holding the prompt, so the caller can assert
+ * the held branch instead of waiting out a window that was never going to
+ * open. Never skips: a skipped test and a broken one look identical in a run.
+ */
+export async function runCommand(
+  page: Page,
+  command: string,
+): Promise<boolean> {
+  if (!(await promptAvailable(page))) return false;
+  await page.keyboard.press("ControlOrMeta+k");
+  await page.keyboard.type(command);
+  await page.keyboard.press("Enter");
+  return true;
+}
+
+/**
+ * Assert the shell is legitimately holding the prompt rather than having lost
+ * it. The status window's own row and the signal have to agree about why —
+ * that agreement is the thing worth checking in this branch.
+ */
+export async function expectPromptHeld(page: Page): Promise<void> {
+  await expect(
+    page.locator(".w-steps .w-step").filter({ hasText: /releasing the prompt/i }),
+  ).toContainText(/held/i);
+  await expect(
+    page.locator(".os-signal").filter({ hasText: /not authenticated|no provider/i }),
+  ).toBeVisible();
+}
+
+/** The frame a window's close control names — windows carry no role. */
+export function windowFrame(page: Page, name: string): Locator {
+  return page
+    .locator(".window")
+    .filter({ has: page.getByRole("button", { name: `close ${name}` }) });
+}
+
+/**
+ * Open the capabilities window by whichever route this shell offers —
+ * `/capabilities` when the prompt is up, the settings panel's own button when
+ * it is not. Both are real routes an operator uses, so covering the second one
+ * is better than only testing the first.
+ */
+export async function openCapabilities(page: Page): Promise<void> {
+  if (await runCommand(page, "/capabilities")) return;
+  // `exact` matters: "close settings" also contains "settings", and the panel
+  // carries both once it is open.
+  // The panel is always in the DOM — it slides in and out and is `inert` when
+  // shut — so "is it open" is the class, not visibility.
+  const panel = page.locator(".panel");
+  if ((await page.locator(".panel.open").count()) === 0) {
+    await page.getByRole("button", { name: "settings", exact: true }).click();
+    await expect(page.locator(".panel.open")).toBeVisible();
+  }
+  await panel.getByRole("button", { name: /open capabilities/i }).click();
+}
+
+/** Same idea for the changelog: the footer version is a control, not a label. */
+export async function openChangelog(page: Page): Promise<void> {
+  if (await runCommand(page, "/changelog")) return;
+  await page.getByRole("button", { name: SETTLED }).click();
+}
+
+/** The providers window's own frame, for scoping away the settings panel and
+ * the signal list — both of which carry a "start login" of their own. */
+export function providersFrame(page: Page): Locator {
+  return page
+    .locator(".window")
+    .filter({ has: page.getByLabel("close providers") });
+}
+
+/**
+ * Open the providers window and report which view its first tab landed on.
+ *
+ * The providers tab is not one view: an attached provider that can log in and
+ * is not signed in gets the login step instead of the picker list
+ * (`ProvidersTab` in `ProvidersWindow.tsx`), because signing in is the only
+ * thing worth offering at that point. Both are correct, so a spec reads which
+ * one it got rather than assuming the signed-in one.
+ */
+export async function openProviders(
+  page: Page,
+): Promise<"picker" | "login"> {
+  const widget = page.getByRole("button", { name: /choose provider/i });
+  await expect(widget).toBeVisible({ timeout: 45_000 });
+  await widget.click();
+  await expect(page.getByLabel("close providers")).toBeVisible();
+
+  const frame = providersFrame(page);
+  const picker = frame.getByText("available providers");
+  const login = frame.getByRole("button", { name: /start login|sign in/i });
+  await expect(picker.or(login).first()).toBeVisible();
+  return (await picker.isVisible()) ? "picker" : "login";
+}

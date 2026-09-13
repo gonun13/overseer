@@ -4,6 +4,7 @@ import type {
   DiscoveredProvider,
   DiscoveryEvent,
   DiscoveryOutcome,
+  DiscoveryStepIdentity,
   DiscoveryStepUpdate,
   UntrackedFolder,
 } from "@overseer/protocol";
@@ -16,6 +17,7 @@ import {
   type PersonalityResult,
 } from "./memory/personality/api.js";
 import { isCatalogOnly, listAdapters } from "./adapters.js";
+import { authDetail, promptReady } from "./overseer/provider-status.js";
 import {
   WORKSPACE_ROOT,
   describeProject,
@@ -33,7 +35,7 @@ import {
 /**
  * The discovery pass: what the overseer learns about the world before any
  * session exists. Steps are emitted as they happen rather than collected and
- * flushed at the end — the operations window renders a growing list, and a
+ * flushed at the end — the status window renders a growing list, and a
  * batch arriving at completion would defeat the point of showing it at all.
  *
  * Furniture unlocks ride on each step's `done` frame (docs/overseer.md §4):
@@ -98,14 +100,25 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
     id: string,
     label: string,
     work: () => Promise<StepResult<T>>,
+    /** Where this step's row lives in the space. Omitted leaves it a
+     * `discovery`-owned row keyed by `id`; the provider steps claim the
+     * canonical `providers` keys so a later login can revise them. */
+    identity: DiscoveryStepIdentity = {},
   ): Promise<T> => {
-    send({ type: "discovery.step.start", runId, id, label });
+    send({ type: "discovery.step.start", runId, id, label, ...identity });
     let result: StepResult<T>;
     try {
       result = await work();
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
-      send({ type: "discovery.step.done", runId, id, outcome: "failed", detail });
+      send({
+        type: "discovery.step.done",
+        runId,
+        id,
+        outcome: "failed",
+        detail,
+        ...identity,
+      });
       await recordAction({
         actor: "overseer",
         action: `discovery:${id}`,
@@ -121,6 +134,7 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
       id,
       outcome,
       detail,
+      ...identity,
       ...update,
     });
     await recordAction({
@@ -327,24 +341,19 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
       // auto-attach branch never returns anything but a signed-in provider.
       const outcome =
         attached?.status.authenticated === true ? "ok" : "blocked";
-      const detail =
-        results.length === 0
-          ? "no providers registered"
-          : attached === undefined
-            ? `${results.length} registered · none attached`
-            : attached.status.authenticated
-              ? `attached ${attached.id}`
-              : `attached ${attached.id} · not authenticated`;
 
       return {
         value: results,
         outcome,
-        detail,
+        // One copy of the wording, shared with every later re-report — see
+        // `overseer/provider-status.ts`.
+        detail: authDetail(results, attached?.id),
         providers: results,
         ...(attached !== undefined ? { attachedProviderId: attached.id } : {}),
         reveal: ["providerWidget"],
       };
     },
+    { service: "providers", spaceKey: "auth" },
   );
 
   const attachedProviderId = pickAttachedProvider(
@@ -354,19 +363,20 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
 
   // 6. Prompt + footer — last beat. Footer always; prompt slot released so it
   // can mount once an attached provider is signed in (furniture still gates).
-  const promptReady =
-    attachedProviderId !== undefined &&
-    providers.some(
-      (p) => p.id === attachedProviderId && p.status.authenticated,
-    );
-  await step("prompt", "releasing the prompt", async () => ({
-    value: promptReady,
-    outcome: promptReady ? "ok" : "blocked",
-    detail: promptReady
-      ? "prompt ready"
-      : "held · connect an authenticated provider",
-    reveal: ["footer", "prompt"],
-  }));
+  // The one copy of the release rule, shared with the client gate rather than
+  // written out a second time here.
+  const ready = promptReady(providers, attachedProviderId);
+  await step(
+    "prompt",
+    "releasing the prompt",
+    async () => ({
+      value: ready,
+      outcome: ready ? "ok" : "blocked",
+      detail: ready ? "prompt ready" : "held · connect an authenticated provider",
+      reveal: ["footer", "prompt"],
+    }),
+    { service: "providers", spaceKey: "prompt" },
+  );
 
   send({
     type: "discovery.complete",

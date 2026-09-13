@@ -1,5 +1,10 @@
 import { test, expect } from "@playwright/test";
-import { passWizardOpening, SETTLED } from "./shell";
+import {
+  openProviders,
+  passWizardOpening,
+  providersFrame,
+  SETTLED,
+} from "./shell";
 
 test("boots to a settled state", async ({ page }) => {
   await page.goto("/");
@@ -54,11 +59,18 @@ test("opens the providers picker from the widget", async ({ page }) => {
   await page.goto("/");
   await passWizardOpening(page);
 
-  const widget = page.getByRole("button", { name: /choose provider/i });
-  await expect(widget).toBeVisible({ timeout: 45_000 });
-  await widget.click();
-  await expect(page.getByLabel("close providers")).toBeVisible();
-  await expect(page.getByRole("button", { name: /connect/i })).toBeVisible();
+  // Which view the tab opens on depends on whether the attached provider is
+  // signed in — the picker offers other providers, the login step offers the
+  // only thing worth doing when the attached one is signed out.
+  const view = await openProviders(page);
+  // Scoped to the window: the signal list and the settings panel each carry a
+  // login control of their own, and an unscoped match hits all three.
+  const frame = providersFrame(page);
+  await expect(
+    view === "picker"
+      ? frame.getByRole("button", { name: /connect/i })
+      : frame.getByRole("button", { name: /start login|sign in/i }).first(),
+  ).toBeVisible();
 });
 
 test("offers the console only when a provider is signed in", async ({

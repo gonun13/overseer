@@ -19,17 +19,6 @@ export interface Project {
   note?: string;
 }
 
-/** One line in the operations window. The overseer's own multi-step work —
- * discovery today, any automation later (docs/overseer.md §3). */
-export interface OperationStep {
-  id: string;
-  /** Lowercase, present participle: it names the step while it runs. */
-  label: string;
-  activity: Activity;
-  /** One short clause of context, shown under the line when present. */
-  detail?: string;
-}
-
 export interface Session {
   id: string;
   activity: Activity;

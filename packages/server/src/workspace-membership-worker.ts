@@ -1,10 +1,10 @@
 import { watch, type FSWatcher } from "node:fs";
-import { randomUUID } from "node:crypto";
 import type {
   DiscoveredProject,
   ServerMessage,
   UntrackedFolder,
 } from "@overseer/protocol";
+import type { OverseerSpace } from "./overseer/space.js";
 import type { WorldSnapshot } from "./memory/internal.js";
 import { recordAction, syncSnapshotProjects } from "./memory/internal.js";
 import {
@@ -19,6 +19,7 @@ type Broadcast = (message: ServerMessage) => void;
 
 export interface MembershipRefreshContext {
   broadcast: Broadcast;
+  space: OverseerSpace;
   snapshot: WorldSnapshot;
   personalityMissing: boolean;
   justNoticedMissing: boolean;
@@ -84,18 +85,22 @@ function fallbackActive(
 }
 
 function emitProjectDiff(
-  broadcast: Broadcast,
+  space: OverseerSpace,
   before: DiscoveredProject[],
   after: DiscoveredProject[],
 ): void {
   const prev = new Map(before.map((p) => [p.path, p]));
   const next = new Map(after.map((p) => [p.path, p]));
 
+  // Membership changes are transitions, not conditions — the project list
+  // itself is the state, and it travels as `workspace.projects`. These rows
+  // say what moved, so they append.
   for (const [projectPath, project] of next) {
     if (prev.has(projectPath)) continue;
-    broadcast({
-      type: "overseer.step",
-      id: randomUUID(),
+    space.status({
+      service: "workspace",
+      key: "project-added",
+      mode: "event",
       label: `adding project ${project.name}`,
       outcome: "ok",
       detail: projectPath,
@@ -103,9 +108,10 @@ function emitProjectDiff(
   }
   for (const [projectPath, project] of prev) {
     if (next.has(projectPath)) continue;
-    broadcast({
-      type: "overseer.step",
-      id: randomUUID(),
+    space.status({
+      service: "workspace",
+      key: "project-removed",
+      mode: "event",
       label: `removing project ${project.name}`,
       outcome: "ok",
       detail: projectPath,
@@ -114,7 +120,7 @@ function emitProjectDiff(
 }
 
 function emitUntrackedDiff(
-  broadcast: Broadcast,
+  space: OverseerSpace,
   before: UntrackedFolder[],
   after: UntrackedFolder[],
 ): void {
@@ -123,9 +129,10 @@ function emitUntrackedDiff(
 
   for (const [, folder] of next) {
     if (prev.has(folder.path)) continue;
-    broadcast({
-      type: "overseer.step",
-      id: randomUUID(),
+    space.status({
+      service: "workspace",
+      key: "folder-noticed",
+      mode: "event",
       label: `noticing folder ${folder.name}`,
       outcome: "blocked",
       detail: "not a git project",
@@ -133,9 +140,10 @@ function emitUntrackedDiff(
   }
   for (const [folderPath, folder] of prev) {
     if (next.has(folderPath)) continue;
-    broadcast({
-      type: "overseer.step",
-      id: randomUUID(),
+    space.status({
+      service: "workspace",
+      key: "folder-cleared",
+      mode: "event",
       label: `folder ${folder.name} cleared`,
       outcome: "ok",
       detail: folderPath,
@@ -149,22 +157,31 @@ function emitUntrackedDiff(
  * slow rather than left guessing. `git-probe.ts` has already deduped these —
  * one per directory per state change.
  */
-function emitProbeEvents(broadcast: Broadcast, events: ProbeEvent[]): void {
+function emitProbeEvents(space: OverseerSpace, events: ProbeEvent[]): void {
   for (const event of events) {
     const name = event.dir.split("/").pop() ?? event.dir;
     if (event.kind === "recovered") {
-      broadcast({
-        type: "overseer.step",
-        id: randomUUID(),
+      // The condition is over, so the row describing it goes rather than
+      // sitting under a recovery line that contradicts it. The recovery
+      // itself is a happening and is worth saying once.
+      space.clear("workspace", `probe:${event.dir}`);
+      space.status({
+        service: "workspace",
+        key: "probe-recovered",
+        mode: "event",
         label: `git reading ${name} again`,
         outcome: "ok",
         detail: event.dir,
       });
       continue;
     }
-    broadcast({
-      type: "overseer.step",
-      id: randomUUID(),
+    // A mount that is slow or failing is a condition that holds until it
+    // stops — keyed per directory, so a second report on the same folder
+    // revises the first instead of stacking.
+    space.status({
+      service: "workspace",
+      key: `probe:${event.dir}`,
+      mode: "state",
       label:
         event.kind === "slow"
           ? `git slow in ${name}`
@@ -206,7 +223,7 @@ export function createWorkspaceMembershipWorker(
   };
 
   const refresh = async (ctx: MembershipRefreshContext): Promise<void> => {
-    const { broadcast, snapshot, personalityMissing, justNoticedMissing } =
+    const { broadcast, space, snapshot, personalityMissing, justNoticedMissing } =
       ctx;
 
     // One readdir per tick, and the git meta is filled onto its result — the
@@ -225,7 +242,7 @@ export function createWorkspaceMembershipWorker(
     const projects = await d.gitMeta(listing.projects, {
       force: changed || ctx.force === true,
     });
-    emitProbeEvents(broadcast, d.takeProbeEvents());
+    emitProbeEvents(space, d.takeProbeEvents());
 
     if (!changed && !justNoticedMissing) {
       if (personalityMissing) return;
@@ -290,14 +307,14 @@ export function createWorkspaceMembershipWorker(
     );
     if (personalityMissing && personalityProjectGone) {
       emitProjectDiff(
-        broadcast,
+        space,
         previousProjects.filter((p) => p.path !== personalityPath),
         projects,
       );
     } else {
-      emitProjectDiff(broadcast, previousProjects, projects);
+      emitProjectDiff(space, previousProjects, projects);
     }
-    emitUntrackedDiff(broadcast, previousUntracked, untracked);
+    emitUntrackedDiff(space, previousUntracked, untracked);
 
     broadcast({
       type: "workspace.projects",

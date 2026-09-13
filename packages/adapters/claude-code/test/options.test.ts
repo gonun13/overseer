@@ -196,6 +196,7 @@ describe("findInitializeBody", () => {
 describe("readProviderOptions against a stand-in CLI", () => {
   let binDir: string;
   let originalPath: string | undefined;
+  let originalConfigDir: string | undefined;
 
   async function installCli(body: string): Promise<void> {
     const file = path.join(binDir, "claude");
@@ -215,6 +216,14 @@ ${body}
     binDir = await mkdtemp(path.join(tmpdir(), "overseer-options-"));
     originalPath = process.env.PATH;
     process.env.PATH = `${binDir}:${originalPath ?? ""}`;
+    // User-scoped agents merge into the list (`custom-agents.ts`), so a real
+    // agent in the developer's own `~/.claude/agents` would be read as part of
+    // the fixture's answer and fail an assertion about the fixture. Point the
+    // config dir at an empty folder so the test sees only what it installed.
+    originalConfigDir = process.env.CLAUDE_CONFIG_DIR;
+    process.env.CLAUDE_CONFIG_DIR = await mkdtemp(
+      path.join(tmpdir(), "overseer-options-home-"),
+    );
     const fixture = path.join(binDir, "initialize.ndjson");
     await writeFile(fixture, await fixtureLine(), "utf8");
     process.env.OPTIONS_FIXTURE = fixture;
@@ -223,6 +232,8 @@ ${body}
   after(() => {
     process.env.PATH = originalPath;
     delete process.env.OPTIONS_FIXTURE;
+    if (originalConfigDir === undefined) delete process.env.CLAUDE_CONFIG_DIR;
+    else process.env.CLAUDE_CONFIG_DIR = originalConfigDir;
   });
 
   it("asks the CLI in the project directory and parses the reply", async () => {

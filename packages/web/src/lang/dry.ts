@@ -14,4 +14,12 @@ export const dry: OverseerMessages = {
   resetDeclined: "thought not",
   resetWorking: "deleting myself",
   resetGoodbye: "well. bye.",
+  idle: "nothing. as usual",
+  ready: "done. for now",
+  working: "busy",
+  blocked: "stuck. your move",
+  attention: "this went badly",
+  approval: "it wants permission",
+  authRestored: "{provider} remembered who it is",
+  authLost: "{provider} forgot its credential",
 };

@@ -11,13 +11,13 @@ import type {
 import type { AgentEvent } from "./events.js";
 import type { PlanMeta, PlanStatusOverride } from "./plan.js";
 import type { Skill, SkillScope, SkillSkipped, SkillSource } from "./skill.js";
+import type { SpaceFrame } from "./space.js";
 import type { Subagent, SubagentScope } from "./subagent.js";
 import type { TurnWire } from "./transcript.js";
 import type {
   AppliedPersonality,
   DiscoveredProject,
   DiscoveryEvent,
-  DiscoveryOutcome,
   RejectedCustomization,
   UntrackedFolder,
 } from "./discovery.js";
@@ -714,19 +714,8 @@ export interface WorkspaceProjectsMessage {
   personalityMissing?: true;
 }
 
-/** One line for the operations window from a supervisor worker (not discovery).
- * Same telegraphic shape as discovery steps — the window does not care who
- * authored the line (docs/overseer.md §3). */
-export interface OverseerStepMessage {
-  type: "overseer.step";
-  id: string;
-  label: string;
-  outcome: DiscoveryOutcome;
-  detail?: string;
-}
-
 /** Every store named by `memory.reset` is gone. The steps of the wipe arrived
- * as ordinary `overseer.step` lines; this is only the end of them, and the
+ * as ordinary `space.status` event rows; this is only the end of them, and the
  * client's cue to reload into a first run. */
 export interface MemoryResetDoneMessage {
   type: "memory.reset.done";
@@ -874,7 +863,7 @@ export type ServerMessage =
   | SkillDeletedMessage
   | AuthStateMessage
   | WorkspaceProjectsMessage
-  | OverseerStepMessage
+  | SpaceFrame
   | MemoryResetDoneMessage
   | ConsoleOpenedMessage
   | ConsoleOutputMessage

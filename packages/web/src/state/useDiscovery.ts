@@ -5,6 +5,7 @@ import type {
   OverseerTheme,
   PersonalityTone,
   ServerMessage,
+  SpaceFrame,
 } from "@overseer/protocol";
 import { useDiscoveryPacing } from "./useDiscoveryPacing";
 import { useOverseerSocket } from "./useOverseerSocket";
@@ -21,7 +22,7 @@ import {
  * it means.
  *
  * Discovery is requested explicitly rather than run on connect (see the
- * `ClientMessage` note in the protocol): the operations window has to be
+ * `ClientMessage` note in the protocol): the status window has to be
  * mounted before steps start arriving, and a reconnect must not silently
  * re-run a scan nobody asked for.
  */
@@ -30,8 +31,19 @@ import {
  * the server will accept. */
 const MAX_NAME = 24;
 
+/** How long one of the overseer's own one-liners holds the message surface
+ * before the ranked signal list takes it back. Long enough to read, short
+ * enough that it never becomes the page's permanent message. */
+const MESSAGE_HOLD_MS = 8_000;
+
 function isDiscoveryEvent(message: ServerMessage): message is DiscoveryEvent {
   return message.type.startsWith("discovery.");
+}
+
+/** Every surface of the overseer space arrives on one prefix, so a new frame
+ * kind joins by being added to the union rather than by being listed here. */
+function isSpaceFrame(message: ServerMessage): message is SpaceFrame {
+  return message.type.startsWith("space.");
 }
 
 export interface DiscoveryController extends WizardState {
@@ -75,9 +87,9 @@ export interface DiscoveryController extends WizardState {
   declineReset: () => void;
   /** Answer the decision with yes — the wipe starts on the server. */
   confirmReset: () => void;
-  /** OverseerSpace calls this when the current headline is fully on screen
+  /** OverseerSpace calls this when the current message is fully on screen
    * (typing finished, or shown instantly). Arms the intro/greet holds. */
-  onHeadlineReady: (text: string) => void;
+  onMessageReady: (text: string) => void;
   /** Send a frame on the shared `/ws` socket. */
   send: (message: ClientMessage) => void;
   /** Subscribe to console.* (and console-related error) frames. */
@@ -97,6 +109,14 @@ export interface DiscoveryController extends WizardState {
 export function useDiscovery(): DiscoveryController {
   const [state, dispatch] = useReducer(wizardReducer, INITIAL_WIZARD);
   const { phase, connected } = state;
+  /** Pending hand-back of the message surface — see `MESSAGE_HOLD_MS`. */
+  const messageHold = useRef<ReturnType<typeof setTimeout> | null>(null);
+  useEffect(
+    () => () => {
+      if (messageHold.current !== null) clearTimeout(messageHold.current);
+    },
+    [],
+  );
   const consoleListeners = useRef(
     new Set<(message: ServerMessage) => void>(),
   );
@@ -296,14 +316,17 @@ export function useDiscovery(): DiscoveryController {
         });
         return;
       }
-      if (message.type === "overseer.step") {
-        dispatch({
-          type: "overseer.step",
-          id: message.id,
-          label: message.label,
-          outcome: message.outcome,
-          detail: message.detail,
-        });
+      if (isSpaceFrame(message)) {
+        dispatch({ type: "space.frame", frame: message });
+        // A reaction is not a state: it says its piece and stands down, or it
+        // would outrank the ranked signal list for the life of the page.
+        if (message.type === "space.message") {
+          if (messageHold.current !== null) clearTimeout(messageHold.current);
+          messageHold.current = setTimeout(() => {
+            messageHold.current = null;
+            dispatch({ type: "space.message.expired" });
+          }, MESSAGE_HOLD_MS);
+        }
         return;
       }
       if (message.type === "memory.reset.done") {
@@ -343,7 +366,7 @@ export function useDiscovery(): DiscoveryController {
     onConnectionLost: handleConnectionLost,
   });
 
-  const { onHeadlineReady: onTimingReady } = useWizardTiming(
+  const { onMessageReady: onTimingReady } = useWizardTiming(
     state,
     dispatch,
     () => {
@@ -351,12 +374,12 @@ export function useDiscovery(): DiscoveryController {
     },
   );
 
-  // Clear a one-shot forced type (the headline after a refused reset) once it
+  // Clear a one-shot forced type (the message after a refused reset) once it
   // has landed — otherwise every later change would keep typing.
-  const onHeadlineReady = useCallback(
+  const onMessageReady = useCallback(
     (text: string) => {
       onTimingReady(text);
-      dispatch({ type: "headline.typed" });
+      dispatch({ type: "message.typed" });
     },
     [onTimingReady],
   );
@@ -566,7 +589,7 @@ export function useDiscovery(): DiscoveryController {
       askReset,
       declineReset,
       confirmReset,
-      onHeadlineReady,
+      onMessageReady,
       send,
       subscribeConsole,
       subscribeSession,
@@ -591,7 +614,7 @@ export function useDiscovery(): DiscoveryController {
       askReset,
       declineReset,
       confirmReset,
-      onHeadlineReady,
+      onMessageReady,
       send,
       subscribeConsole,
       subscribeSession,

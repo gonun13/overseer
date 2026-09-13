@@ -1,7 +1,7 @@
 import { useCallback, useEffect, useRef } from "react";
 import type { DiscoveryEvent } from "@overseer/protocol";
 
-/** The interval between reveals in the operations window. The server does the
+/** The interval between reveals in the status window. The server does the
  * real work in milliseconds and emits as it goes, so without this all three
  * steps land in the same frame and the window reads as a list that was always
  * there rather than a pass being run. */
@@ -16,7 +16,7 @@ function prefersReducedMotion(): boolean {
 
 /**
  * Client-side pacing for `DiscoveryEvent` frames. The server is not slowed
- * down; this only staggers what appears in the operations window.
+ * down; this only staggers what appears in the status window.
  */
 export function useDiscoveryPacing(
   dispatchEvent: (event: DiscoveryEvent) => void,

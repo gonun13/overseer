@@ -80,7 +80,22 @@ export function useSkills(
   // Ask once per (provider, project), the same shape `useSubagents` uses.
   const asked = useRef<string | undefined>(undefined);
   useEffect(() => {
-    if (providerId === undefined || projectPath === undefined) return;
+    // Nothing to ask, so nothing will ever answer. Say why rather than
+    // leaving an enabled import button over an empty body — an unasked list
+    // and an empty one look identical to the operator, and this tab's whole
+    // contract is that it never reads as "you have none" when it does not
+    // know (see `CapabilitiesWindow.tsx`). `providerId` is undefined whenever
+    // the attached provider is not signed in, which is the common way to
+    // arrive here.
+    if (providerId === undefined || projectPath === undefined) {
+      asked.current = undefined;
+      setSkills([]);
+      setLoaded(true);
+      setUnavailable(
+        providerId === undefined ? "no provider attached" : "no active project",
+      );
+      return;
+    }
     const key = `${providerId} ${projectPath}`;
     if (asked.current === key) return;
     asked.current = key;

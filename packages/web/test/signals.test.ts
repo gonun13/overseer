@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import { deriveSignals, headlineFor } from "../src/state/signals.ts";
+import { deriveSignals, messageFor } from "../src/state/signals.ts";
 
 const baseWorld = {
   projects: [],
@@ -26,9 +26,9 @@ describe("deriveSignals usage", () => {
     const usage = signals.find((signal) => signal.id === "usage");
     assert.ok(usage);
     assert.equal(usage.activity, "attention");
-    assert.equal(usage.headline, undefined);
+    assert.equal(usage.message, undefined);
     assert.match(usage.text, /^claude-code · 83% of the week window is spent\.$/);
-    assert.equal(headlineFor(signals).text, "attention");
+    assert.equal(messageFor(signals).key, "attention");
   });
 
   it("blocks only when a window is at its limit", () => {
@@ -42,12 +42,12 @@ describe("deriveSignals usage", () => {
     const usage = signals.find((signal) => signal.id === "usage");
     assert.ok(usage);
     assert.equal(usage.activity, "waiting");
-    assert.equal(usage.headline, undefined);
+    assert.equal(usage.message, undefined);
     assert.match(
       usage.text,
       /^claude-code · week limit reached · sessions cannot start until it resets\.$/,
     );
-    assert.equal(headlineFor(signals).text, "blocked");
+    assert.equal(messageFor(signals).key, "blocked");
   });
 
   it("omits usage signals below the warning threshold", () => {

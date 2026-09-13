@@ -1,5 +1,5 @@
 import { test, expect } from "@playwright/test";
-import { passWizardOpening, SETTLED } from "./shell";
+import { openCapabilities, passWizardOpening, SETTLED } from "./shell";
 
 /**
  * Windows whose surface exists but whose backing is not built must say so.
@@ -22,9 +22,9 @@ import { passWizardOpening, SETTLED } from "./shell";
  * now. That the entry had to be deleted rather than edited is the point: a
  * surface stops being unavailable exactly once.
  */
-for (const { command, window, tab, detail } of [
+for (const { open, window, tab, detail } of [
   {
-    command: "/capabilities",
+    open: openCapabilities,
     window: "capabilities",
     tab: "mcp",
     detail: /mcp servers are not read from the provider yet/i,
@@ -35,9 +35,7 @@ for (const { command, window, tab, detail } of [
     await passWizardOpening(page);
     await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
 
-    await page.keyboard.press("ControlOrMeta+k");
-    await page.keyboard.type(command);
-    await page.keyboard.press("Enter");
+    await open(page);
 
     // Windows carry no role — the close control's label is the only thing
     // that names one, so it is what identifies the frame.

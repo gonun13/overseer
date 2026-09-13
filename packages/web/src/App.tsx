@@ -494,7 +494,7 @@ export default function App() {
     if (attachedProviderId !== undefined) wizardStartLogin(attachedProviderId);
   }, [attachedProviderId, closeSettings, open, wizardStartLogin]);
 
-  // The goodbye is a headline and nothing else — including the operations
+  // The goodbye is a message and nothing else — including the operations
   // window that just finished reporting the wipe.
   useEffect(() => {
     if (wizard.reset === "goodbye") closeAll();
@@ -592,7 +592,7 @@ export default function App() {
 
         <OverseerSpace
           signals={shell.signals}
-          headline={shell.headline}
+          message={shell.message}
           loading={shell.loading}
           typingChance={shell.typingChance}
           holdCaret={shell.holdCaret}
@@ -606,7 +606,7 @@ export default function App() {
             shell.pickingTone ? wizard.submitOperatorTone : undefined
           }
           selectedTone={wizard.personality.tone ?? "neutral"}
-          onHeadlineReady={wizard.onHeadlineReady}
+          onMessageReady={wizard.onMessageReady}
         />
 
         {/* Gated with the prompt: both need an attached, signed-in provider,

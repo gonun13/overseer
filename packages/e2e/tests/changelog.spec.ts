@@ -1,6 +1,6 @@
 import { test, expect } from "@playwright/test";
 import rootPkg from "../../../package.json" with { type: "json" };
-import { passWizardOpening, SETTLED } from "./shell";
+import { openChangelog, passWizardOpening, SETTLED } from "./shell";
 
 /**
  * The changelog window renders the root `CHANGELOG.md`, so these assertions
@@ -21,9 +21,7 @@ test("the /changelog command opens the release notes", async ({ page }) => {
   await passWizardOpening(page);
   await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
 
-  await page.keyboard.press("ControlOrMeta+k");
-  await page.keyboard.type("/changelog");
-  await page.keyboard.press("Enter");
+  await openChangelog(page);
 
   const window = changelog(page);
   await expect(window).toBeVisible();

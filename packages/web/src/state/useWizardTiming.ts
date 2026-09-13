@@ -7,17 +7,17 @@ import {
   type WizardPhase,
 } from "./wizard";
 
-/** How long a typed welcome headline stays up *after typing finishes* before
+/** How long a typed welcome message stays up *after typing finishes* before
  * the next beat. Name ask and tone pick wait on the operator, not this timer. */
 const WELCOME_MS = 1000;
 
-/** Furniture mounts as soon as discovery completes; this hands the headline
+/** Furniture mounts as soon as discovery completes; this hands the message
  * back to ordinary derivation a beat later so the transition is legible
  * rather than everything changing in the same frame. */
 const SETTLING_MS = 600;
 
 /** How long the overseer's answer to a refused reset stays up *after typing
- * finishes* before the headline goes back to reporting the world. */
+ * finishes* before the message goes back to reporting the world. */
 const DECLINED_MS = 1800;
 
 /** How long the goodbye stays up *after typing finishes*, caret still
@@ -33,7 +33,7 @@ interface WizardTimingState {
 
 /**
  * Phase timers that are not part of discovery pacing: boot minimum, welcome
- * headline holds, settling transition, and the reset decline/goodbye holds.
+ * message holds, settling transition, and the reset decline/goodbye holds.
  */
 export function useWizardTiming(
   state: WizardTimingState,
@@ -54,12 +54,12 @@ export function useWizardTiming(
   resetRef.current = reset;
 
   // Hold timer for intro → name, greet → discovery, declined → ready, and
-  // goodbye → reload. Armed by onHeadlineReady once typing has finished.
+  // goodbye → reload. Armed by onMessageReady once typing has finished.
   const holdTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
   const holdFor = useRef<string | null>(null);
 
   /** Start a hold once the line is fully on screen. */
-  const onHeadlineReady = useCallback((text: string) => {
+  const onMessageReady = useCallback((text: string) => {
     if (!text) return;
 
     const resetStage = resetRef.current;
@@ -130,7 +130,7 @@ export function useWizardTiming(
     holdFor.current = null;
   }, [phase, welcomeBeat, reset]);
 
-  // Furniture mounts as soon as discovery completes; this hands the headline
+  // Furniture mounts as soon as discovery completes; this hands the message
   // back to ordinary derivation a beat later so the transition is legible
   // rather than everything changing in the same frame.
   useEffect(() => {
@@ -142,5 +142,5 @@ export function useWizardTiming(
     return () => clearTimeout(id);
   }, [phase]);
 
-  return { onHeadlineReady };
+  return { onMessageReady };
 }

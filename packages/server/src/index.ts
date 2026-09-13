@@ -58,9 +58,9 @@ if (process.env.NODE_ENV === "production") {
 }
 
 const httpServer = createServer(app);
-const { broadcast, refreshSessions } = attachWebSocketServer(httpServer);
-startUsageRefresh(broadcast);
-startWorkspaceMonitor(broadcast);
+const { broadcast, space, refreshSessions } = attachWebSocketServer(httpServer);
+startUsageRefresh(broadcast, space);
+startWorkspaceMonitor(broadcast, space);
 // Sessions the app did not start — a dev loop, a raw console — only exist on
 // disk until something notices them.
 startTranscriptMonitor(refreshSessions);

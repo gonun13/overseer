@@ -4,6 +4,7 @@ export * from "./plan.js";
 export * from "./discovery.js";
 export * from "./skill.js";
 export * from "./slug.js";
+export * from "./space.js";
 export * from "./subagent.js";
 export * from "./transcript.js";
 export * from "./wire.js";
