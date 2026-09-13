@@ -230,6 +230,8 @@ describe("projectGit.push failure messages", () => {
     const responses: Response[] = [
       { stdout: "## main...origin/main\n" }, // status --porcelain --branch
       { stdout: "origin\n" }, // remote
+      { stdout: "" }, // fetch origin main
+      { stdout: "0\n" }, // rev-list --count HEAD..origin/main — not behind
       Object.assign(new Error("Command failed"), { stderr }), // push
       { stdout: `${origin}\n` }, // remote get-url origin
     ];
@@ -270,9 +272,30 @@ describe("projectGit.push failure messages", () => {
     assert.match((result as { reason: string }).reason, /host key changed/);
   });
 
+  it("names the rejection, not git's `To <remote>` header", async () => {
+    // The regression: `describe` takes stderr's first line, and for a push
+    // that is always the header. The register recorded pushes as
+    // "To github.com:owner/repo.git", which says nothing at all.
+    const result = await pushFailing(
+      "To github.com:o/r.git\r\n" +
+        " ! [rejected]        HEAD -> main (fetch first)\r\n" +
+        "error: failed to push some refs to 'github.com:o/r.git'\r\n" +
+        "hint: Updates were rejected because the remote contains work that you do not\r\n" +
+        "hint: have locally. Use 'git pull' before pushing again.\r\n",
+    ).push("/workspace/demo");
+
+    assert.equal(result.ok, false);
+    const { reason } = result as { reason: string };
+    assert.match(reason, /the remote has commits this project does not/);
+    assert.match(reason, /\[rejected\]/);
+    // Neither the useless header nor git's terminal-shaped advice.
+    assert.doesNotMatch(reason, /^To github\.com/);
+    assert.doesNotMatch(reason, /hint:/);
+  });
+
   it("passes an unrelated failure through untouched", async () => {
     const result = await pushFailing(
-      "error: failed to push some refs\n",
+      "To github.com:o/r.git\nerror: failed to push some refs\n",
     ).push("/workspace/demo");
 
     assert.equal(result.ok, false);
@@ -281,11 +304,204 @@ describe("projectGit.push failure messages", () => {
   });
 });
 
+describe("projectGit.pull", () => {
+  const clean = "## main...origin/main [behind 2]\n";
+
+  it("merges origin into the current branch and says how much arrived", async () => {
+    const run = scriptedRun([
+      { stdout: clean }, // status --branch
+      { stdout: "origin\n" }, // remote
+      { stdout: "" }, // fetch origin main
+      { stdout: "2\n" }, // rev-list --count HEAD..origin/main
+      { stdout: "Me <me@example.com> 1700000000 +0000\n" }, // var GIT_AUTHOR_IDENT
+      { stdout: "Fast-forward\n" }, // merge
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.pull("/workspace/demo");
+
+    assert.deepEqual(result, { ok: true, branch: "main", merged: 2 });
+    assert.deepEqual(run.mock.calls[5]?.arguments[1], [
+      "merge",
+      "--no-edit",
+      "origin/main",
+    ]);
+  });
+
+  it("leaves a conflicted merge exactly as git left it", async () => {
+    // The app is not responsible for resolving this, and must not tidy it
+    // away: no --abort, no reset. The half-merged tree is what tells the
+    // operator what disagreed, and it is theirs to resolve in the workspace.
+    const run = scriptedRun([
+      { stdout: clean },
+      { stdout: "origin\n" },
+      { stdout: "" },
+      { stdout: "2\n" },
+      { stdout: "Me <me@example.com> 1700000000 +0000\n" }, // var GIT_AUTHOR_IDENT
+      Object.assign(new Error("Command failed"), {
+        stdout:
+          "Auto-merging skills/seo.md\nCONFLICT (content): Merge conflict in skills/seo.md\nAutomatic merge failed; fix conflicts and then commit the result.\n",
+        stderr: "",
+      }), // merge
+      { stdout: "skills/seo.md\n" }, // diff --name-only --diff-filter=U
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.pull("/workspace/demo");
+
+    assert.equal(result.ok, false);
+    const { reason } = result as { reason: string };
+    assert.match(reason, /skills\/seo\.md conflicts/);
+    assert.match(reason, /resolve in the project, then commit the merge/);
+    // Nothing ran after the conflict listing, and nothing undid the merge.
+    assert.equal(run.mock.calls.length, 7);
+    const ran = run.mock.calls.map((call) => (call.arguments[1] ?? []).join(" "));
+    assert.equal(ran.at(-1), "diff --name-only --diff-filter=U");
+    assert.equal(
+      ran.some((command) => /--abort|reset|checkout/.test(command)),
+      false,
+    );
+  });
+
+  it("refuses over uncommitted work before touching anything", async () => {
+    const run = scriptedRun([
+      { stdout: "## main...origin/main [behind 2]\n M src/a.ts\n" },
+      { stdout: "origin\n" },
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.pull("/workspace/demo");
+
+    assert.equal(result.ok, false);
+    assert.match(
+      (result as { reason: string }).reason,
+      /commit or discard your changes before pulling/,
+    );
+    // Refused on the local read alone — no fetch, no merge.
+    assert.equal(run.mock.calls.length, 2);
+  });
+
+  it("says so when there is nothing to pull", async () => {
+    const run = scriptedRun([
+      { stdout: "## main...origin/main\n" },
+      { stdout: "origin\n" },
+      { stdout: "" }, // fetch
+      { stdout: "0\n" }, // rev-list
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.pull("/workspace/demo");
+
+    assert.equal(result.ok, false);
+    assert.match((result as { reason: string }).reason, /already up to date/);
+  });
+
+  it("refuses a project with no remote", async () => {
+    const run = scriptedRun([{ stdout: "## main\n" }, { stdout: "\n" }]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.pull("/workspace/demo");
+
+    assert.equal(result.ok, false);
+    assert.match((result as { reason: string }).reason, /no remote to pull from/);
+  });
+
+  it("reports an unreachable remote rather than merging a stale ref", async () => {
+    const run = scriptedRun([
+      { stdout: clean },
+      { stdout: "origin\n" },
+      new Error("could not resolve host"), // fetch
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.pull("/workspace/demo");
+
+    assert.equal(result.ok, false);
+    assert.match((result as { reason: string }).reason, /could not reach origin/);
+    assert.equal(run.mock.calls.length, 3);
+  });
+});
+
+describe("projectGit.push against a moved remote", () => {
+  it("fetches first and refuses before pushing when the remote is ahead", async () => {
+    // The case that sent an operator looking for a broken ssh key: the window
+    // said "1 ahead · 0 behind" because nothing in the app had fetched since
+    // the remote moved, so the push looked safe and was rejected by the
+    // remote with a message the register then threw away.
+    const run = scriptedRun([
+      { stdout: "## main...origin/main [ahead 1]\n" }, // status --branch
+      { stdout: "origin\n" }, // remote
+      { stdout: "" }, // fetch origin main
+      { stdout: "1\n" }, // rev-list --count HEAD..origin/main
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.push("/workspace/demo");
+
+    assert.equal(result.ok, false);
+    assert.match(
+      (result as { reason: string }).reason,
+      /the remote has 1 commit this project does not — pull them in first/,
+    );
+    // Refused locally: no push was attempted at all.
+    assert.equal(run.mock.calls.length, 4);
+  });
+
+  it("pluralises more than one commit", async () => {
+    const run = scriptedRun([
+      { stdout: "## main...origin/main\n" },
+      { stdout: "origin\n" },
+      { stdout: "" },
+      { stdout: "3\n" },
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.push("/workspace/demo");
+
+    assert.match((result as { reason: string }).reason, /has 3 commits/);
+  });
+
+  it("pushes anyway when the fetch fails — an unreachable remote is not a veto", async () => {
+    const run = scriptedRun([
+      { stdout: "## main...origin/main\n" },
+      { stdout: "origin\n" },
+      new Error("could not resolve host"), // fetch
+      new Error("unknown revision"), // rev-list
+      { stdout: "" }, // push — still attempted
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    assert.deepEqual(await projectGit.push("/workspace/demo"), { ok: true });
+    assert.equal(run.mock.calls[4]?.arguments[1]?.[0], "push");
+  });
+
+  it("does not fetch a project with no remote", async () => {
+    const run = scriptedRun([
+      { stdout: "## main\n" },
+      { stdout: "\n" }, // remote — none
+      Object.assign(new Error("Command failed"), {
+        stderr: "fatal: No configured push destination.\n",
+      }), // push
+      { stdout: "\n" }, // remote get-url origin
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.push("/workspace/demo");
+
+    assert.equal(result.ok, false);
+    assert.equal(run.mock.calls[2]?.arguments[1]?.[0], "push");
+  });
+});
+
 describe("projectGit.push", () => {
   it("pushes the current branch with -u origin", async () => {
     const run = scriptedRun([
       { stdout: "## feature-x\n" }, // status --branch (for status())
       { stdout: "origin\n" }, // remote
+      { stdout: "" }, // fetch origin feature-x
+      // A branch that has never been pushed has no origin/feature-x to count
+      // against, which is ordinary — the push is what creates it.
+      new Error("unknown revision"), // rev-list --count
       { stdout: "" }, // push
     ]);
     const projectGit = createProjectGit({ run, readIdentity: noIdentity });
@@ -294,6 +510,12 @@ describe("projectGit.push", () => {
 
     assert.deepEqual(result, { ok: true });
     assert.deepEqual(run.mock.calls[2]?.arguments[1], [
+      "fetch",
+      "--quiet",
+      "origin",
+      "feature-x",
+    ]);
+    assert.deepEqual(run.mock.calls[4]?.arguments[1], [
       "push",
       "-u",
       "origin",

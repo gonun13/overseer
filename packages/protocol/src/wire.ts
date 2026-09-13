@@ -269,6 +269,11 @@ export type ClientMessage =
   /** `git push -u origin <branch>` in `path`. Only offered by the client when
    * the last status read reported a remote. */
   | { type: "project.git.push"; path: string }
+  /** Merge `origin/<branch>` into the current branch in `path` — the pull a
+   * rejected push asks for. Only offered when the last status read reported a
+   * remote. A merge that conflicts is left conflicted in the working tree for
+   * the operator to resolve; the app does not undo it. */
+  | { type: "project.git.pull"; path: string }
   /** Merge the current branch into `path`'s default branch, locally —
    * offered only when `path` has no remote (a remote implies a PR process
    * upstream instead). The default branch is whatever the server's
@@ -465,6 +470,16 @@ export interface ProjectGitCommittedMessage {
 export interface ProjectGitPushedMessage {
   type: "project.git.pushed";
   path: string;
+}
+
+/** Ack that `origin/<branch>` was merged into `path`'s current branch.
+ * `merged` is how many commits came down, so the ack can say what arrived
+ * rather than only that something did. */
+export interface ProjectGitPulledMessage {
+  type: "project.git.pulled";
+  path: string;
+  branch: string;
+  merged: number;
 }
 
 /** Ack that `path`'s feature branch (`branch`) was merged into its default
@@ -846,6 +861,7 @@ export type ServerMessage =
   | ProjectGitListMessage
   | ProjectGitCommittedMessage
   | ProjectGitPushedMessage
+  | ProjectGitPulledMessage
   | ProjectGitMergedMessage
   | ProjectGitRevertedMessage
   | GitAccessStateMessage
@@ -1264,6 +1280,7 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   if (
     type === "project.git.status" ||
     type === "project.git.push" ||
+    type === "project.git.pull" ||
     type === "project.git.merge" ||
     type === "project.git.revert"
   ) {

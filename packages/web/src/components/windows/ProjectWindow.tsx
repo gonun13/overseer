@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { ClientMessage, GitFileChange, ServerMessage } from "@overseer/protocol";
+import { canPull, canPush } from "../../state/git-actions";
 import { FILE_TONE } from "../../status";
 import { WInline, WRow, WTitle } from "./bits";
 
@@ -14,7 +15,7 @@ interface GitStatusState {
   files: GitFileChange[];
 }
 
-type Busy = "commit" | "push" | "merge" | "revert" | null;
+type Busy = "commit" | "push" | "pull" | "merge" | "revert" | null;
 
 /**
  * Commit, push, merge, and revert for one project's git worktree — opened
@@ -57,6 +58,7 @@ export function ProjectWindow({
       if (
         (frame.type === "project.git.committed" ||
           frame.type === "project.git.pushed" ||
+          frame.type === "project.git.pulled" ||
           frame.type === "project.git.merged" ||
           frame.type === "project.git.reverted") &&
         frame.path === path
@@ -93,15 +95,11 @@ export function ProjectWindow({
     return <div className="w-empty">no active project</div>;
   }
 
-  // Push is only live when there is something to send and nothing left behind:
-  // uncommitted work means the push would ship a half-state, and `ahead === 0`
-  // means the remote already has every commit. `ahead === undefined` is the
-  // never-pushed branch — no upstream to compare against, so `push -u` is
-  // exactly the thing to offer.
-  const canPush =
-    status !== undefined &&
-    !status.dirty &&
-    (status.ahead === undefined || status.ahead > 0);
+  // Both gates live in state/git-actions.ts, where they are tested: they are a
+  // pair of interlocking rules, and the screen cannot show you that one of them
+  // is subtly wrong.
+  const pushable = canPush(status);
+  const pullable = canPull(status);
 
   function commit() {
     if (!path || message.trim() === "") return;
@@ -173,11 +171,25 @@ export function ProjectWindow({
 
           {confirming === null && (
             <div className="btn-row">
+              {status.hasRemote && (
+                <button
+                  type="button"
+                  className="w-btn"
+                  disabled={busy !== null || !pullable}
+                  onClick={() => {
+                    setBusy("pull");
+                    setError(undefined);
+                    send({ type: "project.git.pull", path });
+                  }}
+                >
+                  {busy === "pull" ? "pulling…" : "pull"}
+                </button>
+              )}
               {status.hasRemote ? (
                 <button
                   type="button"
                   className="w-btn"
-                  disabled={busy !== null || !canPush}
+                  disabled={busy !== null || !pushable}
                   onClick={() => {
                     setBusy("push");
                     setError(undefined);
@@ -215,9 +227,18 @@ export function ProjectWindow({
                   commit first · push sends commits, not working changes.
                 </p>
               ) : (
-                status.ahead === 0 && (
-                  <p className="w-note">nothing to push · the remote is up to date.</p>
-                )
+                <>
+                  {status.behind !== undefined && status.behind > 0 && (
+                    <p className="w-note">
+                      origin has {status.behind} commit
+                      {status.behind === 1 ? "" : "s"} this checkout does not · pull before
+                      pushing.
+                    </p>
+                  )}
+                  {status.ahead === 0 && status.behind === 0 && (
+                    <p className="w-note">nothing to push · the remote is up to date.</p>
+                  )}
+                </>
               )}
               <p className="w-note">merge happens upstream.</p>
             </div>

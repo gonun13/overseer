@@ -105,10 +105,11 @@ export interface WorldSnapshot {
    * Who the app's own commits are authored as. Absent means the operator has
    * not said, and `vcs` falls back to its own identity rather than failing.
    *
-   * Kept here rather than in a git config file because the compose files pass
-   * `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL` through from the host and default
-   * them to empty strings, and git reads those env vars ahead of every config
-   * file — so a config-file identity would be silently overridden. See
+   * Kept here rather than only in a git config file because git reads
+   * `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL` ahead of every config file, so a
+   * config-file identity can be silently overridden by an environment the app
+   * does not control. This is the copy the app authors its own commits from;
+   * `~/.gitconfig` gets a copy too, for children it does not spawn. See
    * `vcs/env.ts`.
    */
   git_identity?: { name: string; email: string };
@@ -371,12 +372,35 @@ async function publishJson(file: string, body: unknown): Promise<void> {
   }
 }
 
-/** Replace the snapshot wholesale. Discovery's ending write — it owns the
- * whole world it just observed, rather than patching a field. */
+/**
+ * Replace the snapshot wholesale. Discovery's ending write — it owns the whole
+ * world it just observed, rather than patching a field.
+ *
+ * Except for the fields the *operator* owns. Those are not part of the world
+ * discovery observes, and it must not carry a copy of them: a pass reads the
+ * previous snapshot when it starts and writes seconds later, so an identity or
+ * a theme set during the pass was written by `updateSnapshot`, then silently
+ * overwritten here by the value that was on disk before it. The operator then
+ * types the same identity in again, which is exactly what was happening.
+ *
+ * So they are carried forward from whatever is on disk *at write time*, under
+ * the same lock every other write takes, with any pre-discovery pending value
+ * winning. The type excludes them so a caller cannot reintroduce the bug by
+ * passing a stale one.
+ */
 export function writeSnapshot(
-  snapshot: Omit<WorldSnapshot, "at">,
+  snapshot: Omit<WorldSnapshot, "at" | "theme" | "git_identity">,
 ): Promise<void> {
-  return serialized(() => publishSnapshot(snapshot));
+  return serialized(async () => {
+    const current = await readSnapshot();
+    const theme = takePendingTheme() ?? current?.theme;
+    const gitIdentity = takePendingGitIdentity() ?? current?.git_identity;
+    await publishSnapshot({
+      ...snapshot,
+      ...(theme !== undefined ? { theme } : {}),
+      ...(gitIdentity !== undefined ? { git_identity: gitIdentity } : {}),
+    });
+  });
 }
 
 /**
@@ -572,22 +596,26 @@ export async function readGitIdentity(): Promise<
   return (await readSnapshot())?.git_identity;
 }
 
-/** Git identity to include when discovery (re)writes the world snapshot. */
-export function gitIdentityForSnapshot(
-  previous: WorldSnapshot | undefined,
-): { name: string; email: string } | undefined {
+/** A pre-discovery identity, consumed — the snapshot write it was waiting for
+ * is happening now, so the holding pen is emptied as it is read. */
+function takePendingGitIdentity(): { name: string; email: string } | undefined {
   const pending = pendingGitIdentity;
   pendingGitIdentity = undefined;
-  return pending ?? previous?.git_identity;
+  return pending;
 }
 
-/** Theme to include when discovery (re)writes the world snapshot. */
-export function themeForSnapshot(
-  previous: WorldSnapshot | undefined,
-): OverseerTheme | undefined {
+/** The same, for a theme chosen before the first snapshot existed. */
+function takePendingTheme(): OverseerTheme | undefined {
   const pending = pendingTheme;
   pendingTheme = undefined;
-  return pending ?? previous?.theme;
+  return pending;
+}
+
+/** Drop both holding pens. For tests sharing one process — a pending value
+ * left by another file would otherwise leak into the next snapshot write. */
+export function clearPendingOperatorChoices(): void {
+  pendingTheme = undefined;
+  pendingGitIdentity = undefined;
 }
 
 /** Record which provider the operator connected. Discovery must have run first. */

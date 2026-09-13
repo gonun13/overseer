@@ -9,6 +9,7 @@ import {
   type DiscoveryOutcome,
   type ServerMessage,
   type Skill,
+  type SpaceOutcome,
   type Subagent,
 } from "@overseer/protocol";
 import { WebSocketServer, type WebSocket } from "ws";
@@ -385,6 +386,105 @@ export function attachWebSocketServer(httpServer: Server): {
       if (ws.readyState === ws.OPEN) ws.send(JSON.stringify(message));
     };
 
+    /**
+     * The git status of one project, as its own frame.
+     *
+     * Two callers want the identical frame — the client asking for it, and a
+     * fetch that has just changed the answer — and the window keys on the path
+     * rather than on having asked, so an unsolicited one lands the same way.
+     */
+    const sendGitStatus = async (projectPath: string) => {
+      const result = await projectGit.status(projectPath);
+      const defaultBranch = await projectGit.defaultBranch(projectPath);
+      // The origin URL is for the window to display, and only this frame wants
+      // it — asking for it inside `status()` would spend a spawn on every
+      // `push` and `merge`, which read that status only for the branch name.
+      // Read here, beside `defaultBranch`, for the same reason and in the same
+      // shape. A project with no `origin` (or one whose only remote is named
+      // something else) is ordinary, not an error, so a failure just leaves the
+      // URL out.
+      let remoteUrl: string | undefined;
+      if (result.hasRemote) {
+        try {
+          remoteUrl = (await projectGit.remoteUrl(projectPath)).stdout;
+        } catch {
+          // No origin to name — `hasRemote` still stands on its own.
+        }
+      }
+      send({
+        type: "project.git.status",
+        path: projectPath,
+        ...result,
+        ...(remoteUrl !== undefined ? { remoteUrl } : {}),
+        defaultBranch,
+      });
+    };
+
+    /**
+     * Fetch this project's current branch, then say what that changed.
+     *
+     * Nothing else in this app fetches, so `origin/<branch>` only moves when
+     * something pushes or pulls — which means the ahead/behind counts a window
+     * shows can be arbitrarily old, and "0 behind" can mean "nobody has looked
+     * since Tuesday". Selecting a project is the moment worth spending a
+     * network round trip on: it is the point where the operator starts
+     * believing what the window says.
+     *
+     * Reported through the space, because this is the app going out to the
+     * network on its own initiative. Unannounced work that changes what the
+     * window says is the thing the status window exists to prevent — and a
+     * fetch that *fails* is exactly when the counts on screen stop meaning
+     * what they appear to mean, so silence is worst precisely when it matters.
+     *
+     * One `state` row, keyed `remote` rather than per project: only one project
+     * is active at a time, so the condition being described is "how the project
+     * you are looking at stands against its remote", and the next selection
+     * corrects it rather than stacking a second line.
+     */
+    const refreshFromRemote = async (projectPath: string) => {
+      const name = path.basename(projectPath);
+      const report = (outcome: SpaceOutcome, detail?: string) =>
+        space.status({
+          service: "git",
+          key: "remote",
+          mode: "state",
+          label: `checking origin for ${name}`,
+          outcome,
+          ...(detail !== undefined ? { detail } : {}),
+        });
+
+      try {
+        const { branch, hasRemote } = await projectGit.status(projectPath);
+        if (!hasRemote) {
+          report("skipped", "no remote to check");
+          return;
+        }
+
+        report("running", `${branch} · asking origin`);
+        if (!(await projectGit.fetchBranch(projectPath, branch))) {
+          // The counts on screen are now known-stale rather than merely old,
+          // and that is worth the operator's attention: it is the difference
+          // between "0 behind" meaning something and meaning nothing.
+          report("failed", `could not reach origin · showing the last known ${branch}`);
+          return;
+        }
+
+        const fresh = await projectGit.status(projectPath);
+        await sendGitStatus(projectPath);
+        const behind = fresh.behind ?? 0;
+        report(
+          behind > 0 ? "blocked" : "ok",
+          behind > 0
+            ? `origin/${branch} has ${behind} commit${behind === 1 ? "" : "s"} this checkout does not`
+            : `${branch} is up to date with origin`,
+        );
+      } catch {
+        // Not a repository, or git is unavailable — `project.git.status` is
+        // where that gets reported, on the frame the client actually asked for.
+        report("skipped", "not a git repository");
+      }
+    };
+
     // Liveness. `alive` is set by the peer's pong and cleared by our ping, so a
     // beat that finds it still false is a peer that did not answer the last
     // one. `terminate` rather than `close`: there is no one left to complete a
@@ -524,6 +624,11 @@ export function attachWebSocketServer(httpServer: Server): {
           send({ type: "project.selected", path: parsed.path });
           void sessionSupervisor.list();
           void sessionSupervisor.listPlans();
+          // Ask the remote where it is, now that this is the project being
+          // looked at. Not awaited: an unreachable remote must not hold up the
+          // selection, and the window opens on the local view either way — the
+          // fresh status arrives as its own frame when the fetch lands.
+          void refreshFromRemote(parsed.path);
           return;
         }
         case "project.create": {
@@ -565,30 +670,7 @@ export function attachWebSocketServer(httpServer: Server): {
             return;
           }
           try {
-            const result = await projectGit.status(parsed.path);
-            const defaultBranch = await projectGit.defaultBranch(parsed.path);
-            // The origin URL is for the window to display, and only this frame
-            // wants it — asking for it inside `status()` would spend a spawn on
-            // every `push` and `merge`, which read that status only for the
-            // branch name. Read here, beside `defaultBranch`, for the same
-            // reason and in the same shape. A project with no `origin` (or one
-            // whose only remote is named something else) is ordinary, not an
-            // error, so a failure just leaves the URL out.
-            let remoteUrl: string | undefined;
-            if (result.hasRemote) {
-              try {
-                remoteUrl = (await projectGit.remoteUrl(parsed.path)).stdout;
-              } catch {
-                // No origin to name — `hasRemote` still stands on its own.
-              }
-            }
-            send({
-              type: "project.git.status",
-              path: parsed.path,
-              ...result,
-              ...(remoteUrl !== undefined ? { remoteUrl } : {}),
-              defaultBranch,
-            });
+            await sendGitStatus(parsed.path);
           } catch (error) {
             send({
               type: "error",
@@ -657,6 +739,47 @@ export function attachWebSocketServer(httpServer: Server): {
             return;
           }
           send({ type: "project.git.pushed", path: parsed.path });
+          return;
+        }
+        case "project.git.pull": {
+          if (!(await isInsideWorkspace(parsed.path))) {
+            send({
+              type: "error",
+              about: "project.git.pull",
+              benign: true,
+              message: "a project must be a path inside the workspace",
+            });
+            return;
+          }
+          const result = await projectGit.pull(parsed.path);
+          announceGitOp(
+            "pulling",
+            parsed.path,
+            result,
+            "project:pull",
+            result.ok
+              ? `merged ${result.merged} commit${result.merged === 1 ? "" : "s"} from origin/${result.branch}`
+              : "",
+          );
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "project.git.pull",
+              benign: result.benign,
+              message: result.reason,
+            });
+            // A conflicted merge changed the working tree and then stopped.
+            // The window has to be told, or it goes on showing the clean tree
+            // this pull just ended — the conflicted files are the whole point.
+            await sendGitStatus(parsed.path).catch(() => undefined);
+            return;
+          }
+          send({
+            type: "project.git.pulled",
+            path: parsed.path,
+            branch: result.branch,
+            merged: result.merged,
+          });
           return;
         }
         case "project.git.merge": {

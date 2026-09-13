@@ -59,6 +59,24 @@ mkdir -p "$OVERSEER_WORKSPACE_HOST"
 OVERSEER_WORKSPACE_HOST=$(CDPATH= cd -- "$OVERSEER_WORKSPACE_HOST" && pwd)
 export OVERSEER_WORKSPACE_HOST
 
+# Git's four identity variables are read ahead of every config file, so an
+# empty one is worse than an absent one: it beats the identity the operator
+# saved in settings *and* the container's own ~/.gitconfig, and the only thing
+# it can produce is `fatal: empty ident name (for <>)`. The compose files pass
+# these through by bare name, which leaves an unset variable unset — but a
+# shell or .env that exports one as empty would hand the emptiness straight on.
+# Nobody means an empty identity, so treat it as the "unset" it was meant to be.
+for _ident in GIT_AUTHOR_NAME GIT_AUTHOR_EMAIL GIT_COMMITTER_NAME GIT_COMMITTER_EMAIL; do
+  eval "_value=\${$_ident:-}"
+  # if/fi rather than `[ … ] && unset`: under `set -e` a failed test as the
+  # last command in the loop body would exit the script on the first variable
+  # that *is* set.
+  if [ -z "$_value" ]; then
+    unset "$_ident"
+  fi
+done
+unset _ident _value
+
 DEV_COMPOSE="docker-compose.dev.yml"
 PROD_COMPOSE="docker-compose.yml"
 export DEV_COMPOSE PROD_COMPOSE

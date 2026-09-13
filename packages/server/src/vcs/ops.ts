@@ -50,6 +50,12 @@ export type GitListResult =
   | { ok: true; entries: GitDirEntry[]; truncated: boolean }
   | { ok: false; reason: string; benign: boolean };
 
+/** `pull`'s result names the branch and how many commits came down, so the ack
+ * can say what arrived rather than only that something did. */
+export type PullResult =
+  | { ok: true; branch: string; merged: number }
+  | { ok: false; reason: string; benign: boolean };
+
 /** `mergeToDefault`'s result carries which branch it merged from and into —
  * the ack to the client names both, and the client no longer has to assume
  * the target was `main`. */
@@ -453,19 +459,170 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     }
   }
 
+  /**
+   * Bring `origin`'s copy of one branch up to date. Best effort, and never
+   * fatal: a remote that is unreachable, unauthenticated or simply slow is not
+   * a reason to refuse the operation that asked for this. The caller carries on
+   * with the local view, which is exactly what it had before.
+   *
+   * Branch-scoped rather than a whole-remote `git fetch`: this is on the path
+   * of things the operator is waiting for, and the other branches are nobody's
+   * question right now. It still updates `refs/remotes/origin/<branch>`, which
+   * is the ref every ahead/behind count in this app is measured against.
+   */
+  async function fetchBranch(dir: string, branch: string): Promise<boolean> {
+    try {
+      await run(dir, ["fetch", "--quiet", "origin", branch]);
+      return true;
+    } catch {
+      return false;
+    }
+  }
+
+  /** How many commits the remote has that this checkout does not. `undefined`
+   * when there is nothing to compare against — a branch that has never been
+   * pushed has no `origin/<branch>`, and that is an ordinary state, not a
+   * failure. */
+  async function countBehind(
+    dir: string,
+    branch: string,
+  ): Promise<number | undefined> {
+    try {
+      const { stdout } = await run(dir, [
+        "rev-list",
+        "--count",
+        `HEAD..origin/${branch}`,
+      ]);
+      const count = Number(stdout.trim());
+      return Number.isFinite(count) ? count : undefined;
+    } catch {
+      return undefined;
+    }
+  }
+
+  /**
+   * Bring `origin`'s commits down into the current branch, by merge.
+   *
+   * Merge rather than rebase: rebase rewrites commits that may already be in a
+   * session's hands, and a half-finished rebase is a state an operator has to
+   * know git well to even recognise. A merge either lands or stops with
+   * conflict markers in the files, which is a state the project window already
+   * renders — `unmerged` is in its file-status vocabulary.
+   *
+   * A conflict is **not** cleaned up. No `--abort`, no reset: the half-merged
+   * tree is the operator's to resolve in the workspace, with whatever tools
+   * they like, and undoing it on their behalf would throw away the one thing
+   * that tells them what actually disagreed.
+   *
+   * Refuses on a dirty tree, before touching anything. A merge into uncommitted
+   * work either refuses partway through or entangles the operator's changes
+   * with the remote's, and neither is something to discover afterwards.
+   */
+  async function pull(dir: string): Promise<PullResult> {
+    const { branch, hasRemote, dirty } = await status(dir);
+    if (!hasRemote) {
+      return { ok: false, benign: true, reason: "this project has no remote to pull from" };
+    }
+    if (dirty) {
+      return {
+        ok: false,
+        benign: true,
+        reason: "commit or discard your changes before pulling — a merge cannot run over uncommitted work",
+      };
+    }
+
+    if (!(await fetchBranch(dir, branch))) {
+      return {
+        ok: false,
+        benign: true,
+        reason: `could not reach origin to pull ${branch}`,
+      };
+    }
+
+    const behind = await countBehind(dir, branch);
+    if (behind === undefined) {
+      return {
+        ok: false,
+        benign: true,
+        reason: `origin has no ${branch} to pull from`,
+      };
+    }
+    if (behind === 0) {
+      return { ok: false, benign: true, reason: `${branch} is already up to date with origin` };
+    }
+
+    try {
+      // A merge writes a commit when the histories have both moved, so it
+      // needs an identity for the same reason `commit` does.
+      await run(dir, ["merge", "--no-edit", `origin/${branch}`], await identityFor(dir));
+      return { ok: true, branch, merged: behind };
+    } catch (error) {
+      // Both streams: git announces "CONFLICT (content): …" and "Automatic
+      // merge failed" on stdout, not stderr.
+      const full = `${stderrOf(error)}\n${stdoutOf(error) ?? ""}`;
+      if (/conflict/i.test(full)) {
+        const files = await conflictedFiles(dir);
+        const named =
+          files.length === 0
+            ? "the merge conflicts"
+            : files.length === 1
+              ? `${files[0]} conflicts`
+              : `${files.length} files conflict — ${files.slice(0, 3).join(", ")}${files.length > 3 ? "…" : ""}`;
+        return {
+          ok: false,
+          benign: true,
+          // Said plainly, because the tree is now in a state the operator has
+          // to act on and nothing here is going to act on it for them.
+          reason: `${named} · resolve in the project, then commit the merge`,
+        };
+      }
+      return { ok: false, benign: false, reason: describe(error) };
+    }
+  }
+
+  /** The paths git is holding as unmerged, for a conflict message that names
+   * them rather than leaving the operator to go looking. */
+  async function conflictedFiles(dir: string): Promise<string[]> {
+    try {
+      const { stdout } = await run(dir, ["diff", "--name-only", "--diff-filter=U"]);
+      return stdout.split("\n").filter((line) => line.trim().length > 0);
+    } catch {
+      return [];
+    }
+  }
+
   async function push(dir: string): Promise<GitOpResult> {
     try {
-      const { branch } = await status(dir);
+      const { branch, hasRemote } = await status(dir);
+
+      // Ask where the remote actually is before trying to move it. Nothing
+      // else in this app fetches, so `origin/<branch>` — and every ahead/behind
+      // count measured against it — is otherwise frozen at whenever this
+      // checkout last spoke to the remote. A push then fails against a remote
+      // the operator was shown as "0 behind" seconds earlier.
+      if (hasRemote) {
+        await fetchBranch(dir, branch);
+        const behind = await countBehind(dir, branch);
+        if (behind !== undefined && behind > 0) {
+          return {
+            ok: false,
+            benign: true,
+            reason: `the remote has ${behind} commit${behind === 1 ? "" : "s"} this project does not — pull them in first`,
+          };
+        }
+      }
+
       await run(dir, ["push", "-u", "origin", branch]);
       return { ok: true };
     } catch (error) {
+      const full = stderrOf(error);
       return {
         ok: false,
         benign: true,
         // Classified against the *whole* of stderr, not `describe`'s first
         // line: git prints a multi-line warning banner ahead of "Host key
         // verification failed", so the signature is never on line one.
-        reason: await explainPushFailure(dir, stderrOf(error), describe(error)),
+        reason: await explainPushFailure(dir, full, describePush(full, error)),
       };
     }
   }
@@ -495,6 +652,12 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
         return `this project's remote uses https, so the ssh key does not apply — switch the remote to ssh to use it · ${summary}`;
       }
       return `no ssh key is set up for this remote — add one in settings › git access · ${summary}`;
+    }
+    // The everyday one, and the only failure here that is nobody's mistake:
+    // the remote moved on. Worth naming, because "fetch first" is git's
+    // instruction to a terminal and this app has no terminal to obey it in.
+    if (/\(fetch first\)|\(non-fast-forward\)|behind its remote counterpart/i.test(full)) {
+      return `the remote has commits this project does not — pull them in first · ${summary}`;
     }
     return summary;
   }
@@ -657,6 +820,8 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     listDir,
     commit,
     push,
+    pull,
+    fetchBranch,
     defaultBranch,
     mergeToDefault,
     revert,
@@ -708,6 +873,37 @@ function stderrOf(error: unknown): string {
     if (typeof stderr === "string") return stderr;
   }
   return error instanceof Error ? error.message : "";
+}
+
+/**
+ * The one line of a push failure worth showing.
+ *
+ * `describe` takes stderr's first line, which works for most git commands and
+ * is exactly wrong for `push`: the first line is always the `To <remote>`
+ * header, the only line in the output that says nothing about what happened.
+ * Operators were shown "To github.com:owner/repo.git" and nothing else.
+ *
+ * The reason sits under it, as `! [rejected] … (fetch first)` or an `error:`/
+ * `fatal:` line. The `hint:` block under *that* is git's advice to someone at
+ * a terminal ("use 'git pull'"), which is not the register's voice — and
+ * `explainPushFailure` gives the actionable version anyway.
+ */
+function describePush(full: string, error: unknown): string {
+  const lines = full
+    .split("\n")
+    .map((line) => line.trim())
+    .filter((line) => line.length > 0);
+
+  const rejected = lines.find((line) => line.startsWith("!"));
+  if (rejected) return rejected.replace(/^!\s*/, "");
+
+  const failed = lines.find((line) => /^(error|fatal):/i.test(line));
+  if (failed) return failed;
+
+  const informative = lines.find(
+    (line) => !/^to\s/i.test(line) && !/^hint:/i.test(line),
+  );
+  return informative ?? describe(error);
 }
 
 function describe(error: unknown): string {

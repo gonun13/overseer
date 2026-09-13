@@ -1,20 +1,22 @@
 /**
  * Which identity a commit this app makes is authored under.
  *
- * The precedence here is not arbitrary, and it is not git's. The compose files
- * pass `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL` and the `GIT_COMMITTER_*` pair
- * through from the host as `${VAR:-}`, so when the host has none set they
- * arrive in the container as **empty strings** rather than absent. Git reads
- * those environment variables ahead of every config file — local, global, and
- * `-c` on the command line alike — so an empty one poisons the identity and
- * `git commit` fails with "empty ident name (for <>)". Verified in the running
- * container: `git var GIT_AUTHOR_IDENT` exits non-zero there, and
- * `~/.gitconfig` is an empty file.
+ * The precedence here is not arbitrary, and it is not git's. Git reads
+ * `GIT_AUTHOR_NAME`, `GIT_AUTHOR_EMAIL` and the `GIT_COMMITTER_*` pair ahead
+ * of every config file — local, global, and `-c` on the command line alike —
+ * so an *empty* one poisons the identity outright and `git commit` fails with
+ * "empty ident name (for <>)". The compose files used to hand exactly that
+ * down: `${VAR:-}` turned "the host set none" into an empty string in the
+ * container, which beat both the identity saved in settings and the
+ * container's own `~/.gitconfig`. They pass these by bare name now, so an
+ * unset variable stays unset, and `dropEmptyIdentityEnv` below is the backstop
+ * for a stack started some other way.
  *
- * That is why the operator's own identity has to be applied the same way — as
- * environment overrides — and why writing it into a config file would not
- * work. It is also why `hasIdentity` probes with `git var GIT_AUTHOR_IDENT`
- * rather than reading `user.name`: only that respects the real precedence.
+ * The operator's own identity is still applied as environment overrides rather
+ * than written to a config file, because that is the only layer that beats an
+ * empty variable if one does slip through. It is also why `hasIdentity` probes
+ * with `git var GIT_AUTHOR_IDENT` rather than reading `user.name`: only that
+ * respects the real precedence.
  */
 
 /** The four variables git resolves an identity from, ahead of any config. */
@@ -28,11 +30,12 @@ export const IDENTITY_VARS = [
 /**
  * Drop identity variables that arrived empty, once, at boot.
  *
- * The compose files pass these through from the host as `${VAR:-}`, so on a
- * host with no git identity they arrive as empty strings rather than absent.
  * An empty one is worse than nothing: git prefers it over every config file
  * and then fails with "empty ident name (for <>)", so a perfectly good
  * `~/.gitconfig` or repository config is overridden by a value nobody set.
+ * The compose files no longer produce them — bare-name passthrough leaves an
+ * unset variable unset — but a stack brought up by hand, or a host that
+ * exports one as empty, still can.
  *
  * Every child process inherits this environment — the agent's own sessions,
  * the console, the dev loop — so removing them here is what lets a config file

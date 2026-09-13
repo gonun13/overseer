@@ -5,6 +5,42 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
 
+## 0.4.4 — 2026-09-13
+
+### Fixed
+
+- The git identity you save in settings › git access now stays saved. Saving it while the overseer
+  was still looking around at startup wrote it and then lost it moments later, so it had to be typed
+  in again — as did a theme picked in the same window. Both now survive.
+- The project window's "ahead · behind" counts are no longer stale. Nothing in the app ever
+  contacted the remote, so those numbers were measured against whatever your checkout last saw —
+  a project could sit at "0 behind" while the remote had moved on days earlier. Opening a project
+  now fetches its current branch first, and the counts update as soon as that lands.
+- Pushing checks the remote before it tries. A push that cannot succeed is now refused up front
+  with "the remote has 1 commit this project does not — pull them in first", rather than being
+  attempted and reported as "To github.com:you/repo.git" — git's header line, and the one line of
+  its output that says nothing about what went wrong. Failures that do reach the remote now quote
+  the rejection itself.
+- The overseer says when it is talking to a remote. Fetching a project's branch shows in the status
+  window while it runs and reports what it found — up to date, how many commits origin is holding,
+  or that origin could not be reached at all. That last one matters most: it is when the ahead and
+  behind counts on screen stop meaning anything.
+- The dev loop's commits are authored as you again. They were landing as `overseer
+  <overseer@localhost>` even with an identity saved, because the container was started with four
+  empty git variables that git reads ahead of every config file. If you set `GIT_AUTHOR_NAME` and
+  friends in `.env`, that still works — but leave them commented out rather than blank.
+
+### Added
+
+- A **pull** button in the project window, offered when origin is holding commits your checkout does
+  not have. It merges them in — no rebase, nothing rewritten. If the merge conflicts, the app stops
+  and leaves the conflict exactly where git put it, names the files, and hands it to you: resolving
+  it is yours to do in the project, and nothing is undone behind your back. It refuses over
+  uncommitted work rather than merging into a half-finished change.
+- Push is held while origin is ahead, instead of being offered and then refused. The button goes
+  live again the moment a pull succeeds — the pull's ack re-reads the project, "behind" comes back
+  to nothing, and push is released in the same breath.
+
 ## 0.4.3 — 2026-09-13
 
 ### Fixed

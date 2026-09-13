@@ -26,8 +26,6 @@ import {
 import {
   readSnapshot,
   recordAction,
-  gitIdentityForSnapshot,
-  themeForSnapshot,
   writeRunLog,
   writeSnapshot,
 } from "./memory/internal.js";
@@ -395,8 +393,10 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
     ...(personalityRescued ? { personalityRescued: true as const } : {}),
   });
 
-  const theme = themeForSnapshot(previous);
-  const gitIdentity = gitIdentityForSnapshot(previous);
+  // The operator's own choices — theme, git identity — are deliberately not
+  // passed here. `writeSnapshot` carries them forward from disk at write time,
+  // because `previous` was read when this pass started and anything set since
+  // would be overwritten by it. See the note on `writeSnapshot`.
   await Promise.all([
     writeRunLog(runId, log),
     writeSnapshot({
@@ -406,8 +406,6 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
       providers,
       last_active_project: activeProjectPath,
       attached_provider: attachedProviderId,
-      ...(theme !== undefined ? { theme } : {}),
-      ...(gitIdentity !== undefined ? { git_identity: gitIdentity } : {}),
     }),
   ]);
 
