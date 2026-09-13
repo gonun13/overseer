@@ -294,6 +294,16 @@ export type ClientMessage =
       mode: "diff" | "content";
       previousPath?: string;
     }
+  /** List one folder of `path`'s worktree — the changed children directly
+   * inside it, which is what a commit made from the project window would take
+   * from that folder. Sent when the operator clicks a folder row: git reports
+   * an untracked directory as a single collapsed entry, and this is how that
+   * row is opened into the files under it.
+   *
+   * `folder` is repo-relative and carries **no** trailing slash — the guard
+   * below is the same one `file` is held to, and an empty path segment is
+   * exactly what it refuses. The client strips the slash git printed. */
+  | { type: "project.git.list"; path: string; folder: string }
   /** Read the container's git access: whether an ssh key exists, the public
    * half of it, and the identity commits are made under. Never carries the
    * private key — nothing in the protocol can ask for it. */
@@ -380,6 +390,20 @@ export interface GitFileChange {
   previousPath?: string;
 }
 
+/** One child of a folder listing — a name, not a path: the window already
+ * knows which folder it is showing, and joining the two is what walks one
+ * level deeper.
+ *
+ * `status` is absent only on a folder whose descendants disagree, which the
+ * row says in words rather than inventing a tone for. A file always has one:
+ * the listing is built from `git status`, so nothing unchanged appears in it
+ * at all. */
+export interface GitDirEntry {
+  name: string;
+  kind: "file" | "dir";
+  status?: GitFileChange["status"];
+}
+
 /** Reply to `project.git.status`. `ahead`/`behind` are absent when the branch
  * has no upstream to compare against — never collapsed to `0`, the same rule
  * `DiscoveredProject.dirty` already follows. A branch that *does* track an
@@ -414,6 +438,19 @@ export interface ProjectGitShowMessage {
   file: string;
   mode: "diff" | "content";
   text: string;
+  truncated: boolean;
+}
+
+/** Reply to `project.git.list`. `entries` are already ordered the way the
+ * window shows them — folders first, then files, each group by name — so the
+ * client renders the list it is given rather than re-deciding the order.
+ * `truncated` means the folder holds more changed children than the cap in
+ * this file allows in one frame, not that the listing ends there. */
+export interface ProjectGitListMessage {
+  type: "project.git.list";
+  path: string;
+  folder: string;
+  entries: GitDirEntry[];
   truncated: boolean;
 }
 
@@ -817,6 +854,7 @@ export type ServerMessage =
   | ProjectCreatedMessage
   | ProjectGitStatusMessage
   | ProjectGitShowMessage
+  | ProjectGitListMessage
   | ProjectGitCommittedMessage
   | ProjectGitPushedMessage
   | ProjectGitMergedMessage
@@ -916,6 +954,10 @@ export const GIT_MAX_DIFF_CHARS = 200_000;
 /** One DOM node per line: the line cap is the render cost, the char cap the
  * frame cost, and either can be the one that trips first. */
 export const GIT_MAX_DIFF_LINES = 2_000;
+/** One row per changed child in a folder listing. Far below the diff caps:
+ * this is a list the operator scans, and a folder with more changed children
+ * than this is one they will navigate into rather than read to the end. */
+export const GIT_MAX_DIR_ENTRIES = 500;
 /** A hostname's own limit, brackets of an IPv6 literal included. */
 export const GIT_SSH_MAX_HOST_CHARS = 253;
 export const GIT_MAX_IDENTITY_NAME_CHARS = 128;
@@ -1246,6 +1288,14 @@ export function isClientMessage(value: unknown): value is ClientMessage {
       msg.message.trim().length > 0 &&
       msg.message.length <= GIT_MAX_COMMIT_MESSAGE_CHARS
     );
+  }
+  if (type === "project.git.list") {
+    const msg = value as { path?: unknown; folder?: unknown };
+    // The same two halves `project.git.show` is checked in, held to the same
+    // predicates: a folder is a repo-relative path like any other, and the
+    // trailing slash git prints on a collapsed directory is stripped by the
+    // client precisely so it can be.
+    return isGitPath(msg.path) && isRepoRelativePath(msg.folder);
   }
   if (type === "project.git.show") {
     const msg = value as {

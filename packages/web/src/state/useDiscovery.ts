@@ -164,6 +164,9 @@ export function useDiscovery(): DiscoveryController {
         // whose refusals ("binary file", a path git no longer knows) are
         // benign in exactly the same way the rest of this channel's are.
         message.type === "project.git.show" ||
+        // One folder's changed children, for the window a folder row opens —
+        // the same read, one level up from a file.
+        message.type === "project.git.list" ||
         message.type === "project.git.committed" ||
         message.type === "project.git.pushed" ||
         message.type === "project.git.merged" ||

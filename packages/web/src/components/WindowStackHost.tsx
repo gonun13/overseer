@@ -23,10 +23,11 @@ import type { SkillsState } from "../state/useSkills";
 import { SubagentWindow } from "./windows/SubagentWindow";
 import type { SubagentsState } from "../state/useSubagents";
 import { findSubagent, subagentKey } from "../subagents";
-import { fileViewKey } from "../fileview";
+import { fileViewKey, folderViewKey, parseFolderViewKey } from "../fileview";
 import { ConsoleWindow } from "./windows/ConsoleWindow";
 import { ContextWindow } from "./windows/ContextWindow";
 import { DiffWindow } from "./windows/DiffWindow";
+import { FolderWindow } from "./windows/FolderWindow";
 import { HelpWindow } from "./windows/HelpWindow";
 import { LoopModelsWindow } from "./windows/LoopModelsWindow";
 import { OverseerWindow } from "./windows/OverseerWindow";
@@ -162,6 +163,21 @@ export function WindowStackHost({
   onReadLoopModels,
 }: WindowStackHostProps) {
   const models = sessionOptions.find((o) => o.key === "model")?.values ?? [];
+
+  /** Open one folder's listing. Shared by the project window's collapsed
+   * folder rows and by a folder row inside a listing already open, so both
+   * entry points title and key the window the same way — the key is what
+   * raises an open window instead of stacking another on the same folder. */
+  const openFolder = (projectPath: string, folder: string) => {
+    openWindow(
+      "folder",
+      folderViewKey(projectPath, folder),
+      // Basename on the tab, full path in the dim detail — the same split the
+      // file view uses, and for the same reason.
+      folder.split("/").pop(),
+      folder,
+    );
+  };
 
   return windows.map((windowState) => {
     // A session window's payload is the session id it belongs to; everything it
@@ -371,6 +387,27 @@ export function WindowStackHost({
             subscribe={subscribeSession}
           />
         )}
+        {windowState.kind === "folder" && (
+          <FolderWindow
+            target={String(windowState.payload ?? "")}
+            send={send}
+            subscribe={subscribeSession}
+            // A child is named, not pathed — the folder this window is showing
+            // is what turns that name into a path, and joining the two here is
+            // the whole of how the walk goes deeper.
+            onOpenFile={(name) => {
+              const view = parseFolderViewKey(String(windowState.payload ?? ""));
+              if (!view) return;
+              const file = `${view.folder}/${name}`;
+              openWindow("diff", fileViewKey(view.projectPath, file), name, file);
+            }}
+            onOpenFolder={(name) => {
+              const view = parseFolderViewKey(String(windowState.payload ?? ""));
+              if (!view) return;
+              openFolder(view.projectPath, `${view.folder}/${name}`);
+            }}
+          />
+        )}
         {windowState.kind === "projectCreate" && (
           <ProjectCreateWindow
             wizard={wizard}
@@ -382,21 +419,28 @@ export function WindowStackHost({
             path={String(windowState.payload ?? "")}
             send={send}
             subscribe={subscribeSession}
-            onOpenFile={(file) =>
+            onOpenFile={(file) => {
+              const project = String(windowState.payload ?? "");
+              // Git collapses an untracked directory into one row ending in a
+              // slash rather than listing its files, so a row is not always a
+              // file. That row opens a listing of the folder — there is no
+              // diff of a directory to show, and the files under it are what
+              // the operator clicked it to see.
+              if (file.path.endsWith("/")) {
+                const folder = file.path.replace(/\/+$/, "");
+                openFolder(project, folder);
+                return;
+              }
               openWindow(
                 "diff",
-                fileViewKey(
-                  String(windowState.payload ?? ""),
-                  file.path,
-                  file.previousPath,
-                ),
+                fileViewKey(project, file.path, file.previousPath),
                 // The tab takes the basename and the full path goes in the
                 // dim detail beside it: a deep path would otherwise fill the
                 // field and crowd out every other window's tab.
                 file.path.split("/").pop(),
                 file.path,
-              )
-            }
+              );
+            }}
           />
         )}
       </Window>

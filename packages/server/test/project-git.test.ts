@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
+import { GIT_MAX_DIR_ENTRIES } from "@overseer/protocol";
 import { createProjectGit } from "../src/vcs/ops.js";
 
 type Response = { stdout: string; stderr?: string } | Error;
@@ -648,6 +649,127 @@ describe("projectGit.diffFile", () => {
       benign: true,
       reason: "fatal: path 'nope.ts' does not exist",
     });
+  });
+});
+
+describe("projectGit.listDir", () => {
+  it("lists the folder's own files with their statuses, hardened", async () => {
+    const run = scriptedRun([
+      { stdout: "?? newdir/a.txt\n M newdir/b.txt\n" },
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.listDir("/workspace/demo", "newdir");
+
+    assert.deepEqual(result, {
+      ok: true,
+      truncated: false,
+      entries: [
+        { name: "a.txt", kind: "file", status: "untracked" },
+        { name: "b.txt", kind: "file", status: "modified" },
+      ],
+    });
+    const argv = run.mock.calls[0]?.arguments[1] ?? [];
+    // `-uall` is what un-collapses the very directory row this opens, and the
+    // `--` is what keeps a folder named like a flag from being read as one.
+    assert.ok(argv.includes("-uall"));
+    assert.deepEqual(argv.slice(-2), ["--", "newdir"]);
+    assert.ok(argv.includes("core.quotepath=false"));
+  });
+
+  it("rolls a subfolder's descendants up into one folder row", async () => {
+    const run = scriptedRun([
+      { stdout: "?? newdir/sub/b.txt\n?? newdir/sub/deep/c.txt\n?? newdir/a.txt\n" },
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.listDir("/workspace/demo", "newdir");
+
+    // Folders first, then files — and `sub` appears once however many files
+    // are under it.
+    assert.deepEqual(result, {
+      ok: true,
+      truncated: false,
+      entries: [
+        { name: "sub", kind: "dir", status: "untracked" },
+        { name: "a.txt", kind: "file", status: "untracked" },
+      ],
+    });
+  });
+
+  it("leaves a folder whose descendants disagree without a status", async () => {
+    const run = scriptedRun([
+      { stdout: "?? mixed/sub/new.txt\n M mixed/sub/old.txt\n" },
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.listDir("/workspace/demo", "mixed");
+
+    assert.deepEqual(result, {
+      ok: true,
+      truncated: false,
+      entries: [{ name: "sub", kind: "dir" }],
+    });
+  });
+
+  it("reads a rename under the folder as its new name", async () => {
+    const run = scriptedRun([{ stdout: "R  docs/from.md -> docs/to.md\n" }]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.listDir("/workspace/demo", "docs");
+
+    assert.deepEqual((result as { entries: unknown[] }).entries, [
+      { name: "to.md", kind: "file", status: "renamed" },
+    ]);
+  });
+
+  it("ignores a path outside the folder it was asked about", async () => {
+    // git is given a pathspec, but a sibling whose name merely starts with the
+    // same characters must not be read as a child of it.
+    const run = scriptedRun([{ stdout: "?? newdirectory/a.txt\n?? newdir/b.txt\n" }]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.listDir("/workspace/demo", "newdir");
+
+    assert.deepEqual((result as { entries: unknown[] }).entries, [
+      { name: "b.txt", kind: "file", status: "untracked" },
+    ]);
+  });
+
+  it("clips a folder past the entry cap and says it did", async () => {
+    const lines = Array.from(
+      { length: GIT_MAX_DIR_ENTRIES + 5 },
+      (_unused, index) => `?? big/file-${String(index).padStart(4, "0")}.txt`,
+    ).join("\n");
+    const run = scriptedRun([{ stdout: `${lines}\n` }]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.listDir("/workspace/demo", "big");
+
+    assert.equal(result.ok, true);
+    assert.equal((result as { truncated: boolean }).truncated, true);
+    assert.equal((result as { entries: unknown[] }).entries.length, GIT_MAX_DIR_ENTRIES);
+  });
+
+  it("treats an empty folder as a success with nothing in it", async () => {
+    const run = scriptedRun([{ stdout: "" }]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.listDir("/workspace/demo", "empty");
+
+    assert.deepEqual(result, { ok: true, entries: [], truncated: false });
+  });
+
+  it("reports a benign refusal when git cannot answer", async () => {
+    const run = scriptedRun([
+      new Error("fatal: not a git repository"),
+    ]);
+    const projectGit = createProjectGit({ run, readIdentity: noIdentity });
+
+    const result = await projectGit.listDir("/workspace/demo", "newdir");
+
+    assert.equal(result.ok, false);
+    assert.equal((result as { benign: boolean }).benign, true);
   });
 });
 

@@ -1,19 +1,7 @@
 import { useEffect, useState } from "react";
 import type { ClientMessage, GitFileChange, ServerMessage } from "@overseer/protocol";
-import { WInline, WRow, WTitle, type RowTone } from "./bits";
-
-/** How a file's fate reads in the list. Untracked and added are both "new"
- * ink: the operator is being asked whether to commit, and from that question's
- * point of view a file git has never seen and one already staged are the same
- * thing. */
-const FILE_TONE: Record<GitFileChange["status"], RowTone> = {
-  deleted: "gone",
-  unmerged: "gone",
-  added: "new",
-  untracked: "new",
-  modified: "changed",
-  renamed: "changed",
-};
+import { FILE_TONE } from "../../status";
+import { WInline, WRow, WTitle } from "./bits";
 
 interface GitStatusState {
   branch: string;

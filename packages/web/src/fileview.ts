@@ -38,3 +38,30 @@ export function parseFileViewKey(key: string): FileView | undefined {
   if (!projectPath || !file) return undefined;
   return { projectPath, file, ...(previousPath ? { previousPath } : {}) };
 }
+
+/**
+ * The same key, for a folder: project and folder, and nothing else.
+ *
+ * Two parts where a file's key has three, so the two can never be confused for
+ * one another — a folder key handed to `parseFileViewKey` is declined, and a
+ * file key handed to `parseFolderViewKey` is too. `folder` is repo-relative
+ * and carries no trailing slash: the server's guard refuses an empty path
+ * segment, so the slash git prints on a collapsed directory is stripped before
+ * the key is built.
+ */
+export interface FolderView {
+  projectPath: string;
+  folder: string;
+}
+
+export function folderViewKey(projectPath: string, folder: string): string {
+  return [projectPath, folder].join(SEP);
+}
+
+export function parseFolderViewKey(key: string): FolderView | undefined {
+  const parts = key.split(SEP);
+  if (parts.length !== 2) return undefined;
+  const [projectPath, folder] = parts;
+  if (!projectPath || !folder) return undefined;
+  return { projectPath, folder };
+}

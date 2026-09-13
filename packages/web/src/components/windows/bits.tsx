@@ -1,6 +1,6 @@
 import { useEffect, useState, type KeyboardEvent, type ReactNode } from "react";
 import { StatusLight } from "../StatusLight";
-import { ACTIVITY_STEP_WORD, type Activity } from "../../status";
+import { ACTIVITY_STEP_WORD, type Activity, type RowTone } from "../../status";
 import type { ProviderInfo } from "../../domain";
 
 /** Content primitives shared by windows and the settings panel. Nothing here
@@ -69,12 +69,6 @@ export function WStep({
     </div>
   );
 }
-
-/** Optional ink for a row whose *content* carries a meaning the status light
- * cannot — a git file's fate (gone / new / touched), where the row is not a
- * unit of activity at all. Three named tones rather than free colour, so no
- * call site can invent a fourth. */
-export type RowTone = "gone" | "new" | "changed";
 
 export function WRow({
   activity,

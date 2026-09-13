@@ -5,6 +5,8 @@ import { promisify } from "node:util";
 import {
   GIT_MAX_DIFF_CHARS,
   GIT_MAX_DIFF_LINES,
+  GIT_MAX_DIR_ENTRIES,
+  type GitDirEntry,
   type GitFileChange,
 } from "@overseer/protocol";
 import { readGitIdentity } from "../memory/internal.js";
@@ -38,6 +40,14 @@ export type GitOpResult =
  * refusing it. */
 export type GitReadResult =
   | { ok: true; text: string; truncated: boolean }
+  | { ok: false; reason: string; benign: boolean };
+
+/** What a listing of one folder returns — the same result shape a file read
+ * uses, and for the same reason: a folder git has never heard of is an
+ * ordinary operator-facing refusal, not a catastrophe. An empty folder is a
+ * success with no entries, never a failure. */
+export type GitListResult =
+  | { ok: true; entries: GitDirEntry[]; truncated: boolean }
   | { ok: false; reason: string; benign: boolean };
 
 /** `mergeToDefault`'s result carries which branch it merged from and into —
@@ -210,21 +220,8 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
         if (behindMatch) behind = Number(behindMatch[1]);
         continue;
       }
-      const code = line.slice(0, 2);
-      // A rename is printed as `old -> new`, so the raw remainder is two paths
-      // and a separator rather than one path. Split them: the new name is what
-      // the row is *about*, and the old one is what makes a diff of it read as
-      // a rename instead of a whole-file addition. Splitting on the last ` -> `
-      // rather than the first, since a filename may legitimately contain one.
-      const raw = line.slice(3).trim();
-      const arrow = code.includes("R") ? raw.lastIndexOf(" -> ") : -1;
-      const filePath = arrow === -1 ? raw : raw.slice(arrow + 4);
-      const previousPath = arrow === -1 ? undefined : raw.slice(0, arrow);
-      files.push({
-        path: filePath,
-        status: statusFromCode(code),
-        ...(previousPath ? { previousPath } : {}),
-      });
+      const change = parsePorcelainFile(line);
+      if (change) files.push(change);
     }
 
     const { stdout: remoteOut } = await run(dir, ["remote"]);
@@ -333,6 +330,93 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     } catch (error) {
       return { ok: false, benign: true, reason: describe(error) };
     }
+  }
+
+  /**
+   * The changed children directly inside one folder of the worktree.
+   *
+   * Built from `git status`, not from a directory read. That is the whole
+   * point: git is what collapsed an untracked directory into the single row
+   * this opens, `-uall` is what un-collapses it, and asking git rather than
+   * the filesystem means every child arrives with its status already attached,
+   * ignored files stay out of the list, and a symlink is reported as itself
+   * rather than followed into whatever it aims at.
+   *
+   * So a listing says what a commit made from the project window would take
+   * from this folder — the same framing the file view has. A subfolder holding
+   * nothing git would commit does not appear, which is that framing being
+   * honest rather than a gap.
+   *
+   * `--` so a folder whose name begins with a dash cannot be read as a flag,
+   * and `core.quotepath=false` so a non-ASCII name arrives readable instead of
+   * octal-escaped — the same hardening `DIFF_FLAGS` carries.
+   */
+  async function listDir(dir: string, folder: string): Promise<GitListResult> {
+    let stdout: string;
+    try {
+      ({ stdout } = await run(dir, [
+        "-c",
+        "core.quotepath=false",
+        "status",
+        "--porcelain=v1",
+        "-uall",
+        "--",
+        folder,
+      ]));
+    } catch (error) {
+      return { ok: false, benign: true, reason: describe(error) };
+    }
+
+    const prefix = folder.endsWith("/") ? folder : `${folder}/`;
+    // Insertion order is git's, which is not the order the window shows; the
+    // sort below is what decides that. A map rather than a list because a
+    // folder is named once per descendant and must appear once.
+    const children = new Map<string, { kind: GitDirEntry["kind"]; statuses: Set<string> }>();
+
+    for (const line of stdout.split("\n")) {
+      if (line.length === 0) continue;
+      const change = parsePorcelainFile(line);
+      if (!change || !change.path.startsWith(prefix)) continue;
+      const rest = change.path.slice(prefix.length);
+      // A trailing slash means git collapsed a directory anyway — under
+      // `-uall` that happens for a directory it was told to ignore, and the
+      // name is still the child.
+      const slash = rest.indexOf("/");
+      const name = slash === -1 ? rest.replace(/\/$/, "") : rest.slice(0, slash);
+      if (name.length === 0) continue;
+      const kind: GitDirEntry["kind"] =
+        slash === -1 && !rest.endsWith("/") ? "file" : "dir";
+      const existing = children.get(name);
+      if (existing) existing.statuses.add(change.status);
+      else children.set(name, { kind, statuses: new Set([change.status]) });
+    }
+
+    const entries: GitDirEntry[] = [...children.entries()]
+      .map(([name, child]) => {
+        // A folder gets a status only when its descendants agree on one.
+        // Disagreement is a real answer, and the row says so in words rather
+        // than picking a winner.
+        const only = child.statuses.size === 1 ? [...child.statuses][0] : undefined;
+        return {
+          name,
+          kind: child.kind,
+          ...(only ? { status: only as GitFileChange["status"] } : {}),
+        };
+      })
+      .sort((a, b) =>
+        a.kind === b.kind
+          ? a.name.localeCompare(b.name)
+          : a.kind === "dir"
+            ? -1
+            : 1,
+      );
+
+    const truncated = entries.length > GIT_MAX_DIR_ENTRIES;
+    return {
+      ok: true,
+      entries: truncated ? entries.slice(0, GIT_MAX_DIR_ENTRIES) : entries,
+      truncated,
+    };
   }
 
   /**
@@ -570,6 +654,7 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     status,
     diffFile,
     readFile,
+    listDir,
     commit,
     push,
     defaultBranch,
@@ -578,6 +663,31 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     init,
     remoteUrl,
     setGlobalIdentity,
+  };
+}
+
+/** One non-header line of `git status --porcelain=v1`, as a change.
+ *
+ * A rename is printed as `old -> new`, so the raw remainder is two paths and a
+ * separator rather than one path. Split them: the new name is what the row is
+ * *about*, and the old one is what makes a diff of it read as a rename instead
+ * of a whole-file addition. Splitting on the last ` -> ` rather than the first,
+ * since a filename may legitimately contain one.
+ *
+ * Shared by `status` and `listDir` — the same output, read once for a whole
+ * worktree and once for one folder of it. */
+function parsePorcelainFile(line: string): GitFileChange | undefined {
+  if (line.length < 4) return undefined;
+  const code = line.slice(0, 2);
+  const raw = line.slice(3).trim();
+  if (raw.length === 0) return undefined;
+  const arrow = code.includes("R") ? raw.lastIndexOf(" -> ") : -1;
+  const filePath = arrow === -1 ? raw : raw.slice(arrow + 4);
+  const previousPath = arrow === -1 ? undefined : raw.slice(0, arrow);
+  return {
+    path: filePath,
+    status: statusFromCode(code),
+    ...(previousPath ? { previousPath } : {}),
   };
 }
 

@@ -5,6 +5,14 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
 
+## 0.4.1 — 2026-09-11
+
+### Fixed
+
+- Clicking a new folder in the project window now lists the files inside it, each one opening its
+  own view — and folders within folders open the same way, however deep they go. It used to open an
+  empty file view that could never load.
+
 ## 0.4.0 — 2026-09-11
 
 ### Added

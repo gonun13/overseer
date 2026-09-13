@@ -12,6 +12,7 @@ export type WindowKind =
   | "help"
   | "changelog"
   | "diff"
+  | "folder"
   | "loopModels"
   | "projectCreate"
   | "project"
@@ -100,6 +101,15 @@ export const WINDOW_SPEC: Record<
   // no bound at all — the same reasoning console and changelog are resizable
   // under.
   diff: { title: "diff", x: 700, y: 260, w: 640, h: 400 },
+  // Opened by clicking a folder row in the project window, or a folder inside
+  // another one of these — the payload carries the project and the folder and
+  // doubles as the dedupe key, so walking back into a folder raises the window
+  // already open on it rather than stacking a second copy.
+  //
+  // Narrower than the diff it sits beside: a listing is one short name per
+  // row, so the diff's width would be mostly empty. Offset from it so a folder
+  // and a file opened out of it can be read together.
+  folder: { title: "folder", x: 720, y: 290, w: 520 },
   // Opened from the providers window's loop tab, one per provider (the
   // payload — a provider id — is also useWindows' dedupe key, so a second
   // click on the same provider raises the existing window). Height is

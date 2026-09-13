@@ -262,6 +262,25 @@ a choice group switching to the file's current contents.
 - The view is **read once, on open and on each toggle**. It does not follow the file: an agent editing
   underneath leaves it stale, and reopening is the refresh.
 
+### 5.6 The folder view
+
+Not every row in the project window is a file. Git reports an untracked directory as a single collapsed row
+ending in a slash rather than as the files under it, and that row opens **a listing of the folder** — there is
+no diff of a directory to show, and the files inside it are what the operator clicked it to see.
+
+- **The list is what a commit made from the project window would take from that folder**, the same framing the
+  file view carries. So an unchanged or ignored child is absent by design; a folder view is not a file browser.
+- **Rows are the project window's rows, one level down.** Same status word on the right, same file tones for
+  new / gone / touched — a file does not change colour for having been reached through a folder.
+- **A folder wears the slash**, so the two kinds are told apart by the name rather than by ink, which is
+  already spoken for by the file's fate. A folder whose children disagree about their status reads `mixed`
+  rather than picking one of them.
+- **Folders nest as deep as the tree does.** A folder row opens another listing, a file row opens the file
+  view (§5.5), and each window is keyed on its own path, so walking back into a folder raises the window
+  already open on it instead of stacking a second copy.
+- **Read once, on open**, like the file view — and truncated past the cap with a note saying how many entries
+  are shown, on the same rule.
+
 ---
 
 ## 6. Permanent furniture

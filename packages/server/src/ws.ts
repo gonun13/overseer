@@ -143,6 +143,68 @@ function gitStepOutcome(result: GitOpResult): DiscoveryOutcome {
   return result.benign ? "blocked" : "failed";
 }
 
+/**
+ * The three-stage containment check every per-file read in a project goes
+ * through, before anything on disk is touched. Returns the project's real
+ * directory, or sends the refusal and returns `undefined`.
+ *
+ * Shared by `project.git.show` and `project.git.list` rather than written
+ * twice: this is the security contract, and a second copy of it is a second
+ * thing to keep correct.
+ *
+ * Stage one is workspace containment for the project itself. Stage two
+ * resolves `relative` against the *real* project directory and checks again —
+ * the frame guard proved the value is relative and free of `..`, which is not
+ * the same as proving where it lands once joined. That check is lexical rather
+ * than another `isInsideWorkspace`, which realpaths its candidate and so
+ * requires the path to exist: a deleted file is precisely the case an operator
+ * most wants a diff for, and it has nothing left on disk to resolve. Stage
+ * three, for anything still on disk, re-resolves through symlinks — a name
+ * that lands inside the project can still *point* outside it, and reading
+ * content follows links, so `ln -s /etc/passwd notes.md` inside a project
+ * would otherwise be served verbatim. (Git needs no such guard: it records a
+ * symlink as its target string, so a diff shows the link, never what it aims
+ * at.)
+ */
+async function resolveInProject(
+  projectPath: string,
+  relative: string,
+  about: string,
+  send: (message: ServerMessage) => void,
+): Promise<string | undefined> {
+  const refuse = (message: string) => {
+    send({ type: "error", about, benign: true, message });
+    return undefined;
+  };
+
+  if (!(await isInsideWorkspace(projectPath))) {
+    return refuse("a project must be a path inside the workspace");
+  }
+
+  let projectDir: string;
+  try {
+    projectDir = await realpath(projectPath);
+  } catch {
+    return refuse("that project is no longer on disk");
+  }
+
+  const target = path.resolve(projectDir, relative);
+  if (!target.startsWith(projectDir + path.sep)) {
+    return refuse("a file must be inside the project");
+  }
+
+  try {
+    const real = await realpath(target);
+    if (!real.startsWith(projectDir + path.sep)) {
+      return refuse("a file must be inside the project");
+    }
+  } catch {
+    // Not on disk — nothing to resolve, and nothing to leak.
+  }
+
+  return projectDir;
+}
+
 export function attachWebSocketServer(httpServer: Server): {
   wss: WebSocketServer;
   broadcast: (message: ServerMessage) => void;
@@ -642,72 +704,13 @@ export function attachWebSocketServer(httpServer: Server): {
           return;
         }
         case "project.git.show": {
-          if (!(await isInsideWorkspace(parsed.path))) {
-            send({
-              type: "error",
-              about: "project.git.show",
-              benign: true,
-              message: "a project must be a path inside the workspace",
-            });
-            return;
-          }
-          // Second stage. The frame guard proved `file` is relative and free
-          // of `..`, which is not the same as proving where it lands once
-          // joined — so it is resolved against the *real* project directory
-          // and checked again here, before anything reads it.
-          //
-          // Compared lexically rather than through `isInsideWorkspace`, which
-          // realpaths its candidate and so requires the path to exist: a
-          // deleted file is precisely the case an operator most wants a diff
-          // for, and it has nothing left on disk to resolve. The existence-
-          // dependent check belongs to the content read, which cannot run on a
-          // missing file anyway, and `readFile` does it there.
-          let projectDir: string;
-          try {
-            projectDir = await realpath(parsed.path);
-          } catch {
-            send({
-              type: "error",
-              about: "project.git.show",
-              benign: true,
-              message: "that project is no longer on disk",
-            });
-            return;
-          }
-          const target = path.resolve(projectDir, parsed.file);
-          if (!target.startsWith(projectDir + path.sep)) {
-            send({
-              type: "error",
-              about: "project.git.show",
-              benign: true,
-              message: "a file must be inside the project",
-            });
-            return;
-          }
-          // Third stage, for anything still on disk: a name that lands inside
-          // the project can still *point* outside it. Reading content follows
-          // symlinks, so `ln -s /etc/passwd notes.md` inside a project would
-          // otherwise be served verbatim — the same escape the workspace guard
-          // exists to stop one level up, and the agent writes into these
-          // directories. A file that does not resolve is a deleted one, which
-          // the lexical check above has already cleared and which no read can
-          // reach anyway. (Git needs no such guard: it records a symlink as
-          // its target string, so a diff shows the link, never what it aims
-          // at.)
-          try {
-            const real = await realpath(target);
-            if (!real.startsWith(projectDir + path.sep)) {
-              send({
-                type: "error",
-                about: "project.git.show",
-                benign: true,
-                message: "a file must be inside the project",
-              });
-              return;
-            }
-          } catch {
-            // Not on disk — nothing to resolve, and nothing to leak.
-          }
+          const projectDir = await resolveInProject(
+            parsed.path,
+            parsed.file,
+            "project.git.show",
+            send,
+          );
+          if (projectDir === undefined) return;
           // Deliberately no `announceGitOp`: this reads, it does not act, and
           // a broadcast step per file click would raise the overseer's own
           // window every time an operator glanced at a diff.
@@ -730,6 +733,35 @@ export function attachWebSocketServer(httpServer: Server): {
             file: parsed.file,
             mode: parsed.mode,
             text: result.text,
+            truncated: result.truncated,
+          });
+          return;
+        }
+        case "project.git.list": {
+          // Same containment contract as `show`, and the same silence: a
+          // listing is a read, so nothing is announced for it.
+          const projectDir = await resolveInProject(
+            parsed.path,
+            parsed.folder,
+            "project.git.list",
+            send,
+          );
+          if (projectDir === undefined) return;
+          const result = await projectGit.listDir(projectDir, parsed.folder);
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "project.git.list",
+              benign: result.benign,
+              message: result.reason,
+            });
+            return;
+          }
+          send({
+            type: "project.git.list",
+            path: parsed.path,
+            folder: parsed.folder,
+            entries: result.entries,
             truncated: result.truncated,
           });
           return;
