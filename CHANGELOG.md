@@ -5,6 +5,20 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
 
+## 0.4.6 — 2026-09-14
+
+### Fixed
+
+- Pushing, committing and the project list no longer fail with "fatal: detected dubious ownership"
+  after you run git on the host in the same project.
+
+## 0.4.5 — 2026-09-14
+
+### Fixed
+
+- The block cursor in a session's compose area follows the caret, so you can see where an edit will
+  land when you move back through what you typed.
+
 ## 0.4.4 — 2026-09-13
 
 ### Fixed

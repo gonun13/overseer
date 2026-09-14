@@ -10,7 +10,7 @@ import {
   type GitFileChange,
 } from "@overseer/protocol";
 import { readGitIdentity } from "../memory/internal.js";
-import { resolveIdentityEnv, type GitIdentity } from "./env.js";
+import { resolveIdentityEnv, safeDirectory, type GitIdentity } from "./env.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -88,7 +88,7 @@ async function defaultRun(
   args: string[],
   env?: NodeJS.ProcessEnv,
 ): Promise<{ stdout: string; stderr: string }> {
-  return execFileAsync("git", args, {
+  return execFileAsync("git", [...safeDirectory(dir), ...args], {
     cwd: dir,
     timeout: 10_000,
     // Without this, `execFile`'s implicit 1 MiB decides how big a diff may be,

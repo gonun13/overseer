@@ -97,3 +97,24 @@ export async function resolveIdentityEnv(
   if (await hasIdentity(dir)) return undefined;
   return identityEnv(FALLBACK_IDENTITY);
 }
+
+/**
+ * The `-c safe.directory=<dir>` prefix every spawned git carries.
+ *
+ * Docker Desktop's VirtioFS layer briefly reports a worktree directory as uid
+ * 0 to the container after the *host* runs git in it, while `.git` still reads
+ * the real uid and the process euid is unchanged. Git's ownership check sees
+ * the mismatch and refuses with "fatal: detected dubious ownership", so an
+ * ordinary status, commit or push fails for about a second for no reason the
+ * operator can see — and because the server spawns git per call, that one bad
+ * window surfaces as an error frame the window keeps showing.
+ *
+ * `safe.directory` is protected config: git honours it from the command line
+ * but deliberately ignores it from the repository's own config, so this has to
+ * travel as argv rather than be written once into a file. It waives only the
+ * ownership check, which is what the FUSE layer is lying about; nothing else
+ * about the repository is trusted differently.
+ */
+export function safeDirectory(dir: string): string[] {
+  return ["-c", `safe.directory=${dir}`];
+}

@@ -3,6 +3,7 @@ import { stat } from "node:fs/promises";
 import path from "node:path";
 import { promisify } from "node:util";
 import type { DiscoveredProject } from "@overseer/protocol";
+import { safeDirectory } from "./env.js";
 
 const execFileAsync = promisify(execFile);
 
@@ -88,7 +89,10 @@ async function defaultRun(
   args: string[],
   timeoutMs: number,
 ): Promise<{ stdout: string }> {
-  return execFileAsync("git", args, { cwd: dir, timeout: timeoutMs });
+  return execFileAsync("git", [...safeDirectory(dir), ...args], {
+    cwd: dir,
+    timeout: timeoutMs,
+  });
 }
 
 /** A timeout kill, as opposed to git itself refusing. `execFile` reports the

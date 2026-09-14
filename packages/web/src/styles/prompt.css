@@ -379,13 +379,39 @@
   color: transparent;
 }
 
+/* One block, everywhere it can stand: it takes the width of the cell it is on —
+   a character mid-text, a blank at the end of a line — and prints that cell
+   knocked out, the way a terminal does. The field is monospaced, so every cell
+   is the same block, and the caret neither changes shape nor shifts the text as
+   it walks through a line and off the end of it. */
 .composer-cursor {
   display: inline-block;
   visibility: hidden;
-  width: 8px;
-  height: 1em;
-  vertical-align: text-bottom;
   background: var(--ink);
+  color: var(--void);
+  animation: composer-cursor 0.6s ease-in-out infinite alternate;
+}
+
+/* Blinking is the knock-out coming and going, not a fade: fading would take the
+   covered glyph with it and leave a hole in the line. The glyph is legible
+   throughout — ink on the block, then ink on the page. */
+@keyframes composer-cursor {
+  from {
+    background: var(--ink);
+    color: var(--void);
+  }
+  to {
+    background: transparent;
+    color: var(--ink);
+  }
+}
+
+/* Same bargain as .blink's: no motion, but never nothing — the block is simply
+   there, so the caret is still findable. */
+@media (prefers-reduced-motion: reduce) {
+  .composer-cursor {
+    animation: none;
+  }
 }
 
 .composer-field:focus-within .composer-cursor {

@@ -58,6 +58,7 @@ export {
   FALLBACK_IDENTITY,
   identityEnv,
   resolveIdentityEnv,
+  safeDirectory,
   type GitIdentity,
 } from "./env.js";
 
