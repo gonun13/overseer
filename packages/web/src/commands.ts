@@ -11,7 +11,10 @@ export interface Command {
     | { type: "selector" }
     | { type: "theme" }
     | { type: "close-all" }
-    | { type: "loop" };
+    | { type: "loop" }
+    | { type: "console" }
+    | { type: "shell" }
+    | { type: "tile" };
 }
 
 export const COMMANDS: Command[] = [
@@ -24,14 +27,8 @@ export const COMMANDS: Command[] = [
   {
     name: "sessions",
     aliases: ["session"],
-    help: "list sessions",
+    help: "every session in the workspace, any project",
     action: { type: "open", kind: "sessions" },
-  },
-  {
-    name: "plans",
-    aliases: ["plan"],
-    help: "plans built in this project's sessions",
-    action: { type: "open", kind: "plans" },
   },
   {
     name: "project",
@@ -45,16 +42,22 @@ export const COMMANDS: Command[] = [
     action: { type: "open", kind: "gitConfig" },
   },
   {
-    name: "capabilities",
-    aliases: ["mcp", "skills", "subagents", "agents"],
-    help: "mcp servers, skills, subagents",
-    action: { type: "open", kind: "capabilities" },
+    name: "console",
+    aliases: ["new", "term", "terminal"],
+    help: "new session in the attached provider's cli, in the active project",
+    action: { type: "console" },
   },
   {
-    name: "console",
-    aliases: ["term", "terminal", "shell"],
-    help: "raw terminal into the provider cli",
-    action: { type: "open", kind: "console" },
+    name: "shell",
+    aliases: ["bash", "sh"],
+    help: "a plain shell in the active project",
+    action: { type: "shell" },
+  },
+  {
+    name: "tile",
+    aliases: ["grid", "arrange"],
+    help: "lay every console window out in a grid",
+    action: { type: "tile" },
   },
   {
     name: "loop",

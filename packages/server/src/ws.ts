@@ -8,13 +8,15 @@ import {
   type DiscoveryEvent,
   type DiscoveryOutcome,
   type ServerMessage,
-  type Skill,
   type SpaceOutcome,
-  type Subagent,
 } from "@overseer/protocol";
 import { WebSocketServer, type WebSocket } from "ws";
 import { listAdapters } from "./adapters.js";
-import { consoleError, createConsoleSession } from "./console.js";
+import {
+  consoleError,
+  createConsoleRegistry,
+  type ConsoleRegistry,
+} from "./console-registry.js";
 import { runDiscovery } from "./discovery.js";
 import {
   buildStatusEntry,
@@ -22,7 +24,6 @@ import {
   type OverseerSpace,
 } from "./overseer/space.js";
 import { reportProviderStatus } from "./overseer/provider-status.js";
-import { createProviderOptions } from "./provider-options.js";
 import { createUsageCheck } from "./usage-check.js";
 import {
   readLoopConfig,
@@ -37,10 +38,7 @@ import {
   startLogin,
   submitCode,
 } from "./login.js";
-import {
-  createSessionSupervisor,
-  sessionError,
-} from "./session-supervisor.js";
+import { createSessionIndex } from "./session-index.js";
 import {
   clearActionRegister,
   clearRunLogs,
@@ -65,8 +63,6 @@ import {
 } from "./personality-file-watcher.js";
 import { refreshPendingUsage } from "./usage-refresh.js";
 import { createProject } from "./project-create.js";
-import { skills } from "./skills.js";
-import { subagents } from "./subagents.js";
 import { gitSsh, parseRemoteHost, projectGit, type GitOpResult } from "./vcs/index.js";
 import { isInsideWorkspace, scanWorkspace } from "./workspace.js";
 
@@ -212,13 +208,18 @@ async function resolveInProject(
   return projectDir;
 }
 
-export function attachWebSocketServer(httpServer: Server): {
+export function attachWebSocketServer(
+  httpServer: Server,
+  opts: { hookBase?: string } = {},
+): {
   wss: WebSocketServer;
+  /** Every console the server runs — `index.ts` routes CLI hooks into it. */
+  consoles: ConsoleRegistry;
   broadcast: (message: ServerMessage) => void;
   /** The overseer space, for the monitors `index.ts` starts alongside. */
   space: OverseerSpace;
-  /** Rebuild and broadcast the sessions list — for monitors that notice
-   * sessions the supervisor did not start (transcript-monitor.ts). */
+  /** Rebuild and broadcast the sessions list — for the monitor that notices
+   * a transcript change (transcript-monitor.ts). */
   refreshSessions: () => Promise<unknown>;
 } {
   const wss = new WebSocketServer({ noServer: true });
@@ -230,58 +231,10 @@ export function attachWebSocketServer(httpServer: Server): {
     }
   };
 
-  /**
-   * The subagent inventory is a fact about the instance, so it goes to every
-   * tab — the same reasoning `provider.options` broadcasts on.
-   */
-  const broadcastSubagents = (result: {
-    providerId: string;
-    projectDir: string;
-    subagents: Subagent[];
-  }): void => {
-    broadcast({
-      type: "subagent.list",
-      providerId: result.providerId,
-      projectDir: result.projectDir,
-      subagents: result.subagents,
-    });
-  };
-
-  /**
-   * Re-read after a write or delete and push the result, rather than patching
-   * a local copy: one extra directory read buys a broadcast that is what is
-   * actually on disk, including the rename a write may have performed.
-   *
-   * Silent on failure. The write itself already succeeded and has been
-   * acknowledged; a second error frame about the refresh would report a
-   * failure the operator's action did not have.
-   */
-  const pushSubagents = async (): Promise<void> => {
-    const result = await subagents.list();
-    if (result.ok) broadcastSubagents(result);
-  };
-
-  /** The skill inventory is a fact about the instance, for the same reason the
-   * subagent one is. */
-  const broadcastSkills = (result: {
-    providerId: string;
-    projectDir: string;
-    skills: Skill[];
-  }): void => {
-    broadcast({
-      type: "skill.list",
-      providerId: result.providerId,
-      projectDir: result.projectDir,
-      skills: result.skills,
-    });
-  };
-
-  /** Re-read after an import or delete, for the same reasons `pushSubagents`
-   * does — and silent on failure for the same one. */
-  const pushSkills = async (): Promise<void> => {
-    const result = await skills.list();
-    if (result.ok) broadcastSkills(result);
-  };
+  const consoles = createConsoleRegistry({
+    broadcast,
+    ...(opts.hookBase !== undefined ? { hookBase: opts.hookBase } : {}),
+  });
 
   /**
    * The one door every service reports to the operator through. Created here
@@ -289,8 +242,9 @@ export function attachWebSocketServer(httpServer: Server): {
    */
   const space = createOverseerSpace(broadcast);
 
-  const sessionSupervisor = createSessionSupervisor(broadcast);
-  const providerOptions = createProviderOptions();
+  const sessionIndex = createSessionIndex(broadcast, {
+    isRunning: (sessionId) => consoles.findBySession(sessionId) !== undefined,
+  });
   const usageCheck = createUsageCheck();
 
   /**
@@ -512,10 +466,9 @@ export function attachWebSocketServer(httpServer: Server): {
       send({ type: "space.replay", ...replayed });
     }
 
-    // One raw CLI console per socket. Torn down with the connection so a
-    // closed tab cannot leave a `claude` TUI running in the container.
-    const consoleSession = createConsoleSession(send);
-    ws.on("close", () => consoleSession.dispose());
+    // Consoles outlive the socket: a closed tab only stops watching them.
+    ws.on("close", () => consoles.detachAll(send));
+    send({ type: "console.list", consoles: consoles.list() });
 
     // Welcome needs returning + name before discovery runs, so load both here
     // rather than waiting for the pass. Theme comes from the same snapshot.
@@ -538,8 +491,7 @@ export function attachWebSocketServer(httpServer: Server): {
       // only holds for a tab that happens to click the button again.
       const auth = currentAuthState();
       if (auth !== undefined) send(auth);
-      void sessionSupervisor.list();
-      void sessionSupervisor.listPlans();
+      void sessionIndex.list();
     })();
 
     ws.on("message", async (raw) => {
@@ -622,8 +574,6 @@ export function attachWebSocketServer(httpServer: Server): {
             return;
           }
           send({ type: "project.selected", path: parsed.path });
-          void sessionSupervisor.list();
-          void sessionSupervisor.listPlans();
           // Ask the remote where it is, now that this is the project being
           // looked at. Not awaited: an unreachable remote must not hold up the
           // selection, and the window opens on the local view either way — the
@@ -1021,7 +971,6 @@ export function attachWebSocketServer(httpServer: Server): {
             return;
           }
           send({ type: "provider.connected", id: parsed.id });
-          void sessionSupervisor.list();
           return;
         }
         // Auth state always goes out on `broadcast`, never on `send`: a login
@@ -1201,193 +1150,44 @@ export function attachWebSocketServer(httpServer: Server): {
           return;
         }
         case "console.open": {
-          const result = await consoleSession.open(
-            parsed.cols,
-            parsed.rows,
-            parsed.mode,
-            parsed.takeover,
-          );
-          // Suffix the mode so a refusal lands in the window that asked —
-          // a socket can hold both a raw CLI console and a loop console.
-          if (!result.ok) {
-            send(
-              consoleError(
-                parsed.mode === "loop" ? "console.open.loop" : "console.open",
-                result.reason,
-              ),
-            );
+          const { type: _type, reqId, ...request } = parsed;
+          const result = await consoles.open(request);
+          // Ack only — the window that mounts for this id attaches itself, so
+          // its replay lands in a terminal that exists.
+          if (result.ok) {
+            send({ type: "console.opened", reqId, console: result.console });
+          } else {
+            send({ type: "console.failed", reqId, reason: result.reason });
           }
           return;
         }
+        case "console.attach": {
+          const result = consoles.attach(parsed.id, send, parsed.cols, parsed.rows);
+          if (!result.ok) send(consoleError("console.attach", result.reason));
+          return;
+        }
+        case "console.detach":
+          consoles.detach(parsed.id, send);
+          return;
         case "console.input": {
-          const result = consoleSession.input(parsed.id, parsed.data);
+          const result = consoles.input(parsed.id, parsed.data);
           if (!result.ok) send(consoleError("console.input", result.reason));
           return;
         }
         case "console.resize": {
-          const result = consoleSession.resize(
-            parsed.id,
-            parsed.cols,
-            parsed.rows,
-          );
+          const result = consoles.resize(parsed.id, parsed.cols, parsed.rows);
           if (!result.ok) send(consoleError("console.resize", result.reason));
           return;
         }
-        case "console.close": {
-          const result = consoleSession.close(parsed.id);
-          if (!result.ok) send(consoleError("console.close", result.reason));
+        case "console.kill":
+          consoles.kill(parsed.id);
           return;
-        }
-        case "provider.options": {
-          const result = await providerOptions.read();
-          if (!result.ok) {
-            send({
-              type: "error",
-              about: "provider.options",
-              benign: true,
-              message: result.reason,
-            });
-            return;
-          }
-          // Broadcast: what the provider offers is a fact about the instance,
-          // not about the socket that asked, and a second tab must not have to
-          // spawn the CLI again to learn it.
-          broadcast({
-            type: "provider.options",
-            providerId: result.providerId,
-            projectDir: result.projectDir,
-            options: result.options,
-          });
+        case "console.dismiss":
+          consoles.dismiss(parsed.id);
           return;
-        }
-        case "subagent.list": {
-          const result = await subagents.list();
-          if (!result.ok) {
-            send({
-              type: "error",
-              about: "subagent.list",
-              benign: true,
-              message: result.reason,
-            });
-            return;
-          }
-          broadcastSubagents(result);
+        case "console.list":
+          send({ type: "console.list", consoles: consoles.list() });
           return;
-        }
-        case "subagent.write": {
-          const result = await subagents.write({
-            draft: {
-              name: parsed.name,
-              description: parsed.description,
-              prompt: parsed.prompt,
-              model: parsed.model,
-              tools: parsed.tools,
-              scope: parsed.scope,
-            },
-            ...(parsed.previousName !== undefined
-              ? {
-                  previous: {
-                    name: parsed.previousName,
-                    // A rename within one scope does not resend the scope.
-                    scope: parsed.previousScope ?? parsed.scope,
-                  },
-                }
-              : {}),
-          });
-          if (!result.ok) {
-            send({
-              type: "error",
-              about: "subagent.write",
-              benign: result.benign,
-              message: result.reason,
-            });
-            return;
-          }
-          // To the asker, so its form can close on its own request rather than
-          // on any write that happens to land.
-          send({ type: "subagent.written", subagent: result.subagent });
-          await pushSubagents();
-          return;
-        }
-        case "subagent.delete": {
-          const result = await subagents.remove({
-            name: parsed.name,
-            scope: parsed.scope,
-          });
-          if (!result.ok) {
-            send({
-              type: "error",
-              about: "subagent.delete",
-              benign: result.benign,
-              message: result.reason,
-            });
-            return;
-          }
-          send({
-            type: "subagent.deleted",
-            name: parsed.name,
-            scope: parsed.scope,
-          });
-          await pushSubagents();
-          return;
-        }
-        case "skill.list": {
-          const result = await skills.list();
-          if (!result.ok) {
-            send({
-              type: "error",
-              about: "skill.list",
-              benign: true,
-              message: result.reason,
-            });
-            return;
-          }
-          broadcastSkills(result);
-          return;
-        }
-        case "skill.import": {
-          const result = await skills.importSkill({
-            source: parsed.source,
-            scope: parsed.scope,
-            ...(parsed.name !== undefined ? { name: parsed.name } : {}),
-          });
-          if (!result.ok) {
-            send({
-              type: "error",
-              about: "skill.import",
-              benign: result.benign,
-              message: result.reason,
-            });
-            return;
-          }
-          // To the asker, so its form can close on its own request rather than
-          // on any import that happens to land.
-          send({
-            type: "skill.imported",
-            skills: result.skills,
-            skipped: result.skipped,
-          });
-          await pushSkills();
-          return;
-        }
-        case "skill.delete": {
-          const result = await skills.remove({
-            name: parsed.name,
-            scope: parsed.scope,
-          });
-          if (!result.ok) {
-            send({
-              type: "error",
-              about: "skill.delete",
-              benign: result.benign,
-              message: result.reason,
-            });
-            return;
-          }
-          send({ type: "skill.deleted", name: parsed.name, scope: parsed.scope });
-          await pushSkills();
-          return;
-        }
         case "provider.checkUsage": {
           const result = await usageCheck.check();
           if (!result.ok) {
@@ -1408,92 +1208,14 @@ export function attachWebSocketServer(httpServer: Server): {
           });
           return;
         }
-        case "session.list": {
-          const result = await sessionSupervisor.list();
-          if (!result.ok) send(sessionError("session.list", result.reason));
+        case "session.list":
+          await sessionIndex.list();
           return;
-        }
-        case "session.create": {
-          const result = await sessionSupervisor.create({
-            model: parsed.model,
-            permissionMode: parsed.permissionMode,
-            agent: parsed.agent,
-            name: parsed.name,
-          });
-          if (!result.ok) send(sessionError("session.create", result.reason));
-          return;
-        }
-        case "session.open": {
-          const result = await sessionSupervisor.open(parsed.sessionId);
-          if (!result.ok) send(sessionError("session.open", result.reason));
-          return;
-        }
-        case "session.send": {
-          const result = await sessionSupervisor.send(parsed.sessionId, parsed.text);
-          if (!result.ok) send(sessionError("session.send", result.reason));
-          return;
-        }
-        case "session.model": {
-          const result = await sessionSupervisor.setModel(
-            parsed.sessionId,
-            parsed.model,
-          );
-          if (!result.ok) send(sessionError("session.model", result.reason));
-          return;
-        }
-        case "session.mode": {
-          const result = await sessionSupervisor.setPermissionMode(
-            parsed.sessionId,
-            parsed.mode,
-          );
-          if (!result.ok) send(sessionError("session.mode", result.reason));
-          return;
-        }
-        case "session.interrupt": {
-          const result = sessionSupervisor.interrupt(parsed.sessionId);
-          if (!result.ok) {
-            send(sessionError("session.interrupt", result.reason));
-          }
-          return;
-        }
-        case "approval.resolve": {
-          const result = sessionSupervisor.resolveApproval(
-            parsed.sessionId,
-            parsed.requestId,
-            parsed.decision,
-          );
-          if (!result.ok) send(sessionError("approval.resolve", result.reason));
-          return;
-        }
-        case "session.close": {
-          const result = await sessionSupervisor.close(parsed.sessionId);
-          if (!result.ok) send(sessionError("session.close", result.reason));
-          return;
-        }
         case "session.delete": {
-          const result = await sessionSupervisor.delete(parsed.sessionId);
-          if (!result.ok) send(sessionError("session.delete", result.reason));
-          return;
-        }
-        // The loop's own provider/model config — independent of the app's
-        // attached provider above. Broadcast, not sent to one socket: a
-        // change from any tab has to land in every tab's loop window.
-        case "plan.list": {
-          const result = await sessionSupervisor.listPlans();
-          if (!result.ok) send(sessionError("plan.list", result.reason));
-          return;
-        }
-        case "plan.status": {
-          const result = await sessionSupervisor.setPlanStatus(
-            parsed.planId,
-            parsed.status,
-          );
-          if (!result.ok) send(sessionError("plan.status", result.reason));
-          return;
-        }
-        case "plan.implement": {
-          const result = await sessionSupervisor.implementPlan(parsed.planId);
-          if (!result.ok) send(sessionError("plan.implement", result.reason));
+          const result = await sessionIndex.delete(parsed.sessionId);
+          if (!result.ok) {
+            send({ type: "error", about: "session.delete", benign: true, message: result.reason });
+          }
           return;
         }
         case "loop.config.read": {
@@ -1553,14 +1275,9 @@ export function attachWebSocketServer(httpServer: Server): {
 
   return {
     wss,
+    consoles,
     broadcast,
     space,
-    // Plans are read out of the same transcripts, so whatever wakes the
-    // session list wakes them too — a plan proposed in a session Overseer
-    // never started still appears.
-    refreshSessions: async () => {
-      await sessionSupervisor.list();
-      await sessionSupervisor.listPlans();
-    },
+    refreshSessions: () => sessionIndex.list(),
   };
 }

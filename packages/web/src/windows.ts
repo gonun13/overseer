@@ -2,12 +2,6 @@ export type WindowKind =
   | "overseer"
   | "providers"
   | "sessions"
-  | "plans"
-  | "chat"
-  | "capabilities"
-  | "subagent"
-  | "skillImport"
-  | "context"
   | "console"
   | "help"
   | "changelog"
@@ -27,7 +21,7 @@ export interface OpenWindow {
   x: number;
   y: number;
   w: number;
-  /** Body height when the kind is resizable (console, chat). Absent = CSS default. */
+  /** Body height when the kind is resizable (console, diff…). Absent = CSS default. */
   h?: number;
   /** Stacking order. DOM order stays fixed so clicks survive a raise. */
   z: number;
@@ -60,29 +54,11 @@ export const WINDOW_SPEC: Record<
   // viewport, and loopModels rides a fixed step above it.
   providers: { title: "providers", x: 9999, y: 9999, w: 420 },
   sessions: { title: "sessions", x: 96, y: 168, w: 620 },
-  // Mid-bottom: spawn position is computed in useWindows from the viewport so
-  // a conversation opens near the hand — over the middle of the field, clear of
-  // the prompt terminal that keeps the very bottom. Height is operator-
-  // resizable from the bottom-right grip. The title is per-session, so this
-  // one is only the fallback for a window opened without one.
-  chat: { title: "session", x: 9999, y: 9999, w: 560, h: 420 },
-  // Under the project panel, left-aligned with it: plans belong to a project,
-  // and the operator reads the two together. y is the 9999 sentinel — the
-  // panel's own height depends on how many projects there are and whether its
-  // list is open, so the spawn is computed in useWindows rather than assumed
-  // here. Height is operator-resizable: a busy project accumulates plans.
-  plans: { title: "plans", x: 26, y: 9999, w: 520, h: 360 },
-  capabilities: { title: "capabilities", x: 150, y: 250, w: 540 },
-  // Resizable, unlike most: the instructions box is the point of the window,
-  // and a long prompt in a fixed body is what would make it unusable.
-  subagent: { title: "subagent", x: 260, y: 200, w: 560, h: 420 },
-  // Not resizable, unlike the subagent editor: there is no prose box here, so
-  // the window is as tall as its two short forms and no taller.
-  skillImport: { title: "import skill", x: 280, y: 220, w: 560 },
-  context: { title: "context", x: 120, y: 300, w: 500 },
-  // Mid-right: spawn position is computed in useWindows from the viewport so
-  // it sits on the right edge, vertically centred. Height is operator-
-  // resizable from the bottom-right grip.
+  // One per console — any number, across projects. Mid-right: spawn position
+  // is computed in useWindows from the viewport, and repeats cascade. The
+  // payload is the console id (or `pending:<reqId>` until the server
+  // answers). Height is operator-resizable from the bottom-right grip, and
+  // the layout survives a reload (console-layout.ts).
   console: { title: "console", x: 9999, y: 9999, w: 720, h: 480 },
   help: { title: "help", x: 380, y: 190, w: 560 },
   // Beside help, offset so the two can sit open together — they answer the
@@ -92,9 +68,7 @@ export const WINDOW_SPEC: Record<
   changelog: { title: "changelog", x: 420, y: 220, w: 560, h: 400 },
   // Opened by clicking a changed file in the project window — the payload
   // carries the project and the file, and doubles as the dedupe key, so a
-  // second click on the same row raises the window it already opened. Also
-  // opened from a tool turn's inspect control, which passes a bare target and
-  // still gets the unavailable note.
+  // second click on the same row raises the window it already opened.
   //
   // Wider and taller than the fixed kinds: a diff's line length is the file's
   // and not ours, so a narrow frame wraps every line twice, and its length has

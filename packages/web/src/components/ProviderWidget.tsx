@@ -184,7 +184,7 @@ export function ProviderWidget({
           className="widget-console"
           onClick={onOpenConsole}
         >
-          open <span className="widget-console-word">console</span>
+          new <span className="widget-console-word">session</span>
         </button>
       )}
     </div>

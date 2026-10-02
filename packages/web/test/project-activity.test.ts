@@ -1,68 +1,51 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { Project, Session } from "../src/domain.ts";
-import { projectsWithSessionActivity } from "../src/state/project-activity.ts";
+import type { ConsoleInfo } from "@overseer/protocol";
+import type { Project } from "../src/domain.ts";
+import { projectsWithConsoleActivity } from "../src/state/project-activity.ts";
 
-describe("projectsWithSessionActivity", () => {
+function consoleIn(projectPath: string, extra: Partial<ConsoleInfo>): ConsoleInfo {
+  return {
+    id: `${projectPath}-${extra.activity ?? "idle"}`,
+    kind: "agent",
+    projectPath,
+    title: "claude-code",
+    startedAt: "2026-10-02T00:00:00Z",
+    status: "running",
+    activity: "idle",
+    hooked: true,
+    ...extra,
+  };
+}
+
+describe("projectsWithConsoleActivity", () => {
   const projects: Project[] = [
-    {
-      id: "/workspace/a",
-      name: "a",
-      path: "/workspace/a",
-      branch: "main",
-      activity: "idle",
-    },
-    {
-      id: "/workspace/b",
-      name: "b",
-      path: "/workspace/b",
-      branch: "main",
-      activity: "idle",
-    },
+    { id: "/workspace/a", name: "a", path: "/workspace/a", branch: "main", activity: "idle" },
+    { id: "/workspace/b", name: "b", path: "/workspace/b", branch: "main", activity: "idle" },
   ];
 
-  it("marks a project working when a session in it is working", () => {
-    const sessions: Session[] = [
-      {
-        id: "s1",
-        activity: "working",
-        name: "fix bug",
-        projectId: "/workspace/a",
-        branch: "main",
-        model: "",
-        cost: "",
-        doing: "",
-      },
-    ];
-    const next = projectsWithSessionActivity(projects, sessions);
+  it("marks a project working when a console in it is working", () => {
+    const next = projectsWithConsoleActivity(projects, [
+      consoleIn("/workspace/a", { activity: "working" }),
+    ]);
     assert.equal(next[0]?.activity, "working");
     assert.equal(next[1]?.activity, "idle");
   });
 
-  it("prefers attention over working on the same project", () => {
-    const sessions: Session[] = [
-      {
-        id: "s1",
-        activity: "working",
-        name: "a",
-        projectId: "/workspace/a",
-        branch: "main",
-        model: "",
-        cost: "",
-        doing: "",
-      },
-      {
-        id: "s2",
-        activity: "attention",
-        name: "b",
-        projectId: "/workspace/a",
-        branch: "main",
-        model: "",
-        cost: "",
-        doing: "",
-      },
-    ];
-    const next = projectsWithSessionActivity(projects, sessions);
-    assert.equal(next[0]?.activity, "attention");
+  it("prefers a waiting CLI over a working one in the same project", () => {
+    const next = projectsWithConsoleActivity(projects, [
+      consoleIn("/workspace/a", { activity: "working" }),
+      consoleIn("/workspace/a", { activity: "waiting" }),
+    ]);
+    assert.equal(next[0]?.activity, "approval");
+  });
+
+  it("leaves idle and cleanly exited consoles off the light", () => {
+    const next = projectsWithConsoleActivity(projects, [
+      consoleIn("/workspace/a", { activity: "idle" }),
+      consoleIn("/workspace/b", { status: "exited", exitCode: 0 }),
+    ]);
+    assert.equal(next[0], projects[0]);
+    assert.equal(next[1], projects[1]);
   });
 });

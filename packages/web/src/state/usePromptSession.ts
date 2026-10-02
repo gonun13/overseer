@@ -15,13 +15,15 @@ interface PromptTerminalActions {
   openProjectSelector: () => void;
   toggleTheme: () => void;
   openLoop: () => void;
+  openConsole: () => void;
+  openShell: () => void;
+  tileConsoles: () => void;
 }
 
 /**
  * Owns focus and slash-command routing for the prompt terminal. A leading `/`
- * dispatches a UI action; the caller sends anything else to the active
- * project's session. Model transcripts live on those sessions
- * (useChatSessions), not here.
+ * dispatches a UI action; anything else is the opening prompt of a new
+ * console session in the active project (the caller's business).
  */
 export function usePromptSession({
   openWindow,
@@ -30,6 +32,9 @@ export function usePromptSession({
   openProjectSelector,
   toggleTheme,
   openLoop,
+  openConsole,
+  openShell,
+  tileConsoles,
 }: PromptTerminalActions) {
   const [focused, setFocused] = useState(false);
 
@@ -38,8 +43,8 @@ export function usePromptSession({
 
   /**
    * Returns true when the input was a slash command — matched and dispatched,
-   * or unknown and ignored. False means the caller should send it as a session
-   * prompt.
+   * or unknown and ignored. False means the caller should start a session
+   * with it.
    */
   const submit = useCallback(
     (input: string): boolean => {
@@ -65,6 +70,15 @@ export function usePromptSession({
           case "loop":
             openLoop();
             return true;
+          case "console":
+            openConsole();
+            return true;
+          case "shell":
+            openShell();
+            return true;
+          case "tile":
+            tileConsoles();
+            return true;
         }
         return true;
       }
@@ -72,6 +86,9 @@ export function usePromptSession({
     },
     [
       closeAllWindows,
+      openConsole,
+      openShell,
+      tileConsoles,
       openLoop,
       openProjectSelector,
       openSettings,

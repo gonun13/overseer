@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useRef } from "react";
-import type { Project, ProviderInfo, Session } from "../domain";
+import type { ConsoleInfo } from "@overseer/protocol";
+import type { Project, ProviderInfo } from "../domain";
 import type { WindowKind } from "../windows";
 import { deriveSignals, messageFor, type Signal } from "./signals";
 import { message as toneMessage } from "../lang";
@@ -13,7 +14,7 @@ import {
   welcomeNeedsTone,
   wizardMessage,
 } from "./wizard";
-import { projectsWithSessionActivity } from "./project-activity";
+import { projectsWithConsoleActivity } from "./project-activity";
 
 /** Stable empty state so OverseerSpace does not repeat its ranking work during boot. */
 const EMPTY_SIGNALS: Signal[] = [];
@@ -31,12 +32,12 @@ type OpenWindow = (
 export function useShellPresentation(
   wizard: DiscoveryController,
   openWindow: OpenWindow,
-  sessions: Session[] = [],
+  consoles: ConsoleInfo[] = [],
 ) {
   const furniture = furnitureFor(wizard);
   const projects = useMemo(
-    () => projectsWithSessionActivity(projectsFor(wizard), sessions),
-    [wizard, sessions],
+    () => projectsWithConsoleActivity(projectsFor(wizard), consoles),
+    [wizard, consoles],
   );
   const activeProject: Project | undefined =
     projects.find((project) => project.path === wizard.activeProjectPath) ??
@@ -71,8 +72,7 @@ export function useShellPresentation(
       deriveSignals({
         projects,
         activeProject,
-        sessions,
-        capabilities: [],
+        consoles,
         provider,
         rejected: wizard.rejected,
         untrackedFolders: wizard.untrackedFolders,
@@ -83,7 +83,7 @@ export function useShellPresentation(
     [
       projects,
       activeProject,
-      sessions,
+      consoles,
       provider,
       wizard.rejected,
       wizard.untrackedFolders,

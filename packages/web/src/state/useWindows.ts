@@ -50,7 +50,14 @@ export function useWindows() {
   }, []);
 
   const open = useCallback(
-    (kind: WindowKind, payload?: unknown, title?: string, detail?: string) => {
+    (
+      kind: WindowKind,
+      payload?: unknown,
+      title?: string,
+      detail?: string,
+      /** Exact placement — a restored layout, not a fresh spawn. */
+      geometry?: WindowGeometry,
+    ) => {
       setWindows((current) => {
         // Re-summoning a window that's already up raises it rather than stacking a duplicate.
         const existing = current.find(
@@ -61,6 +68,20 @@ export function useWindows() {
         }
 
         const spec = WINDOW_SPEC[kind];
+        if (geometry !== undefined) {
+          return [
+            ...current,
+            {
+              id: `${kind}-${++seq}`,
+              kind,
+              title: title ?? spec.title,
+              ...(detail !== undefined ? { detail } : {}),
+              ...clampGeometry(geometry),
+              z: ++zSeq,
+              payload,
+            },
+          ];
+        }
         // Each kind has its own home; only repeats of the same kind cascade off it.
         const cascade = current.filter((w) => w.kind === kind).length * 24;
         // Clamp on spawn so a window never lands off-screen on a small viewport.
@@ -116,50 +137,6 @@ export function useWindows() {
                 56,
                 midRightY(PROVIDERS_ASSUMED_HEIGHT, cascade) - stackAbove,
               ),
-              w: width,
-              h: bodyH,
-              z: ++zSeq,
-              payload,
-            },
-          ];
-        }
-
-        // Plans open under the project panel they belong to, left-aligned
-        // with it (`.projects { left: 26px }` in styles/panels.css). The
-        // panel's height is not fixed — its list grows with the workspace and
-        // collapses to nothing — so this clears the tallest it gets
-        // (`max-height: 44vh` plus its header) rather than measuring a piece
-        // of furniture from inside the window system, the same assumed-
-        // clearance approach the providers branch above takes.
-        if (kind === "plans") {
-          const left = 26;
-          const panelTop = 20;
-          const panelHeader = 34;
-          const gap = 16;
-          const chrome = 36; // tab above the body
-          const below =
-            panelTop +
-            panelHeader +
-            Math.round(window.innerHeight * 0.44) +
-            gap;
-          const y = Math.max(56, below + cascade);
-          // On a short viewport the full body does not fit under the panel.
-          // Give up height rather than the position: sliding up would put the
-          // window over the very furniture it is explaining, which is worse
-          // than a shorter list the operator can resize or scroll.
-          const bodyH = Math.max(
-            160,
-            Math.min(height ?? spec.h ?? 360, window.innerHeight - y - chrome - 24),
-          );
-          return [
-            ...current,
-            {
-              id: `${kind}-${++seq}`,
-              kind,
-              title: title ?? spec.title,
-              ...detailFields,
-              x: left,
-              y,
               w: width,
               h: bodyH,
               z: ++zSeq,
@@ -227,39 +204,6 @@ export function useWindows() {
           ];
         }
 
-        // Chat: mid-bottom — centred on the field and low, so a conversation
-        // opens where the operator is already looking, but above the prompt
-        // terminal and the footer rather than on top of them.
-        if (kind === "chat") {
-          const bodyH = height ?? 420;
-          const chrome = 36; // tab above the body
-          const dockClearance = 140; // prompt terminal + footer
-          return [
-            ...current,
-            {
-              id: `${kind}-${++seq}`,
-              kind,
-              title: title ?? spec.title,
-              ...detailFields,
-              x: Math.max(
-                24,
-                Math.min(
-                  Math.round((window.innerWidth - width) / 2) + cascade,
-                  window.innerWidth - width - 24,
-                ),
-              ),
-              y: Math.max(
-                56,
-                window.innerHeight - bodyH - chrome - dockClearance + cascade,
-              ),
-              w: width,
-              h: bodyH,
-              z: ++zSeq,
-              payload,
-            },
-          ];
-        }
-
         return [
           ...current,
           {
@@ -301,15 +245,13 @@ export function useWindows() {
 
   const closeAll = useCallback(() => setWindows([]), []);
 
-  /** Dismiss every window of a kind (e.g. console when the active project flips). */
+  /** Dismiss every window of a kind. */
   const closeKind = useCallback((kind: WindowKind) => {
     setWindows((current) => current.filter((w) => w.kind !== kind));
   }, []);
 
-  /** Dismiss every window matching a predicate (e.g. a chat window whose
-   * session belongs to a project that just stopped being active — a session
-   * window is scoped to the project its session runs in, the same way
-   * console is scoped to the cwd it opened in). */
+  /** Dismiss every window matching a predicate (e.g. consoles another tab
+   * dismissed). */
   const closeWhere = useCallback((predicate: (w: OpenWindow) => boolean) => {
     setWindows((current) => current.filter((w) => !predicate(w)));
   }, []);
@@ -360,6 +302,75 @@ export function useWindows() {
     [],
   );
 
+  /**
+   * Re-key a window — a console window opens on its request id and becomes
+   * the console's own once the server answers. If a window already shows the
+   * new payload (the server attached an existing console), the placeholder
+   * goes and that one is raised instead.
+   */
+  const rekey = useCallback(
+    (
+      kind: WindowKind,
+      from: unknown,
+      to: unknown,
+      title?: string,
+      detail?: string,
+    ) => {
+      setWindows((current) => {
+        const placeholder = current.find((w) => w.kind === kind && w.payload === from);
+        if (placeholder === undefined) return current;
+        const existing = current.find((w) => w.kind === kind && w.payload === to);
+        if (existing !== undefined) {
+          return current
+            .filter((w) => w !== placeholder)
+            .map((w) => (w === existing ? { ...w, z: ++zSeq } : w));
+        }
+        return current.map((w) =>
+          w === placeholder
+            ? {
+                ...w,
+                payload: to,
+                ...(title !== undefined ? { title } : {}),
+                ...(detail !== undefined ? { detail } : {}),
+              }
+            : w,
+        );
+      });
+    },
+    [],
+  );
+
+  /** Lay every window of a kind out in a grid filling the field. */
+  const tile = useCallback((kind: WindowKind) => {
+    setWindows((current) => {
+      const targets = current.filter((w) => w.kind === kind);
+      if (targets.length === 0) return current;
+      const n = targets.length;
+      const cols = Math.ceil(Math.sqrt(n));
+      const rows = Math.ceil(n / cols);
+      const left = 16;
+      const top = TOP_CLEARANCE + 40;
+      const gap = 12;
+      const chrome = 36; // tab above the body
+      const bottom = 120; // the furniture along the bottom edge
+      const cellW = Math.floor((window.innerWidth - left * 2 - gap * (cols - 1)) / cols);
+      const cellH = Math.floor((window.innerHeight - top - bottom - gap * (rows - 1)) / rows);
+      const placed = new Map<string, OpenWindow>();
+      targets.forEach((w, i) => {
+        const col = i % cols;
+        const row = Math.floor(i / cols);
+        placed.set(w.id, {
+          ...w,
+          x: left + col * (cellW + gap),
+          y: top + row * (cellH + gap),
+          w: Math.max(320, cellW),
+          h: Math.max(160, cellH - chrome),
+        });
+      });
+      return current.map((w) => placed.get(w.id) ?? w);
+    });
+  }, []);
+
   return {
     windows,
     open,
@@ -372,5 +383,27 @@ export function useWindows() {
     move,
     resize,
     retitle,
+    rekey,
+    tile,
+  };
+}
+
+export interface WindowGeometry {
+  x: number;
+  y: number;
+  w: number;
+  h?: number;
+}
+
+/** A saved layout may come from a bigger screen — keep it reachable. */
+function clampGeometry(g: WindowGeometry): WindowGeometry {
+  const w = Math.max(320, Math.min(g.w, window.innerWidth - 32));
+  return {
+    x: Math.max(0, Math.min(g.x, window.innerWidth - w)),
+    y: Math.max(28, Math.min(g.y, window.innerHeight - 120)),
+    w,
+    ...(g.h !== undefined
+      ? { h: Math.max(160, Math.min(g.h, window.innerHeight - 120)) }
+      : {}),
   };
 }

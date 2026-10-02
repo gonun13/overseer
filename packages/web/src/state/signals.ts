@@ -1,5 +1,6 @@
 import type {
   AdapterUsageWindow,
+  ConsoleInfo,
   SpaceMessageKey,
   RejectedCustomization,
   UntrackedFolder,
@@ -10,7 +11,7 @@ import {
   type Activity,
 } from "../status.ts";
 import type { WindowKind } from "../windows";
-import type { Capability, Project, Session } from "../domain";
+import type { Project } from "../domain";
 
 /** Where a signal sends you when you click it. Every signal is actionable —
  * a message the operator can't act on is noise (design-system.md §4). */
@@ -18,9 +19,11 @@ export type Target =
   | { kind: "window"; window: WindowKind; payload?: string }
   | { kind: "settings" }
   | { kind: "selector" }
-  /** Starts a conversation — same as + new session. Standby uses this so the
-   * click is the work, not a detour to the prompt or the sessions list. */
+  /** Starts a new console session — same as + new session. Standby uses this
+   * so the click is the work, not a detour to the prompt or the panel. */
   | { kind: "session" }
+  /** Brings one console's window up. */
+  | { kind: "console"; id: string }
   /** The login surface — opens the providers window on its authenticate step
    * *and* starts the flow, so following the signal is one click, not two. */
   | { kind: "login" }
@@ -49,8 +52,8 @@ export interface Signal {
 export interface WorldState {
   projects: Project[];
   activeProject?: Project;
-  sessions: Session[];
-  capabilities: Capability[];
+  /** Every console the server runs, in any project. */
+  consoles: ConsoleInfo[];
   provider: {
     name: string;
     authenticated: boolean;
@@ -81,7 +84,7 @@ export interface WorldState {
  */
 export function deriveSignals(world: WorldState): Signal[] {
   const signals: Signal[] = [];
-  const { activeProject, sessions, capabilities, provider } = world;
+  const { activeProject, consoles, provider } = world;
 
   // A customization the operator wrote that did not take effect. Reported, not
   // dropped: silently ignoring it leaves them believing it worked, which is
@@ -184,50 +187,33 @@ export function deriveSignals(world: WorldState): Signal[] {
     });
   }
 
-  // A session sitting on a `can_use_tool` request — resolved inline, in that
-  // session's own window, not a separate queue (docs/architecture-design.md
-  // §3's MVP shape, not the 1.x cross-session queue). One signal per session,
-  // each pointing straight at it.
-  for (const session of sessions) {
-    if (session.activity !== "approval") continue;
+  // A CLI waiting on the operator — a permission prompt, a question. Nothing
+  // happens in that console until someone looks at it, so each one is its own
+  // signal pointing straight at its window. Only hooked CLIs can say this;
+  // the rest show up as working or idle.
+  for (const c of consoles) {
+    if (c.status !== "running" || c.activity !== "waiting") continue;
     signals.push({
-      id: `approval-${session.id}`,
-      activity: session.activity,
+      id: `waiting-${c.id}`,
+      activity: "approval",
       kicker: "approval",
-      text: session.doing
-        ? `${session.name} · ${session.doing}.`
-        : `${session.name} needs your approval.`,
-      target: { kind: "window", window: "chat", payload: session.id },
+      text: `${c.title} is waiting for you.`,
+      target: { kind: "console", id: c.id },
     });
   }
 
-  for (const capability of capabilities) {
-    if (!capability.problem) continue;
+  // The overseer is an independent unit, not a narrator of every console — an
+  // agent working is doing exactly what it is supposed to and earns no signal
+  // of its own (docs/overseer.md §3). A process that died with an error is
+  // something the operator did not already know to expect.
+  for (const c of consoles) {
+    if (c.status !== "exited" || c.exitCode === 0 || c.signal !== undefined) continue;
     signals.push({
-      id: `cap-${capability.id}`,
-      activity: capability.activity,
-      kicker: "capability",
-      text: `${capability.name} (${capability.kind}) is unusable: ${capability.problem}.`,
-      target: { kind: "window", window: "capabilities" },
-    });
-  }
-
-  // The overseer is an independent unit, not a narrator of every session — a
-  // session generating a reply is doing exactly what it is supposed to and
-  // earns no signal of its own (docs/overseer.md §3). Only a session that hit
-  // real trouble (a denied permission, a stream error — anything that landed
-  // it on `attention`) is something the operator did not already know to
-  // expect, so only that state is reported here.
-  for (const session of sessions) {
-    if (session.activity !== "attention") continue;
-    signals.push({
-      id: `session-${session.id}`,
-      activity: session.activity,
-      kicker: "session",
-      text: session.doing
-        ? `${session.name} · ${session.doing}.`
-        : `${session.name} needs attention.`,
-      target: { kind: "window", window: "sessions" },
+      id: `exited-${c.id}`,
+      activity: "attention",
+      kicker: "console",
+      text: `${c.title} exited with code ${c.exitCode ?? "?"}.`,
+      target: { kind: "console", id: c.id },
     });
   }
 

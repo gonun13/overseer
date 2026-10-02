@@ -1,4 +1,4 @@
-import type { AdapterUsageWindow, PlanStatus } from "@overseer/protocol";
+import type { AdapterUsageWindow } from "@overseer/protocol";
 import type { Activity } from "./status";
 
 /**
@@ -21,47 +21,21 @@ export interface Project {
 
 export interface Session {
   id: string;
+  /** Lit by the console running this session; idle when none is. */
   activity: Activity;
   name: string;
+  /** The project directory the session belongs to. */
   projectId: string;
+  providerId: string;
   branch: string;
-  model: string;
-  cost: string;
-  /** One line on what it is doing right now, for the overseer space. */
-  doing: string;
-  /** Set when this is a dev-loop run. Such a session lives in a console PTY,
-   * not a chat window, and must never be resumed. */
+  lastActiveAt: string;
+  /** The console running this session right now, if any. */
+  consoleId?: string;
+  /** Set when this is a dev-loop run. Such a session lives in its loop
+   * console and is never resumed in a second CLI. */
   origin?: "loop";
   /** Workspace the loop run belongs to. Only set with `origin: "loop"`. */
   loopWorkspace?: string;
-}
-
-/** One plan in the plans window. `status` is the protocol's word for it,
- * rendered as-is: the operator reads the same vocabulary the server reasons
- * in. */
-export interface Plan {
-  id: string;
-  activity: Activity;
-  title: string;
-  sessionId: string;
-  /** Session name, when the session is still listed. */
-  session?: string;
-  status: PlanStatus;
-  /** Short human-facing time, e.g. "3h ago". */
-  when: string;
-  /** False once the session that built it has been deleted — implementing it
-   * starts a fresh session instead of resuming. */
-  sessionExists: boolean;
-}
-
-export interface Capability {
-  id: string;
-  activity: Activity;
-  name: string;
-  kind: string;
-  tools: number;
-  /** Set when the capability needs the operator before it can be used. */
-  problem?: string;
 }
 
 /** What the provider widget reads out. Empty strings mean "not been told yet",
@@ -95,67 +69,4 @@ export interface WorkspaceInfo {
   staging: string;
 }
 
-export type Turn =
-  | { id: string; kind: "user"; text: string }
-  | {
-      id: string;
-      kind: "agent";
-      text: string;
-      /** The resolved model that produced this reply. Live turns only — a
-       * runtime `set_model` can change what later turns in the same session
-       * run on, so this is read off the turn itself, not the session's
-       * current setting. Backfilled history leaves this unset. */
-      model?: string;
-    }
-  | {
-      id: string;
-      kind: "thinking";
-      /** The model's own reasoning for the reply that follows. Live turns
-       * only — Claude can summarize or withhold this entirely depending on
-       * account/model settings, so a turn is only ever created once real text
-       * has arrived (see `applySessionEvent`); an empty stream leaves no turn
-       * at all rather than a bubble with nothing in it. */
-      text: string;
-    }
-  | {
-      id: string;
-      kind: "tool";
-      tool: string;
-      target: string;
-      /** Live tool calls only — backfilled history leaves this unset. */
-      status?: "running" | "ok" | "error";
-    }
-  | {
-      /** The provider's `can_use_tool` request id. No `toolUseId` correlates
-       * this back to the "tool" turn it follows — the CLI's permission
-       * control request carries no such id — so it renders as its own turn. */
-      id: string;
-      kind: "approval";
-      tool: string;
-      /** Same reading as a tool row's: what the call is acting on. The tool
-       * input itself is not shown — the operator is deciding whether this
-       * tool may touch this target, not reviewing a payload. */
-      target: string;
-      /** Set only when the request came from a question tool. Then the
-       * request is not an approval at all: the provider is asking the
-       * operator something and the answers are what it gets back, so the row
-       * shows the questions instead of allow/deny. */
-      questions?: ApprovalQuestion[];
-    };
-
-/** One question a provider asked through its question tool, as the operator
- * sees it. `multiSelect` questions take any number of options; the rest take
- * exactly one. */
-export type ApprovalQuestion = {
-  question: string;
-  header: string;
-  multiSelect: boolean;
-  options: Array<{ label: string; description: string }>;
-};
-
 export type DiffLine = { kind: "add" | "del" | "ctx"; text: string };
-
-/** A console line. Kept for any non-xterm readouts; the live console window
- * streams through xterm rather than this shape. */
-export type ConsoleLine = { kind: "in" | "out" | "err"; text: string };
-

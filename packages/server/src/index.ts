@@ -3,7 +3,6 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { attachWebSocketServer } from "./ws.js";
-import { listAdapters } from "./adapters.js";
 import { startTranscriptMonitor } from "./transcript-monitor.js";
 import { startUsageRefresh } from "./usage-refresh.js";
 import { startWorkspaceMonitor } from "./workspace-monitor.js";
@@ -28,17 +27,15 @@ const port = Number(process.env.PORT ?? 3000);
 // in production, "127.0.0.1:3001:3000" in dev so both stacks can run at once.
 const host = process.env.HOST ?? "127.0.0.1";
 
+function isLoopback(address: string): boolean {
+  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
+}
+
 const app = express();
 app.use(express.json());
 
 app.get("/api/health", (_req, res) => {
   res.json({ ok: true });
-});
-
-app.get("/api/providers", (_req, res) => {
-  res.json(
-    listAdapters().map(({ id, capabilities }) => ({ id, capabilities })),
-  );
 });
 
 if (process.env.NODE_ENV === "production") {
@@ -58,7 +55,31 @@ if (process.env.NODE_ENV === "production") {
 }
 
 const httpServer = createServer(app);
-const { broadcast, space, refreshSessions } = attachWebSocketServer(httpServer);
+// CLIs run in this same container, so their hooks reach the server on
+// loopback whatever interface it is bound to.
+const { broadcast, space, refreshSessions, consoles } = attachWebSocketServer(
+  httpServer,
+  { hookBase: `http://127.0.0.1:${port}` },
+);
+
+// Lifecycle reports from CLI hooks (console-registry.ts). Loopback only, and
+// the path carries a per-console secret: a hook is a `curl` from a process
+// this server spawned, never a browser.
+app.post("/hooks/:id/:token", (req, res) => {
+  const remote = req.socket.remoteAddress ?? "";
+  if (!isLoopback(remote)) {
+    res.status(403).end();
+    return;
+  }
+  const activity = typeof req.query.activity === "string" ? req.query.activity : "";
+  const ok = consoles.reportHook(req.params.id, req.params.token, activity);
+  res.status(ok ? 204 : 404).end();
+});
+
+process.on("SIGTERM", () => {
+  consoles.dispose();
+  process.exit(0);
+});
 startUsageRefresh(broadcast, space);
 startWorkspaceMonitor(broadcast, space);
 // Sessions the app did not start — a dev loop, a raw console — only exist on

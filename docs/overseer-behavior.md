@@ -17,7 +17,7 @@ Not a zone. The system's own voice — the one component that speaks about the m
 project. It is four things at once:
 
 - **Wizard** — moves a fresh instance from nothing to a working setup.
-- **Supervisor** — watches projects, sessions, capabilities and the provider, and surfaces what changed.
+- **Supervisor** — watches projects, consoles, sessions and the provider, and surfaces what changed — a console waiting on the operator, one that died with an error.
   Project changes under `/workspace` stream from `packages/server/src/workspace-monitor.ts` without rerunning
   discovery.
 - **Automation trigger** — will start agents, scripts, and `claude` commands on the operator's behalf.
@@ -26,7 +26,7 @@ project. It is four things at once:
 
 ### What it is not
 
-- **Not chat.** Conversation happens in a project's provider session; the overseer speaks only about state.
+- **Not chat.** Conversation happens in the provider's own CLI, in a console; the overseer speaks only about state.
 - **Not a dashboard.** Every signal is actionable
   ([UI anti-patterns](ui-ux-design.md#10-anti-patterns)).
 - **Not a log.** The screen shows derived conclusions; records stay in internal memory (§6).

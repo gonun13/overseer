@@ -1,43 +1,31 @@
 import type {
   ClientMessage,
+  ConsoleInfo,
   OverseerTheme,
-  PermissionDecision,
   ServerMessage,
 } from "@overseer/protocol";
-import type { Plan, Project, ProviderInfo, Session } from "../domain";
-import type {
-  SessionOption,
-  SessionOptionKey,
-  SessionSettings,
-} from "../session";
-import type { Chat } from "../state/useChatSessions";
+import type { Project, Session } from "../domain";
 import type { DiscoveryController } from "../state/useDiscovery";
 import type { LoopConfigState, LoopModelsEntry } from "../state/useLoopConfig";
+import { consoleLight, type PendingConsole } from "../state/useConsoles";
+import { PENDING_PREFIX } from "../state/console-layout";
 import type { OpenWindow, WindowKind } from "../windows";
 import { Window } from "./Window";
-import { CapabilitiesWindow } from "./windows/CapabilitiesWindow";
 import { ChangelogWindow } from "./windows/ChangelogWindow";
 import { GitConfigWindow } from "./windows/GitConfigWindow";
-import { SkillImportWindow } from "./windows/SkillImportWindow";
-import type { SkillsState } from "../state/useSkills";
-import { SubagentWindow } from "./windows/SubagentWindow";
-import type { SubagentsState } from "../state/useSubagents";
-import { findSubagent, subagentKey } from "../subagents";
 import { fileViewKey, folderViewKey, parseFolderViewKey } from "../fileview";
 import { ConsoleWindow } from "./windows/ConsoleWindow";
-import { ContextWindow } from "./windows/ContextWindow";
 import { DiffWindow } from "./windows/DiffWindow";
 import { FolderWindow } from "./windows/FolderWindow";
 import { HelpWindow } from "./windows/HelpWindow";
 import { LoopModelsWindow } from "./windows/LoopModelsWindow";
 import { OverseerWindow } from "./windows/OverseerWindow";
 import { spaceRows } from "../state/space";
-import { PlansWindow } from "./windows/PlansWindow";
 import { ProjectCreateWindow } from "./windows/ProjectCreateWindow";
 import { ProjectWindow } from "./windows/ProjectWindow";
 import { ProvidersWindow } from "./windows/ProvidersWindow";
-import { SessionWindow } from "./windows/SessionWindow";
 import { SessionsWindow } from "./windows/SessionsWindow";
+import type { ProviderInfo } from "../domain";
 
 /** Mirrors `useWindows`' own `open`. `detail` is the dim secondary on the tab —
  * needed wherever the title alone is ambiguous, as it is for a file view whose
@@ -53,59 +41,25 @@ interface WindowStackHostProps {
   windows: OpenWindow[];
   wizard: DiscoveryController;
   projects: Project[];
-  activeProject?: Project;
   provider: ProviderInfo;
   theme: OverseerTheme;
   sessions: Session[];
+  consoles: ConsoleInfo[];
+  pendingConsoles: PendingConsole[];
   openWindow: OpenWindowAction;
   closeWindow: (id: string) => void;
   raiseWindow: (id: string) => void;
   moveWindow: (id: string, x: number, y: number) => void;
   resizeWindow: (id: string, w: number, h: number) => void;
-  openChat: (session: Session) => void;
-  startChat: () => void;
-  chatFor: (id: string) => Chat | undefined;
-  sendChat: (id: string, input: string) => void;
+  /** A console window's process ended; `clean` is a zero exit. */
+  onConsoleExit: (windowId: string, consoleId: string, clean: boolean) => void;
+  onKillConsole: (id: string) => void;
+  onOpenSession: (session: Session) => void;
   onDeleteSession: (id: string) => void;
-  /** Interrupt the turn a session has in flight. */
-  onStopSession: (id: string) => void;
-  onResolveApproval: (
-    sessionId: string,
-    requestId: string,
-    decision: PermissionDecision,
-  ) => void;
-  plans: Plan[];
-  /** Last plan refusal in the server's words, shown in the plans window. */
-  plansError?: string;
-  onOpenPlanSession: (sessionId: string) => void;
-  onImplementPlan: (planId: string) => void;
-  onSetPlanStatus: (planId: string, status: "done" | "open") => void;
-  sessionOptions: SessionOption[];
-  subagents: SubagentsState;
-  skills: SkillsState;
-  /** Provider defaults plus the operator's picks — the fallback for a row a
-   * session has not reported on yet. */
-  armedSession: SessionSettings;
-  openSessionControls: Partial<Record<string, SessionOptionKey>>;
-  onToggleSessionControl: (sessionId: string, key: SessionOptionKey) => void;
-  onSelectSessionControl: (
-    sessionId: string,
-    key: SessionOptionKey,
-    value: string,
-  ) => void;
-  onOpenSessionContext: (sessionId: string) => void;
   send: (message: ClientMessage) => void;
   subscribeConsole: (listener: (message: ServerMessage) => void) => () => void;
-  /** Routes `project.git.*` frames to the project management window — same
-   * channel `useProviderOptions`/`useChatSessions` already use, since these
-   * are the same kind of single-window, project-scoped, benign-refusal-
-   * tolerant request. */
+  /** Routes `project.git.*` frames to the project, diff and folder windows. */
   subscribeSession: (listener: (message: ServerMessage) => void) => () => void;
-  /** True when the next loop console to mount should end the run currently
-   * holding the workspace's lease. Consumed once, on that mount. */
-  loopTakeover: boolean;
-  /** A loop row goes to its console, never to a chat window. */
-  onOpenLoopSession: (session: Session) => void;
   /** The loop's own provider/model configuration — independent of `provider`
    * above, which is the app's single attached one. */
   loopConfig: LoopConfigState;
@@ -123,48 +77,29 @@ export function WindowStackHost({
   windows,
   wizard,
   projects,
-  activeProject,
   provider,
   theme,
   sessions,
+  consoles,
+  pendingConsoles,
   openWindow,
   closeWindow,
   raiseWindow,
   moveWindow,
   resizeWindow,
-  openChat,
-  startChat,
-  chatFor,
-  sendChat,
+  onConsoleExit,
+  onKillConsole,
+  onOpenSession,
   onDeleteSession,
-  onStopSession,
-  onResolveApproval,
-  plans,
-  plansError,
-  onOpenPlanSession,
-  onImplementPlan,
-  onSetPlanStatus,
-  sessionOptions,
-  subagents,
-  skills,
-  armedSession,
-  openSessionControls,
-  onToggleSessionControl,
-  onSelectSessionControl,
-  onOpenSessionContext,
   send,
   subscribeConsole,
   subscribeSession,
-  loopTakeover,
-  onOpenLoopSession,
   loopConfig,
   onSetLoopProvider,
   onSetLoopModel,
   loopModelsByProvider,
   onReadLoopModels,
 }: WindowStackHostProps) {
-  const models = sessionOptions.find((o) => o.key === "model")?.values ?? [];
-
   /** Open one folder's listing. Shared by the project window's collapsed
    * folder rows and by a folder row inside a listing already open, so both
    * entry points title and key the window the same way — the key is what
@@ -181,16 +116,19 @@ export function WindowStackHost({
   };
 
   return windows.map((windowState) => {
-    // A session window's payload is the session id it belongs to; everything it
-    // renders is read back from the conversation store, never held in the frame.
-    const chat =
-      windowState.kind === "chat"
-        ? chatFor(String(windowState.payload ?? ""))
+    const payload = String(windowState.payload ?? "");
+    const consoleInfo =
+      windowState.kind === "console" ? consoles.find((c) => c.id === payload) : undefined;
+    const pending =
+      windowState.kind === "console" && payload.startsWith(PENDING_PREFIX)
+        ? pendingConsoles.find((p) => `${PENDING_PREFIX}${p.reqId}` === payload)
         : undefined;
+    const running = consoleInfo?.status === "running";
 
     return (
       <Window
         key={windowState.id}
+        windowId={windowState.id}
         title={windowState.title}
         detail={windowState.detail}
         x={windowState.x}
@@ -198,12 +136,20 @@ export function WindowStackHost({
         z={windowState.z}
         width={windowState.w}
         height={windowState.h}
-        variant={
-          windowState.kind === "console"
-            ? "console"
-            : windowState.kind === "chat"
-              ? "session"
-              : undefined
+        variant={windowState.kind === "console" ? "console" : undefined}
+        light={consoleInfo !== undefined ? consoleLight(consoleInfo) : undefined}
+        closeLabel={running ? "detach" : undefined}
+        actions={
+          running ? (
+            <button
+              type="button"
+              className="tab-action"
+              onClick={() => onKillConsole(consoleInfo.id)}
+              aria-label={`kill ${windowState.title}`}
+            >
+              kill
+            </button>
+          ) : undefined
         }
         onClose={() => closeWindow(windowState.id)}
         onRaise={() => raiseWindow(windowState.id)}
@@ -248,91 +194,12 @@ export function WindowStackHost({
             }
           />
         )}
-        {windowState.kind === "plans" && (
-          <PlansWindow
-            plans={plans}
-            provider={provider}
-            error={plansError}
-            onOpenPlanSession={onOpenPlanSession}
-            onImplementPlan={onImplementPlan}
-            onSetPlanStatus={onSetPlanStatus}
-          />
-        )}
         {windowState.kind === "sessions" && (
           <SessionsWindow
             sessions={sessions}
             projects={projects}
-            provider={provider}
-            models={models}
-            onOpenSession={(id) => {
-              // A loop run lives in a console, not a conversation — routed
-              // before `chatFor`, which would otherwise resume it.
-              const session = sessions.find((s) => s.id === id);
-              if (session?.origin === "loop") {
-                onOpenLoopSession(session);
-                return;
-              }
-              const chat = chatFor(id);
-              if (chat) openChat(chat.session);
-            }}
-            onNewSession={startChat}
-            onStopSession={onStopSession}
+            onOpenSession={onOpenSession}
             onDeleteSession={onDeleteSession}
-          />
-        )}
-        {chat && (
-          <SessionWindow
-            turns={chat.turns}
-            note={chat.note}
-            busy={chat.session.activity === "working"}
-            // A row this session has said nothing about falls back to what is
-            // armed, which is seeded from the provider's own defaults — so the
-            // head reads what the next turn will actually run on, never "—".
-            settings={{
-              model: chat.settings.model || armedSession.model,
-              mode: chat.settings.mode || armedSession.mode,
-              agent: chat.settings.agent || armedSession.agent,
-            }}
-            options={sessionOptions}
-            openSessionControl={openSessionControls[chat.session.id] ?? null}
-            contextCount={0}
-            onToggleSessionControl={(key) =>
-              onToggleSessionControl(chat.session.id, key)
-            }
-            onSelectSessionControl={(key, value) =>
-              onSelectSessionControl(chat.session.id, key, value)
-            }
-            onOpenSessionContext={() => onOpenSessionContext(chat.session.id)}
-            onSubmit={(input) => sendChat(chat.session.id, input)}
-            onStop={() => onStopSession(chat.session.id)}
-            onInspect={(turnId) => {
-              const turn = chat.turns.find(
-                (candidate) => candidate.id === turnId,
-              );
-              if (turn?.kind === "tool")
-                openWindow("diff", turn.target, turn.tool);
-            }}
-            onResolveApproval={(requestId, decision) =>
-              onResolveApproval(chat.session.id, requestId, decision)
-            }
-          />
-        )}
-        {windowState.kind === "capabilities" && (
-          <CapabilitiesWindow
-            provider={provider}
-            subagents={subagents}
-            skills={skills}
-            onEdit={(subagent) =>
-              openWindow("subagent", subagentKey(subagent), subagent.name)
-            }
-            // An empty payload is the create form. It is also its dedupe key,
-            // so a second "+ subagent" raises the one already open rather than
-            // stacking a second blank form over it.
-            onCreate={() => openWindow("subagent", "", "new subagent")}
-            // One import window, keyed on nothing: a second "import skill"
-            // raises the one already open rather than stacking a blank form
-            // over it, the same rule "+ subagent" follows.
-            onImportSkill={() => openWindow("skillImport", "", "import skill")}
           />
         )}
         {windowState.kind === "gitConfig" && (
@@ -345,38 +212,15 @@ export function WindowStackHost({
             onSaveIdentity={wizard.saveGitIdentity}
           />
         )}
-        {windowState.kind === "skillImport" && (
-          <SkillImportWindow
-            skills={skills}
-            onClose={() => closeWindow(windowState.id)}
-          />
-        )}
-        {windowState.kind === "subagent" && (
-          <SubagentWindow
-            // Looked up rather than carried on the payload: after a save
-            // renames a file, the row this window was opened from is gone and
-            // the list is the only thing that knows where it went.
-            existing={findSubagent(subagents.subagents, String(windowState.payload ?? ""))}
-            subagents={subagents}
-            models={sessionOptions.find((o) => o.key === "model")}
-            onClose={() => closeWindow(windowState.id)}
-          />
-        )}
-        {windowState.kind === "context" && (
-          <ContextWindow
-            projectName={activeProject?.name}
-            provider={provider}
-          />
-        )}
         {windowState.kind === "console" && (
           <ConsoleWindow
-            provider={provider}
+            info={consoleInfo}
+            pending={pending}
             theme={theme}
+            connected={wizard.connected}
             send={send}
             subscribe={subscribeConsole}
-            onProcessExit={() => closeWindow(windowState.id)}
-            mode={windowState.payload === "loop" ? "loop" : undefined}
-            takeover={windowState.payload === "loop" && loopTakeover}
+            onProcessExit={(clean) => onConsoleExit(windowState.id, payload, clean)}
           />
         )}
         {windowState.kind === "help" && <HelpWindow provider={provider} />}

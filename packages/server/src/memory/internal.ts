@@ -14,9 +14,6 @@ import type {
   DiscoveredProject,
   DiscoveredProvider,
   OverseerTheme,
-  AdapterPlan,
-  PlanStatus,
-  PlanStatusOverride,
 } from "@overseer/protocol";
 
 /**
@@ -226,97 +223,6 @@ export async function readSnapshot(): Promise<WorldSnapshot | undefined> {
 }
 
 /**
- * What this instance knows about a plan beyond what its transcript says.
- *
- * Two things live here, and only two, because everything else is re-read from
- * the provider's transcripts on every list:
- *
- * - the operator's own verdict, which no amount of reading can recover; and
- * - a copy of the plan itself, so that deleting the session does not delete
- *   the plan. Without it a plan and its session are the same object — the row
- *   would vanish with the transcript, and "implement a plan whose session is
- *   gone" could never happen.
- *
- * Keyed by the plan's tool-use id, which the provider mints and does not
- * reuse.
- */
-export interface PlanEntry {
-  plan: AdapterPlan;
-  /** Absent while the plan is still what the transcript says it is. */
-  override?: Exclude<PlanStatus, "proposed" | "in-progress" | "superseded">;
-  at: string;
-}
-
-export type PlanStore = Record<string, PlanEntry>;
-
-export async function readPlanStore(): Promise<PlanStore> {
-  try {
-    const parsed = JSON.parse(await readFile(plansFile(), "utf8")) as unknown;
-    if (typeof parsed !== "object" || parsed === null) return {};
-    return parsed as PlanStore;
-  } catch {
-    // No file yet, or one that no longer parses. Either way the honest answer
-    // is "nothing is remembered", not a failed list.
-    return {};
-  }
-}
-
-/**
- * Keep a copy of every plan just read out of a transcript.
- *
- * Writes only when something actually changed: this runs on every list, and
- * the list runs on every transcript-monitor tick, so an unconditional publish
- * would rewrite the file every second and a half for the life of the process.
- */
-export async function rememberPlans(plans: AdapterPlan[]): Promise<void> {
-  if (plans.length === 0) return;
-  await serialized(async () => {
-    const store = await readPlanStore();
-    let changed = false;
-    for (const plan of plans) {
-      const existing = store[plan.id];
-      if (
-        existing !== undefined &&
-        JSON.stringify(existing.plan) === JSON.stringify(plan)
-      ) {
-        continue;
-      }
-      store[plan.id] = {
-        ...(existing ?? {}),
-        plan,
-        at: new Date().toISOString(),
-      };
-      changed = true;
-    }
-    if (changed) await publishJson(plansFile(), store);
-  });
-}
-
-/**
- * Record — or clear, with `"open"` — what the operator says about one plan.
- * Serialised and published the same way the snapshot is: two tabs retiring
- * different plans at once must not lose one of the two.
- */
-export async function setPlanOverride(
-  planId: string,
-  status: PlanStatusOverride,
-): Promise<void> {
-  await serialized(async () => {
-    const store = await readPlanStore();
-    const entry = store[planId];
-    if (entry === undefined) return;
-    if (status === "open") {
-      if (entry.override === undefined) return;
-      delete entry.override;
-    } else {
-      entry.override = status;
-    }
-    entry.at = new Date().toISOString();
-    await publishJson(plansFile(), store);
-  });
-}
-
-/**
  * Serialises every access to the files in this store.
  *
  * Temp-file-plus-rename buys crash safety, not concurrency safety, and there
@@ -457,6 +363,8 @@ export function clearSnapshot(): Promise<void> {
   });
 }
 
+/** Plans are no longer tracked, but an older instance may have left its
+ * store behind — a reset still removes it. */
 export function clearPlanStore(): Promise<void> {
   return serialized(() => rm(plansFile(), { force: true }));
 }

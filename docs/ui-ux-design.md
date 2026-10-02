@@ -49,8 +49,8 @@ The steady-state layout is:
 | top-centre    | **active project** — target for new prompts and sessions                       |
 | top-right     | **clock** and the **settings** gear                                           |
 | centre        | **the overseer space** — message plus ranked, clickable signals              |
-| bottom-left   | **prompt controls** — the numbered accordion                                  |
-| bottom-centre | **the prompt** — transcript and composer as sibling panels — and the footer   |
+| bottom-left   | **session panel** — every console, and the active project's sessions          |
+| bottom-centre | **the prompt** — one command line — and the footer                            |
 | bottom-right  | **provider widget** — provider, auth, usage, spend                            |
 
 Furniture appears progressively as its state becomes knowable; the prompt appears only after an authenticated
@@ -202,25 +202,34 @@ content. `w-editor` is an input and therefore uses the input ground (§7.1).
 
 ### 5.3 The console
 
-A raw terminal into the provider CLI, available only when signed in. Open it from the provider widget or with
-`console`. Slash commands, output, and errors appear verbatim via a PTY bridged over `/ws` into an xterm.js
-surface. Closing the window terminates the CLI process; the CLI exiting (`/exit`, `/quit`) closes the window.
+The console is where all agent work happens: the provider CLI's own TUI, a plain shell, or a dev-loop run,
+in an xterm.js surface bridged over `/ws` to a PTY the server owns. Open one from the provider widget
+(new session), the session panel (`+ new session`, `+ shell`, or a session row), the prompt bar (a typed
+prompt starts a session on it), or with `/console`, `/shell`, `/loop`.
+
+Any number can be open, in any project, anywhere on the field. `/tile` lays them out in a grid;
+`Ctrl` + `` ` `` raises the next one and hands it the keyboard. The tab shows a status light — what the
+CLI is doing — in place of the usual mark.
+
+|                   | Treatment                                                                                   |
+| ----------------- | ------------------------------------------------------------------------------------------- |
+| stream            | xterm.js matching the Overseer theme                                                        |
+| close (×)         | **detach** — the process keeps running and stays in the session panel's consoles list      |
+| kill              | its own tab control; the console stays listed as exited until dismissed                    |
+| CLI exits cleanly | `/exit`, `exit`: the window closes and the console is dismissed                             |
+| CLI fails         | the window stays, with the exit code, so the failure can be read                            |
+| reload            | every console window comes back where it was, with its scrollback                           |
+| auth              | shared container credentials; onboarding pre-seeded                                         |
+
+While focus is in a terminal the keyboard is the CLI's: Overseer's own keys stand down, except
+`Ctrl` + `` ` ``, which is how you leave.
 
 Credentials come from the same container `CLAUDE_CONFIG_DIR` volume as Overseer login. Before spawn, Overseer
-marks Claude's interactive onboarding complete (and trusts the active project) so the TUI does not re-run the
+marks Claude's interactive onboarding complete (and trusts the project) so the TUI does not re-run the
 theme picker / browser login that pipe-based `claude auth login` already finished.
 
 The console is a continuous stream on the window surface (`--fill-solid`) — dark in samaritan, light in
-machine — not stamp paper and not §7.1's input/output split. Frame chrome matches other windows (horizontal
-edges only).
-
-|                 | Treatment                                      |
-| --------------- | ---------------------------------------------- |
-| stream          | xterm.js matching the Overseer theme           |
-| process lifecycle | one PTY per browser socket; close kills child |
-| auth            | shared container credentials; onboarding pre-seeded |
-
-Native Claude commands `/exit` and `/quit` end the process; Overseer does not rewrite a bare `exit`.
+machine — not stamp paper. Frame chrome matches other windows (horizontal edges only).
 
 ### 5.4 The decision — the one surface that blocks
 
@@ -303,41 +312,16 @@ options use void.
    is unboxed and drawn larger than the other glyphs: the clock beside it has no frame either, so a
    border would make the gear the only boxed thing in that corner. A glyph big enough to hit does not
    need one. `.icon-btn` — the boxed variant — stays for small glyphs that do, like the panel's ✕.
-4. **PromptControls** (bottom-left) — an **accordion** of four rows, joined by a bracket rule.
-   **A closed row prints the value in force, not its own name** — `1 OPUS`, `2 ACCEPTEDITS`,
-   `3 REVIEWER` — because the row's identity is already carried by its digit and its fixed place in
-   the bar, and what the operator needs at a glance is what the next turn is armed with. The name
-   survives on the button's `aria-label`, so the rows stay addressable to a screen reader. Row 4 is the
-   exception: it has no selection to print, so it keeps its name and hangs its count off it
-   (`4 CONTEXT · EMPTY`).
-
-   A head never reads `—` once the provider has answered: a row the operator has not touched shows the
-   default that provider is actually sitting on (`1 DEFAULT`, `2 AUTO`, `3 NONE`), because a control
-   that says nothing tells the operator nothing about what the next turn will do. The head also drops a
-   trailing parenthetical — the CLI's `Default (recommended)` becomes `DEFAULT` — since four heads share
-   the composer's width and the annotation would crowd out the name; the menu keeps it in full.
-
-   Closed, the rows are a menu on the **field**, blending with the background the same
-   as the clock. Opening one drops its values on **`--void`** beneath it — this is the machine's own menu, not
-   a value the session produced, the same reasoning that keeps a window's tab off the stamp scale — current
-   value marked `▪`; picking a value closes the section. One section open at a time. The block is
-   bottom-anchored, so it grows upward. Values that arm something dangerous (`bypass`) render in `--accent`.
-   Row 4 has no values — context needs more than a value, so it summons a window. These rows control **the
-   next prompt**; this is the prompt's control surface, not navigation.
-
-   The values are the provider's, not ours: each entry prints the CLI's own name with its own
-   description beneath it in prose case — the one thing in this bar that is not uppercased, for the
-   same reason prompt text is not ([§7.1](#71-input-is-dark-output-is-light)). A row the provider has
-   not answered for stays shut and reads `—`; it never shows a plausible default.
-
-   Row 3 lists **the operator's own subagents** — the `.md` files they wrote into
-   `.claude/agents/` — and never the CLI's built-in routing agents, which are Claude's internal
-   machinery rather than a choice anyone made. It leads with `none`, which has to stay reachable
-   after another agent is picked, and an operator who has written none still gets a row that opens
-   and says so. A pick arms the *next* session — the CLI has no runtime setter for model or mode — so
-   a head can read what a live session is running while something else is armed for the next.
-5. **ProviderWidget** (bottom-right) — see §6.2. When signed in, `OPEN CONSOLE` with CONSOLE in `--ok` sits under it.
-6. **Prompt** (bottom-centre) — appears only after an authenticated provider is attached.
+4. **SessionPanel** (bottom-left) — the project panel's two levels, mirrored: a readout header
+   (`CONSOLES · 3 RUNNING`, lit by the most urgent console) with a surface list opening upward over it.
+   The list has two sections. **Consoles** — every console the server runs, in any project, each with
+   its light, kill (running) or dismiss (exited); picking one brings its window back, which is how a
+   detached console is found again. **Sessions** — the active project's sessions from the CLIs' own
+   transcripts, lit by the console running each; picking one shows that console or resumes the session
+   in a new one. Under them, `+ new session`, `+ shell` and, with two or more running, `tile`. Selecting
+   never closes the panel.
+5. **ProviderWidget** (bottom-right) — see §6.2. When signed in, `NEW SESSION` with SESSION in `--ok` sits under it.
+6. **Prompt** (bottom-centre) — appears only after an authenticated provider is attached (§7).
 7. **Footer** — one line under the prompt: product, version, and `ask for HELP` with HELP in `--accent`.
 
 ### 6.1 Panels
@@ -373,64 +357,26 @@ never use a hover fill.
 
 ## 7. The prompt
 
-### 7.1 Input is dark, output is light
+One line at the bottom of the field, on the dark input surface (`--fill`/`--ink`). It never grows into a
+transcript — conversations live in consoles (§5.3).
 
-In Samaritan, operator input uses a dark surface and agent output uses a light page or stamp. Machine inverts
-both while preserving the contrast relationship.
+- A leading `/` starts a command; names autocomplete from `packages/web/src/commands.ts` and open the
+  corresponding surface or action.
+- Anything else starts a new session in the active project with it as the opening prompt, in a new console.
+- **No exec button.** `Enter` runs it.
 
-|           | Input — dark                  | Output — light                                              |
-| --------- | ----------------------------- | ----------------------------------------------------------- |
-| collapsed | `.prompt-bar`                 | —                                                           |
-| expanded  | `.composer`, `.turn-operator` | `.transcript-panel` (the page), `.turn-agent`, `.turn-tool` |
-
-The transcript and composer are sibling panels with separate 2px horizontal edges and a 6px field gap.
-
-The transcript uses `--page`. The collapsed prompt bar, expanded composer, and echoed operator turns share
-`--fill`/`--ink`. The session tab uses void.
-
-- **No exec button.** `Enter` sends, `Shift`+`Enter` inserts a newline.
-- Expanded width is capped at `min(880px, max(520px, 100vw - 600px))` so the chat never covers the two bottom
-  corners it depends on — the prompt controls to its left, the provider widget to its right.
-- **The text is not uppercased.** This is prose going to a model and should look like prose while it is being
-  written. Uppercase remains for labels and chrome only.
-- The composer grows with its content to 168px, then scrolls.
-- Beneath it, one meta line: the send hint, or `TURN IN FLIGHT`. **Not** the armed model · mode ·
-  agent — the control heads directly below already print exactly that, and stating it twice makes the
-  operator work out which of the two is authoritative.
-- A leading `/` starts a command; names autocomplete from
-  `packages/web/src/commands.ts` and open the corresponding surface or action.
-  Anything else goes to the active project's session, starting one if none is active.
-
-### 7.2 What you did vs what the agent did
-
-Authorship is carried by §7.1's rule, not by bubbles or side-alignment: your turns are input and stay dark,
-the agent's are output and stay light.
-
-|          | Operator — input                            | Agent — output                            |
-| -------- | ------------------------------------------- | ----------------------------------------- |
-| ground   | `--fill`, the same dark as the composer     | a `--stamp` block on the light page       |
-| text     | `--ink`                                     | `--stamp-ink`                             |
-| edge     | a 2px `--accent-fill` lane rule             | a `--stamp-edge` border on all four sides |
-| label    | above the prose, in `--ink-faint`           | above the prose, in `--stamp-faint`       |
-| relation | identical to the composer it was typed into | identical to tool rows and chips          |
-
-The lane rule keeps operator turns from reading as stamps. Tool calls are slim stamps that open a detail
-window.
-
-Consecutive `.turn-tool` rows form one continuous bordered block with no internal gaps.
-
-### 7.3 Keys
+### 7.1 Keys
 
 | Key                | Does                                                                       |
 | ------------------ | -------------------------------------------------------------------------- |
-| `1`–`4`            | open the matching numbered prompt control, when present and prompt closed |
+| `Ctrl` + `` ` ``   | raise the next console window and focus its terminal                       |
 | `Ctrl`/`Cmd` + `K` | open the prompt                                                            |
 | `Ctrl`/`Cmd` + `P` | collapse or expand the project panel                                       |
 | `Ctrl`/`Cmd` + `,` | toggle settings                                                            |
-| `Esc`              | dismiss the topmost surface: settings → top window → open control → prompt |
+| `Esc`              | dismiss the topmost surface: settings → top window → prompt                |
 
-Once the prompt is open it owns every keystroke, including digits. The project panel is furniture and is
-never in the `Esc` chain.
+None of these fire while a terminal has focus, except `Ctrl` + `` ` ``. The project panel is furniture and
+is never in the `Esc` chain.
 
 ---
 

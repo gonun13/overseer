@@ -305,3 +305,27 @@
   line-height: 1.4;
   overflow-wrap: anywhere;
 }
+
+/* Section labels inside the sessions panel — consoles first, then the active
+   project's sessions. Readout type, not rows. */
+.sessions-section {
+  margin: 8px 0 2px;
+  padding: 0 9px;
+  color: var(--ink-faint);
+  font-size: 10px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.sessions-section:first-child {
+  margin-top: 0;
+}
+
+.sessions-actions {
+  display: flex;
+  gap: 4px;
+}
+
+.sessions-actions .session-new {
+  flex: 1;
+}

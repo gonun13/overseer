@@ -18,9 +18,9 @@ projects on external git remotes so a bad run is recoverable.
 
 | 🟢 Advantages | 🔴 Disadvantages |
 | --- | --- |
-| Sandboxed isolation from the host | Slower than a bare CLI |
-| A better UI experience than a raw CLI | Fewer features than a single-provider tool |
-| Multi-provider support | Docker footprint instead of a single binary |
+| Sandboxed isolation from the host | A browser terminal instead of your own |
+| Every CLI feature, as the provider ships it | Docker footprint instead of a single binary |
+| Many agents across many projects on one desk |  |
 | More observability across projects |  |
 | Automatic workflows via the dev loop |  |
 
@@ -108,21 +108,29 @@ the source tree is bind-mounted and watched.
 
 ## Features
 
+Overseer is a harness around the providers' own CLIs, not a replacement for them. Every
+agent conversation happens in the CLI's real TUI, in a console window. Overseer adds what
+a single terminal cannot: many consoles across many projects on one desk, and a view of
+all of them at once.
+
+- **Consoles** — any number of console windows, across projects, arranged freely (`/tile`
+  lays them out in a grid). A console is the provider CLI (`/console`, or type a prompt
+  into the prompt bar), a plain shell (`/shell`), or the dev loop (`/loop`).
+- **Consoles outlive the tab** — closing a window only detaches it; the process keeps
+  running on the server. A reload puts every window back where it was, with its
+  scrollback. Kill is a separate, explicit control.
+- **Sessions** — every provider session in the workspace, read from the CLIs' own
+  transcripts. Opening one shows the console running it, or resumes it in a new one
+  (`claude --resume`, `agent --resume`).
+- **Monitoring** — Claude Code reports through hooks, so a console waiting on a
+  permission prompt lights up and the overseer points you straight at it. Other CLIs
+  are watched by their output.
 - **Overseer space** — ranks what needs attention and opens the surface it refers to.
 - **Wizard** — walks a fresh instance from nothing to a working setup.
 - **Project panel** — persistent status for every project, plus project creation.
-- **Sessions** — spawned, streamed, resumed, and deleted as draggable windows, with
-  per-session model, permission mode, and subagent controls.
-- **Plans** — `/plans` surfaces plans a session has produced and continues them where
-  they left off.
-- **Console** — a raw PTY escape hatch straight into the provider CLI.
-- **Dev loop tool, in-app** — `/loop` runs the dev loop in a console window.
-- **Inline approvals** — permission requests are answered right in the session that
-  raised them.
 - **Git over ssh** — generate a key in settings, add its public half to your git host,
   and push from the app or the agent. Works with any host, self-hosted included.
 - **Theme support** — samaritan (default) and machine already included.
-- And much more to come...
 
 Architecture: [docs/architecture-design.md](docs/architecture-design.md) ·
 UI: [docs/ui-ux-design.md](docs/ui-ux-design.md) ·

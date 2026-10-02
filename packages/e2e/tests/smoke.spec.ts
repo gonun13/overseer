@@ -73,7 +73,7 @@ test("opens the providers picker from the widget", async ({ page }) => {
   ).toBeVisible();
 });
 
-test("offers the console only when a provider is signed in", async ({
+test("offers a new session only when a provider is signed in", async ({
   page,
 }) => {
   await page.goto("/");
@@ -86,22 +86,21 @@ test("offers the console only when a provider is signed in", async ({
   const widget = page.getByRole("button", { name: /choose provider/i });
   await expect(widget).toBeVisible({ timeout: 45_000 });
 
-  const consoleBtn = page.getByRole("button", { name: /open console/i });
+  const newSession = page.locator(".widget-console");
   if (await widget.getByText("signed in", { exact: true }).isVisible()) {
-    await expect(consoleBtn).toBeVisible();
-    await consoleBtn.click();
-    await expect(page.getByLabel("close console")).toBeVisible();
-    // Live PTY surface — xterm mounts as an application region. Do not type a
-    // model prompt here; only assert the terminal is present and dismissible.
-    await expect(page.getByLabel("provider console")).toBeVisible({
-      timeout: 15_000,
-    });
-    await page.getByLabel("close console").click();
-    await expect(page.getByLabel("close console")).toHaveCount(0);
+    await expect(newSession).toBeVisible();
+    await newSession.click();
+    // The provider's own TUI in a console window. Do not type a model prompt
+    // here; only assert the terminal is up, then end it.
+    const term = page.locator(".window-console .console-term").last();
+    await expect(term).toBeVisible({ timeout: 15_000 });
+    const win = page.locator(".window-console").last();
+    await win.getByRole("button", { name: /^kill / }).click();
+    await win.getByRole("button", { name: /^close / }).click();
     return;
   }
 
-  // Not signed in (or nothing attached): the console has nothing to show, and
+  // Not signed in (or nothing attached): there is no CLI to start, and
   // offering it would be a control that cannot do anything.
-  await expect(consoleBtn).toHaveCount(0);
+  await expect(newSession).toHaveCount(0);
 });

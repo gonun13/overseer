@@ -27,12 +27,11 @@ export function SettingsPanel({
   gitAccess,
   onClose,
   onSelectTheme,
-  onOpenCapabilities,
   onOpenGitConfig,
   onStartLogin,
   onSignOut,
-  onStopAllSessions,
-  stoppableCount,
+  onKillAllConsoles,
+  runningCount,
   onResetOverseer,
 }: {
   open: boolean;
@@ -44,19 +43,17 @@ export function SettingsPanel({
   gitAccess?: GitAccessState;
   onClose: () => void;
   onSelectTheme: (theme: OverseerTheme) => void;
-  onOpenCapabilities: () => void;
   /** Close settings and open the git config window, where setup happens. */
   onOpenGitConfig: () => void;
   /** Close settings, open the login surface, and start the flow. */
   onStartLogin: () => void;
   /** `claude auth logout` on the container's CLI. Idempotent. */
   onSignOut: () => void;
-  /** Interrupt every session with a turn in flight. Sweeps what the client
-   * already knows is running — there is no server-side "stop everything". */
-  onStopAllSessions: () => void;
-  /** How many sessions that sweep would actually reach. Zero disables the
-   * button rather than letting it promise an action with no target. */
-  stoppableCount: number;
+  /** End every running console — agents, shells, loop runs. */
+  onKillAllConsoles: () => void;
+  /** How many that would reach. Zero disables the button rather than letting
+   * it promise an action with no target. */
+  runningCount: number;
   /** Close settings and put the reset decision up. The panel never wipes
    * anything itself — it only asks. */
   onResetOverseer: () => void;
@@ -188,16 +185,6 @@ export function SettingsPanel({
           </button>
         </div>
 
-        <WTitle>capabilities</WTitle>
-        <p className="panel-note">
-          mcp servers, skills and subagents available to every session.
-        </p>
-        <div className="btn-row">
-          <button className="w-btn" onClick={onOpenCapabilities}>
-            open capabilities
-          </button>
-        </div>
-
         <WTitle>appearance</WTitle>
         <WInline
           label="theme"
@@ -228,13 +215,13 @@ export function SettingsPanel({
         <div className="btn-row">
           <WConfirmButton
             label={
-              stoppableCount === 0
-                ? "stop all sessions"
-                : `stop all sessions (${stoppableCount})`
+              runningCount === 0
+                ? "kill all consoles"
+                : `kill all consoles (${runningCount})`
             }
-            confirmLabel="stop them all"
-            disabled={stoppableCount === 0}
-            onConfirm={onStopAllSessions}
+            confirmLabel="kill them all"
+            disabled={runningCount === 0}
+            onConfirm={onKillAllConsoles}
           />
           <button className="w-btn danger" onClick={onResetOverseer}>
             reset overseer

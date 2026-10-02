@@ -1,12 +1,26 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
+import type { ConsoleInfo } from "@overseer/protocol";
 import { deriveSignals, messageFor } from "../src/state/signals.ts";
+
+function consoleInfo(extra: Partial<ConsoleInfo>): ConsoleInfo {
+  return {
+    id: "c1",
+    kind: "agent",
+    projectPath: "/workspace/demo",
+    providerId: "claude-code",
+    title: "claude-code · demo",
+    startedAt: "2026-10-02T00:00:00Z",
+    status: "running",
+    activity: "idle",
+    hooked: true,
+    ...extra,
+  };
+}
 
 const baseWorld = {
   projects: [],
-  sessions: [],
-  approvals: [],
-  capabilities: [],
+  consoles: [] as ConsoleInfo[],
   provider: {
     name: "claude-code",
     authenticated: true,
@@ -62,49 +76,37 @@ describe("deriveSignals usage", () => {
   });
 });
 
-describe("deriveSignals session attention", () => {
-  it("names what went wrong, not only the session", () => {
+describe("deriveSignals consoles", () => {
+  it("points at a console whose CLI is waiting on the operator", () => {
     const signals = deriveSignals({
       ...baseWorld,
-      sessions: [
-        {
-          id: "s1",
-          activity: "attention",
-          name: "new session",
-          projectId: "/workspace/demo",
-          branch: "",
-          model: "",
-          cost: "",
-          doing: "You've hit your weekly limit · resets 3am (UTC)",
-        },
-      ],
+      consoles: [consoleInfo({ activity: "waiting" })],
     });
-    const session = signals.find((signal) => signal.id === "session-s1");
-    assert.ok(session);
-    assert.match(
-      session.text,
-      /^new session · You've hit your weekly limit · resets 3am \(UTC\)\.$/,
-    );
+    const waiting = signals.find((signal) => signal.id === "waiting-c1");
+    assert.ok(waiting);
+    assert.equal(waiting.activity, "approval");
+    assert.deepEqual(waiting.target, { kind: "console", id: "c1" });
+    assert.equal(signals[0], waiting);
   });
 
-  it("falls back when attention has no detail yet", () => {
+  it("says nothing about a console that is merely working", () => {
     const signals = deriveSignals({
       ...baseWorld,
-      sessions: [
-        {
-          id: "s1",
-          activity: "attention",
-          name: "new session",
-          projectId: "/workspace/demo",
-          branch: "",
-          model: "",
-          cost: "",
-          doing: "",
-        },
-      ],
+      consoles: [consoleInfo({ activity: "working" })],
     });
-    const session = signals.find((signal) => signal.id === "session-s1");
-    assert.ok(session);
-    assert.equal(session.text, "new session needs attention.");
+    assert.equal(signals.some((signal) => signal.id.endsWith("c1")), false);
+  });
+
+  it("reports a console that died with an error, not one that was ended", () => {
+    const failed = deriveSignals({
+      ...baseWorld,
+      consoles: [consoleInfo({ status: "exited", exitCode: 1 })],
+    });
+    assert.ok(failed.find((signal) => signal.id === "exited-c1"));
+    const killed = deriveSignals({
+      ...baseWorld,
+      consoles: [consoleInfo({ status: "exited", exitCode: 0, signal: 15 })],
+    });
+    assert.equal(killed.find((signal) => signal.id === "exited-c1"), undefined);
   });
 });

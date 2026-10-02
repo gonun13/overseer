@@ -5,10 +5,8 @@ import path from "node:path";
 import { after, before, describe, it } from "node:test";
 import {
   deleteSession,
-  findProjectDirForSession,
   listProjectSessions,
   lookupSessionTitle,
-  readSessionHistory,
 } from "../src/transcripts.js";
 
 /** transcripts.ts reads `process.env.HOME` internally (mirroring the real
@@ -105,7 +103,7 @@ describe("cursor transcripts", () => {
     assert.ok(title?.endsWith("…"));
   });
 
-  it("reads turns back with the <user_query> envelope stripped, agent text untouched", async () => {
+  it("titles a session with the <user_query> envelope stripped", async () => {
     await trustProject("demo3", "/workspace/demo3");
     await writeTranscript(
       "demo3",
@@ -113,27 +111,7 @@ describe("cursor transcripts", () => {
       [userTurn("hello"), agentTurn("hi there")],
       { createdAtMs: 1, updatedAtMs: 1, cwd: "/workspace/demo3" },
     );
-    const turns = await readSessionHistory("/workspace/demo3", "chat-3");
-    assert.deepEqual(
-      turns.map((t) => ("text" in t ? t.text : undefined)),
-      ["hello", "hi there"],
-    );
-    assert.equal(turns[0]?.kind, "user");
-    assert.equal(turns[1]?.kind, "agent");
-  });
-
-  it("finds the project dir for a session id by scanning chats/*/<id>/meta.json", async () => {
-    await trustProject("demo4", "/workspace/demo4");
-    await writeTranscript("demo4", "chat-4", [userTurn("x")], {
-      createdAtMs: 1,
-      updatedAtMs: 1,
-      cwd: "/workspace/demo4",
-    });
-    assert.equal(await findProjectDirForSession("chat-4"), "/workspace/demo4");
-  });
-
-  it("throws for an unknown session id", async () => {
-    await assert.rejects(() => findProjectDirForSession("nope"));
+    assert.equal(await lookupSessionTitle("/workspace/demo3", "chat-3"), "hello");
   });
 
   it("deletes a session's transcript from both projects/ and chats/, idempotently", async () => {
@@ -146,7 +124,6 @@ describe("cursor transcripts", () => {
 
     await deleteSession("/workspace/demo5", "chat-5");
     assert.deepEqual(await listProjectSessions("/workspace/demo5"), []);
-    await assert.rejects(() => findProjectDirForSession("chat-5"));
 
     // Idempotent — already gone is not an error.
     await deleteSession("/workspace/demo5", "chat-5");

@@ -27,20 +27,20 @@ export function HelpWindow({ provider }: { provider: ProviderInfo }) {
       <WTitle>keys</WTitle>
       <div className="w-pre">
         {[
-          "1 .. 4               open a session control",
-          "                     (focused session, prompt unfocused)",
+          "ctrl + `             next console window (works inside one)",
           "ctrl/cmd + k         open the prompt",
           "ctrl/cmd + p         collapse or expand projects",
           "ctrl/cmd + ,         open settings",
           "/                    start a command; tab completes",
           "esc                  dismiss the topmost thing",
+          "                     (inside a console, keys belong to the cli)",
         ].join("\n")}
       </div>
 
       <WTitle>anything else</WTitle>
       <div className="w-pre">
         {
-          "text that does not start with / is sent to the\nactive project's session, starting one if none is active."
+          "text that does not start with / starts a new session\nin the active project, with it as the opening prompt.\n\nclosing a console window only detaches it — the cli\nkeeps running and stays in the consoles list. kill\nends it."
         }
       </div>
     </div>

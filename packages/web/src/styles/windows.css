@@ -912,3 +912,18 @@ a.w-btn {
   color: var(--ink-dim);
   font-size: 11px;
 }
+
+/* Extra tab controls (kill on a console) — same weight as close. */
+.tab-action {
+  margin-left: 6px;
+  padding: 0 4px;
+  font-size: 11px;
+  letter-spacing: 0.04em;
+  opacity: 0.6;
+  cursor: pointer;
+}
+
+.tab-action:hover {
+  opacity: 1;
+  color: var(--accent);
+}

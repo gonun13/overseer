@@ -1,56 +1,61 @@
-import { WProviderNote } from "./bits";
-import type { ProviderInfo } from "../../domain";
 import type {
   ClientMessage,
+  ConsoleInfo,
   OverseerTheme,
   ServerMessage,
 } from "@overseer/protocol";
+import type { PendingConsole } from "../../state/useConsoles";
 import { ConsoleTerminal } from "./ConsoleTerminal";
 
 /**
- * A direct terminal into the provider's CLI, for operators who already know it.
- * Everything else in Overseer is a considered view of what the agent is doing;
- * this is the escape hatch that admits no view covers everything — you get the
- * raw process, its own slash commands, and its own errors, verbatim.
+ * One console: a provider CLI, a shell or a dev-loop run, live on the server.
  *
- * Rendered as a full xterm.js surface matching the window theme
- * (ui-ux-design.md §5.3). Closing the window kills the PTY; the CLI exiting
- * (`/exit`, `/quit`) closes the window.
+ * Everything an agent does happens in here, in the CLI's own TUI. Closing the
+ * window detaches — the process keeps running and stays in the console list;
+ * killing it is a separate, explicit control on the tab.
  */
 export function ConsoleWindow({
-  provider,
+  info,
+  pending,
   theme,
+  connected,
   send,
   subscribe,
   onProcessExit,
-  mode,
-  takeover,
 }: {
-  provider: ProviderInfo;
+  /** The console, once the server has started it. */
+  info?: ConsoleInfo;
+  /** The request, while it is in flight or after it was refused. */
+  pending?: PendingConsole;
   theme: OverseerTheme;
+  connected: boolean;
   send: (message: ClientMessage) => void;
   subscribe: (listener: (message: ServerMessage) => void) => () => void;
-  onProcessExit: () => void;
-  /** "loop" opens the dev loop's overseer session instead of the attached
-   * provider's bare CLI — it picks its own provider, so the attached one's
-   * auth state below is irrelevant to it. */
-  mode?: "loop";
-  /** End the run currently holding the workspace's lease first. */
-  takeover?: boolean;
+  onProcessExit: (clean: boolean) => void;
 }) {
+  if (info === undefined) {
+    return (
+      <div className="console">
+        <p className="w-note">
+          {pending?.error !== undefined
+            ? `could not start: ${pending.error}`
+            : pending !== undefined
+              ? "starting…"
+              : "this console is gone."}
+        </p>
+      </div>
+    );
+  }
   return (
     <div className="console">
-      {mode !== "loop" && !provider.authenticated && (
-        <WProviderNote provider={provider} />
-      )}
       <ConsoleTerminal
+        consoleId={info.id}
         send={send}
         subscribe={subscribe}
         onProcessExit={onProcessExit}
-        authenticated={provider.authenticated}
         theme={theme}
-        mode={mode}
-        takeover={takeover}
+        label={`${info.title} console`}
+        connected={connected}
       />
     </div>
   );

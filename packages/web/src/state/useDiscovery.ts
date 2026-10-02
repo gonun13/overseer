@@ -92,11 +92,12 @@ export interface DiscoveryController extends WizardState {
   onMessageReady: (text: string) => void;
   /** Send a frame on the shared `/ws` socket. */
   send: (message: ClientMessage) => void;
-  /** Subscribe to console.* (and console-related error) frames. */
+  /** Subscribe to console.* frames (list, state, I/O, refusals). */
   subscribeConsole: (
     listener: (message: ServerMessage) => void,
   ) => () => void;
-  /** Subscribe to session.*, provider.options, and their error frames. */
+  /** Subscribe to session.*, usage-check and project.git.* frames and their
+   * error frames. */
   subscribeSession: (
     listener: (message: ServerMessage) => void,
   ) => () => void;
@@ -137,9 +138,7 @@ export function useDiscovery(): DiscoveryController {
   const handleServerMessage = useCallback(
     (message: ServerMessage) => {
       if (
-        message.type === "console.opened" ||
-        message.type === "console.output" ||
-        message.type === "console.exit" ||
+        message.type.startsWith("console.") ||
         (message.type === "error" && message.about?.startsWith("console."))
       ) {
         for (const listener of consoleListeners.current) listener(message);
@@ -149,55 +148,26 @@ export function useDiscovery(): DiscoveryController {
       }
       if (
         message.type === "session.list" ||
-        message.type === "session.history" ||
-        message.type === "session.event" ||
         message.type === "session.meta" ||
-        // Plans are read out of the same transcripts the sessions above come
-        // from, and every plan operation is an operation on a session — same
-        // channel, same benign refusals.
-        message.type === "plan.list" ||
-        message.type === "plan.implementing" ||
-        // What the provider offers a session is a session-control concern, and
-        // its refusals are benign the same way the console's are. A manual
-        // usage check is the same kind of ask — on-demand, provider-scoped,
-        // a refusal that must not tear the wizard down.
-        message.type === "provider.options" ||
+        // A manual usage check is an on-demand, provider-scoped ask whose
+        // refusal must not tear the wizard down.
         message.type === "provider.usageCheck" ||
         // The project management window's own requests — single-window,
         // project-scoped, and their refusals (nothing to commit, no remote,
         // a merge conflict) are exactly the same kind of benign "stay put"
         // as the rest of this channel.
-        // The capabilities window's subagent inventory — provider- and
-        // project-scoped, and its refusals ("no active project", a name that
-        // is not kebab-case) are benign in exactly the same way.
-        message.type === "subagent.list" ||
-        message.type === "subagent.written" ||
-        message.type === "subagent.deleted" ||
-        // The same window's skill inventory, on the same terms — provider- and
-        // project-scoped, with refusals ("cannot manage skills", a url that is
-        // not https) that are benign in exactly the same way.
-        message.type === "skill.list" ||
-        message.type === "skill.imported" ||
-        message.type === "skill.deleted" ||
         message.type === "project.git.status" ||
-        // One file's diff or contents, for the window a file row opens. A read
-        // whose refusals ("binary file", a path git no longer knows) are
-        // benign in exactly the same way the rest of this channel's are.
+        // One file's diff or contents, for the window a file row opens.
         message.type === "project.git.show" ||
-        // One folder's changed children, for the window a folder row opens —
-        // the same read, one level up from a file.
+        // One folder's changed children, for the window a folder row opens.
         message.type === "project.git.list" ||
         message.type === "project.git.committed" ||
         message.type === "project.git.pushed" ||
         message.type === "project.git.merged" ||
         message.type === "project.git.reverted" ||
         (message.type === "error" && message.about?.startsWith("session.")) ||
-        (message.type === "error" && message.about?.startsWith("plan.")) ||
-        (message.type === "error" && message.about === "provider.options") ||
         (message.type === "error" && message.about === "provider.checkUsage") ||
-(message.type === "error" && message.about?.startsWith("project.git.")) ||
-        (message.type === "error" && message.about?.startsWith("subagent.")) ||
-        (message.type === "error" && message.about?.startsWith("skill."))
+        (message.type === "error" && message.about?.startsWith("project.git."))
       ) {
         for (const listener of sessionListeners.current) listener(message);
         return;

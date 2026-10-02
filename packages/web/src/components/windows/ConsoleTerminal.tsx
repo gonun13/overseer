@@ -9,28 +9,27 @@ import type {
 import "@xterm/xterm/css/xterm.css";
 
 /**
- * Mounts an xterm.js terminal against the server's raw Claude PTY console.
+ * Mounts an xterm.js terminal on one of the server's consoles.
  *
- * Overseer forwards keystrokes and output verbatim — slash commands, cursor
- * control, and `/exit` / `/quit` are the CLI's business. When the process
- * exits, `onProcessExit` closes the Overseer window.
+ * The console outlives this terminal: mounting attaches (scrollback replay,
+ * then live output), unmounting only detaches. Overseer forwards keystrokes
+ * and output verbatim — slash commands, cursor control and `/exit` are the
+ * CLI's business.
  */
 
 export interface ConsoleTerminalProps {
+  consoleId: string;
   send: (message: ClientMessage) => void;
   subscribe: (listener: (message: ServerMessage) => void) => () => void;
-  onProcessExit: () => void;
-  /** True when the provider is signed in — otherwise the open is refused.
-   * Ignored when `mode === "loop"`: the loop picks its own provider. */
-  authenticated: boolean;
+  /** The process exited; `clean` is a zero exit (the operator's own `/exit`). */
+  onProcessExit: (clean: boolean) => void;
   /** Matches the Overseer surface: dark samaritan, light machine. */
   theme: OverseerTheme;
-  /** "loop" opens `loop/run` for the active project instead of the bare
-   * provider CLI. */
-  mode?: "loop";
-  /** End the run holding this workspace's lease first. Set only after the
-   * operator answered the take-over decision. */
-  takeover?: boolean;
+  /** Accessible name — which console this is. */
+  label: string;
+  /** Socket state. A reconnect is a new socket the server has never attached,
+   * so the terminal attaches again (and replays) when this flips back on. */
+  connected: boolean;
 }
 
 function xtermTheme(theme: OverseerTheme): ITheme {
@@ -85,31 +84,25 @@ function xtermTheme(theme: OverseerTheme): ITheme {
 }
 
 export function ConsoleTerminal({
+  consoleId,
   send,
   subscribe,
   onProcessExit,
-  authenticated,
   theme,
-  mode,
-  takeover,
+  label,
+  connected,
 }: ConsoleTerminalProps) {
   const hostRef = useRef<HTMLDivElement>(null);
   const termRef = useRef<Terminal | null>(null);
   const fitRef = useRef<FitAddon | null>(null);
-  const consoleId = useRef<string | null>(null);
-  const opened = useRef(false);
-  const closing = useRef(false);
+  /** Output that arrives before our replay is already inside it. */
+  const replayed = useRef(false);
   const onProcessExitRef = useRef(onProcessExit);
   onProcessExitRef.current = onProcessExit;
   const sendRef = useRef(send);
   sendRef.current = send;
   const themeRef = useRef(theme);
   themeRef.current = theme;
-  const modeRef = useRef(mode);
-  modeRef.current = mode;
-  // Read once, at mount: a take-over applies to the run this terminal is
-  // starting, never to a later re-render of the same one.
-  const takeoverRef = useRef(takeover);
 
   const fit = useCallback(() => {
     const addon = fitRef.current;
@@ -121,20 +114,26 @@ export function ConsoleTerminal({
       // Host not laid out yet.
       return;
     }
-    const id = consoleId.current;
-    if (id === null) return;
+    if (!replayed.current) return;
     sendRef.current({
       type: "console.resize",
-      id,
+      id: consoleId,
       cols: term.cols,
       rows: term.rows,
     });
-  }, []);
+  }, [consoleId]);
 
-  // Rebuild the terminal when the Overseer theme flips so colours stay in step
-  // with the window surface. Closing/reopening the PTY on theme change would
-  // kill the CLI mid-turn — only the xterm chrome is swapped; the socket keeps
-  // the same console id and stream.
+  const wasConnected = useRef(connected);
+  useEffect(() => {
+    const reconnected = connected && !wasConnected.current;
+    wasConnected.current = connected;
+    const term = termRef.current;
+    if (!reconnected || !term) return;
+    replayed.current = false;
+    sendRef.current({ type: "console.attach", id: consoleId, cols: term.cols, rows: term.rows });
+  }, [connected, consoleId]);
+
+  // Only the xterm chrome follows a theme flip; the console keeps running.
   useEffect(() => {
     const term = termRef.current;
     if (term) term.options.theme = xtermTheme(theme);
@@ -149,6 +148,7 @@ export function ConsoleTerminal({
       fontFamily: "IBM Plex Mono, ui-monospace, monospace",
       fontSize: 12,
       lineHeight: 1.35,
+      scrollback: 5000,
       theme: xtermTheme(themeRef.current),
       allowProposedApi: true,
     });
@@ -157,97 +157,65 @@ export function ConsoleTerminal({
     term.open(host);
     termRef.current = term;
     fitRef.current = fitAddon;
-
-    // Defer fit until the window body's expand animation has given the host
-    // a real size — otherwise cols/rows collapse to 1.
-    const openTimer = window.setTimeout(() => {
-      fitAddon.fit();
-      // The loop picks its own provider (loop/.provider / LOOP_PROVIDER),
-      // independently of whatever Overseer itself has attached — so it opens
-      // regardless of the attached provider's auth state.
-      if (modeRef.current !== "loop" && !authenticated) {
-        term.writeln("provider is not signed in");
-        return;
-      }
-      sendRef.current({
-        type: "console.open",
-        cols: term.cols,
-        rows: term.rows,
-        ...(modeRef.current ? { mode: modeRef.current } : {}),
-        ...(takeoverRef.current === true ? { takeover: true } : {}),
-      });
-      opened.current = true;
-      term.focus();
-    }, 320);
-
-    const dataDisposable = term.onData((data) => {
-      const id = consoleId.current;
-      if (id === null) return;
-      sendRef.current({ type: "console.input", id, data });
-    });
+    replayed.current = false;
 
     const unsubscribe = subscribe((message) => {
-      if (message.type === "console.opened") {
-        // The socket can hold a raw CLI console and a loop console at once,
-        // and both terminals see every frame. Adopt only the ack for our own
-        // slot, or the two windows steal each other's streams.
-        if ((message.mode ?? undefined) !== modeRef.current) return;
-        consoleId.current = message.id;
-        // Size may have changed between open request and ack.
-        fit();
+      if (!("id" in message) || message.id !== consoleId) return;
+      if (message.type === "console.replay") {
+        term.reset();
+        term.write(message.data);
+        replayed.current = true;
         term.focus();
         return;
       }
       if (message.type === "console.output") {
-        if (message.id !== consoleId.current) return;
-        term.write(message.data);
+        if (replayed.current) term.write(message.data);
         return;
       }
       if (message.type === "console.exit") {
-        if (message.id !== consoleId.current) return;
-        consoleId.current = null;
-        closing.current = true;
-        // A clean exit is the operator's own `/exit` or `/quit`, so the window
-        // goes with it. A failure is the opposite: it is the only account of
-        // what went wrong, and a process that dies on startup (a loop refusing
-        // a held lease, a missing binary) used to take the window with it
-        // before anything could be read.
-        if (message.exitCode === 0) {
-          onProcessExitRef.current();
-          return;
-        }
         const signal =
           message.signal !== undefined ? ` · signal ${message.signal}` : "";
-        term.writeln(
-          `\r\n[process exited with code ${message.exitCode}${signal}]`,
-        );
-        return;
+        term.writeln(`\r\n[process exited with code ${message.exitCode}${signal}]`);
+        onProcessExitRef.current(message.exitCode === 0);
       }
-      if (message.type === "error" && message.about?.startsWith("console.")) {
-        const loopError = message.about.endsWith(".loop");
-        if (loopError !== (modeRef.current === "loop")) return;
-        term.writeln(`\r\n${message.message}`);
+    });
+
+    // Defer the attach until the window body's expand animation has given
+    // the host a real size — otherwise cols/rows collapse to 1 and the TUI
+    // redraws for a one-column terminal.
+    const attachTimer = window.setTimeout(() => {
+      try {
+        fitAddon.fit();
+      } catch {
+        // Attach at whatever size xterm has.
       }
+      sendRef.current({
+        type: "console.attach",
+        id: consoleId,
+        cols: term.cols,
+        rows: term.rows,
+      });
+    }, 320);
+
+    const dataDisposable = term.onData((data) => {
+      sendRef.current({ type: "console.input", id: consoleId, data });
     });
 
     const observer = new ResizeObserver(() => fit());
     observer.observe(host);
 
     return () => {
-      window.clearTimeout(openTimer);
+      window.clearTimeout(attachTimer);
       observer.disconnect();
       dataDisposable.dispose();
       unsubscribe();
-      const id = consoleId.current;
-      consoleId.current = null;
-      if (id !== null && !closing.current) {
-        sendRef.current({ type: "console.close", id });
-      }
+      // Detach only: closing a window is not ending the process.
+      sendRef.current({ type: "console.detach", id: consoleId });
       term.dispose();
       termRef.current = null;
       fitRef.current = null;
     };
-  }, [authenticated, fit, subscribe]);
+  }, [consoleId, fit, subscribe]);
 
   return (
     <div
@@ -255,7 +223,7 @@ export function ConsoleTerminal({
       ref={hostRef}
       onClick={() => termRef.current?.focus()}
       role="application"
-      aria-label="provider console"
+      aria-label={label}
     />
   );
 }

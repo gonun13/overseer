@@ -1,144 +1,26 @@
-import type { AgentEvent } from "./events.js";
-import type { AdapterPlan } from "./plan.js";
-import type { Skill, SkillImportOutcome, SkillScope } from "./skill.js";
-import type { Subagent, SubagentDraft, SubagentScope } from "./subagent.js";
-import type { TurnWire } from "./transcript.js";
-
-/** Flag set the UI renders controls from — an adapter that can't do X doesn't grow an X zone. */
+/** What the UI may offer for a provider — an adapter that can't do X doesn't
+ * grow an X control. Everything an agent does happens in its own CLI, so this
+ * is only about the parts Overseer drives itself. */
 export interface AdapterCapabilities {
-  streamingDeltas: boolean;
-  permissionPrompts: boolean;
-  interrupt: boolean;
-  subagents: boolean;
-  mcp: boolean;
-  skills: boolean;
-  effortLevels: boolean;
-  costReporting: boolean;
-  checkpoints: boolean;
-  backgroundAgents: boolean;
   /** Whether this adapter can sign itself in from the console. False means the
    * UI grows no login controls at all — an adapter that authenticates some
    * other way must not be handed a dead button. */
   login: boolean;
   /**
    * Whether this adapter offers `checkUsage` — an on-demand, operator-
-   * triggered usage report, distinct from `costReporting`'s automatic
-   * gauges. False means the UI grows no "check usage" button, rather than
-   * offering one that always fails.
+   * triggered usage report. False means the UI grows no "check usage" button,
+   * rather than offering one that always fails.
    */
   usageCheck: boolean;
 }
 
-/**
- * The permission modes a provider CLI accepts, pooled across every adapter —
- * each offers only its own subset via `listOptions`, so the UI never shows
- * the operator a mode a different provider's CLI would reject.
- *
- * `acceptEdits | auto | bypassPermissions | manual | dontAsk` are claude
- * 2.1.226's own, as it prints them when handed a bogus one:
- *
- *   error: option '--permission-mode <mode>' argument 'x' is invalid.
- *   Allowed choices are acceptEdits, auto, bypassPermissions, manual, dontAsk, plan.
- *
- * The CLI also accepts an undocumented `default`, and reports `manual` back as
- * `default`. That asymmetry is the adapter's to absorb (see
- * `normalizePermissionMode` in the claude-code adapter) — it must not leak into
- * the union, or the UI ends up offering the operator two words for one mode.
- *
- * `plan` is shared: both claude (`--permission-mode plan`) and cursor
- * (`--mode plan`) use the same word for the same idea — read-only, propose
- * only. `ask` is cursor's own (`--mode ask`, verified against
- * `2026.08.31-4057e58`) — Q&A only, no tool execution.
- */
-export type PermissionMode =
-  | "acceptEdits"
-  | "auto"
-  | "bypassPermissions"
-  | "manual"
-  | "dontAsk"
-  | "plan"
-  | "ask";
-
-export type PermissionDecision =
-  | { decision: "allow-once" }
-  | { decision: "allow-always"; rule: string }
-  | { decision: "deny"; feedback?: string }
-  /**
-   * The operator answered a question the provider asked with a question tool
-   * (claude's `AskUserQuestion`), keyed by the question text exactly as it was
-   * asked. Not an approval: the answers *are* the tool's result, and a request
-   * allowed without them reports back that the operator said nothing
-   * (verified against the CLI, 2.1.226: "The user did not answer the
-   * questions."). Multi-select answers arrive as one comma-joined string,
-   * which is the same shape the CLI coerces a list to.
-   */
-  | { decision: "answer"; answers: Record<string, string> };
-
-export interface SessionOpts {
-  projectDir: string;
-  model?: string;
-  effort?: string;
-  permissionMode?: PermissionMode;
-  /** Subagent to run the turn as. Empty or absent means the agent itself. */
-  agent?: string;
-  resumeSessionId?: string;
-  name?: string;
-}
-
-/**
- * One entry in a session-control menu.
- *
- * `value` is what reaches the CLI; `label` and `detail` are the provider's own
- * words for it. Nothing here is composed by Overseer — when a provider gives no
- * display name, `label` repeats `value` rather than inventing prose.
- */
-export interface ProviderOption {
-  value: string;
-  label: string;
-  detail?: string;
-  /** Arms something dangerous (`bypassPermissions`). Rendered in `--accent`. */
-  danger?: true;
-  /**
-   * For a model row only: the id the CLI actually reports once this model is
-   * running (`"sonnet"` resolves to `"claude-sonnet-5"`). A live session's
-   * `SessionMeta.model`/turn attribution carries that resolved id, not the
-   * menu's own `value` — matching against this is how the UI turns it back
-   * into the catalog entry instead of printing the raw id.
-   */
-  resolvedModel?: string;
-}
-
-/**
- * What one provider offers a session, in one project. Agents are project-scoped
- * (`<project>/.claude/agents/`), so this is asked per project directory rather
- * than once per provider.
- *
- * Every list may be empty: an adapter that could not get an answer reports
- * nothing rather than a guess, and the UI leaves that row's menu shut.
- */
-export interface ProviderOptions {
-  models: ProviderOption[];
-  permissionModes: ProviderOption[];
-  agents: ProviderOption[];
-  /** The mode the CLI is configured to use when none is passed. */
-  defaultPermissionMode?: PermissionMode;
-  /** The model the CLI is configured to use when none is passed. Lets a control
-   * row read what the next turn will actually run on instead of a blank. */
-  defaultModel?: string;
-}
-
+/** One provider session, as its transcript on disk describes it. */
 export interface SessionMeta {
   id: string;
   adapterId: string;
   name?: string;
   projectDir: string;
   gitBranch?: string;
-  model: string;
-  /** Absent until the provider reports it on `session.init` — the same "not
-   * told yet" convention `model: ""` uses. Never filled with a plausible
-   * default: the CLI's own settings decide, and guessing here would show the
-   * operator a mode the session is not actually running under. */
-  permissionMode?: PermissionMode;
   status: "live" | "dormant" | "closed";
   createdAt: string;
   lastActiveAt: string;
@@ -155,32 +37,6 @@ export interface SessionMeta {
   origin?: "loop";
   /** Workspace slug whose lease owns this run. Only set with `origin: "loop"`. */
   loopWorkspace?: string;
-}
-
-export interface UserMessage {
-  role: "user";
-  content: Array<
-    | { type: "text"; text: string }
-    | { type: "image"; source: string; mediaType: string }
-  >;
-}
-
-export interface SessionHandle {
-  events: AsyncIterable<AgentEvent>;
-  /** Queues if a turn is in flight. */
-  send(msg: UserMessage): void;
-  interrupt(): void;
-  /** Retarget the *next* turn of this already-running session — a control
-   * request on stdin, not a respawn. Success or failure comes back as a
-   * `session.model` or `error` event on `events`, asynchronously. */
-  setModel(model: string): void;
-  /** Retarget the *next* turn's permission mode on this already-running
-   * session — a control request on stdin, not a respawn. Success or failure
-   * comes back as a `session.mode` or `error` event on `events`,
-   * asynchronously. */
-  setPermissionMode(mode: PermissionMode): void;
-  resolvePermission(id: string, decision: PermissionDecision): void;
-  close(): Promise<void>;
 }
 
 /**
@@ -319,14 +175,46 @@ export interface AdapterLogin {
 }
 
 /**
- * Options for the raw CLI console — a PTY escape hatch into the provider's
- * interactive CLI, not a stream-json agent session.
+ * Options for an interactive provider CLI console — the provider's own TUI in
+ * a PTY. Every agent interaction in Overseer goes through one of these.
  */
 export interface ConsoleOpts {
   /** Absolute path inside `/workspace` — the CLI's cwd. */
   cwd: string;
-  cols: number;
-  rows: number;
+  /**
+   * The provider session this console runs. With `resume` it is an existing
+   * session to pick up; without, it is a freshly minted id the CLI should
+   * adopt for a new session (when the CLI supports choosing one). Absent:
+   * the CLI starts a session of its own choosing.
+   */
+  sessionId?: string;
+  resume?: boolean;
+  /** Opening prompt for a new session, passed as the CLI's positional
+   * argument so the TUI starts on it. */
+  prompt?: string;
+  /**
+   * Where the CLI should report lifecycle events (prompt submitted, tool use,
+   * waiting on a permission, turn done) — an HTTP endpoint on this server.
+   * Adapters whose CLI has hooks wire them to it; others ignore it and the
+   * server falls back to watching PTY output.
+   */
+  hookUrl?: string;
+}
+
+/**
+ * What to run for a console. The server owns the PTY; the adapter only knows
+ * its CLI's command line, so spawning, scrollback and lifetime live in one
+ * place for every provider.
+ */
+export interface ConsoleCommand {
+  file: string;
+  args: string[];
+  cwd: string;
+  /** Added on top of the server's environment. */
+  env?: Record<string, string>;
+  /** True when `hookUrl` was wired into the CLI — the server then trusts hook
+   * events over output-based activity guessing. */
+  hooked?: boolean;
 }
 
 export interface ConsoleExit {
@@ -355,33 +243,16 @@ export interface ConsoleHandle {
 
 /**
  * Where an adapter's own session transcripts live, for the server to list,
- * open, title, and delete them without knowing the on-disk format — every
- * method here used to be a free function the session supervisor imported
- * directly from `@overseer/adapter-claude-code`, hardcoding that one adapter
- * regardless of which provider was actually attached. A second real adapter
- * (`@overseer/adapter-cursor`) made that untenable: the supervisor now
- * resolves this from whichever adapter is attached, per call.
+ * title and delete them without knowing the on-disk format.
  *
  * `mintSessionId` is `Promise`-returning to leave room for a provider whose
  * id must round-trip its own CLI — neither shipped adapter needs that today:
- * both claude-code and cursor mint locally with `randomUUID()`, cursor's
- * `agent --resume` having turned out to accept an id it has never seen
- * (verified against the real CLI) rather than requiring `agent create-chat`
- * first.
+ * both mint locally with `randomUUID()` and pass it to the CLI (claude's
+ * `--session-id`, cursor's `--resume`, which accepts an id it has never seen).
  */
 export interface AdapterSessionStore {
-  /** Every session this adapter's own transcripts show for one project —
-   * merged by the supervisor with whatever it is tracking live. */
+  /** Every session this adapter's own transcripts show for one project. */
   listProjectSessions(projectDir: string): Promise<SessionMeta[]>;
-  readSessionHistory(projectDir: string, sessionId: string): Promise<TurnWire[]>;
-  /** Plans this adapter's own transcripts show for one project. Optional: an
-   * adapter whose CLI has no plan step simply omits it, and the server reports
-   * no plans rather than inventing a shape the provider never produced. */
-  listProjectPlans?(projectDir: string): Promise<AdapterPlan[]>;
-  /** Open a *new* session under an id the caller already minted (via
-   * `mintSessionId`) — the supervisor needs the id before the process starts,
-   * to track it. */
-  openSession(sessionId: string, opts: SessionOpts): Promise<SessionHandle>;
   mintSessionId(): Promise<string>;
   lookupSessionTitle(projectDir: string, sessionId: string): Promise<string | undefined>;
   deleteSession(projectDir: string, sessionId: string): Promise<void>;
@@ -390,9 +261,6 @@ export interface AdapterSessionStore {
 export interface AgentAdapter {
   id: string;
   capabilities: AdapterCapabilities;
-  createSession(opts: SessionOpts): Promise<SessionHandle>;
-  resumeSession(id: string): Promise<SessionHandle>;
-  listSessions(): Promise<SessionMeta[]>;
   /**
    * Auth (and version) only — must not wait on usage. When signed in, returns
    * `usageState: "pending"` so the widget can say it is retrieving. Never throws.
@@ -413,115 +281,18 @@ export interface AgentAdapter {
    * Absent when the adapter has no such path. Never throws.
    */
   checkUsage?(opts: { projectDir: string }): Promise<AdapterUsageCheck>;
-  /**
-   * What this provider offers a session in one project — models, permission
-   * modes, subagents. Absent when the adapter cannot enumerate them, in which
-   * case the server refuses the request rather than filling the menus in with
-   * plausible-looking values. Never throws; empty lists are the failure shape.
-   */
-  listOptions?(opts: { projectDir: string }): Promise<ProviderOptions>;
-  /**
-   * The operator's own subagent files for one project — both scopes, with the
-   * body and the path, not the menu-shaped summary `listOptions` returns.
-   *
-   * Absent when the adapter has no such concept, in which case the server
-   * refuses the request rather than reporting an empty inventory that would
-   * read as "you have none" (the `listProjectPlans` precedent). Never throws;
-   * an unreadable folder reports nothing rather than failing the list.
-   */
-  listSubagents?(opts: { projectDir: string }): Promise<Subagent[]>;
-  /**
-   * Create or replace one subagent file, returning it as read back from disk
-   * rather than as asked for.
-   *
-   * `previous` names the file being edited: a subagent's name *is* its
-   * filename, so an edit that renames it or moves its scope is a write plus an
-   * unlink, and only the adapter knows where either file lives.
-   *
-   * May throw — unlike a failed list, a failed write is something the operator
-   * has to see.
-   */
-  writeSubagent?(opts: {
-    projectDir: string;
-    draft: SubagentDraft;
-    previous?: { name: string; scope: SubagentScope };
-  }): Promise<Subagent>;
-  /**
-   * Remove one subagent file. Resolves the path through the adapter's own
-   * listing rather than composing it, so a name the write path would reject
-   * can still be deleted. May throw.
-   */
-  deleteSubagent?(opts: {
-    projectDir: string;
-    name: string;
-    scope: SubagentScope;
-  }): Promise<void>;
-  /**
-   * The operator's own skill folders for one project — both scopes.
-   *
-   * Absent when the adapter has no such concept, in which case the server
-   * refuses rather than reporting an empty inventory, exactly as with
-   * `listSubagents`. Never throws; an unreadable folder reports nothing.
-   *
-   * May include skills the CLI discovers in *another* provider's directory,
-   * marked `foreign`. Listing what the CLI will act on is the whole point of
-   * the inventory; hiding a folder the CLI reads would make the list a
-   * description of this adapter's filesystem rather than of the session's
-   * behaviour.
-   */
-  listSkills?(opts: { projectDir: string }): Promise<Skill[]>;
-  /**
-   * Install every skill an already-fetched directory holds, returning them as
-   * read back from disk rather than as asked for.
-   *
-   * `stagingDir` holds exactly what the operator's source produced — the server
-   * cloned or decoded it and owns its lifetime. This method decides what in
-   * there is a skill, where each one lands, and copies them. The split is the
-   * same one `writeSubagent` makes: the server never composes a destination
-   * path, because only the adapter knows its own layout.
-   *
-   * **Plural, because a source usually is.** Published collections are folders
-   * of skills, and both the folder-with-`SKILL.md` and the flat `<name>.md`
-   * shapes appear in the wild. Installing one and discarding the rest would
-   * make the common source the awkward case.
-   *
-   * One skill failing does not fail the rest: it lands in `skipped` with a
-   * reason. That is what makes re-importing a collection after it gained a
-   * skill do the obvious thing. Throwing is reserved for a source that yields
-   * nothing installable at all.
-   *
-   * Must not leave a partial skill behind: a half-copied folder is one the CLI
-   * would try to load.
-   */
-  importSkills?(opts: {
-    projectDir: string;
-    stagingDir: string;
-    scope: SkillScope;
-    name?: string;
-  }): Promise<SkillImportOutcome>;
-  /**
-   * Remove one skill folder. Resolves through the adapter's own listing rather
-   * than composing the path, so a name the import path would reject can still
-   * be deleted. Refuses a `foreign` skill: it belongs to another provider's
-   * directory, and deleting it here would remove it from that provider too.
-   * May throw.
-   */
-  deleteSkill?(opts: {
-    projectDir: string;
-    name: string;
-    scope: SkillScope;
-  }): Promise<void>;
   /** Present only when `capabilities.login` is true. */
   login?: AdapterLogin;
   /**
-   * Open a raw interactive CLI console. Absent when the adapter has no PTY
-   * escape hatch — the server must refuse `console.open` in that case rather
-   * than invent a pipe.
+   * The command line for an interactive console. Absent when the adapter has
+   * no interactive CLI — the server must refuse `console.open` in that case
+   * rather than invent a pipe. May prepare CLI state (onboarding flags, trust)
+   * before returning.
    */
-  openConsole?(opts: ConsoleOpts): Promise<ConsoleHandle>;
+  consoleCommand?(opts: ConsoleOpts): Promise<ConsoleCommand>;
   /**
    * Directory the adapter writes session transcripts under, for the server to
-   * watch so sessions it did not start still reach the list. Absent when the
+   * watch so a session started in any console reaches the list. Absent when the
    * adapter keeps no such directory, in which case nothing is watched — the
    * server must not guess a path, because where a CLI keeps its state is the
    * adapter's business (the same reasoning `CLAUDE_CONFIG_DIR` carries).
@@ -529,9 +300,9 @@ export interface AgentAdapter {
   sessionsWatchPath?(): string | undefined;
   /**
    * Where this adapter's own session transcripts live, for the server to
-   * list/open/title/delete without knowing the on-disk format. Absent for a
+   * list, title and delete without knowing the on-disk format. Absent for a
    * catalog stub — `getStatus` always reports `authenticated: false` there,
-   * so the supervisor never reaches past that to ask for a session store.
+   * so nothing reaches past that to ask for a session store.
    */
   sessions?: AdapterSessionStore;
 }

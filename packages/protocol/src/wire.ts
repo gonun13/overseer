@@ -2,18 +2,9 @@ import type {
   AdapterStatus,
   AdapterUsageWindow,
   LoginPhase,
-  PermissionDecision,
-  PermissionMode,
-  ProviderOption,
-  ProviderOptions,
   SessionMeta,
 } from "./adapter.js";
-import type { AgentEvent } from "./events.js";
-import type { PlanMeta, PlanStatusOverride } from "./plan.js";
-import type { Skill, SkillScope, SkillSkipped, SkillSource } from "./skill.js";
 import type { SpaceFrame } from "./space.js";
-import type { Subagent, SubagentScope } from "./subagent.js";
-import type { TurnWire } from "./transcript.js";
 import type {
   AppliedPersonality,
   DiscoveredProject,
@@ -54,15 +45,10 @@ export type ClientMessage =
   | { type: "theme.select"; theme: OverseerTheme }
   /** Attach a provider from the picker. Auth is a separate later step. */
   | { type: "provider.connect"; id: string }
-  /** Ask what the attached provider offers a session in the active project —
-   * models, permission modes, subagents. Explicit rather than pushed at
-   * connect time: the answer costs a subprocess, and only a client with the
-   * controls on screen needs it. */
-  | { type: "provider.options" }
   /**
    * Ask the attached provider for an on-demand usage report (`AgentAdapter
    * .checkUsage`) — the operator's own request, never sent automatically.
-   * Unlike `provider.options`, some adapters answer this with a real,
+   * Some adapters answer this with a real,
    * possibly slow, possibly costly CLI turn (cursor's `/usage` is an ordinary
    * prompt the model answers, not a free deterministic command), so it is
    * gated behind an explicit ask rather than run on any timer.
@@ -85,81 +71,56 @@ export type ClientMessage =
    * sent after the operator answered the decision (ui-ux-design.md §5.2). */
   | { type: "memory.reset" }
   /**
-   * Open a raw PTY into the attached provider's interactive CLI, in the active
-   * project. One console per socket; a second open replaces the first.
-   * `cols`/`rows` are the initial terminal size. `mode: "loop"` opens the dev
-   * loop's overseer session (`loop/run`) instead of the bare provider CLI.
+   * Start a console. Consoles belong to the server, not the socket: closing
+   * the tab only detaches, and any tab can `console.attach` later.
+   *
+   * - `agent`: the provider's interactive CLI in `projectPath`. With
+   *   `sessionId` + `resume` it resumes that session; if a console already
+   *   runs that session the server attaches to it instead of starting a second
+   *   CLI on the same transcript.
+   * - `shell`: a login shell in `projectPath`.
+   * - `loop`: the dev loop (`loop/run <project>`). `takeover` ends the run
+   *   holding the lease first — only sent after the operator answered a
+   *   decision.
+   *
+   * `reqId` is the client's own correlation id, echoed on `console.opened` /
+   * `console.failed`.
    */
   | {
       type: "console.open";
+      reqId: string;
+      kind: ConsoleKind;
+      projectPath: string;
+      providerId?: string;
+      sessionId?: string;
+      resume?: boolean;
+      /** Opening prompt for a new agent session — the CLI starts working on
+       * it at once, in its own TUI. */
+      prompt?: string;
+      takeover?: boolean;
       cols: number;
       rows: number;
-      mode?: "loop";
-      /**
-       * End the loop run currently holding this workspace's lease before
-       * starting a new one. Only meaningful with `mode: "loop"`, and only sent
-       * after the operator answered a decision — it destroys a conversation
-       * that may be mid-request, possibly one attached to another terminal.
-       */
-      takeover?: boolean;
     }
+  /** Subscribe this socket to a live console: replay its scrollback, then
+   * stream. Also resizes the PTY to this terminal (last writer wins). */
+  | { type: "console.attach"; id: string; cols: number; rows: number }
+  /** Stop streaming a console to this socket. The process keeps running. */
+  | { type: "console.detach"; id: string }
   /** Keystrokes / paste from the browser terminal, opaque to Overseer. */
   | { type: "console.input"; id: string; data: string }
   /** Browser terminal resized — forwarded to the PTY. */
   | { type: "console.resize"; id: string; cols: number; rows: number }
-  /** Operator dismissed the console window (or the tab is leaving). */
-  | { type: "console.close"; id: string }
-  /** List sessions for the active project. */
+  /** End the process. The console stays listed as exited until dismissed. */
+  | { type: "console.kill"; id: string }
+  /** Forget an exited console (kills it first if it is still running). */
+  | { type: "console.dismiss"; id: string }
+  /** Ask for the console list (also pushed on every change). */
+  | { type: "console.list" }
+  /** List every session in the workspace — every project, every provider. */
   | { type: "session.list" }
-  /** Start a new stream-json session in the active project. */
-  | {
-      type: "session.create";
-      model?: string;
-      permissionMode?: PermissionMode;
-      /** Subagent to run turns as. Empty string means none — the operator
-       * chose the "none" row, which is not the same as never having chosen. */
-      agent?: string;
-      name?: string;
-    }
-  /** Subscribe to a session, backfill history, resume if dormant. */
-  | { type: "session.open"; sessionId: string }
-  /** Send a user turn to a live session. */
-  | { type: "session.send"; sessionId: string; text: string }
-  /** Retarget an already-running session's next turn — a control request on
-   * the live process, not a respawn. Resumes a dormant session first, the
-   * same as `session.send`. */
-  | { type: "session.model"; sessionId: string; model: string }
-  /** Retarget an already-running session's next turn's permission mode — a
-   * control request on the live process, not a respawn. Resumes a dormant
-   * session first, the same as `session.model`. */
-  | { type: "session.mode"; sessionId: string; mode: PermissionMode }
-  /** Answer a pending `can_use_tool` request on a live session — inline,
-   * inside the session that raised it. */
-  | {
-      type: "approval.resolve";
-      sessionId: string;
-      requestId: string;
-      decision: PermissionDecision;
-    }
-  /** Interrupt the in-flight turn. */
-  | { type: "session.interrupt"; sessionId: string }
-  /** Close a live session process. */
-  | { type: "session.close"; sessionId: string }
-  /** Stop the process if running and permanently delete the session's transcript. */
+  /** Permanently delete a session's transcript. Refused while a console runs
+   * it or a loop run owns it. */
   | { type: "session.delete"; sessionId: string }
-  /** List the plans the active project's transcripts show. */
-  | { type: "plan.list" }
-  /** Retire a plan by hand, or hand it back to what the transcript says
-   * (`"open"`). The three derived statuses are not settable — they are a
-   * reading of the transcript, not an opinion about it. */
-  | { type: "plan.status"; planId: string; status: PlanStatusOverride }
-  /**
-   * Continue a plan in the session that built it: leave `plan` mode and send
-   * the implement turn there, so the work lands in the transcript that holds
-   * the plan. A plan whose session is gone starts a new one, seeded with the
-   * plan itself.
-   */
-  | { type: "plan.implement"; planId: string }
   /**
    * Read the loop's own provider/model configuration — separate from the
    * app's single attached provider (`provider.connect`); the loop picks its
@@ -167,69 +128,6 @@ export type ClientMessage =
    * than pushed at connect time: it shells out to `loop/bin/models`, and
    * only a client with the loop tab of the providers window open needs it.
    */
-  /**
-   * List the operator's own subagent files for the active project — both
-   * scopes. Explicit rather than pushed at connect time, like
-   * `provider.options`: only a client with the capabilities window open needs
-   * it. Unlike that one it costs no subprocess, just two directory reads.
-   */
-  | { type: "subagent.list" }
-  /**
-   * Create or replace one subagent file.
-   *
-   * `previousName`/`previousScope` name the file being edited: the name *is*
-   * the filename, so a rename or a scope move has to remove the old file, and
-   * only the request knows which one that was. Both absent means create.
-   *
-   * `model` and `tools` empty mean inherit the session's — not an empty model
-   * and not an empty allowlist.
-   */
-  | {
-      type: "subagent.write";
-      name: string;
-      description: string;
-      prompt: string;
-      model: string;
-      tools: string;
-      scope: SubagentScope;
-      previousName?: string;
-      previousScope?: SubagentScope;
-    }
-  /**
-   * Remove one subagent file.
-   *
-   * Deliberately accepts a `name` the write path would refuse: a hand-written
-   * file whose frontmatter name is not kebab-case is exactly the one an
-   * operator most wants to delete. The server resolves it through the
-   * adapter's own listing rather than composing a path from it.
-   */
-  | { type: "subagent.delete"; name: string; scope: SubagentScope }
-  /**
-   * List the operator's own skill folders for the active project — both
-   * scopes. Same reasoning as `subagent.list`: explicit, cheap, and only a
-   * client with the capabilities window open needs it.
-   */
-  | { type: "skill.list" }
-  /**
-   * Install one skill.
-   *
-   * The frame carries a *source*, not a skill: a git repository to clone or a
-   * set of files read in the browser. The server fetches it into a staging
-   * directory and the adapter decides where it lands, so nothing here is a
-   * path the operator composed.
-   *
-   * `name` overrides what the skill calls itself; absent is the ordinary case.
-   */
-  | { type: "skill.import"; source: SkillSource; scope: SkillScope; name?: string }
-  /**
-   * Remove one skill folder.
-   *
-   * Accepts a `name` the import path would refuse, for the same reason
-   * `subagent.delete` does: a folder whose name is not kebab-case is exactly
-   * the one an operator most wants gone. Resolved through the adapter's own
-   * listing rather than composed into a path.
-   */
-  | { type: "skill.delete"; name: string; scope: SkillScope }
   | { type: "loop.config.read" }
   /** Select which provider the loop runs on next (`loop/bin/provider`). */
   | { type: "loop.provider.set"; id: string }
@@ -571,9 +469,8 @@ export interface ProviderStatusMessage {
  * an unreadable report still has something to show, and so the numbers on the
  * instrument always have a receipt behind them.
  *
- * Broadcast, same reasoning as `ProviderOptionsMessage`: the ask can be slow
- * and costly, so a second tab must not trigger a second one just to see the
- * answer that is already on its way.
+ * Broadcast: the ask can be slow and costly, so a second tab must not trigger
+ * a second one just to see the answer that is already on its way.
  */
 export interface ProviderUsageCheckMessage {
   type: "provider.usageCheck";
@@ -581,100 +478,6 @@ export interface ProviderUsageCheckMessage {
   report: string;
   windows: AdapterUsageWindow[];
   spend?: string;
-}
-
-/**
- * What the attached provider offers a session, for one project.
- *
- * Broadcast rather than sent to the asking socket: the answer is a fact about
- * the instance, not about who asked, and a second tab must not have to spawn
- * the CLI again to learn it.
- *
- * `projectDir` is on the frame because the lists are project-scoped — a client
- * that has already moved on to another project can tell this reply is stale
- * instead of rendering another project's subagents.
- */
-export interface ProviderOptionsMessage {
-  type: "provider.options";
-  providerId: string;
-  projectDir: string;
-  options: ProviderOptions;
-}
-
-/**
- * Every subagent file the operator has, for one project.
- *
- * Broadcast rather than sent to the asker, and re-broadcast after every
- * successful write or delete — the same reasoning as `ProviderOptionsMessage`:
- * this is a fact about the instance, and a second tab must not have to re-ask
- * to see an edit made in the first.
- *
- * `projectDir` is on the frame because project-scoped agents are, so a client
- * that has moved on can tell this reply is stale.
- */
-export interface SubagentListMessage {
-  type: "subagent.list";
-  providerId: string;
-  projectDir: string;
-  subagents: Subagent[];
-}
-
-/**
- * One write landed, as it reads back off disk — which is not always what was
- * asked for, since the name in the frontmatter decides the filename.
- *
- * Sent to the socket that asked rather than broadcast, so its form can close:
- * the `subagent.list` that follows is what updates every other tab. Same shape
- * and reasoning as `ProjectCreatedMessage`.
- */
-export interface SubagentWrittenMessage {
-  type: "subagent.written";
-  subagent: Subagent;
-}
-
-/** One subagent file is gone. Sent to the asker, for the same reason. */
-export interface SubagentDeletedMessage {
-  type: "subagent.deleted";
-  name: string;
-  scope: SubagentScope;
-}
-
-/**
- * Every skill folder the operator has, for one project.
- *
- * Broadcast and re-broadcast after every import or delete, for the same reason
- * `SubagentListMessage` is: a fact about the instance, not an answer to one
- * tab's question.
- */
-export interface SkillListMessage {
-  type: "skill.list";
-  providerId: string;
-  projectDir: string;
-  skills: Skill[];
-}
-
-/**
- * What one import landed, as it reads back off disk.
- *
- * Sent to the socket that asked so its form can close; the `skill.list` that
- * follows is what updates every other tab.
- *
- * `skills` is plural because a source usually is — a folder of them installs
- * all of them. `skipped` carries the ones that were not installed and why,
- * which is ordinary rather than exceptional: re-importing a collection that
- * gained one skill skips the rest as already present.
- */
-export interface SkillImportedMessage {
-  type: "skill.imported";
-  skills: Skill[];
-  skipped: SkillSkipped[];
-}
-
-/** One skill folder is gone. Sent to the asker, for the same reason. */
-export interface SkillDeletedMessage {
-  type: "skill.deleted";
-  name: string;
-  scope: SkillScope;
 }
 
 /**
@@ -736,17 +539,56 @@ export interface MemoryResetDoneMessage {
   type: "memory.reset.done";
 }
 
-/** PTY is up — subsequent input/resize/close must carry this `id`. */
-export interface ConsoleOpenedMessage {
-  type: "console.opened";
+/** What kind of process a console runs. */
+export type ConsoleKind = "agent" | "shell" | "loop";
+
+/**
+ * What the CLI in a console is doing, as far as Overseer can tell. `waiting`
+ * means it needs the operator — a permission prompt or a question.
+ */
+export type ConsoleActivity = "working" | "waiting" | "idle" | "unknown";
+
+/** One console as the server tracks it — the same for every tab. */
+export interface ConsoleInfo {
   id: string;
-  /** Echoes the open request's mode. The raw CLI and the dev loop hold a PTY
-   * slot each, so a socket can have two console windows live at once; without
-   * this each of them would adopt whichever ack landed last. */
-  mode?: "loop";
+  kind: ConsoleKind;
+  projectPath: string;
+  providerId?: string;
+  /** The provider session this console runs, when known. */
+  sessionId?: string;
+  title: string;
+  startedAt: string;
+  status: "running" | "exited";
+  exitCode?: number;
+  signal?: number;
+  activity: ConsoleActivity;
+  /** True when activity comes from CLI hooks rather than output heuristics. */
+  hooked: boolean;
 }
 
-/** Opaque PTY output chunk for the owning socket only. */
+/** The console requested by `reqId` is up. The requesting socket is already
+ * attached; its scrollback follows as `console.replay`. */
+export interface ConsoleOpenedMessage {
+  type: "console.opened";
+  reqId: string;
+  console: ConsoleInfo;
+}
+
+/** The console requested by `reqId` could not be started. */
+export interface ConsoleFailedMessage {
+  type: "console.failed";
+  reqId: string;
+  reason: string;
+}
+
+/** Scrollback for a socket that just attached — write before live output. */
+export interface ConsoleReplayMessage {
+  type: "console.replay";
+  id: string;
+  data: string;
+}
+
+/** Opaque PTY output chunk, to every attached socket. */
 export interface ConsoleOutputMessage {
   type: "console.output";
   id: string;
@@ -754,14 +596,27 @@ export interface ConsoleOutputMessage {
 }
 
 /**
- * The CLI process ended. Native `/exit` and `/quit` land here; the client
- * closes the console window. `signal` is present when the process was killed.
+ * The process ended. `signal` is present when it was killed. The console
+ * stays in `console.list` as exited until someone dismisses it.
  */
 export interface ConsoleExitMessage {
   type: "console.exit";
   id: string;
   exitCode: number;
   signal?: number;
+}
+
+/** Every console the server holds — broadcast to all tabs on any change. */
+export interface ConsoleListMessage {
+  type: "console.list";
+  consoles: ConsoleInfo[];
+}
+
+/** One console's activity changed — broadcast, cheaper than a full list. */
+export interface ConsoleStateMessage {
+  type: "console.state";
+  id: string;
+  activity: ConsoleActivity;
 }
 
 /** Sessions for the active project — broadcast to all tabs. */
@@ -771,19 +626,6 @@ export interface SessionListMessage {
 }
 
 /** JSONL backfill before live streaming begins. */
-export interface SessionHistoryMessage {
-  type: "session.history";
-  sessionId: string;
-  turns: TurnWire[];
-}
-
-/** One normalized adapter event from a live session. */
-export interface SessionEventMessage {
-  type: "session.event";
-  event: AgentEvent;
-}
-
-/** Session metadata changed (status, cost, name). */
 export interface SessionMetaMessage {
   type: "session.meta";
   session: SessionMeta;
@@ -791,22 +633,6 @@ export interface SessionMetaMessage {
 
 /** Plans for the active project — broadcast to all tabs, like the session
  * list, so a plan retired in one tab leaves the others' lists too. */
-export interface PlanListMessage {
-  type: "plan.list";
-  plans: PlanMeta[];
-}
-
-/** A plan is being continued, in this session. The client opens (or raises)
- * that session's window: the server has already sent the turn, and the output
- * is about to arrive there. */
-export interface PlanImplementingMessage {
-  type: "plan.implementing";
-  planId: string;
-  sessionId: string;
-}
-
-/** One loop-runnable provider's model allocation, mirroring `loop/bin/models
- * --json`'s `providers.<id>` entry. */
 export interface LoopProviderInfo {
   id: string;
   /** Mirrors `providers/<id>/manifest.json`'s `loopSubagents` field (absent
@@ -836,10 +662,25 @@ export interface LoopConfigMessage {
 }
 
 /**
+ * One model a loop-runnable provider offers. `value` is what reaches the CLI;
+ * `label` and `detail` are the provider's own words for it — when it gives no
+ * display name, `label` repeats `value` rather than inventing prose.
+ */
+export interface ProviderOption {
+  value: string;
+  label: string;
+  detail?: string;
+  /** Marks something dangerous. Rendered in `--accent`. */
+  danger?: true;
+  /** The id the CLI reports once this model is running (`"sonnet"` resolves
+   * to `"claude-sonnet-5"`), when it differs from `value`. */
+  resolvedModel?: string;
+}
+
+/**
  * The models one loop-runnable provider offers, from `loop/bin/models
  * list-models <providerId>` — that provider's own CLI, asked directly and
- * independent of the app's attached provider (unlike `ProviderOptionsMessage`,
- * which only ever answers for the one the app has attached and authenticated).
+ * independent of the app's attached provider.
  * Broadcast, so a provider switched from another tab still lands here.
  */
 export interface LoopModelsMessage {
@@ -870,26 +711,19 @@ export type ServerMessage =
   | ProviderConnectedMessage
   | ProviderStatusMessage
   | ProviderUsageCheckMessage
-  | ProviderOptionsMessage
-  | SubagentListMessage
-  | SubagentWrittenMessage
-  | SubagentDeletedMessage
-  | SkillListMessage
-  | SkillImportedMessage
-  | SkillDeletedMessage
   | AuthStateMessage
   | WorkspaceProjectsMessage
   | SpaceFrame
   | MemoryResetDoneMessage
   | ConsoleOpenedMessage
+  | ConsoleFailedMessage
+  | ConsoleReplayMessage
   | ConsoleOutputMessage
   | ConsoleExitMessage
+  | ConsoleListMessage
+  | ConsoleStateMessage
   | SessionListMessage
-  | SessionHistoryMessage
-  | SessionEventMessage
   | SessionMetaMessage
-  | PlanListMessage
-  | PlanImplementingMessage
   | LoopConfigMessage
   | LoopModelsMessage
   | DiscoveryEvent;
@@ -901,48 +735,8 @@ export const CONSOLE_MAX_INPUT_CHARS = 64_000;
 export const SESSION_MAX_ID_CHARS = 64;
 export const SESSION_MAX_TEXT_CHARS = 64_000;
 export const SESSION_MAX_NAME_CHARS = 256;
-/** Matches `SESSION_MAX_AGENT_CHARS` — a menu value, not free text. */
+/** A model id, as a menu value — not free text. */
 export const SESSION_MAX_MODEL_CHARS = 128;
-
-/** Mirrors `PermissionMode`. The CLI rejects anything else outright, and a
- * rejected spawn reads to the operator as a broken session rather than a bad
- * frame — so the socket refuses it here instead. */
-const PERMISSION_MODES = new Set<string>([
-  "acceptEdits",
-  "auto",
-  "bypassPermissions",
-  "manual",
-  "dontAsk",
-  "plan",
-  "ask",
-]);
-
-/** A subagent name, as the provider reported it. Empty means "none". */
-export const SESSION_MAX_AGENT_CHARS = 128;
-
-/** A plan id is a provider tool-use id, not something Overseer mints, so this
- * is a sanity bound rather than a format. */
-export const PLAN_MAX_ID_CHARS = 128;
-
-/** A permission request id is the provider's own `can_use_tool` request id —
- * a sanity bound, not a format, same reasoning as `PLAN_MAX_ID_CHARS`. */
-export const APPROVAL_MAX_ID_CHARS = 128;
-/** An "allow always" rule, e.g. `Bash(git *)` — short by construction. */
-export const APPROVAL_MAX_RULE_CHARS = 256;
-/** Optional free text on a deny. */
-export const APPROVAL_MAX_FEEDBACK_CHARS = 2_000;
-/** A question tool asks at most four questions in one call (claude's
- * `AskUserQuestion`); the bound is that, with room to spare. */
-export const APPROVAL_MAX_ANSWERS = 8;
-/** Answer keys are the question text verbatim, so they are a sentence. */
-export const APPROVAL_MAX_QUESTION_CHARS = 1_000;
-/** An answer is a picked option's label, or the operator's own words in place
- * of one — the same order of magnitude as a deny's feedback. */
-export const APPROVAL_MAX_ANSWER_CHARS = 2_000;
-
-/** Mirrors `PlanStatusOverride` — the derived statuses are deliberately absent:
- * a client asking for one is asking to overwrite a reading of the transcript. */
-const PLAN_OVERRIDE_STATUSES = new Set<string>(["done", "archived", "open"]);
 
 export const PROJECT_MAX_NAME_CHARS = 200;
 export const PROJECT_MAX_FOLDER_CHARS = 100;
@@ -969,104 +763,6 @@ export const GIT_MAX_IDENTITY_NAME_CHARS = 128;
 /** RFC 5321's cap on an address. */
 export const GIT_MAX_IDENTITY_EMAIL_CHARS = 254;
 
-/** A subagent name is also its filename; kebab-case at this length covers
- * every real agent name and keeps the path short. */
-export const SUBAGENT_MAX_NAME_CHARS = 64;
-/** The description is the routing hint a CLI matches a task against — a
- * sentence or two, not a document. */
-export const SUBAGENT_MAX_DESCRIPTION_CHARS = 1_000;
-/** The body. Same bound as a user turn: it is prose of the same order. */
-export const SUBAGENT_MAX_PROMPT_CHARS = 64_000;
-/** A comma-separated tool allowlist, not free prose. */
-export const SUBAGENT_MAX_TOOLS_CHARS = 1_000;
-
-/** Mirrors `SubagentScope`. */
-const SUBAGENT_SCOPES = new Set<string>(["project", "user"]);
-
-/** A skill name is also its directory name — same reasoning and same bound as
- * `SUBAGENT_MAX_NAME_CHARS`. */
-export const SKILL_MAX_NAME_CHARS = 64;
-/** A clone URL. Generous next to `GIT_MAX_PATH_CHARS` because a forge URL
- * carries a ref and a subpath through the same string. */
-export const SKILL_MAX_URL_CHARS = 2_048;
-/** A ref is a branch, tag or sha. */
-export const SKILL_MAX_REF_CHARS = 256;
-/** A path inside the repository, or inside the uploaded skill. */
-export const SKILL_MAX_SUBPATH_CHARS = 1_024;
-/**
- * An upload is a skill an operator assembled by hand, not an archive: a
- * `SKILL.md` and the handful of files it references. These three caps bound
- * the frame, and the server re-checks the total after decoding — a client that
- * satisfies each file's cap can still overrun the sum.
- */
-export const SKILL_MAX_UPLOAD_FILES = 50;
-export const SKILL_MAX_UPLOAD_FILE_CHARS = 256_000;
-export const SKILL_MAX_UPLOAD_TOTAL_CHARS = 1_000_000;
-
-/** Mirrors `SkillScope`. Separate from `SUBAGENT_SCOPES` despite the identical
- * body: the two unions are free to diverge. */
-const SKILL_SCOPES = new Set<string>(["project", "user"]);
-
-/**
- * A path inside an uploaded skill's own folder.
- *
- * The whole containment story for an upload, and the reason it is a shape rule
- * rather than a `realpath` check: none of these files exist at validation time.
- * Rejects an absolute path, a Windows separator, a drive letter, any `.`/`..`
- * segment, and any empty segment — what survives can only be joined *downward*
- * from the skill's directory.
- */
-function isSkillUploadPath(value: unknown): value is string {
-  if (typeof value !== "string") return false;
-  if (value === "" || value.length > SKILL_MAX_SUBPATH_CHARS) return false;
-  if (value.includes("\\") || value.includes("\0")) return false;
-  if (value.startsWith("/")) return false;
-  if (/^[A-Za-z]:/.test(value)) return false;
-  const segments = value.split("/");
-  return segments.every(
-    (segment) => segment !== "" && segment !== "." && segment !== "..",
-  );
-}
-
-function isSkillSource(value: unknown): value is SkillSource {
-  if (typeof value !== "object" || value === null) return false;
-  const source = value as Record<string, unknown>;
-
-  if (source.kind === "git") {
-    return (
-      typeof source.url === "string" &&
-      source.url.trim().length > 0 &&
-      source.url.length <= SKILL_MAX_URL_CHARS &&
-      !hasConfigInjection(source.url) &&
-      (source.ref === undefined ||
-        (typeof source.ref === "string" &&
-          source.ref.length <= SKILL_MAX_REF_CHARS)) &&
-      // A subpath is a path *inside the clone*, so it takes the same downward
-      // rule an upload path does.
-      (source.subpath === undefined || isSkillUploadPath(source.subpath))
-    );
-  }
-
-  if (source.kind === "upload") {
-    if (!Array.isArray(source.files)) return false;
-    if (source.files.length === 0) return false;
-    if (source.files.length > SKILL_MAX_UPLOAD_FILES) return false;
-    let total = 0;
-    for (const entry of source.files) {
-      if (typeof entry !== "object" || entry === null) return false;
-      const file = entry as Record<string, unknown>;
-      if (!isSkillUploadPath(file.path)) return false;
-      if (typeof file.text !== "string") return false;
-      if (file.text.length > SKILL_MAX_UPLOAD_FILE_CHARS) return false;
-      total += file.text.length;
-      if (total > SKILL_MAX_UPLOAD_TOTAL_CHARS) return false;
-    }
-    return true;
-  }
-
-  return false;
-}
-
 function isConsoleSize(cols: unknown, rows: unknown): boolean {
   return (
     typeof cols === "number" &&
@@ -1080,6 +776,11 @@ function isConsoleSize(cols: unknown, rows: unknown): boolean {
   );
 }
 
+function isConsoleId(id: unknown): boolean {
+  return typeof id === "string" && id.length > 0 && id.length <= 64;
+}
+
+const CONSOLE_KINDS = new Set<string>(["agent", "shell", "loop"]);
 const TONES = new Set<string>(["neutral", "dry", "warm"]);
 const THEMES = new Set<string>(["samaritan", "machine"]);
 
@@ -1104,7 +805,6 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   if (type === "provider.connect") {
     return typeof (value as { id?: unknown }).id === "string";
   }
-  if (type === "provider.options") return true;
   if (type === "provider.checkUsage") return true;
   if (type === "auth.start" || type === "auth.signout") {
     return typeof (value as { providerId?: unknown }).providerId === "string";
@@ -1119,123 +819,61 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   if (type === "auth.cancel") return true;
   if (type === "memory.reset") return true;
   if (type === "console.open") {
-    const msg = value as { cols?: unknown; rows?: unknown };
-    return isConsoleSize(msg.cols, msg.rows);
+    const msg = value as {
+      reqId?: unknown;
+      kind?: unknown;
+      projectPath?: unknown;
+      providerId?: unknown;
+      sessionId?: unknown;
+      resume?: unknown;
+      prompt?: unknown;
+      takeover?: unknown;
+      cols?: unknown;
+      rows?: unknown;
+    };
+    return (
+      isConsoleId(msg.reqId) &&
+      CONSOLE_KINDS.has(msg.kind as string) &&
+      typeof msg.projectPath === "string" &&
+      msg.projectPath.length > 0 &&
+      msg.projectPath.length <= GIT_MAX_PATH_CHARS &&
+      (msg.providerId === undefined || isConsoleId(msg.providerId)) &&
+      (msg.sessionId === undefined ||
+        (typeof msg.sessionId === "string" &&
+          msg.sessionId.length > 0 &&
+          msg.sessionId.length <= SESSION_MAX_ID_CHARS)) &&
+      (msg.resume === undefined || typeof msg.resume === "boolean") &&
+      (msg.prompt === undefined ||
+        (typeof msg.prompt === "string" &&
+          msg.prompt.length > 0 &&
+          msg.prompt.length <= SESSION_MAX_TEXT_CHARS)) &&
+      (msg.takeover === undefined || typeof msg.takeover === "boolean") &&
+      isConsoleSize(msg.cols, msg.rows)
+    );
+  }
+  if (type === "console.attach" || type === "console.resize") {
+    const msg = value as { id?: unknown; cols?: unknown; rows?: unknown };
+    return isConsoleId(msg.id) && isConsoleSize(msg.cols, msg.rows);
   }
   if (type === "console.input") {
     const msg = value as { id?: unknown; data?: unknown };
     return (
-      typeof msg.id === "string" &&
-      msg.id.length > 0 &&
-      msg.id.length <= 64 &&
+      isConsoleId(msg.id) &&
       typeof msg.data === "string" &&
       msg.data.length <= CONSOLE_MAX_INPUT_CHARS
     );
   }
-  if (type === "console.resize") {
-    const msg = value as { id?: unknown; cols?: unknown; rows?: unknown };
-    return (
-      typeof msg.id === "string" &&
-      msg.id.length > 0 &&
-      msg.id.length <= 64 &&
-      isConsoleSize(msg.cols, msg.rows)
-    );
-  }
-  if (type === "console.close") {
-    const msg = value as { id?: unknown };
-    return (
-      typeof msg.id === "string" && msg.id.length > 0 && msg.id.length <= 64
-    );
-  }
-  if (type === "session.list") return true;
-  if (type === "session.create") {
-    const msg = value as {
-      model?: unknown;
-      permissionMode?: unknown;
-      agent?: unknown;
-      name?: unknown;
-    };
-    if (msg.model !== undefined && typeof msg.model !== "string") return false;
-    if (
-      msg.permissionMode !== undefined &&
-      !PERMISSION_MODES.has(msg.permissionMode as string)
-    ) {
-      return false;
-    }
-    // An empty agent is legal — it is the "none" row, and it must be
-    // distinguishable from the field never having been sent.
-    if (
-      msg.agent !== undefined &&
-      (typeof msg.agent !== "string" ||
-        msg.agent.length > SESSION_MAX_AGENT_CHARS)
-    ) {
-      return false;
-    }
-    if (msg.name !== undefined) {
-      return (
-        typeof msg.name === "string" &&
-        msg.name.length > 0 &&
-        msg.name.length <= SESSION_MAX_NAME_CHARS
-      );
-    }
-    return true;
-  }
   if (
-    type === "session.open" ||
-    type === "session.interrupt" ||
-    type === "session.close" ||
-    type === "session.delete"
+    type === "console.detach" ||
+    type === "console.kill" ||
+    type === "console.dismiss"
   ) {
-    const msg = value as { sessionId?: unknown };
-    return isSessionId(msg.sessionId);
+    return isConsoleId((value as { id?: unknown }).id);
   }
-  if (type === "session.send") {
-    const msg = value as { sessionId?: unknown; text?: unknown };
-    return (
-      isSessionId(msg.sessionId) &&
-      typeof msg.text === "string" &&
-      msg.text.length > 0 &&
-      msg.text.length <= SESSION_MAX_TEXT_CHARS
-    );
-  }
-  if (type === "session.model") {
-    const msg = value as { sessionId?: unknown; model?: unknown };
-    return (
-      isSessionId(msg.sessionId) &&
-      typeof msg.model === "string" &&
-      msg.model.length > 0 &&
-      msg.model.length <= SESSION_MAX_MODEL_CHARS
-    );
-  }
-  if (type === "session.mode") {
-    const msg = value as { sessionId?: unknown; mode?: unknown };
-    return (
-      isSessionId(msg.sessionId) && PERMISSION_MODES.has(msg.mode as string)
-    );
-  }
-  if (type === "approval.resolve") {
-    const msg = value as {
-      sessionId?: unknown;
-      requestId?: unknown;
-      decision?: unknown;
-    };
-    return (
-      isSessionId(msg.sessionId) &&
-      typeof msg.requestId === "string" &&
-      msg.requestId.length > 0 &&
-      msg.requestId.length <= APPROVAL_MAX_ID_CHARS &&
-      isPermissionDecision(msg.decision)
-    );
-  }
-  if (type === "plan.list") return true;
-  if (type === "plan.implement") {
-    return isPlanId((value as { planId?: unknown }).planId);
-  }
-  if (type === "plan.status") {
-    const msg = value as { planId?: unknown; status?: unknown };
-    return (
-      isPlanId(msg.planId) && PLAN_OVERRIDE_STATUSES.has(msg.status as string)
-    );
+  if (type === "console.list") return true;
+  if (type === "session.list") return true;
+  if (type === "session.delete") {
+    return isSessionId((value as { sessionId?: unknown }).sessionId);
   }
   if (type === "loop.config.read") return true;
   if (type === "loop.provider.set") {
@@ -1332,52 +970,6 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     const msg = value as { name?: unknown; email?: unknown };
     return isGitIdentityName(msg.name) && isGitIdentityEmail(msg.email);
   }
-  if (type === "subagent.list") return true;
-  if (type === "subagent.write") {
-    const msg = value as {
-      name?: unknown;
-      description?: unknown;
-      prompt?: unknown;
-      model?: unknown;
-      tools?: unknown;
-      scope?: unknown;
-      previousName?: unknown;
-      previousScope?: unknown;
-    };
-    return (
-      isSubagentName(msg.name) &&
-      typeof msg.description === "string" &&
-      msg.description.length <= SUBAGENT_MAX_DESCRIPTION_CHARS &&
-      typeof msg.prompt === "string" &&
-      msg.prompt.length <= SUBAGENT_MAX_PROMPT_CHARS &&
-      typeof msg.model === "string" &&
-      msg.model.length <= SESSION_MAX_MODEL_CHARS &&
-      typeof msg.tools === "string" &&
-      msg.tools.length <= SUBAGENT_MAX_TOOLS_CHARS &&
-      SUBAGENT_SCOPES.has(msg.scope as string) &&
-      (msg.previousName === undefined || isSubagentName(msg.previousName)) &&
-      (msg.previousScope === undefined ||
-        SUBAGENT_SCOPES.has(msg.previousScope as string))
-    );
-  }
-  if (type === "subagent.delete") {
-    const msg = value as { name?: unknown; scope?: unknown };
-    return isSubagentName(msg.name) && SUBAGENT_SCOPES.has(msg.scope as string);
-  }
-  if (type === "skill.list") return true;
-  if (type === "skill.import") {
-    const msg = value as { source?: unknown; scope?: unknown; name?: unknown };
-    return (
-      isSkillSource(msg.source) &&
-      SKILL_SCOPES.has(msg.scope as string) &&
-      // Absent is the ordinary case: the skill names itself.
-      (msg.name === undefined || isSkillName(msg.name))
-    );
-  }
-  if (type === "skill.delete") {
-    const msg = value as { name?: unknown; scope?: unknown };
-    return isSkillName(msg.name) && SKILL_SCOPES.has(msg.scope as string);
-  }
   return false;
 }
 
@@ -1457,47 +1049,6 @@ function isGitIdentityEmail(value: unknown): value is string {
   );
 }
 
-/**
- * Shape and length only — deliberately not `SUBAGENT_NAME_PATTERN`.
- *
- * A name that is the right shape but the wrong format is a mistake the
- * operator made in a form, and it deserves a sentence telling them the rule
- * (which the server gives it), not a frame silently dropped as unrecognized.
- * The same split `project.create` makes with `PROJECT_FOLDER_PATTERN`.
- *
- * It is also what lets `subagent.delete` accept a hand-written name the write
- * path would refuse — the one file an operator most wants to be able to remove.
- */
-function isSubagentName(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= SUBAGENT_MAX_NAME_CHARS
-  );
-}
-
-/**
- * Shape and length only — deliberately not `SKILL_NAME_PATTERN`, for exactly
- * the reasons `isSubagentName` is not `SUBAGENT_NAME_PATTERN`.
- *
- * One addition: a skill name is a directory name, so a frame that slipped a
- * separator through here would reach a `path.join`. The format check on the
- * *import* path is the server's (with a sentence explaining the rule), but no
- * name that could traverse is worth carrying even as far as a refusal.
- */
-function isSkillName(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= SKILL_MAX_NAME_CHARS &&
-    !value.includes("/") &&
-    !value.includes("\\") &&
-    !value.includes("\0") &&
-    value !== "." &&
-    value !== ".."
-  );
-}
-
 function isGitPath(value: unknown): value is string {
   return (
     typeof value === "string" && value.length > 0 && value.length <= GIT_MAX_PATH_CHARS
@@ -1526,59 +1077,10 @@ function isRepoRelativePath(value: unknown): value is string {
   return value.split("/").every((segment) => segment !== ".." && segment !== "");
 }
 
-function isPlanId(value: unknown): value is string {
-  return (
-    typeof value === "string" &&
-    value.length > 0 &&
-    value.length <= PLAN_MAX_ID_CHARS
-  );
-}
-
 function isSessionId(value: unknown): value is string {
   return (
     typeof value === "string" &&
     value.length > 0 &&
     value.length <= SESSION_MAX_ID_CHARS
   );
-}
-
-function isPermissionDecision(value: unknown): value is PermissionDecision {
-  if (typeof value !== "object" || value === null) return false;
-  const decision = value as {
-    decision?: unknown;
-    rule?: unknown;
-    feedback?: unknown;
-  };
-  if (decision.decision === "allow-once") return true;
-  if (decision.decision === "allow-always") {
-    return (
-      typeof decision.rule === "string" &&
-      decision.rule.length > 0 &&
-      decision.rule.length <= APPROVAL_MAX_RULE_CHARS
-    );
-  }
-  if (decision.decision === "deny") {
-    return (
-      decision.feedback === undefined ||
-      (typeof decision.feedback === "string" &&
-        decision.feedback.length <= APPROVAL_MAX_FEEDBACK_CHARS)
-    );
-  }
-  if (decision.decision === "answer") {
-    const answers = (value as { answers?: unknown }).answers;
-    if (typeof answers !== "object" || answers === null) return false;
-    const entries = Object.entries(answers as Record<string, unknown>);
-    if (entries.length === 0 || entries.length > APPROVAL_MAX_ANSWERS) {
-      return false;
-    }
-    return entries.every(
-      ([question, answer]) =>
-        question.length > 0 &&
-        question.length <= APPROVAL_MAX_QUESTION_CHARS &&
-        typeof answer === "string" &&
-        answer.length > 0 &&
-        answer.length <= APPROVAL_MAX_ANSWER_CHARS,
-    );
-  }
-  return false;
 }

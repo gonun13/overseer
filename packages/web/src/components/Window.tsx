@@ -1,5 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
+import type { Activity } from "../status";
 import { CloseIcon, ResizeIcon } from "./icons";
+import { StatusLight } from "./StatusLight";
 
 const MIN_WIDTH = 420;
 const MIN_HEIGHT = 240;
@@ -10,6 +12,7 @@ const MIN_HEIGHT = 240;
  * construction — there is no offset left to drift (design-system.md §5).
  */
 export function Window({
+  windowId,
   title,
   detail,
   x,
@@ -18,12 +21,17 @@ export function Window({
   width,
   height,
   variant,
+  light,
+  actions,
+  closeLabel,
   onClose,
   onRaise,
   onMove,
   onResize,
   children,
 }: {
+  /** Stamped on the frame so keyboard commands can find a window's content. */
+  windowId?: string;
   title: string;
   /** Dim secondary on the tab — not uppercased (e.g. project name). */
   detail?: string;
@@ -36,6 +44,12 @@ export function Window({
   /** `console` fills flush; `session` fills the body so the transcript can grow.
    * Either may expose a resize grip when `onResize` is set. */
   variant?: "console" | "session";
+  /** A status light in place of the tab mark — what a console's CLI is doing. */
+  light?: Activity;
+  /** Extra tab controls, before close. */
+  actions?: ReactNode;
+  /** Overrides the close button's verb ("detach" on a console). */
+  closeLabel?: string;
   onClose: () => void;
   onRaise: () => void;
   onMove: (x: number, y: number) => void;
@@ -138,6 +152,7 @@ export function Window({
     <div
       className={`window ${variant ? `window-${variant}` : ""} ${dragging || resizing ? "dragging" : ""}`}
       style={{ left: x, top: y, width, zIndex: z }}
+      data-window-id={windowId}
       onPointerDown={(e) => {
         onRaise();
         // Controls and scrollable content keep their own pointer behaviour.
@@ -152,7 +167,11 @@ export function Window({
       }}
     >
       <div className={`window-tab ${revealed ? "revealed" : ""}`}>
-        <span style={{ color: "var(--mark-fill)" }}>▽</span>
+        {light !== undefined ? (
+          <StatusLight activity={light} />
+        ) : (
+          <span style={{ color: "var(--mark-fill)" }}>▽</span>
+        )}
         <span style={{ opacity: 0.5, fontSize: 12 }}>///</span>
         <span>{title}</span>
         {detail !== undefined && detail !== "" && (
@@ -163,13 +182,15 @@ export function Window({
             <span className="window-tab-detail">{detail}</span>
           </>
         )}
+        {actions}
         <button
           className="tab-close"
           onClick={onClose}
+          title={closeLabel}
           aria-label={
             detail !== undefined && detail !== ""
-              ? `close ${title} ${detail}`
-              : `close ${title}`
+              ? `${closeLabel ?? "close"} ${title} ${detail}`
+              : `${closeLabel ?? "close"} ${title}`
           }
         >
           <CloseIcon />

@@ -1,24 +1,14 @@
 import type { ConsoleExit, ConsoleHandle } from "@overseer/protocol";
 
 /**
- * Raw PTY onto the dev loop's overseer session — `/app/loop/run <name>`, the
- * same entrypoint `./bin/loop <name>` execs into this container from the
- * host. This is a second front end on that one entrypoint, not a second
- * implementation of it: loop's own provider choice, session leasing, and
- * overseer prompt are entirely its own business. `OVERSEER_IN_CONTAINER=1` is
- * set as a persistent image `ENV`, so `loop/run`'s host guard passes here the
- * same way it does under `docker compose exec`.
- *
- * Deliberately independent of `@overseer/adapter-claude-code`: loop can run
- * any provider bundle under `providers/`, so this has nothing to do with
- * which provider (if any) Overseer itself has attached.
+ * The one place Overseer spawns a PTY. Adapters describe their CLI's command
+ * line (`consoleCommand`); the dev loop and plain shells are commands too. All
+ * of them run through here so lifetime and kill semantics are the same for
+ * every console.
  */
 
-const LOOP_RUN = "/app/loop/run";
-const APP_DIR = "/app";
-
-/** Graceful signal window before a forced kill — same rationale as the
- * claude-code adapter's console/login PTYs. */
+/** Graceful signal window before a forced kill — a wedged CLI must not pin a
+ * console forever. */
 const KILL_GRACE_MS = 5_000;
 
 export interface PtyProcess {
@@ -27,40 +17,33 @@ export interface PtyProcess {
   resize(cols: number, rows: number): void;
   kill(signal?: string): void;
   onData(listener: (data: string) => void): void;
-  onExit(
-    listener: (event: { exitCode: number; signal?: number }) => void,
-  ): void;
+  onExit(listener: (event: { exitCode: number; signal?: number }) => void): void;
 }
 
-export type PtySpawner = (opts: {
+export interface PtySpawnOpts {
   file: string;
   args: string[];
   cwd: string;
   cols: number;
   rows: number;
   env: NodeJS.ProcessEnv;
-}) => PtyProcess | Promise<PtyProcess>;
+}
+
+export type PtySpawner = (opts: PtySpawnOpts) => PtyProcess | Promise<PtyProcess>;
 
 let spawner: PtySpawner | undefined;
 
 /** Test seam — inject a fake PTY. Pass `undefined` to restore the default. */
-export function setLoopConsoleSpawner(next: PtySpawner | undefined): void {
+export function setPtySpawner(next: PtySpawner | undefined): void {
   spawner = next;
 }
 
-async function spawnPty(opts: {
-  file: string;
-  args: string[];
-  cwd: string;
-  cols: number;
-  rows: number;
-  env: NodeJS.ProcessEnv;
-}): Promise<PtyProcess> {
+async function spawnProcess(opts: PtySpawnOpts): Promise<PtyProcess> {
   if (spawner !== undefined) return spawner(opts);
 
   // Dynamic import so unit tests can inject a fake without loading the native
-  // module, and so a missing build surfaces as an openLoopConsole failure
-  // rather than taking down the whole server import graph.
+  // module, and so a missing build surfaces as a failed open rather than
+  // taking down the whole server import graph.
   const pty = await import("node-pty");
   const proc = pty.spawn(opts.file, opts.args, {
     name: "xterm-256color",
@@ -83,27 +66,12 @@ async function spawnPty(opts: {
   };
 }
 
-export interface LoopConsoleOpts {
-  /** Workspace directory name — `loop/run` resolves it under `workspace/`. */
-  name: string;
-  cols: number;
-  rows: number;
+export interface PtyHandle extends ConsoleHandle {
+  pid: number;
 }
 
-/** Spawn `loop/run <name>` in a PTY. Mirrors the claude-code adapter's
- * `openConsole` shape so `console.ts`'s broker needs no changes to consume
- * either. */
-export async function openLoopConsole(
-  opts: LoopConsoleOpts,
-): Promise<ConsoleHandle> {
-  const proc = await spawnPty({
-    file: LOOP_RUN,
-    args: [opts.name],
-    cwd: APP_DIR,
-    cols: opts.cols,
-    rows: opts.rows,
-    env: process.env,
-  });
+export async function spawnPty(opts: PtySpawnOpts): Promise<PtyHandle> {
+  const proc = await spawnProcess(opts);
 
   const dataListeners = new Set<(data: string) => void>();
   const exitListeners = new Set<(info: ConsoleExit) => void>();
@@ -125,7 +93,7 @@ export async function openLoopConsole(
       try {
         listener(info);
       } catch (error) {
-        console.error("loop-console: onExit listener threw", error);
+        console.error("pty: onExit listener threw", error);
       }
     }
     settle(info);
@@ -136,19 +104,17 @@ export async function openLoopConsole(
       try {
         listener(data);
       } catch (error) {
-        console.error("loop-console: onData listener threw", error);
+        console.error("pty: onData listener threw", error);
       }
     }
   });
 
   proc.onExit(({ exitCode, signal }) => {
-    finish({
-      exitCode: exitCode ?? -1,
-      ...(signal ? { signal } : {}),
-    });
+    finish({ exitCode: exitCode ?? -1, ...(signal ? { signal } : {}) });
   });
 
   return {
+    pid: proc.pid,
     onData(listener) {
       dataListeners.add(listener);
     },
@@ -164,10 +130,10 @@ export async function openLoopConsole(
         // EPIPE / closed PTY — exit will follow.
       }
     },
-    resize(nextCols, nextRows) {
+    resize(cols, rows) {
       if (exited) return;
       try {
-        proc.resize(nextCols, nextRows);
+        proc.resize(cols, rows);
       } catch {
         // Process already gone.
       }
@@ -181,7 +147,6 @@ export async function openLoopConsole(
         finish({ exitCode: -1 });
         return;
       }
-      if (killTimer !== undefined) return;
       killTimer = setTimeout(() => {
         if (exited) return;
         try {
@@ -192,5 +157,15 @@ export async function openLoopConsole(
       }, KILL_GRACE_MS);
     },
     done,
+  };
+}
+
+/** Environment every console gets on top of the server's own. */
+export function consoleEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+  return {
+    ...process.env,
+    TERM: "xterm-256color",
+    COLORTERM: "truecolor",
+    ...extra,
   };
 }

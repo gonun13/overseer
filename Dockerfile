@@ -133,7 +133,7 @@ FROM base AS agents
 # provider-cli: opencode
 # provider-cli: github-copilot
 RUN npm install -g \
-      @anthropic-ai/claude-code@2.1.226 \
+      @anthropic-ai/claude-code@2.1.287 \
       @openai/codex@0.147.0 \
       opencode-ai@1.18.18 \
       @github/copilot@1.0.80 \

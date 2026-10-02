@@ -17,23 +17,24 @@ providers/            one directory per agent CLI, read by the app and the loop 
 packages/
   protocol/           shared TS types — the frontend/backend/adapter contract
   web/                React + Vite + Tailwind SPA
-  server/             Node: WS + REST, static SPA host, adapter registry, session supervisor
+  server/             Node: WS + REST, static SPA host, adapter registry, console registry,
+                      session index, CLI hook endpoint
   adapters/
-    claude-code/      Claude Code adapter — login, console, stream-json sessions, plans, subagents
-    cursor/           Cursor adapter — login, console, stream-json sessions, plans, subagents
+    claude-code/      Claude Code adapter — login, usage, console command line + hooks, transcripts
+    cursor/           Cursor adapter — login, usage, console command line, transcripts
   e2e/                Playwright acceptance tests (container-only)
 loop/                 the dev-loop CLI — bash, a provider CLI, and plain files
                       the workspace is not in here — it is a host directory beside the repo
                       (OVERSEER_WORKSPACE_HOST, §6.2), mounted at /workspace
 ```
 
-**Frontend-first, provider-agnostic.** `protocol/` is written to serve the UI, not to mirror any one CLI's output. Adapters translate provider-specific behavior into it. Catalog stubs live in the server registry (`stub-adapters.ts`) until they earn a real `packages/adapters/<id>/` package.
+**A harness, not a replacement.** Every agent interaction happens in the provider's own CLI, running in a PTY the server owns and the browser shows through xterm.js (§1.2). Overseer does not re-implement what the CLIs already do — transcripts, approvals, models, agents, skills, plans are all the CLI's own. What it adds is the desk around them: many consoles across many projects at once, a session list across all of them, monitoring, projects, git, auth and the dev loop. Adapters translate the few provider-specific things that remain — how to log in, how to read usage, what command line starts or resumes a session, where transcripts live — into `protocol/`. Catalog stubs live in the server registry (`stub-adapters.ts`) until they earn a real `packages/adapters/<id>/` package.
 
 **Provider vs adapter.** Two words for the two sides of the same id string (`"claude-code"`, `"codex"`, …):
 
 | Term         | Layer            | Where it appears                                                                                                              |
 | ------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
-| **provider** | operator/product | what the operator attaches, signs in and configures — the provider widget and window, `provider.connect`, `GET /api/providers` |
+| **provider** | operator/product | what the operator attaches, signs in and configures — the provider widget and window, `provider.connect` |
 | **adapter**  | internal runtime | the code that translates a CLI into `protocol/` — `AgentAdapter` (§1.1), `packages/adapters/`, the server's adapter registry   |
 
 One provider is attached at a time, and it is backed by exactly one adapter.
@@ -43,99 +44,29 @@ One provider is attached at a time, and it is backed by exactly one adapter.
 ```typescript
 interface AgentAdapter {
   id: string; // "claude-code"
-  capabilities: AdapterCapabilities;
-  createSession(opts: SessionOpts): Promise<SessionHandle>;
-  resumeSession(id: string): Promise<SessionHandle>;
-  listSessions(): Promise<SessionMeta[]>;
+  capabilities: AdapterCapabilities; // { login, usageCheck }
   getStatus(): Promise<AdapterStatus>;
-  // What this provider offers a session, in one project. Optional: an adapter
-  // that cannot enumerate omits it and the server refuses the request rather
-  // than filling menus with values the CLI would reject.
-  listOptions?(opts: { projectDir: string }): Promise<ProviderOptions>;
-  // The operator's own subagent files, and the plans their sessions produced.
-  // Optional for the same reason: an adapter with no such folder omits them
-  // and the server refuses rather than reporting an empty inventory.
-  listSubagents?(opts: { projectDir: string }): Promise<Subagent[]>;
-  writeSubagent?(opts: { ... }): Promise<Subagent>;
-  deleteSubagent?(opts: { ... }): Promise<void>;
+  refreshUsage?(): Promise<AdapterStatus>;
+  checkUsage?(opts: { projectDir: string }): Promise<AdapterUsageCheck>;
+  login?: AdapterLogin;
+  // The command line for an interactive console. The server owns the PTY;
+  // the adapter only knows its CLI's flags.
+  consoleCommand?(opts: ConsoleOpts): Promise<ConsoleCommand>;
+  sessionsWatchPath?(): string | undefined;
+  sessions?: AdapterSessionStore; // list, title, delete transcripts; mint ids
 }
 
-interface SessionHandle {
-  events: AsyncIterable<AgentEvent>;
-  send(msg: UserMessage): void; // queues if a turn is in flight
-  interrupt(): void;
-  setModel(model: string): void;
-  setPermissionMode(mode: PermissionMode): void;
-  resolvePermission(id: string, d: PermissionDecision): void;
-  close(): Promise<void>;
+interface ConsoleOpts {
+  cwd: string;
+  sessionId?: string; // with resume: the session to pick up; without: an id to adopt
+  resume?: boolean;
+  prompt?: string; // opening prompt, as the CLI's positional argument
+  hookUrl?: string; // where lifecycle hooks report (§1.2)
 }
 ```
 
-The setters are fire-and-forget: they return `void`, and whether the provider
-accepted is reported back asynchronously on the event stream as `session.model`
-/ `session.mode`, or as an `error`. `setModel` and `setPermissionMode` are built
-for both adapters — claude-code sends a control request mid-session, cursor
-(which has no such channel) arms the *next* spawn and says so immediately.
-There is no `setEffort`: effort is a `listOptions` value folded into the model
-or a spawn flag, never a runtime control.
-
-### 1.1.1 Discovering what a provider offers
-
-`ProviderOptions` is
-`{ models, permissionModes, agents, defaultPermissionMode?, defaultModel? }`, each
-entry `{ value, label, detail?, danger? }` — `value` is what reaches the CLI, `label`
-and `detail` are the provider's own words. Every list may be empty; an adapter that
-could not get an answer reports nothing rather than a guess, and the UI leaves that
-row's menu shut.
-
-The two `default*` fields exist so a control row can read what the next turn will
-actually run on instead of a blank. They are not guesses about behaviour: the mode is
-the CLI's own `current_permission_mode`, and the model is the option the CLI itself
-labels "Default (recommended)", whose whole meaning is "whatever is configured".
-
-For `claude-code` the answer has two halves, because the CLI only knows one of them.
-
-**Models and the current permission mode** come from one `initialize` control request
-— 0 tokens, no session written, ~1.2s:
-
-```jsonc
-// stdin, to `claude -p --input-format stream-json --output-format stream-json --verbose`
-{"type":"control_request","request_id":"overseer_initialize","request":{"subtype":"initialize"}}
-```
-
-The reply carries `models[]` (with `displayName`, `description`, `supportsEffort`,
-`supportedEffortLevels`), `current_permission_mode`, `commands`, and
-`available_output_styles`.
-
-**Subagents** come off disk instead, from the two directories the operator writes to:
-
-```
-<project>/.claude/agents/*.md    this project
-$CLAUDE_CONFIG_DIR/agents/*.md   every project
-```
-
-`name` and `description` are read from each file's YAML frontmatter, falling back to
-the filename; project wins on a name collision, which is the CLI's own precedence.
-The list always leads with `none`.
-
-The reply's own `agents[]` is deliberately **not** used. It mixes the operator's
-subagents in with the CLI's built-in routing agents (`Explore`, `Plan`,
-`general-purpose`, `statusline-setup`, …) with nothing to tell them apart, and those
-built-ins are Claude's internal machinery, not a choice the operator made — offering
-them would put the CLI's plumbing in a menu beside the permission modes.
-
-**Permission modes** are in neither source: the only machine-readable enumeration is
-the CLI's own rejection message. They are a constant in the adapter, pinned to the
-same build as the `usage.ts` and `login.ts` parses.
-
-Nothing here is cached. Half the answer is files the operator can add or edit at any
-moment, so a cached list would go on offering agents they deleted; the ask is
-free and happens on human timescales (attaching a provider, changing project, opening
-a control row). The server single-flights it so two tabs cannot spawn two children.
-
-`AdapterCapabilities` contains `streamingDeltas`, `permissionPrompts`, `interrupt`, `subagents`, `mcp`, `skills`, `effortLevels`, `costReporting`, `checkpoints`, `backgroundAgents`, `login`, and `usageCheck`. The UI renders only supported controls. `subagents` claims the *file editor* — reading and writing the operator's agent files — not that the event stream distinguishes a subagent's work (cursor's does not).
-
-Normalized event union: `session.init`, `text.delta`, `thinking.delta`, `tool.start` / `tool.delta` / `tool.end`, `permission.request`, `todo.update`, `subagent.start` / `subagent.text` / `subagent.end`, `session.model`, `session.mode`, `turn.end` (usage + cumulative process cost), `error`, `exit`.
+Adding a provider is mostly a command line: an adapter that can say how to start and resume its
+CLI gets consoles, and one that can list its transcripts gets the session list.
 
 ### 1.1.2 The provider registry
 
@@ -183,56 +114,34 @@ image.
 Where the registry lives is a deployment fact, `OVERSEER_PROVIDERS_DIR`, for the
 same reason `CLAUDE_CONFIG_DIR` and the workspace root are.
 
-### 1.2 Process model — one long-lived process per session
+### 1.2 Process model — consoles belong to the server
 
-The `claude-code` adapter keeps one process open per active session in bidirectional streaming mode:
+Every CLI process runs in a PTY owned by the server's console registry
+(`packages/server/src/console-registry.ts`), never by a browser tab:
 
-```typescript
-const sessionId = randomUUID(); // mint it — don't discover it afterwards
-spawn(
-  "claude",
-  [
-    "-p",
-    "--input-format",
-    "stream-json", // user turns written to stdin as JSON
-    "--output-format",
-    "stream-json",
-    "--include-partial-messages", // token-level deltas
-    "--include-hook-events", // lifecycle events in-stream
-    "--forward-subagent-text", // subagent text, tagged parent_tool_use_id
-    "--replay-user-messages", // echo of our input = ack + ordering
-    "--verbose",
-    "--session-id",
-    sessionId,
-    "--model",
-    model,
-    "--effort",
-    effort,
-    "--permission-mode",
-    mode,
-  ],
-  { cwd: projectDir },
-); // a directory under /workspace
-```
+- **Kinds.** `agent` (the provider CLI, via `consoleCommand`), `shell` (a login shell in the
+  project) and `loop` (`/app/loop/run <project>`). All three go through one spawn helper
+  (`pty.ts`).
+- **Attach, don't own.** A socket *attaches* to a console — it is sent the scrollback (a 512 KB
+  ring), then live output — and *detaches* when its window closes or the tab goes away. The
+  process keeps running until it exits or someone kills it. Resize is last-writer-wins.
+- **One CLI per transcript.** Opening an agent console on a session that already has a running
+  console attaches to that console instead of starting a second CLI on the same JSONL. A session
+  a live dev-loop run holds is refused; its loop console is the way in. A project's loop console
+  is likewise attached rather than started twice.
+- **Ids are minted up front.** A new session gets an id from `sessions.mintSessionId()` and passes
+  it to the CLI (claude `--session-id`, cursor `--resume`, which adopts an unseen id), so the
+  console and its transcript are linked from the first byte.
+- **Exited consoles stay listed** until dismissed, so a failure can still be read.
+- **Activity.** Claude Code consoles are started with a `--settings` layer of hooks
+  (`SessionStart`, `UserPromptSubmit`, `Pre/PostToolUse`, `Notification` on permission prompts,
+  `Stop`) that `curl` the server's loopback-only `POST /hooks/<console>/<token>?activity=…`. The
+  per-console token means only the CLI the server spawned can report for it. A CLI without hooks
+  is read from its output: output means `working`, two quiet seconds mean `idle`.
 
-- **stdin:** user content blocks plus control messages. Images can travel over the existing WebSocket as content blocks; no upload endpoint is required.
-- **stdout:** NDJSON: `system`, `assistant`, `user`, `stream_event`, `control_request`, `control_response`, `result`, and `rate_limit_event`.
-- **Runtime control:** use control requests for interrupt, model, permission mode, and other supported settings. Do not kill the process to interrupt a turn.
-- **Idle reaping:** close after 15 minutes; re-spawn with `--resume <sessionId>` on the next message. The UI marks the session dormant while no process is running.
-
-`--forward-subagent-text` and `--include-hook-events` provide live subagent activity without custom hook scripts.
-
-### 1.3 Async side-tasks (authoring skills)
-
-Skills are **authored** by asking the agent, not through dedicated forms. Each authoring edit opens a **side-task**: a short-lived session scoped to the relevant config directory. Its status appears in the capabilities zone, and the capability row refreshes from disk when it finishes.
-
-**Subagents diverge from this as shipped.** They are written directly by the adapter (`writeSubagent` / `deleteSubagent`, `packages/adapters/claude-code/src/subagent-files.ts`) from a form in the capabilities window, not by a side-task. A subagent file is a short, fixed shape — four frontmatter keys and a prose body — so a deterministic write is both cheaper and more predictable than spending a turn on it, and the operator's own text reaches disk unaltered.
-
-**Importing a skill diverges too, and for a different reason.** `0.4.x` ships `importSkills` / `deleteSkill` (`packages/adapters/*/src/skill-files.ts`), fed by a git clone or a set of uploaded files. It is plural because published sources are: a collection is a folder of skills, and both the folder-with-`SKILL.md` and the flat `<name>.md` shapes occur. What makes a markdown file a skill is its frontmatter description — that is what a task is matched against — not its filename, so the installed folder layout is a destination rather than an admission criterion. The argument that put skills on the side-task path was that their layout is a directory rather than a file — true, and it is why there is no skill *editor*. But an import does not need to understand the directory; it needs to copy it and refuse it when it is not a skill. Spending a turn to do a `cp` would add a model's judgement to an operation that has none to make, and would put the operator's own files through a paraphrase.
-
-So the split is by *operation*, not by artifact: **deterministic for import and delete, side-task for authoring.** The side-task remains the right and still-unbuilt model for writing a skill's prose in place.
-
-A raw file editor remains optional.
+The session list (`session-index.ts`) is a separate, read-only index: every adapter's transcripts
+in every workspace project, rebuilt whenever a transcript changes (`transcript-monitor.ts`) and
+broadcast to every tab. The browser joins it with the console list to light each session.
 
 ---
 
@@ -330,80 +239,37 @@ overridden and `git commit` would fail with "empty ident name".
 
 ## 3. Feature Map
 
-Ordered by priority; within each tier, roughly by how often it gets used.
+Everything a CLI does for a conversation — streaming, tool calls, approvals, models, modes, agents,
+skills, MCP, plans, checkpoints — is the CLI's own and is not listed here. This is the harness
+around it. Ordered by priority.
 
-### MVP — the core loop
+### Core — the desk
 
-| Feature                                            | Zone     | Mechanism                                                         |
-| -------------------------------------------------- | -------- | ----------------------------------------------------------------- |
-| Send prompt, stream response                       | Console  | stream-json stdin; `stream_event` deltas out                      |
-| Transcript: text, tool calls, collapsible thinking | Console  | normalized `text.delta` / `tool.*` / `thinking.delta`             |
-| Diff rendering for `Edit` / `Write`                | Console  | parse tool input; unified diff in inspector                       |
-| Terminal output for `Bash`                         | Console  | ANSI-aware renderer                                               |
-| Live todo checklist                                | Console  | `TodoWrite` tool calls → `todo.update`                            |
-| Tool approval, inline                              | Console  | `can_use_tool` control request (see §6.1)                         |
-| Permission mode selector                           | Top bar  | startup flag + runtime `set_permission_mode` control request      |
-| Interrupt turn                                     | Console  | `interrupt` control request, from the composer, either session list, or the settings sweep |
-| Queue message during a turn                        | Console  | buffer in `SessionHandle.send`                                    |
-| Model + effort selector                            | Console  | startup flags + runtime control updates                           |
-| Create session in a project                        | Sessions | pick a dir under `/workspace`; mint `--session-id`                 |
-| Resume session + history replay                    | Sessions | `--resume`; parse JSONL for backfill (§4)                         |
-| Session list with live status                      | Sessions | supervisor state + JSONL mtime                                    |
-| Plan utilization + estimated spend                 | Provider | `/usage` via refreshUsage; later `usage.limit` (§2.1) |
-| Subscription login                                 | System   | `claude auth login`, plain spawn, no PTY; URL out to the operator's own browser, pasted code in (§2) |
-| Theme switch                                       | System   | `data-theme` on `:root`; choice persisted in internal memory      |
-| Crash / exit / auth-failure surfacing              | Console  | classify stream errors, result subtype, signal, and exit code     |
+| Feature                                   | Zone      | Mechanism                                                                 |
+| ----------------------------------------- | --------- | ------------------------------------------------------------------------- |
+| Provider CLI in a console window          | Consoles  | `consoleCommand` → server PTY → xterm.js (§1.2)                           |
+| Many consoles, any project, freely placed | Consoles  | console registry; window stack; `/tile`                                   |
+| Consoles survive the tab                  | Consoles  | attach/detach + scrollback ring; layout in localStorage                   |
+| New session with an opening prompt        | Prompt    | `console.open {prompt}` → CLI positional argument                         |
+| Resume a session                          | Sessions  | `claude --resume`, `agent --resume`; attach if already running            |
+| Session list, every project and provider  | Sessions  | `session-index.ts` over adapter transcripts, rebuilt on transcript change |
+| Waiting / working / idle lights           | Consoles  | Claude Code hooks → `/hooks`; output heuristics otherwise                 |
+| Plain shell in a project                  | Consoles  | `kind: "shell"`                                                           |
+| Dev loop in a console                     | Consoles  | `kind: "loop"`, take-over decision for a run held elsewhere              |
+| Plan utilization + estimated spend        | Provider  | `/usage` via refreshUsage (§2.1)                                          |
+| Subscription login                        | System    | `claude auth login`, plain spawn; URL out, pasted code in (§2)            |
+| Projects, git, file view                  | Projects  | workspace monitor, `vcs/*`                                                |
+| Theme switch                              | System    | `data-theme` on `:root`; choice persisted in internal memory             |
 
-### Important
+### Next
 
-| Feature                                   | Zone         | Mechanism                                                                                                     |
-| ----------------------------------------- | ------------ | ------------------------------------------------------------------------------------------------------------- |
-| Cross-session approval queue              | Approvals    | aggregate `permission.request` from every live session                                                        |
-| Permission rules editor                   | Approvals    | "allow always" writes `Bash(git *)`-style patterns to `settings.json`; `--allowedTools` / `--disallowedTools` |
-| Plan-mode approval screen                 | Approvals    | `ExitPlanMode` output — an approval surface, not a chat bubble                                                |
-| Nested subagent turns                     | Console      | `--forward-subagent-text`, grouped by `parent_tool_use_id`                                                    |
-| Background agents                         | Sessions     | supervisor-managed sessions; `--bg` is incompatible with `-p`                                         |
-| Context window gauge                      | Console      | `get_context_usage` control request                                                                        |
-| Budget ceiling per session                | Console      | persist spend; pass remaining budget via `--max-budget-usd` on each spawn                                |
-| MCP server list + health + tool inventory | Capabilities | `claude mcp list` / `get`; `⏸ Pending approval` for unapproved `.mcp.json`                                    |
-| MCP add / remove                          | Capabilities | `mcp add` (stdio/http/sse, `-e`, `--header`), `add-json`, `remove`                                            |
-| MCP OAuth login                           | Capabilities | `mcp login --no-browser`; URL out, redirect URL in                                                            |
-| Per-session MCP sets                      | Capabilities | `--mcp-config`, `--strict-mcp-config`                                                                         |
-| Subagent inventory + editing              | Capabilities | **live** — filesystem read/write of `.claude/agents` in both scopes (§1.3)                                     |
-| Skills inventory + import                 | Capabilities | **live** — filesystem read of `skills/` in both scopes, import from git or uploaded files (§1.3)               |
-| Agent-driven skill authoring              | Capabilities | async side-tasks (§1.3)                                                                                       |
-| Pin a subagent / ephemeral agents         | Console      | `--agent <name>`, `--agents <json>`                                                                           |
-| File attachments, image paste             | Console      | content blocks on stdin                                                                                       |
-| Session fork                              | Sessions     | `--fork-session`                                                                                              |
-| Session naming                            | Sessions     | `-n <name>`                                                                                                   |
-| Multi-root workspace                      | Sessions     | `--add-dir`                                                                                                   |
-| Search across sessions                    | Sessions     | index JSONL into SQLite                                                                                       |
-| Config import / export                    | System       | via `/workspace/_overseer/` (§2)                                                                              |
-| Hook event stream                         | System       | `--include-hook-events`                                                                                       |
-| CLI version + health                      | System       | `claude doctor`, version drift warning                                                                        |
-| Settings source inspector                 | System       | read known files and apply documented user → project → local precedence                                       |
-
-### Nice to have
-
-| Feature                           | Zone         | Mechanism                                                           |
-| --------------------------------- | ------------ | ------------------------------------------------------------------- |
-| Checkpoints / rewind              | Console      | `rewind_files` control request                                     |
-| Git worktree per session          | Sessions     | `-w/--worktree` — how parallel sessions stop fighting over one tree |
-| Session entity graph              | Console      | SVG node map of subagents, MCP servers, files touched               |
-| Branch tree for forked history    | Sessions     | full `parentUuid` tree instead of newest-leaf (§4)                  |
-| Plugin management                 | Capabilities | `claude plugin`, `--plugin-dir`, `--plugin-url`                     |
-| Custom system prompt per session  | Console      | `--system-prompt`, `--append-system-prompt`                         |
-| Structured job mode               | Sessions     | `--json-schema` — run-and-return rather than chat                   |
-| Fallback model chain              | System       | `--fallback-model a,b`                                              |
-| Prompt suggestions                | Console      | `--prompt-suggestions`; predicted next prompt after each turn       |
-| Resume from a PR                  | Sessions     | find linked session metadata; `--from-pr` itself is interactive     |
-| Troubleshooting modes             | System       | `--safe-mode`, `--bare`                                             |
-| Raw file editor for skills/agents | Capabilities | watcher + conflict handling                                        |
-| Transcript export                 | Console      | markdown / JSON                                                     |
-| Command palette                   | global       | keyboard-first jump to any session, zone, or action                 |
-| Desktop notifications             | global       | on approval request or turn completion                              |
-| Additional providers              | —            | catalog stubs (`codex`, `opencode`, `github-copilot`) land early; full adapter runtime still later |
-| Dev-loop CLI                      | —            | incubating outside `packages/*` as `loop/`; bash + a provider CLI + files only, in the app's container (§9) |
+| Feature                              | Zone     | Mechanism                                                               |
+| ------------------------------------ | -------- | ----------------------------------------------------------------------- |
+| Consoles for the catalog providers   | Consoles | a `consoleCommand` for `codex`, `opencode`, `github-copilot`            |
+| Git worktree per console             | Consoles | `-w/--worktree` — how parallel agents stop fighting over one tree       |
+| Desktop notifications                | global   | on a console going `waiting`                                            |
+| Cross-console search                 | Sessions | index transcripts                                                        |
+| Command palette                      | global   | keyboard-first jump to any console, session or action                   |
 
 ---
 
@@ -414,12 +280,9 @@ Ordered by priority; within each tier, roughly by how often it gets used.
 - **Message records:** `type`, `uuid`, `parentUuid`, `sessionId`, `timestamp`, `message`, `cwd`, `gitBranch`, `version`, `userType`, `promptId`, `isMeta`, `isSidechain`.
 - **Operation records:** `type`, `operation`, `sessionId`, `timestamp` (compaction and similar).
 
-Two rules matter:
-
-1. **`parentUuid` makes this a tree, not a log.** V1 walks from the newest leaf to the root and renders that path; a full branch tree is a nice-to-have.
-2. **`isSidechain` marks subagent turns.** Nest them under their parent; never inline them into the main transcript.
-
-JSONL is undocumented and may drift. Use it only for history backfill, pin the CLI version, and disable replay for unsupported versions. Live state always comes from the stream.
+Overseer reads these files only to *list* sessions — id, title, branch, timestamps — and to delete
+one. It never replays a transcript: the CLI does that itself on `--resume`, in its own console.
+JSONL is undocumented and may drift, which is one more reason to read as little of it as possible.
 
 ---
 
@@ -475,9 +338,12 @@ The modes themselves are the CLI's own six — `acceptEdits`, `auto`, `bypassPer
 undocumented and reports `manual` back as `default`, which the adapter folds so the
 UI never offers two words for one mode.
 
-### 6.1 Approval protocol
+### 6.1 Approvals and hooks
 
-In streaming-input mode, permission prompts arrive as `control_request` messages and are resolved with matching `control_response` messages. Re-initialization can redeliver pending requests, so the server deduplicates them by request ID. A `PreToolUse` hook is for policy that must inspect every tool call, not for ordinary user approval.
+Approvals are answered in the CLI's own TUI, in its console. Overseer only learns that one is
+pending, through the `Notification` hook (§1.2), and points the operator at the console. The hook
+endpoint accepts loopback requests only, and each console's URL carries a random token, so a
+process in the container cannot report for a console it was not started as.
 
 ---
 

@@ -1,6 +1,6 @@
 import { readdir, readFile, rm } from "node:fs/promises";
 import path from "node:path";
-import type { SessionMeta, TurnWire } from "@overseer/protocol";
+import type { SessionMeta } from "@overseer/protocol";
 
 /**
  * Cursor's on-disk session state — captured against the real CLI (`agent
@@ -19,7 +19,7 @@ import type { SessionMeta, TurnWire } from "@overseer/protocol";
  * honest answer, not a guess.
  *
  * `<hash>` in `chats/` has no known derivation, so anything keyed under it
- * (`findProjectDirForSession`, `deleteSession`'s second half) scans every
+ * (`deleteSession`'s second half) scans every
  * hash directory for the one `<chatId>` subdirectory that matches — cheap
  * enough at the scale one operator's `~/.cursor` reaches.
  */
@@ -81,12 +81,9 @@ async function slugForProject(projectDir: string): Promise<string | undefined> {
   return undefined;
 }
 
-interface ParsedChat {
-  turns: TurnWire[];
-  firstUserText?: string;
-}
-
-async function readChatTranscript(slug: string, chatId: string): Promise<ParsedChat> {
+/** The chat's first operator message, for its title. Stops reading there —
+ * the rest of the transcript is the CLI's to show, in its own console. */
+async function readFirstUserText(slug: string, chatId: string): Promise<string | undefined> {
   const file = path.join(
     projectsRoot(),
     slug,
@@ -98,12 +95,9 @@ async function readChatTranscript(slug: string, chatId: string): Promise<ParsedC
   try {
     raw = await readFile(file, "utf8");
   } catch {
-    return { turns: [] };
+    return undefined;
   }
 
-  const turns: TurnWire[] = [];
-  let firstUserText: string | undefined;
-  let seq = 0;
   for (const line of raw.split(/\r?\n/)) {
     const trimmed = line.trim();
     if (trimmed === "") continue;
@@ -115,7 +109,7 @@ async function readChatTranscript(slug: string, chatId: string): Promise<ParsedC
     }
     if (typeof record !== "object" || record === null) continue;
     const obj = record as Record<string, unknown>;
-    if (obj.role !== "user" && obj.role !== "assistant") continue;
+    if (obj.role !== "user") continue;
     const message = obj.message as Record<string, unknown> | undefined;
     const content = message?.content;
     if (!Array.isArray(content)) continue;
@@ -129,18 +123,9 @@ async function readChatTranscript(slug: string, chatId: string): Promise<ParsedC
       )
       .map((block) => block.text)
       .join("");
-    if (text === "") continue;
-
-    seq += 1;
-    if (obj.role === "user") {
-      const clean = operatorText(text);
-      turns.push({ id: `${chatId}-${seq}`, kind: "user", text: clean });
-      if (firstUserText === undefined) firstUserText = clean;
-    } else {
-      turns.push({ id: `${chatId}-${seq}`, kind: "agent", text });
-    }
+    if (text !== "") return operatorText(text);
   }
-  return { turns, firstUserText };
+  return undefined;
 }
 
 interface ChatMeta {
@@ -174,14 +159,6 @@ async function findChatMeta(chatId: string): Promise<ChatMeta | undefined> {
   return undefined;
 }
 
-/** The project directory a chat id was opened under — for `resumeSession`,
- * which is handed only an id. */
-export async function findProjectDirForSession(chatId: string): Promise<string> {
-  const meta = await findChatMeta(chatId);
-  if (meta?.cwd !== undefined && meta.cwd !== "") return meta.cwd;
-  throw new Error(`session not found: ${chatId}`);
-}
-
 export async function listProjectSessions(projectDir: string): Promise<SessionMeta[]> {
   const slug = await slugForProject(projectDir);
   if (slug === undefined) return [];
@@ -197,7 +174,7 @@ export async function listProjectSessions(projectDir: string): Promise<SessionMe
   const sessions: SessionMeta[] = [];
   for (const chatId of chatIds) {
     const meta = await findChatMeta(chatId);
-    const { firstUserText } = await readChatTranscript(slug, chatId);
+    const firstUserText = await readFirstUserText(slug, chatId);
     const createdAt =
       meta?.createdAtMs !== undefined
         ? new Date(meta.createdAtMs).toISOString()
@@ -210,10 +187,6 @@ export async function listProjectSessions(projectDir: string): Promise<SessionMe
       id: chatId,
       adapterId: "cursor",
       projectDir,
-      // Not recorded anywhere on disk per-session — the live event stream
-      // carries it (session.init/session.model); a dormant listing honestly
-      // has nothing to report rather than a guess.
-      model: "",
       status: "dormant",
       createdAt,
       lastActiveAt,
@@ -227,23 +200,13 @@ export async function listProjectSessions(projectDir: string): Promise<SessionMe
   );
 }
 
-export async function readSessionHistory(
-  projectDir: string,
-  sessionId: string,
-): Promise<TurnWire[]> {
-  const slug = await slugForProject(projectDir);
-  if (slug === undefined) return [];
-  const { turns } = await readChatTranscript(slug, sessionId);
-  return turns;
-}
-
 export async function lookupSessionTitle(
   projectDir: string,
   sessionId: string,
 ): Promise<string | undefined> {
   const slug = await slugForProject(projectDir);
   if (slug === undefined) return undefined;
-  const { firstUserText } = await readChatTranscript(slug, sessionId);
+  const firstUserText = await readFirstUserText(slug, sessionId);
   return firstUserText !== undefined ? truncateTitle(firstUserText) : undefined;
 }
 

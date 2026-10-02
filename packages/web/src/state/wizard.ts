@@ -817,6 +817,10 @@ export interface Furniture {
   clock: boolean;
   footer: boolean;
   prompt: boolean;
+  /** The consoles/sessions panel. Released with the prompt slot but, unlike
+   * the prompt, not gated on a signed-in provider: a shell or a loop run
+   * needs none. */
+  sessions: boolean;
   /** Whether the ranked signal list may render at all. Signals describe a world
    * discovery has not looked at yet, so before it resolves they would state
    * "no project selected" as a finding rather than as the absence of one. */
@@ -839,6 +843,7 @@ export function furnitureFor(state: WizardState): Furniture {
         (p) =>
           p.id === state.attachedProviderId && p.status.authenticated,
       ),
+    sessions: revealed.prompt,
     // Signals need an active project context to mean anything.
     signals: revealed.activeProject,
   };

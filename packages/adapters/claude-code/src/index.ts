@@ -1,55 +1,22 @@
+import { randomUUID } from "node:crypto";
 import { join as pathJoin } from "node:path";
 import type {
-  AdapterPlan,
   AdapterSessionStore,
   AgentAdapter,
   AdapterCapabilities,
   AdapterStatus,
-  ConsoleHandle,
+  ConsoleCommand,
   ConsoleOpts,
-  ProviderOptions,
-  Skill,
-  SkillImportOutcome,
-  SkillScope,
-  Subagent,
-  SubagentDraft,
-  SubagentScope,
-  SessionHandle,
   SessionMeta,
-  SessionOpts,
 } from "@overseer/protocol";
 import { configDir } from "./config-dir.js";
-import { openConsole } from "./console.js";
-import { readSubagents } from "./custom-agents.js";
-import {
-  backfillHistory,
-  deleteSessionTranscript,
-  listSessionsForProject,
-} from "./jsonl.js";
+import { consoleCommand } from "./console.js";
+import { deleteSessionTranscript, listSessionsForProject } from "./jsonl.js";
 import { readAuthStatus, signOut, startLogin } from "./login.js";
-import { listPlansForProject } from "./plans.js";
-import { readProviderOptions } from "./options.js";
-import { deleteSkillDir, importSkillDir } from "./skill-files.js";
-import { readSkills } from "./skills.js";
-import {
-  deleteSubagentFile,
-  writeSubagentFile,
-} from "./subagent-files.js";
-import { createSessionHandle, mintSessionId, openSession } from "./session-handle.js";
 import { resolveSessionTitle } from "./session-titles.js";
 import { readUsageWindows, withPendingUsage } from "./usage.js";
 
 const capabilities: AdapterCapabilities = {
-  streamingDeltas: true,
-  permissionPrompts: true,
-  interrupt: true,
-  subagents: true,
-  mcp: true,
-  skills: true,
-  effortLevels: true,
-  costReporting: true,
-  checkpoints: false,
-  backgroundAgents: false,
   login: true,
   // No checkUsage: refreshUsage already covers this adapter's usage surface
   // with a free, deterministic report — a second, manual path is redundant.
@@ -84,77 +51,14 @@ async function refreshUsage(): Promise<AdapterStatus> {
 export const claudeCodeAdapter: AgentAdapter = {
   id: "claude-code",
   capabilities,
-  async createSession(opts: SessionOpts): Promise<SessionHandle> {
-    return openSession(mintSessionId(), opts);
-  },
-  async resumeSession(id: string): Promise<SessionHandle> {
-    const projectDir = await findProjectDirForSession(id);
-    return createSessionHandle(id, {
-      projectDir,
-      resumeSessionId: id,
-    });
-  },
-  async listSessions(): Promise<SessionMeta[]> {
-    // Supervisor filters by active project; adapter exposes scan helper only.
-    return [];
-  },
   getStatus,
   refreshUsage,
-  listOptions(opts: { projectDir: string }): Promise<ProviderOptions> {
-    return readProviderOptions(opts);
-  },
-  async listSubagents(opts: { projectDir: string }): Promise<Subagent[]> {
-    // Never throws, per the interface: an unreadable folder is reported as no
-    // agents, the same way `readSubagents` treats a missing one.
-    try {
-      return await readSubagents({ ...opts, configDir: configDir() });
-    } catch {
-      return [];
-    }
-  },
-  writeSubagent(opts: {
-    projectDir: string;
-    draft: SubagentDraft;
-    previous?: { name: string; scope: SubagentScope };
-  }): Promise<Subagent> {
-    return writeSubagentFile({ ...opts, configDir: configDir() });
-  },
-  deleteSubagent(opts: {
-    projectDir: string;
-    name: string;
-    scope: SubagentScope;
-  }): Promise<void> {
-    return deleteSubagentFile({ ...opts, configDir: configDir() });
-  },
-  async listSkills(opts: { projectDir: string }): Promise<Skill[]> {
-    // Never throws, per the interface — same contract as `listSubagents`.
-    try {
-      return await readSkills({ ...opts, configDir: configDir() });
-    } catch {
-      return [];
-    }
-  },
-  importSkills(opts: {
-    projectDir: string;
-    stagingDir: string;
-    scope: SkillScope;
-    name?: string;
-  }): Promise<SkillImportOutcome> {
-    return importSkillDir({ ...opts, configDir: configDir() });
-  },
-  deleteSkill(opts: {
-    projectDir: string;
-    name: string;
-    scope: SkillScope;
-  }): Promise<void> {
-    return deleteSkillDir({ ...opts, configDir: configDir() });
-  },
   login: {
     start: startLogin,
     signOut,
   },
-  openConsole(opts: ConsoleOpts): Promise<ConsoleHandle> {
-    return openConsole(opts);
+  consoleCommand(opts: ConsoleOpts): Promise<ConsoleCommand> {
+    return consoleCommand(opts);
   },
   sessionsWatchPath(): string {
     // One directory above the per-project slugs, so a project the CLI has not
@@ -164,93 +68,21 @@ export const claudeCodeAdapter: AgentAdapter = {
   },
   sessions: {
     listProjectSessions,
-    readSessionHistory,
-    // Wrapped async — the interface accommodates a provider whose open must
-    // itself be a CLI round-trip (cursor's); claude's own is synchronous.
-    async openSession(sessionId: string, opts: SessionOpts): Promise<SessionHandle> {
-      return openSession(sessionId, opts);
-    },
     // Wrapped async — the interface leaves room for a provider whose id must
-    // round-trip its own CLI; claude's own is synchronous and just needs the
-    // shape.
+    // round-trip its own CLI; claude takes any id via `--session-id`.
     async mintSessionId(): Promise<string> {
-      return mintSessionId();
+      return randomUUID();
     },
     lookupSessionTitle,
     deleteSession,
-    listProjectPlans,
   } satisfies AdapterSessionStore,
 };
 
-async function findProjectDirForSession(sessionId: string): Promise<string> {
-  const { readdir, readFile } = await import("node:fs/promises");
-  const path = await import("node:path");
-  const root = path.join(configDir(), "projects");
-  let entries: string[];
-  try {
-    entries = await readdir(root);
-  } catch {
-    throw new Error(`session not found: ${sessionId}`);
-  }
-  for (const slug of entries) {
-    const file = path.join(root, slug, `${sessionId}.jsonl`);
-    try {
-      const raw = await readFile(file, "utf8");
-      // `cwd` is not on the opening record — a transcript starts with
-      // bookkeeping (`mode`, `queue-operation`) that carries no path, so scan
-      // forward for the first record that states one.
-      for (const line of raw.split(/\r?\n/)) {
-        if (line.trim() === "") continue;
-        let record: { cwd?: unknown };
-        try {
-          record = JSON.parse(line) as { cwd?: unknown };
-        } catch {
-          continue;
-        }
-        if (typeof record.cwd === "string" && record.cwd !== "") {
-          return record.cwd;
-        }
-      }
-    } catch {
-      // not in this slug
-    }
-  }
-  throw new Error(`session not found: ${sessionId}`);
-}
-
-/** List sessions for one project directory — used by the session supervisor. */
+/** List sessions for one project directory — used by the session index. */
 export async function listProjectSessions(
   projectDir: string,
 ): Promise<SessionMeta[]> {
   return listSessionsForProject(configDir(), projectDir);
-}
-
-/**
- * Backfill transcript turns from JSONL — used by the session supervisor.
- *
- * `projectDir` is the caller's best guess (the supervisor passes the active
- * project), and a transcript only lives under the slug for the cwd its process
- * actually ran in. Those differ whenever a session was started somewhere other
- * than the active project — a dev-loop run, or a console opened in a
- * subdirectory — and the miss is silent, because a missing file backfills as an
- * empty transcript rather than an error. So fall back to locating the session
- * by id, which is what `resumeSession` already relies on.
- */
-export async function readSessionHistory(
-  projectDir: string,
-  sessionId: string,
-) {
-  const turns = await backfillHistory(configDir(), projectDir, sessionId);
-  if (turns.length > 0) return turns;
-  let resolved: string;
-  try {
-    resolved = await findProjectDirForSession(sessionId);
-  } catch {
-    // Genuinely unknown session — an empty transcript is the honest answer.
-    return turns;
-  }
-  if (resolved === projectDir) return turns;
-  return backfillHistory(configDir(), resolved, sessionId);
 }
 
 /** Resolve Claude's display title for a session. */
@@ -262,13 +94,6 @@ export async function lookupSessionTitle(
 }
 
 /** Permanently remove a session's transcript from disk. */
-/** Plans this project's transcripts hold — see `plans.ts`. */
-export async function listProjectPlans(
-  projectDir: string,
-): Promise<AdapterPlan[]> {
-  return listPlansForProject(configDir(), projectDir);
-}
-
 export async function deleteSession(
   projectDir: string,
   sessionId: string,
@@ -277,5 +102,3 @@ export async function deleteSession(
 }
 
 export default claudeCodeAdapter;
-
-export { mintSessionId, openSession } from "./session-handle.js";

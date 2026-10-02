@@ -1,8 +1,6 @@
-import { randomUUID } from "node:crypto";
 import { readdir, readFile, unlink } from "node:fs/promises";
 import path from "node:path";
-import type { SessionMeta, TurnWire } from "@overseer/protocol";
-import { operatorText, textFromContent } from "./operator-text.js";
+import type { SessionMeta } from "@overseer/protocol";
 import { projectDirSlug } from "./project-slug.js";
 import { resolveSessionTitle } from "./session-titles.js";
 
@@ -21,8 +19,7 @@ export function sessionJsonlPath(
   );
 }
 
-/** One line of a CLI transcript. Exported for the plan reader, which walks
- * the same files looking for a different thing. */
+/** One line of a CLI transcript. */
 export interface JsonlRecord {
   type?: string;
   uuid?: string;
@@ -37,60 +34,6 @@ export interface JsonlRecord {
     role?: string;
     content?: unknown;
   };
-}
-
-function toolSummary(content: unknown): { tool: string; target: string } | undefined {
-  if (!Array.isArray(content)) return undefined;
-  for (const block of content) {
-    if (
-      typeof block === "object" &&
-      block !== null &&
-      (block as { type?: string }).type === "tool_use"
-    ) {
-      const tool = (block as { name?: unknown }).name;
-      const input = (block as { input?: unknown }).input;
-      const target =
-        typeof input === "object" &&
-        input !== null &&
-        typeof (input as { file_path?: unknown }).file_path === "string"
-          ? (input as { file_path: string }).file_path
-          : typeof input === "object" && input !== null
-            ? JSON.stringify(input)
-            : "";
-      if (typeof tool === "string") {
-        return { tool, target };
-      }
-    }
-  }
-  return undefined;
-}
-
-function turnFromRecord(record: JsonlRecord): TurnWire | undefined {
-  if (record.type !== "user" && record.type !== "assistant") return undefined;
-  const role = record.message?.role ?? record.type;
-  if (role === "user") {
-    // The CLI's own bookkeeping records share `type: "user"` with the
-    // operator's prompts; replaying them would put the caveat banner and slash
-    // command echoes in the transcript as things the operator said.
-    const text = operatorText(record);
-    if (text === undefined) return undefined;
-    return { id: record.uuid ?? randomUUID(), kind: "user", text };
-  }
-  if (role === "assistant") {
-    const tool = toolSummary(record.message?.content);
-    if (tool) {
-      return {
-        id: record.uuid ?? randomUUID(),
-        kind: "tool",
-        tool: tool.tool,
-        target: tool.target,
-      };
-    }
-    const text = textFromContent(record.message?.content);
-    if (text === "") return undefined;
-    return { id: record.uuid ?? randomUUID(), kind: "agent", text };
-  }
-  return undefined;
 }
 
 /** Parse one transcript, skipping lines the CLI's undocumented format has
@@ -148,7 +91,6 @@ async function readSessionMetaFromJsonl(
     name: title,
     projectDir: cwd,
     gitBranch,
-    model: "",
     status: "dormant",
     createdAt,
     lastActiveAt,
@@ -186,55 +128,6 @@ export async function listSessionsForProject(
     (a, b) =>
       new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime(),
   );
-}
-
-/** Walk parentUuid from newest leaf to root; skip sidechains. */
-export async function backfillHistory(
-  configDir: string,
-  projectDir: string,
-  sessionId: string,
-): Promise<TurnWire[]> {
-  const filePath = sessionJsonlPath(configDir, projectDir, sessionId);
-  const records = await parseJsonlFile(filePath);
-  if (records.length === 0) return [];
-
-  const byUuid = new Map<string, JsonlRecord>();
-  const childOf = new Map<string, string>();
-  for (const record of records) {
-    if (record.uuid === undefined) continue;
-    byUuid.set(record.uuid, record);
-    if (record.parentUuid) childOf.set(record.parentUuid, record.uuid);
-  }
-
-  let leaf: JsonlRecord | undefined;
-  for (const record of records) {
-    if (record.uuid === undefined || record.isSidechain) continue;
-    if (!childOf.has(record.uuid)) {
-      leaf = record;
-    }
-  }
-  if (leaf?.uuid === undefined) {
-    leaf = records.at(-1);
-  }
-
-  const chain: JsonlRecord[] = [];
-  let current: JsonlRecord | undefined = leaf;
-  while (current !== undefined) {
-    if (!current.isSidechain) chain.push(current);
-    const parent =
-      current.parentUuid !== undefined && current.parentUuid !== null
-        ? byUuid.get(current.parentUuid)
-        : undefined;
-    current = parent;
-  }
-
-  chain.reverse();
-  const turns: TurnWire[] = [];
-  for (const record of chain) {
-    const turn = turnFromRecord(record);
-    if (turn !== undefined) turns.push(turn);
-  }
-  return turns;
 }
 
 /** Permanently remove a session's transcript. Idempotent: a session already

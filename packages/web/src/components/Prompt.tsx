@@ -1,14 +1,15 @@
 import { useEffect, useRef, useState } from "react";
 import { suggestCommands } from "../commands";
 
-const IDLE_TEXT = "type / for a command, or message the session";
+const IDLE_TEXT = "type / for a command, or a prompt to start a new session";
 
 /**
  * The prompt terminal — one line at the bottom of the field, always. Click or
  * Cmd+K focuses it; Escape blurs. It never grows into a transcript panel.
  *
  * A leading `/` is a command: names autocomplete and Enter runs the highlighted
- * one. Everything else is a prompt for the active project's session.
+ * one. Everything else starts a new console session in the active project
+ * with it as the opening prompt — the conversation itself happens there.
  *
  * No tab and no close button, unlike a window: the terminal is permanent
  * furniture, not a surface you summon and dismiss.
@@ -19,7 +20,7 @@ export function Prompt({
   onBlur,
   onSubmit,
 }: {
-  /** Whether the bar is focused — session-control digits stand down while true. */
+  /** Whether the bar is focused. */
   focused: boolean;
   onFocus: () => void;
   onBlur: () => void;

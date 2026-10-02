@@ -38,13 +38,10 @@ describe("matchCommand", () => {
     assert.equal(matchCommand("/nope"), undefined);
   });
 
-  it("opens the plans window from either name", () => {
-    assert.equal(matchCommand("/plans")?.action.type, "open");
-    assert.deepEqual(matchCommand("/plans")?.action, {
-      type: "open",
-      kind: "plans",
-    });
-    assert.equal(matchCommand("/plan")?.name, "plans");
+  it("starts consoles rather than opening a window", () => {
+    assert.deepEqual(matchCommand("/console")?.action, { type: "console" });
+    assert.deepEqual(matchCommand("/bash")?.action, { type: "shell" });
+    assert.deepEqual(matchCommand("/tile")?.action, { type: "tile" });
   });
 
   it("does not include a context command", () => {
