@@ -4,7 +4,7 @@ import type { Project } from "../domain";
 /**
  * Top-centre, permanent. Every session, approval and tool call in the app runs
  * against this project, so it is stated plainly at the top of the field and
- * never hidden behind a menu (design-system.md §6).
+ * never hidden behind a menu (spec/ui-ux.md §6).
  *
  * The readout is the whole hit target, and a click on it means "show me this
  * project": the panel to switch, and — once there is a project to show — its

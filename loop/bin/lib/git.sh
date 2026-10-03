@@ -305,7 +305,7 @@ git_branch_absorbed() {
 # the trunk, locally, without disturbing the working tree.
 #
 # This is what "publish" means in a repo with no remote: there is nowhere to
-# push, so the human's approval merges the work instead. `loop/bin/close
+# push, so passing the publish gate merges the work instead. `loop/bin/close
 # --merge` uses the same function for a repo that has a remote but is merged
 # here rather than on a forge.
 #

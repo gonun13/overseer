@@ -1083,6 +1083,9 @@ export function attachWebSocketServer(
           // The personality watcher must not treat this delete as an accident
           // — otherwise the status window gets a second, blocked
           // "personality deleted · restart to restore" under the wipe.
+          // The legacy plans file is not part of this socket reset sequence and
+          // survives it; `clearInternalMemory` removes it for callers using the
+          // aggregate helper.
           beginIntentionalPersonalityDelete();
           try {
             await erase("deleting personality", async () => {
@@ -1262,10 +1265,9 @@ export function attachWebSocketServer(
           return;
         }
         case "loop.models.read": {
-          // Never refuses — readLoopModels reports an empty list rather than
-          // throwing, so there is no error path to send here (an unreachable
-          // or signed-out CLI is a legitimate, displayable answer: "nothing
-          // to pick from yet", not a broken request).
+          // Provider command failures and invalid JSON become an empty list.
+          // A parseable reply with an unexpected nested shape can still throw
+          // out of this handler.
           broadcast(await readLoopModels(parsed.providerId));
           return;
         }

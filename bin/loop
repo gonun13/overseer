@@ -5,7 +5,7 @@
 #
 #   ./bin/loop <workspace>          open an overseer session on that workspace
 #   ./bin/loop <command> [args...]  any loop/bin/<command> — list, train, stint…
-#   ./bin/loop sh                   a shell in the loop's container
+#   ./bin/loop sh                   a shell in the loop's container (alias: bash)
 #   ./bin/loop --prod <...>         against the production stack
 #
 # The first argument is a loop/bin command when a file of that name exists

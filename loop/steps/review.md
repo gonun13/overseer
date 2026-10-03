@@ -6,11 +6,11 @@ the human at this terminal, then their decision — recorded, not made by you.
 Exactly one review record.
 
 **Nothing about this request has gone anywhere yet, and this step does not send
-it.** The work is a commit on a local branch and nothing more. `loop/bin/publish`
-acts on it *after* this record says the human approved it — pushing the branch
-to origin, or, in a project with no remote, merging it into the trunk. That
-ordering is what makes this review the gate rather than a formality after the
-fact. A rejected review publishes nothing at all.
+it.** The work is a commit on a local branch and nothing more. In the normal flow,
+`loop/bin/publish` acts after this artifact records `approved` or `followups` —
+pushing the branch to origin, or, in a project with no remote, merging it into
+the trunk. The command reads this artifact directly and `--force` bypasses that
+check; it does not verify the sign-off file or lifecycle event.
 
 **You run this step yourself, in this session**, like `scope` — it ends in a
 conversation and a human's decision. The one part you delegate is the audit,
@@ -152,11 +152,12 @@ Put the outcome to them as a choice:
 |---|---|
 | `approved` | publish it, as it stands |
 | `followups` | the same, and open the findings as new requests |
-| `rejected` | publish nothing. The branch stays where it is and stays in the train, and the findings are opened as requests cut off it. |
+| `rejected` | fail the normal publish gate. The branch stays where it is and stays in the train, and the findings are opened as requests cut off it. |
 
 Say plainly which one they are choosing, in the terms of *this* project: with a
 remote, `approved` and `followups` push the branch to your git host; with no
-remote they merge it into the trunk. `rejected` leaves it untouched either way.
+remote they merge it into the trunk. `rejected` leaves it untouched in the normal
+flow; an explicit `publish --force` bypasses the artifact outcome.
 Check which one you are in — `git -C <workspace_dir> remote get-url origin` —
 rather than promising a push that cannot happen.
 
@@ -223,7 +224,7 @@ findings: <none, or `<n> (<n> high, <n> medium, <n> low)`>
 
 ## Outcome
 - <approved | followups | rejected> — <one line, in the human's own words>
-- Branch: {{frontmatter.branch}} (local — published only if this approves)
+- Branch: {{frontmatter.branch}} (local — the normal publish gate accepts approved/followups)
 
 ## Audit
 | Severity | Where | Finding |

@@ -17,7 +17,7 @@ import { StatusLight } from "./StatusLight";
  * Slides in from the right edge off the gear beside the clock. Settings are not
  * a window: they are not summoned into the field, they are not draggable, and
  * only one can be open — they belong to the machine, not to the work
- * (design-system.md §6).
+ * (spec/ui-ux.md §6).
  */
 export function SettingsPanel({
   open,

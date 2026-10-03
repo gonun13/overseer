@@ -1,18 +1,14 @@
 # Overseer
 
-<p align="center">
-  <img src="docs/samples/overseer_white.png" width="49%" />
-  <img src="docs/samples/overseer_black.png" width="49%" />
-</p>
-
 A single-page web console for driving CLI coding agents. 
 
 For now only `claude` and `cursor` are fully wired providers but others are ready to be implemented.
 
 Built sandboxed, with the paranoid in mind: protect the host from runaway LLMs.
 Agents run in Docker, not on your desktop — they cannot wipe your home directory or
-reach your real accounts. The only shared surface is `/workspace`; keep those
+reach your real accounts. In production, the only shared surface is `/workspace`; keep those
 projects on external git remotes so a bad run is recoverable.
+Development also mounts the writable source repo at `/app`, accessible to agent shells.
 
 ## Trade-offs
 
@@ -34,7 +30,7 @@ Nothing else. Node, npm, and the agent CLIs all live inside the container.
 
 Your projects do **not** live in this repo. The first run creates
 `../overseer-workspace` — a directory next to this clone — and mounts it into the
-container as `/workspace`, the only surface the agents get. Put a project there (clone
+container as `/workspace`, the only host surface agents get in production. Put a project there (clone
 it, or create one from the UI) and it shows up in the panel.
 
 It sits outside the repo on purpose: inside, a dev container saw every project twice,
@@ -73,8 +69,8 @@ owns the agents as named volumes;
 
 Configuration is optional and lives in `.env` — copy `.env.example` and uncomment what
 you need (Compose loads it automatically). `OVERSEER_WORKSPACE_HOST` moves the workspace;
-`TZ` sets the container timezone, which is what provider usage and limit reset phrases
-follow. Default is UTC.
+`TZ` sets the container timezone for CLI usage and limit reset phrases. Default is UTC;
+Cursor dashboard reset dates are displayed in UTC regardless of `TZ`.
 
 ```sh
 ./bin/stop
@@ -118,14 +114,19 @@ all of them at once.
   overseer, prompt, provider). A console is the provider CLI (`+ new session`, or type a
   prompt into the prompt bar), a plain shell (`/shell`), or the dev loop (`/loop`).
 - **Consoles outlive the tab** — closing a window only detaches it; the process keeps
-  running on the server. A reload puts every window back where it was, with its
-  scrollback. Kill is a separate, explicit control.
+  running on the server. A reload restores console windows and their scrollback,
+  then tiles them on the stage. Kill is a separate, explicit control.
 - **Sessions** — every provider session in the workspace, read from the CLIs' own
   transcripts. Opening one shows the console running it, or resumes it in a new one
   (`claude --resume`, `agent --resume`).
 - **Monitoring** — Claude Code reports through hooks, so a console waiting on a
   permission prompt lights up and the overseer points you straight at it. Other CLIs
   are watched by their output.
+
+Prompt commands also accept these aliases: `/provider` for `/providers`, `/session`
+for `/sessions`, `/gitconfig` for `/git`, `/bash` or `/sh` for `/shell`, `/grid` or
+`/arrange` for `/tile`, `/system` for `/settings`, `/changes` or `/whatsnew` for
+`/changelog`, `/night` or `/day` for `/theme`, and `/dismiss` for `/clear`.
 - **Overseer space** — ranks what needs attention and opens the surface it refers to.
 - **Wizard** — walks a fresh instance from nothing to a working setup.
 - **Project panel** — persistent status for every project, plus project creation.

@@ -28,7 +28,7 @@ without one, lists every slug under db/.
         that decision sent it, and one whose latest step is `review` carries
         `outcome` — which is the whole of how the next action survives a
         restart. Every request that owns a branch also carries `branch`:
-        {name, base, pr, state}, so the train is visible without running git.
+        {name, base, state}, so the train is visible without running git.
         This is the form to read from a script or an agent.
 
 Exit codes: 0 ok, 1 general failure.

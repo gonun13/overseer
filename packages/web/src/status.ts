@@ -63,8 +63,8 @@ export const ACTIVITY_MESSAGE_KEY: Record<Activity, SpaceMessageKey> = {
 };
 
 /** The bracketed word in the status window's `label... [STATUS]` lines.
- * A second vocabulary would be a second status system — this is the same five
- * values wearing the register that log reads in (spec/behaviour/overseer.md §3). An
+ * A second vocabulary would be a second status system — these are the five
+ * operation outcomes wearing the activity register (spec/behaviour/overseer.md §3). An
  * operation step never actually reaches `approval` — kept only so the map
  * stays exhaustive. */
 export const ACTIVITY_STEP_WORD: Record<Activity, string> = {

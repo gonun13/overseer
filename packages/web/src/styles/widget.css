@@ -1,7 +1,7 @@
 /* ---- right rail: the provider widget --------------------------------------
    Widgets stay on the field. They are bracketed at the corners rather than
    framed and tabbed, so they read as instruments sitting on the background and
-   can never be mistaken for windows (design-system.md §6.2). */
+   can never be mistaken for windows (spec/ui-ux.md §6.2). */
 .widget {
   width: 100%;
   display: flex;

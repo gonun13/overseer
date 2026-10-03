@@ -32,8 +32,8 @@ Your window is for the state of the loop, nothing else.
 
 ## The commands
 
-All of them take the workspace name. Human-readable output goes to stderr, JSON
-to stdout. Write `LOOP_DIR` out in full when you run one — substitute the real
+Workspace commands take the workspace name; provider/model configuration and lints are global.
+Stdout may be JSON, tables or Markdown; use `--json` where offered. Diagnostics go to stderr. Write `LOOP_DIR` out in full when you run one — substitute the real
 path you were given, don't leave a shell variable in the command — so the loop's
 own commands are recognized as such and don't need approving one at a time.
 
@@ -46,7 +46,7 @@ own commands are recognized as such and don't need approving one at a time.
 | `$LOOP_DIR/bin/tracers <ws> <id> [--next\|--last]` | the plan's tracers; `--next` the group to implement, `--last` the one just built |
 | `$LOOP_DIR/bin/stint <ws>` | who holds the stint, and what is still pending in it |
 | `$LOOP_DIR/bin/land <ws> <id>` | commit to the branch and release the tree. Local; nothing is pushed |
-| `$LOOP_DIR/bin/publish <ws> <id>` | act on an approved review: push the branch to origin, or merge it into the trunk when the project has no remote |
+| `$LOOP_DIR/bin/publish <ws> <id> [--force]` | accept an approved/followups review artifact and push the branch, or merge it when there is no remote; `--force` bypasses that check |
 | `$LOOP_DIR/bin/memory <ws> --show` | the workspace's accumulated knowledge. Steps maintain it; you rarely need it |
 | `$LOOP_DIR/bin/train <ws>` | the stacked branches, and which one the next request is cut from |
 | `$LOOP_DIR/bin/worktree <ws> <id> --create` | the throwaway checkout a review is QA'd in |
@@ -140,10 +140,10 @@ You run `review` yourself, like `scope` — read `$LOOP_DIR/steps/review.md` and
 follow it. An audit you delegate, QA you walk the operator through, and their
 decision, which you record but do not make.
 
-**This is the gate.** Say so plainly: approving publishes the work — pushed to
-your git host, or merged into the trunk in a project with no remote — and
-rejecting leaves it exactly where it is. Two things are unlike every other
-step:
+**This is the normal gate.** Say so plainly: an approved/followups artifact lets
+`publish` push the work to the git host, or merge it into the trunk with no
+remote. A rejected artifact blocks the normal path; `publish --force` bypasses
+the check. Two things are unlike every other step:
 
 - **The sign-off comes first.** `step <ws> <id> review` refuses until `signoff`
   has put the human's words on disk. So: audit, QA, capture the decision, *then*
@@ -155,7 +155,7 @@ step:
 |---|---|
 | `approved` | `publish <ws> <id>` |
 | `followups` | the same, then `new` for each finding they approved |
-| `rejected` | **publish nothing.** The branch stays where it is and stays in the train. Open the findings as requests. |
+| `rejected` | Do not publish in the normal flow. The branch stays where it is and stays in the train. Open the findings as requests. |
 
 `publish` refuses a request that was not reviewed, or whose review rejected it.
 That refusal is the safety rail — never reach for `--force`.

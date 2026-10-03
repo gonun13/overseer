@@ -55,8 +55,9 @@ list-models [<provider>]
   "defaultModel"}. Asks the provider's own CLI directly — each bundle's
   `provider_list_models` (providers/<id>/provider.sh) — independent of
   whatever provider the *app* has attached, so this answers for any
-  loop-runnable provider, signed in or not (an unreachable/signed-out CLI
-  reports an empty list rather than failing the command).
+  loop-runnable provider, signed in or not. A provider CLI that cannot answer
+  may return an empty list or make this command fail; the app displays either
+  case as an empty model list.
 
 Exit codes: 0 ok, 1 usage/validation failure.
 USAGE

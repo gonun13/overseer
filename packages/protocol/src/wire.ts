@@ -619,20 +619,19 @@ export interface ConsoleStateMessage {
   activity: ConsoleActivity;
 }
 
-/** Sessions for the active project — broadcast to all tabs. */
+/** Sessions across every workspace project/provider — broadcast to all tabs. */
 export interface SessionListMessage {
   type: "session.list";
   sessions: SessionMeta[];
 }
 
-/** JSONL backfill before live streaming begins. */
+/** Legacy session metadata frame; the current server does not emit it. */
 export interface SessionMetaMessage {
   type: "session.meta";
   session: SessionMeta;
 }
 
-/** Plans for the active project — broadcast to all tabs, like the session
- * list, so a plan retired in one tab leaves the others' lists too. */
+/** Global loop provider/model allocation, independent of active project. */
 export interface LoopProviderInfo {
   id: string;
   /** Mirrors `providers/<id>/manifest.json`'s `loopSubagents` field (absent

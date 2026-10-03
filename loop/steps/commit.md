@@ -1,9 +1,9 @@
 # Step: commit
 
 Write the commit message and the pull-request body for one finished request.
-Exactly one commit record. You do not run git, you do not open the pull
-request, and you do not touch the project — `loop/bin/land` does all three,
-after this record has been validated.
+Exactly one commit record. You do not commit or push, you do not open the pull
+request, and you do not change project files — `loop/bin/land` stages and commits
+locally after this record has been validated. Publishing follows review; the operator opens the PR.
 
 The work is already done and already judged. `decide` routed this request here
 because every tracer in its plan is implemented and the last verify passed.
@@ -45,13 +45,14 @@ and a "tidier" branch name is simply wrong.
 2. **Read the repository freely.** These are the ones you want, and they are
    how you write a message worth reading:
    - `git -C <workspace_dir> status --short`
-   - `git -C <workspace_dir> diff --stat <base_branch>...<branch>`
-   - `git -C <workspace_dir> diff <base_branch>...<branch>`
+   - `git -C <workspace_dir> diff --stat <base_branch>`
+   - `git -C <workspace_dir> diff <base_branch>`
    - `git -C <workspace_dir> log --oneline -10`
    Read the actual diff. A message written only from the implement record
    describes what was planned, not what was written.
 3. **Do not push and do not merge.** The branch stays exactly where it is until
-   a human has reviewed it and approved it; `loop/bin/publish` acts on it then —
+   the review artifact has an accepted outcome (or the operator forces publish);
+   `loop/bin/publish` acts on it then —
    pushing it to origin, or merging it into the trunk when the project has no
    remote. You write the title and body either one uses. Writing them is free;
    publishing is what commits you.
@@ -65,7 +66,8 @@ and a "tidier" branch name is simply wrong.
 
 1. Read `inputs.request_file`, `inputs.implement_file`, and the last
    `## Decision` block of `inputs.decide_file`.
-2. Read the diff for the range named in `frontmatter` (`base_branch...branch`).
+2. Read the working-tree diff against `frontmatter.base_branch`, including staged changes.
+   Read any untracked files listed by `status --short` too; `land` will stage them.
    This is the authority on what actually changed; where it and the implement
    record disagree, the diff wins.
 3. Write the commit message: an imperative subject under 72 characters, a blank

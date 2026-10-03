@@ -109,7 +109,7 @@ Rules:
 
 ## 3. Activity — the one status vocabulary
 
-Projects, consoles, sessions and signals are all "an activity", and all use the same five values and the
+Projects, consoles, sessions and signals are all "an activity", and all use the same six values and the
 same round light.
 
 | Activity    | Light             | Means                                     |
@@ -117,14 +117,15 @@ same round light.
 | `idle`      | unlit ring        | nothing happening — no light is the point |
 | `working`   | pulsing green     | a turn is in flight                       |
 | `done`      | steady green      | finished, result unread                   |
-| `waiting`   | steady amber      | blocked on config, auth or a queue        |
-| `attention` | pulsing red, fast | needs the operator to intervene           |
+| `waiting`   | pulsing red, fast | blocked on config, auth or a queue        |
+| `attention` | steady amber      | needs the operator to intervene           |
+| `approval`  | pulsing amber, fast | CLI needs approval                      |
 
 The round light is the **only circle in the interface** and the only thing that animates on its own. Pulse
 rhythm carries urgency: 1.2s for work in progress, 0.7s for intervention. Colour is never the sole carrier —
 every light sits beside a word.
 
-Rank order for anything that sorts by status: `attention → waiting → working → done → idle`.
+Rank order for anything that sorts by status: `approval → attention → waiting → working → done → idle`.
 
 ---
 
@@ -141,7 +142,8 @@ answer** to what deserves attention.
   the sentence states what happened and what it means.
 - **Every signal is actionable** and opens the relevant window, panel, selector, prompt, or recovery action.
 - Signals are derived on every render, never stored.
-- When nothing is wrong and nothing is running, exactly one `idle` signal remains: standby.
+- When no other signal needs attention, exactly one `idle` signal remains: standby.
+  Consoles may still be working; standby invites another session.
 
 Semantics live in `packages/web/src/state/signals.ts`. New system state earns a derivation rule there, not a
 new widget.
@@ -153,10 +155,12 @@ new widget.
 **The summonable primitive**, and a _surface_ — it inverts the theme. Opened by a signal click, a typed
 command, or a system escalation.
 
-- `position: absolute`, **confined to the stage** (§1) and **tiled**: every window, of every kind, takes
+- `position: absolute` and **tiled**: every window, of every kind, takes
   a cell of one near-square grid over the stage, in the order it was opened, with a 2px gap between
   cells. The grid re-tiles whenever a window opens or closes and when the viewport resizes. A window can
-  still be dragged or resized (never onto a rail); `/tile` puts everything back on the grid. A tiled
+  still be dragged or resized; horizontal dragging stays inside the stage, while vertical dragging
+  keeps only the tab reachable and can leave the body below it. Resize aims at the stage edge, but
+  the 420×240 minimum can overrun a smaller available area. `/tile` puts everything back on the grid. A tiled
   window's height is its whole box, tab included, and the body flexes to fill it, scrolling vertically.
   Columns never go narrower than 320px: a crowded stage gets more rows instead, and cells never overlap.
   `packages/web/src/layout.ts` owns the stage bounds and the grid.
@@ -401,7 +405,7 @@ is never in the `Esc` chain.
 
 Motion means the system changed state. Never decoration.
 
-- **Pulse** — status lights only; 1.2s working, 0.7s attention.
+- **Pulse** — status lights only; 1.2s working, 0.7s waiting or approval. Attention is steady.
 - **Boot progress** — a determinate loading bar replaces the centre marker until startup settles.
 - **Tab wipe** — `clip-path: inset(0 N% 0 0)` 100→0 over ~200ms when a window opens.
 - **Body expand** — `max-height` 0→`min(420px, 52vh)`, 500ms, after the tab lands.

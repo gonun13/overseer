@@ -3,9 +3,7 @@ import type { SpaceService } from "./space.js";
 
 /**
  * Discovery: what the overseer learns about the world before any session
- * exists. Deliberately its own union rather than a member of `AgentEvent` —
- * every `AgentEvent` variant carries a `sessionId`, and discovery runs when
- * there is no session to carry.
+ * exists. It has a run id rather than a session id.
  */
 
 /**

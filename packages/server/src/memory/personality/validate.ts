@@ -16,11 +16,11 @@ export type PersonalityTone = NonNullable<AppliedPersonality["tone"]>;
 /** Fields the operator may set, and how each is validated. */
 export const TONES = new Set<string>(["neutral", "dry", "warm"]);
 /** A headline, not a paragraph. Long enough to be personal, short enough to
- * stay one line at 34px (design-system.md §4). */
+ * stay one line at 34px (spec/ui-ux.md §4). */
 export const MAX_GREETING = 48;
 export const MAX_NAME = 24;
 /** Cap, not a free dial: past this the "rare tell" stops being rare and starts
- * being a scheduled effect (design-system.md §9). */
+ * being a scheduled effect (spec/ui-ux.md §9). */
 export const MAX_TYPING_CHANCE = 0.5;
 
 /**

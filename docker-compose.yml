@@ -23,8 +23,7 @@ services:
   overseer:
     build:
       context: .
-      # Explicit: the Dockerfile has `dev` and `test` stages after this one, and
-      # the default target is the last stage.
+      # Explicit production target.
       target: runtime
       args:
         OVERSEER_UID: ${OVERSEER_UID:-1000}

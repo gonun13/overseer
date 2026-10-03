@@ -10,7 +10,7 @@ import type { OverseerSpace } from "./overseer/space.js";
  * Discovery is a one-shot pass; this is the continuous half — create/delete
  * (and "became a git project" / "stopped being one") under the workspace root
  * update every connected client without replaying the wizard. Diffs also land
- * as `overseer.step` lines so the status window reports what changed.
+ * as `space.status` lines so the status window reports what changed.
  * `personality.json` is tracked directly: edits are re-read live; deletion
  * complains and asks for a restart (discovery restores defaults on the next
  * boot — no silent live repair).

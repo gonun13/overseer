@@ -15,9 +15,9 @@ rebuild replaces and what survives it is load-bearing:
 |---|---|---|
 | `/app` | code — `packages/`, `loop/`, `providers/` | image; a bind mount of the repo in dev |
 | `/home/overseer` | every provider CLI's config and auth, plus the git ssh key ([architecture.md §2.2](architecture.md#22-git-access)) | the `agent-home` volume |
-| `/workspace` | the one surface shared with the host | host bind mount, from `OVERSEER_WORKSPACE_HOST` |
+| `/workspace` | the production surface shared with the host | host bind mount, from `OVERSEER_WORKSPACE_HOST` |
 | `/workspace/<project>/` | one git project per directory; a console's `cwd` | host |
-| `/workspace/_overseer/` | import/export staging only — host-writable, untrusted | host |
+| `/app` (dev only) | writable source repo, accessible to agent shells | host bind mount |
 | `/app/.overseer` | internal memory (§2) | the `overseer-memory` volume |
 | `/app/loop/db` | the dev loop's file store ([behaviour/dev-loop.md](behaviour/dev-loop.md)) | the repo in dev, the `loop-db` volume in prod |
 
@@ -52,7 +52,8 @@ paths, or a workspace project's own bind mounts resolve to empty directories
 ([architecture.md §6.3](architecture.md#63-the-daemon-that-builds-workspace-projects)).
 
 What discards what: `./bin/reset` drops every volume, auth included; `reset overseer` in settings
-empties `/app/.overseer` and `personality.json` only ([behaviour/overseer.md §6.5](behaviour/overseer.md#65-resetting-the-overseer--forgetting-on-purpose)).
+removes `state.json`, `actions.jsonl`, run logs and `personality.json`. A legacy `plans.json`, if
+present from an older build, survives ([behaviour/overseer.md §6.5](behaviour/overseer.md#65-resetting-the-overseer--forgetting-on-purpose)).
 
 ---
 
@@ -70,8 +71,8 @@ The server owns all access, in `packages/server/src/memory/internal.ts`.
 
 | Store | Shape (`internal.ts`) | Rule |
 |---|---|---|
-| `actions.jsonl` | `ActionRecord` — `at`, `actor` (`overseer` \| `operator`), `action`, `outcome` (`ok` \| `blocked` \| `failed` \| `skipped`), optional `detail` | Every overseer action is recorded before it is reported. Never filtered or muted by configuration. |
-| `state.json` | `WorldSnapshot` — `at`, `runCount`, `workspaceRoot`, `projects`, `providers`, `last_active_project?`, `attached_provider?`, `theme?`, `git_identity?` | Its existence is what makes a boot a return visit. `attached_provider` is only ever set by the operator, never auto-picked. |
+| `actions.jsonl` | `ActionRecord` — `at`, `actor` (`overseer` \| `operator`), `action`, `outcome` (`ok` \| `blocked` \| `failed` \| `skipped`), optional `detail` | A report starts a best-effort asynchronous append, then broadcasts without waiting. Never filtered or muted by configuration. |
+| `state.json` | `WorldSnapshot` — `at`, `runCount`, `workspaceRoot`, `projects`, `providers`, `last_active_project?`, `attached_provider?`, `theme?`, `git_identity?` | Its existence is what makes a boot a return visit. Restore `attached_provider` when registered; otherwise attach the first authenticated provider. |
 | `logs/` | one JSONL file per run id | Records, not screen content; the status window shows derived rows. |
 
 A usage-history / session / search index (`index.sqlite`) was planned in earlier drafts and does
@@ -102,7 +103,7 @@ This spec does not restate its types; change the type, and the compiler finds ev
 |---|---|---|
 | WebSocket frames (`/ws`) | `protocol/src/wire.ts` | Discriminated union on `type`, namespaced `project.*`, `console.*`, `git.*`, `loop.*`, `auth.*`, `session.*`, `operator.*`, `provider.*`, `theme.*`, `memory.*`, `workspace.*`, `discovery.*`, plus `connected` and `error`. Almost all app traffic goes here. |
 | Adapter runtime | `protocol/src/adapter.ts` | `AgentAdapter`, `AdapterStatus`, capabilities — see [architecture.md §1.1](architecture.md#11-the-adapter-interface). |
-| Activity vocabulary | `protocol/src/space.ts` (`Activity`) | The five values in [ui-ux.md §3](ui-ux.md#3-activity--the-one-status-vocabulary). |
+| Activity vocabulary | `protocol/src/space.ts` (`Activity`) | The six values in [ui-ux.md §3](ui-ux.md#3-activity--the-one-status-vocabulary). |
 | Discovery events | `protocol/src/discovery.ts` | |
 | HTTP | `packages/server/src/index.ts` | `GET /api/health`; `POST /hooks/<console>/<token>` (loopback only, per-console token — [architecture.md §6.1](architecture.md#61-approvals-and-hooks)); the built SPA. |
 | Provider manifest | `providers/<id>/manifest.json` | `id`, `cli`, `configDir`, `install`, `app` (`adapter` \| `stub` \| `none`), `loop` (`bundle` \| `none`), optional `loopSubagents` — [architecture.md §1.1.2](architecture.md#112-the-provider-registry). |
@@ -112,7 +113,23 @@ This spec does not restate its types; change the type, and the compiler finds ev
 
 ## 5. Browser storage
 
-Only one thing persists in the browser: console window placement
+Only one thing persists in the browser: console window state (ids, opening order and geometry;
+restore uses the ids/order and tiles the windows)
 (`packages/web/src/state/console-layout.ts`, `localStorage`, best effort). Everything else the
 operator chooses — theme, active project, attached provider, git identity — lives server-side in
 `state.json`, so it survives a different browser.
+
+## 6. Runtime overrides
+
+These are container environment variables; adding them to Compose's `.env` alone does not
+forward them to a service. Defaults apply when unset.
+
+| Variable | Effect / default |
+|---|---|
+| `SHELL` | Plain console executable, `bash`; always receives `-l`. |
+| `OVERSEER_LOOP_DB` | Server loop lease/session record directory, `/app/loop/db`; does not move the shell helpers' store. |
+| `OVERSEER_LOOP_BIN_MODELS` | Model configuration helper, `/app/loop/bin/models`. |
+| `OVERSEER_LOOP_BIN_PROVIDER` | Provider selection helper, `/app/loop/bin/provider`. |
+| `OVERSEER_SSH_DIR` | SSH key store, `$HOME/.ssh`. |
+| `XDG_CONFIG_HOME` | Cursor's first token lookup is `<value>/cursor/auth.json`; empty/unset uses `$HOME/.config/cursor/auth.json`, then the legacy locations. |
+| `CURSOR_API_ENDPOINT` | Cursor dashboard API base, `https://api2.cursor.sh`; blank uses the default, trailing slashes are stripped. |

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 
 /**
  * The message swaps instantly almost every time it changes — motion here
- * means the system changed state, not decoration (design-system.md §9). Very
+ * means the system changed state, not decoration (spec/ui-ux.md §9). Very
  * occasionally it types the new word out instead: a small tell that
  * something is watching, deliberately rare so it never reads as a feature.
  * Never fires on mount — only on a real change from what was already showing.

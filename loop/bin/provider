@@ -19,9 +19,9 @@ Lists the providers the loop can run — the shared providers/ registry, minus
 any bundle the app carries alone — and the currently selected one (from
 loop/.provider, ignoring LOOP_PROVIDER).
 
-With no <id> and a TTY, prompts for a numbered selection and writes
-loop/.provider. With <id>, sets that provider directly. Without a TTY and
-without <id>, prints the list and exits 1.
+With <id>, sets that provider directly. With no <id>, prints the list; without
+a TTY it exits 1. The current interactive picker captures its printed menu as
+part of the selected value and does not save a valid id, so pass <id> explicitly.
 
 Exit codes: 0 ok, 1 usage/validation failure.
 EOF

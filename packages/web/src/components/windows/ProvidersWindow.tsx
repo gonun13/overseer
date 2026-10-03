@@ -89,7 +89,7 @@ export function ProvidersWindow({
  *
  * The two are the same focus zone — "which agent runs my work" — and
  * splitting them would put the operator through two summonings for one
- * decision (design-system.md §6). The authenticate step takes over
+ * decision (spec/ui-ux.md §6). The authenticate step takes over
  * automatically when the attached provider can log in and has not, which is
  * exactly when there is nothing else in this view worth looking at.
  */

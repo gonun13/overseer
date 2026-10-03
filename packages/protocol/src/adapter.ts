@@ -48,13 +48,13 @@ export interface SessionMeta {
  * as a per-model weekly pool use `week:<name>`.
  */
 export interface AdapterUsageWindow {
-  /** Stable id: `session`, `week`, or `week:<model>` for extra caps. */
+  /** Provider-specific stable id, e.g. Claude's `session`/`week:<model>` or Cursor's `included`/`auto`/`api`. */
   id: string;
   /** Operator-facing name, lowercase: `session`, `week`, `fable`. */
   label: string;
   /** Fraction consumed, 0–1 inclusive. */
   used: number;
-  /** The CLI's own reset phrase, when it gave one. Not parsed into a date. */
+  /** Reset display text: a CLI phrase or a synthesized UTC dashboard date. */
   resets?: string;
 }
 
@@ -272,12 +272,9 @@ export interface AgentAdapter {
    */
   refreshUsage?(): Promise<AdapterStatus>;
   /**
-   * On-demand usage report as the CLI's own prose, for an adapter whose only
-   * usage surface is a real agent turn rather than a free deterministic
-   * command (cursor's `/usage` is an ordinary prompt the model answers, not a
-   * client-intercepted report — real tokens, real latency, no fixed shape).
-   * Never scheduled automatically and never parsed into `AdapterUsageWindow`
-   * gauges the way `refreshUsage` is — only asked when the operator asks.
+   * On-demand usage report, optionally with parsed `AdapterUsageWindow` gauges.
+   * Cursor first reads its dashboard, then may fall back to a real CLI turn
+   * with token cost and latency. Only asked when the operator asks; never scheduled.
    * Absent when the adapter has no such path. Never throws.
    */
   checkUsage?(opts: { projectDir: string }): Promise<AdapterUsageCheck>;

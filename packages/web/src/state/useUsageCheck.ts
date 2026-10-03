@@ -24,9 +24,8 @@ const NO_WINDOWS: AdapterUsageWindow[] = [];
 /**
  * `provider.checkUsage` — the on-demand counterpart to the widget's
  * automatic gauges (`usage-refresh.ts` server-side). Never asked on a timer:
- * an adapter that offers this (see `AdapterCapabilities.usageCheck`) has no
- * free deterministic report, only a real CLI turn, so the operator has to
- * press the button.
+ * the operator presses the button. Reports can include parsed gauges; Cursor
+ * tries its dashboard first and may fall back to a costly CLI turn.
  *
  * A failed re-check keeps the gauges the last good one produced — the same
  * call `usage-refresh.ts` makes for the automatic path, and for the same

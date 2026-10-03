@@ -8,8 +8,8 @@ import type { GitRemoteHost } from "@overseer/protocol";
  *
  * **Generated here, never uploaded.** The operator presses a button, the
  * container makes a keypair, and only the *public* half ever leaves — there is
- * no message in the protocol that returns the private key and no code path
- * that reads it. A key pasted in through a browser would have to cross the
+ * no message in the protocol that returns the private key. Readability checks
+ * read it inside the container. A key pasted in through a browser would have to cross the
  * network, sit in a form field, and land in whatever the browser remembers;
  * generating in place avoids all three.
  *

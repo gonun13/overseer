@@ -78,7 +78,7 @@ export function useDiscoveryPacing(
   }, []);
 
   /** Reduced motion collapses the pacing entirely — instant, never nothing
-   * (design-system.md §9). The steps are information, so they all arrive; they
+   * (spec/ui-ux.md §9). The steps are information, so they all arrive; they
    * just stop being staged. */
   const reveal = useCallback(
     (event: DiscoveryEvent) => {

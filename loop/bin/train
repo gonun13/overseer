@@ -20,8 +20,8 @@ usage() {
 usage: loop/bin/train <workspace-name> [--json | --tip] [--id <request-id>]
 
 Lists the branches the loop tracks in the workspace <workspace-name>, bases before
-the branches stacked on them, with the request each belongs to, the pull
-request opened for it, and whether it has landed on the default branch.
+the branches stacked on them, with the request each belongs to and whether
+it has landed on the default branch.
 
 A request's branch is cut when it takes the working tree, off the tip of this
 train — so a request always starts from the one in front of it, and only from
@@ -29,7 +29,7 @@ the default branch when nothing is ahead. `loop/bin/close` prunes a landed
 request's metadata, which is how it leaves the train and stops being anyone's
 base.
 
---json  one object per branch: {request, branch, base, pr, state, tip}.
+--json  one object: {tip, branches:[{request, branch, base, state, tip}, ...]}.
         The form to read from a script or an agent.
 --tip   print only the branch a new request would be cut from, bare and ready
         to read — the default branch when the train is empty.

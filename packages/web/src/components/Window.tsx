@@ -10,7 +10,7 @@ const MIN_HEIGHT = 240;
 /**
  * The summonable primitive. The tab is a flow child of the window box, not an
  * absolutely-positioned chip, so its left edge is the window's left edge by
- * construction — there is no offset left to drift (design-system.md §5).
+ * construction — there is no offset left to drift (spec/ui-ux.md §5).
  */
 export function Window({
   windowId,

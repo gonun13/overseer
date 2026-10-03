@@ -45,8 +45,8 @@ export function WInline({ label, value }: { label: string; value: ReactNode }) {
  * are what makes a run of them scannable.
  *
  * The bracket word comes from `ACTIVITY_STEP_WORD`, so a step has no colour or
- * icon of its own: it is the same light and the same five values as everything
- * else (design-system.md §3).
+ * icon of its own: it uses the shared activity light and maps the five operation
+ * outcomes onto it (spec/ui-ux.md §3).
  */
 export function WStep({
   label,

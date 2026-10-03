@@ -11,11 +11,10 @@ code, UI copy and docs; do not coin synonyms (see the "renaming things" anti-pat
 | Term | Meaning |
 |---|---|
 | **Operator** | The one developer using this instance. |
-| **Workspace** | `/workspace` in the container — a host directory beside the repo (`OVERSEER_WORKSPACE_HOST`). The only surface shared with the host. |
+| **Workspace** | `/workspace` in the container — a host directory beside the repo (`OVERSEER_WORKSPACE_HOST`). The only surface shared with the host in production; dev also shares the source repo. |
 | **Project** | One git repository directly under the workspace, `/workspace/<project>/`. |
 | **Active project** | The project new sessions, shells and prompts target. Chosen by the operator, remembered in internal memory; existing consoles keep their own project. |
 | **`overseer-personality`** | A project the overseer scaffolds on first discovery to hold `personality.json`. An ordinary project otherwise. |
-| **Staging** | `/workspace/_overseer/` — import/export channel for provider config. Not a project; untrusted. |
 
 ## 2. Providers
 
@@ -24,7 +23,7 @@ code, UI copy and docs; do not coin synonyms (see the "renaming things" anti-pat
 | **Provider** | An agent CLI as the operator sees it — attached, signed in, configured. Identified by an id (`claude`, `cursor`, …). |
 | **Adapter** | The code that translates one provider's CLI into the protocol. Same id as its provider. |
 | **Catalog stub** | A provider whose CLI ships in the image but whose adapter is not built (`app: "stub"`). Listed, not usable. |
-| **Attached provider** | The one provider the app's own sessions use. Only the operator attaches one. |
+| **Attached provider** | The one provider new app sessions use. Restored from the operator's pick, otherwise the first authenticated provider. |
 | **Bundle** | A provider's loop-side config tree (`providers/<id>/provider.sh` + config). |
 
 ## 3. Consoles and sessions
@@ -42,7 +41,7 @@ code, UI copy and docs; do not coin synonyms (see the "renaming things" anti-pat
 | Term | Meaning |
 |---|---|
 | **Overseer** | The system's own voice — wizard, supervisor, automation trigger and notification point. Not chat, not a dashboard, not a log. (The dev loop's orchestrating session is also called "the overseer" inside `loop/`; context disambiguates.) |
-| **Activity** | The one status vocabulary: `attention` → `waiting` → `working` → `done` → `idle`, in rank order. |
+| **Activity** | The one status vocabulary: `approval` → `attention` → `waiting` → `working` → `done` → `idle`, in rank order. |
 | **Message** | The overseer's one uppercase line, in the operator's tone. |
 | **Signal** | A ranked, actionable sentence derived from real state on every render; never stored. Has a kicker (its category). |
 | **Status window** | Telegraphic rows of service work. A row is a **state** (a condition, replaced in place) or an **event** (a happening, append-only). |
@@ -64,16 +63,20 @@ These hold everywhere; code that breaks one is a bug, a spec change that breaks 
 2. **One CLI per transcript.** A session never has two live consoles.
 3. **One loop run per project.** Guarded by the loop's lease; reaching one held elsewhere is an
    explicit, confirmed take-over.
-4. **One attached provider**, chosen by the operator, never auto-picked.
-5. **External never overrides internal.** Host-writable input (`personality.json`, staging) cannot change
+4. **One attached provider.** Restore the operator's previous pick when registered; otherwise attach
+   the first already authenticated provider. Never start login automatically.
+5. **External never overrides internal.** Host-writable input (`personality.json`) cannot change
    policy, logging, permissions, paths, or signals. A rejected field is reported, never silently ignored.
-6. **The action register has no mute switch.** Every overseer action is recorded before it is reported.
+6. **The action register has no mute switch.** Reporting starts a best-effort asynchronous record
+   write, then broadcasts without waiting for persistence.
 7. **Signals are derived, never stored**, and every signal is actionable.
 8. **Personality changes phrasing, never meaning.** Activity, errors, paths and diffs are verbatim.
 9. **Sign-in is not memory.** Resetting the overseer never touches provider auth.
-10. **Every `git` the server runs goes through `packages/server/src/vcs/`.**
+10. **Server git generally goes through `packages/server/src/vcs/`.** Personality scaffolding is
+    the exception and spawns `git` directly.
 11. **No private key leaves the container.** Only the public half of the git ssh key is ever shown.
-12. **Nothing in the dev loop is public until a human approved it.**
+12. **`publish` gates the selected request only.** It reads that request's review artifact (or
+    accepts `--force`); stacked ancestors are not independently gated.
 
 ## 6. Dev loop vocabulary
 

@@ -71,9 +71,7 @@ provider_session() {
 # verified forms: `(current, default)` on an untouched account, or `(current)`
 # alone once the account's selection has moved off that default (switching
 # models for one turn persists as the new selection) — both mean the same
-# thing for `defaultModel`, so both are read. Mirrors
-# packages/adapters/cursor/src/options.ts's `parseModelsOutput` exactly; keep
-# the two in step.
+# thing for `defaultModel`, so both are read.
 provider_list_models() {
   local line value rest label models='[]' default_model=''
   while IFS= read -r line; do

@@ -104,12 +104,12 @@ provider_session() {
 }
 
 # provider_list_models — this account's models, from the same `initialize`
-# control request the app's own adapter probes (packages/adapters/claude
-# /src/options.ts) — there is no plain-text `claude models` command. As JSON
+# control request the app's own adapter probes
+# (packages/adapters/claude/src/index.ts) — there is no plain-text `claude models` command. As JSON
 # on stdout: `{"models":[{"value","label"}...],"defaultModel"}`.
 #
 # The request/response shape is undocumented (scraped from the pinned build,
-# same caveat options.ts states) and verified live: write one
+# same caveat the adapter states) and verified live: write one
 # `control_request` line to `claude -p --input-format stream-json
 # --output-format stream-json --no-session-persistence`'s stdin, read the
 # matching `control_response` off stdout, kill the child (it would otherwise
@@ -119,7 +119,7 @@ provider_session() {
 #
 # `withVersionInLabel`'s job, in jq: `displayName` alone drops the version
 # claude only states in `description` ("Sonnet" not "Sonnet 5", verified) —
-# stitch the two back together, matching options.ts's own logic, when
+# stitch the two back together, matching the adapter's own logic, when
 # `description`'s leading word matches `displayName`'s.
 provider_list_models() {
   local response

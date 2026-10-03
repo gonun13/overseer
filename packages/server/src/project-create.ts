@@ -4,12 +4,14 @@ import { PROJECT_FOLDER_PATTERN } from "@overseer/protocol";
 import { projectGit } from "./vcs/index.js";
 import { WORKSPACE_ROOT, scanWorkspace } from "./workspace.js";
 
-/** Below this, a spammed retry loop cannot outrun a human reading the error
+/** Successful creates are separated by two seconds. Below this, a spammed retry
+ * loop cannot outrun a human reading the error
  * and stopping. Above it, an operator naming several projects in a row is
  * never made to wait. */
 const CREATE_COOLDOWN_MS = 2_000;
 
-/** A hard ceiling on what this endpoint alone can do to the workspace's
+/** Creation is refused at 500 scanned projects. A hard ceiling on what this
+ * endpoint alone can do to the workspace's
  * disk/inode budget, independent of request rate — the guard that survives a
  * process restart or a client that reconnects to dodge the cooldown. */
 const MAX_PROJECTS = 500;
@@ -35,8 +37,8 @@ export interface CreateProjectDeps {
   now?: () => number;
 }
 
-/** Delegates to `vcs`, so that every `git` the server runs comes from the one
- * module. The `gitInit` dependency seam above stays exactly as it was — tests
+/** Delegates this project's git initialization to `vcs`. The `gitInit`
+ * dependency seam above stays exactly as it was — tests
  * still inject their own and never reach a real repository. */
 async function defaultGitInit(dir: string): Promise<void> {
   await projectGit.init(dir);

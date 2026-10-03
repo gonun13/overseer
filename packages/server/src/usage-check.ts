@@ -6,12 +6,10 @@ import { isInsideWorkspace } from "./workspace.js";
 
 /**
  * On-demand usage report for the attached provider (`AgentAdapter
- * .checkUsage`) — distinct from `usage-refresh.ts`'s gauges: this is never
- * scheduled, only asked, because for an adapter like cursor's the ask is a
- * real, possibly slow, possibly costly CLI turn rather than a free
- * deterministic command.
+ * .checkUsage`) — never scheduled, only asked. It may return parsed gauges.
+ * Cursor first reads its dashboard, then may fall back to a slow, costly CLI turn.
  *
- * Single-flight for the same reason `provider-options.ts` is: two tabs
+ * Single-flight: two tabs
  * asking on the same tick must not spawn two of these.
  */
 

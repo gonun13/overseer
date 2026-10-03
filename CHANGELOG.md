@@ -5,6 +5,13 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [spec/architecture.md §8.4](spec/architecture.md#84-changelog).
 
+## Unreleased
+
+### Fixed
+
+- Documentation and CLI help now match the current commands, configuration, provider status,
+  window behavior and dev-loop publishing gate.
+
 ## 0.5.1 — 2026-10-03
 
 ### Changed

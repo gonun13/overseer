@@ -14,10 +14,9 @@ import type { OverseerSpace } from "./space.js";
  * quietly unlocked the composer. Only one of the two could ever be wrong, and
  * it was always the one the operator was reading.
  *
- * So the predicate lives here now, the rows are `state` rows, and every path
- * that changes provider auth calls `reportProviderStatus` — which means a
- * login rewrites both rows in place instead of stacking a contradiction under
- * them.
+ * So the predicate lives here now and the rows are `state` rows. Login,
+ * sign-out and console-observed expiry paths refresh them; the usage-refresh
+ * expiry path updates the snapshot and widget without refreshing these rows.
  */
 
 /** Whether the prompt may be released: an attached provider, signed in. The
@@ -90,11 +89,8 @@ export function reportProviderStatus(
 /**
  * Re-report the provider rows from whatever the world snapshot now says.
  *
- * This is the hook every auth-change path hangs on. The snapshot is already
- * the one place `setProviderAuthenticated` and `setProviderStatus` write to,
- * so reading it back here means a login, a sign-out, an expiry noticed by the
- * console, and a usage refresh all correct the same two rows without each
- * knowing how the rows are worded.
+ * Login, sign-out and console-observed expiry paths use this hook. Reading the
+ * shared snapshot keeps those callers from duplicating the row wording.
  *
  * Silent before the first snapshot exists — discovery has not run, so there
  * are no rows to correct yet.

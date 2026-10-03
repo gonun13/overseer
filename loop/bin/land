@@ -9,9 +9,8 @@
 #
 # This is the irreversible half of the `commit` step, and it is bash rather
 # than the agent on purpose. The step writes a message and a pull-request body;
-# nothing more. `git commit` and `git push` stay denied to every provider, so
-# the verbs that cannot be undone stay where they are deterministic and
-# reviewable, the same way id allocation and the jsonl append do.
+# nothing more. Claude denies direct commits and pushes; Cursor relies on the
+# loop's instructions. This verb keeps committing deterministic and reviewable.
 #
 # It runs AFTER loop/bin/record, not before. `record` is the gate that
 # validates the artifact; if the repository moved first and validation then
@@ -102,8 +101,8 @@ message=$(record_section "$file" "Commit message")
 pr_body=$(record_section "$file" "PR body")
 
 [ -n "$message" ] || die "the commit record has no '## Commit message' section — nothing to commit with" 1
-# The pull-request title and body are not used here — loop/bin/publish opens
-# the pull request later — but they are checked now, while the step that wrote
+# The pull-request title and body are not used here — the operator opens
+# the pull request after loop/bin/publish — but they are checked now, while the step that wrote
 # them is still the obvious thing to rerun.
 [ -n "$pr_title" ] || die "the commit record has no pr_title" 1
 [ -n "$pr_body" ] || die "the commit record has no '## PR body' section

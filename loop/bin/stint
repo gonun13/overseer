@@ -4,7 +4,7 @@
 # hatch, hand it back.
 #
 # This is an administrative command, not a part of the loop. A request holds the
-# stint from its first `implement` until `loop/bin/land` commits and pushes its
+# stint from its first `implement` until `loop/bin/land` commits locally to its
 # work — `decide` turns the cycle without handing the tree back, because the
 # changes are still there and still that request's. --release exists for a
 # human cleaning up outside a session, never as a stand-in for the judgement

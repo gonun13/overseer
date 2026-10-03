@@ -13,7 +13,7 @@ import { BOOT_MS } from "../state/wizard";
  *
  * Under `prefers-reduced-motion` the fill's animation is dropped in CSS and
  * the bar sits full instead — the state still shows, it just stops moving
- * (design-system.md §9).
+ * (spec/ui-ux.md §9).
  */
 export function LoadingBar() {
   return (

@@ -25,9 +25,8 @@ import { recordAction } from "../memory/internal.js";
  * 2. **States supersede, events accumulate.** See `SpaceStatusMode` — a
  *    condition is re-reported and replaces itself; a happening is appended and
  *    stands.
- * 3. **Reporting is recording.** `recordAction` is folded in, so the action
- *    register cannot drift from what the operator was shown by a call site
- *    that remembered one and forgot the other.
+ * 3. **Reporting starts recording.** `recordAction` is folded in, but its
+ *    best-effort append is not awaited before the row is broadcast.
  *
  * Deliberately not an `EventEmitter`: the server has none anywhere, and the
  * established shape for a module that pushes to every tab is an injected

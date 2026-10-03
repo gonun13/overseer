@@ -131,7 +131,7 @@ if [ "$step" = decide ]; then
 fi
 
 # A recorded commit does not end the stint — `loop/bin/land` does, once the
-# work is actually committed and pushed. Letting another request in here would
+# work is committed locally. Letting another request in here would
 # cut its branch off a tree still holding uncommitted changes.
 outcome=""
 if [ "$step" = review ]; then

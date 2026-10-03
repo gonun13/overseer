@@ -154,9 +154,8 @@ const SCAFFOLD_README = `# overseer-personality
 
 This is the overseer's **external memory** — the part of it you can shape.
 
-It is an ordinary git project under the workspace mount, so you can edit it three
-ways: directly on the host, through a session opened against it, or via the
-async side-task editing flow used for skills and subagents.
+It is an ordinary git project under the workspace mount, so you can edit it
+directly on the host or through a session opened against it.
 
 ## What you can change
 
@@ -177,8 +176,8 @@ here — always takes precedence.
 
 Anything that would disable logging, filter the action register, grant
 permissions, change paths or mounts, or override how signals are ranked is
-refused. So is any field not in the table above; unknown fields are rejected by
-default rather than ignored.
+refused. Other fields are rejected by default rather than ignored; \`$schema\`
+and keys beginning with \`//\` are accepted as metadata.
 
 Nothing is dropped quietly. A refused field shows up in the overseer space as a
 signal naming the field and the reason, so you always know what did and did not

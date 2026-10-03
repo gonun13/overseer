@@ -28,7 +28,7 @@ const AFTER_NAME_MS = 2000;
  * still being set up (boot, first-run asks, goodbye), and docked into the
  * right rail once windows need the stage. Not a log and not a dashboard: a ranked, derived
  * answer to "what should I be looking at?". Every line is clickable and opens
- * the thing it is talking about (design-system.md §4).
+ * the thing it is talking about (spec/ui-ux.md §4).
  *
  * During the wizard's opening phases the signal list is empty and the message
  * is the whole message — that is the "message-only" state a fresh instance

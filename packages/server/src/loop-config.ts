@@ -16,7 +16,7 @@ import { readProviderManifests } from "./provider-registry.js";
  * second copy in TypeScript would drift the moment a step is added.
  *
  * Entirely independent of the app's own attached provider
- * (`provider-registry.ts`, `adapters.ts`, `session-supervisor.ts`): the loop
+ * (`provider-registry.ts`, `adapters.ts`, `console-broker.ts`): the loop
  * picks its own (`loop/.provider`) and always has, per
  * `loop/bin/lib/providers.sh`'s `resolve_provider_id`.
  */
@@ -46,10 +46,9 @@ interface ModelsJson {
 }
 
 /** `loop/bin/models --json` plus each provider's `loopSubagents` manifest
- * field, folded into one wire frame. Never throws on a bad `--json` reply —
- * that would take the loop tab down for every provider, not just the one
- * whose config is malformed — so a parse failure reports an empty, current-
- * only config instead. */
+ * field, folded into one wire frame. Command failures and invalid JSON fall
+ * back to an empty config. A parseable reply with the wrong nested shape may
+ * still throw while it is mapped. */
 export async function readLoopConfig(deps: LoopConfigDeps = {}): Promise<LoopConfigMessage> {
   const run = deps.run ?? defaultRun;
   const readManifests = deps.readProviderManifests ?? readProviderManifests;
@@ -117,10 +116,9 @@ interface ListModelsJson {
  * the loop's own provider is configured separately, and its model list has
  * to come from the same place its config does.
  *
- * Never throws — a provider that cannot list models (not signed in, no
- * `provider_list_models`, a CLI error) reports an empty list rather than
- * failing the whole window, the same "report nothing rather than a guess"
- * rule `AgentAdapter.listOptions` follows.
+ * Provider command failures and invalid JSON report an empty list rather than
+ * failing the whole window. A parseable reply with the wrong `models` shape
+ * may still throw while it is returned.
  */
 export async function readLoopModels(
   providerId: string,

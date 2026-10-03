@@ -31,7 +31,8 @@ what is open without starting a session.
 
 Exit codes: 0 ok, 1 general/provider failure, 2 workspace not found,
 4 no terminal attached, 5 another overseer session holds this workspace,
-6 run from the host instead of the container.
+6 run from the host instead of the container (with OVERSEER_WORKSPACE set;
+otherwise environment validation exits 1 first).
 USAGE
 }
 

@@ -3,7 +3,7 @@ import { ACTIVITY_PULSES, type Activity } from "../status";
 /**
  * The round light. The only circle in the interface, and the only thing that
  * animates on its own — an unlit ring means idle, so a screen of rings is a
- * screen with nothing happening on it (design-system.md §3).
+ * screen with nothing happening on it (spec/ui-ux.md §3).
  *
  * Colour comes from `--light-*`, which the field, surfaces and stamps each
  * re-point, so one component is correct on every ground.

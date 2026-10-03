@@ -290,8 +290,8 @@ function personalityAlarmMessage(
   };
 }
 
-/** Discovery outcomes are the same five activities in a different register —
- * no second vocabulary (spec/behaviour/overseer.md §3). */
+/** Discovery outcomes map onto the five non-approval activities — no second
+ * vocabulary (spec/behaviour/overseer.md §3). */
 export type WizardAction =
   /** Socket is up *and* the server sent identity for the welcome beat. */
   | {

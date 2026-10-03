@@ -26,9 +26,9 @@ keeps going until you stop it. You talk to it; it runs the steps.
 three on your project — so `loop/run` refuses to start on the host and points
 you at `./bin/loop`, which opens the session inside the running stack. The loop
 and the app share that container deliberately: one workspace, one provider
-registry, one set of signed-in CLIs. The `loop/bin/*` commands below are not
-guarded — they read and record state and open no session, so they work from a
-host terminal too.
+registry, one set of signed-in CLIs. Run the helpers below through
+`./bin/loop <command> [args...]`; direct host execution is unsupported and requires
+container environment variables even for help.
 
 - `<workspace-name>` must already exist as a directory under `/workspace/`.
 - Prereqs: Docker, and the active provider's CLI signed in. Everything else the
@@ -81,15 +81,15 @@ loop/bin/check
 
 | Command | What it does |
 |---|---|
-| `list` | Open (not yet cleared) requests and their current step/status, for one workspace or every slug under `db/`. Read-only, derived from `index.jsonl` plus, for a request that has been `decided`, the `route` from its decision record. `--json` adds the session lease and the stint's lock, and is the form the overseer reads. |
+| `list` | Open (not yet cleared) requests and their current step/status, for one workspace or every slug under `db/`. Reaps malformed or dead session leases. Request state is derived from `index.jsonl` plus, for a request that has been `decided`, the `route` from its decision record. `--json` adds the session lease and the stint's lock, and is the form the overseer reads. |
 | `new` | Allocates a request id, writes the raw human text to `db/<slug>/raw/<id>.txt` verbatim, and prints the `request` step context. Nothing is recorded until `record` runs, so a failed structuring pass can't lose what the human said. |
 | `step` | Prints one step's context: the instruction file to follow, the inputs to read, the file to write, and the exact frontmatter to put in it. Refuses if an input artifact is missing. For a step that takes the working tree it also claims the stint, and refuses if another request holds it; `--tracer` names which slice of the plan to work. |
 | `record` | Validates what the step wrote against the frontmatter `step` handed out, then appends the step's event to `index.jsonl`. On failure it records nothing and prints which keys are wrong. A step that takes the working tree must still hold the lock. Recording a `decide` whose route is not `commit` also clears that lock's record of the lap just finished, which is what lets the cycle turn again. |
 | `tracers` | That request's tracers, from its plan, with the phase they belong to, whether the plan declared them parallel, and their status from the implement record's ledger. `--next` prints just the group to implement next, comma-separated and ready for `step --tracer`; `--last` prints the group the implement record says was actually built, which is what `verify` checks and what a rework redoes. Read-only, and the only place plan markdown is parsed. |
 | `stint` | Reports who holds the stint, how far through the current lap of the cycle they are, and which tracers are pending. `--release` hands the stint back — an administrative hatch for a human cleaning up outside a session, refused while the holder still has pending tracers unless `--force`, and never a statement that a run was good. Changes nothing else — no artifact, no status, no `index.jsonl` line. |
 | `land` | The irreversible half of `commit`, run after `record`: stages everything, commits it to the request's branch with the message the commit record carries, appends a `landed` event, and releases the stint. **Local only** — nothing is pushed. Skipped when it has already happened, so an interrupted run is retried by running it again. |
-| `publish` | Acts on an approved review. With an `origin` remote: pushes the branch there and prints the title the commit record carries, for the pull request you open yourself — the first moment anything about a request leaves the machine. With no remote: merges the branch into the trunk instead, without touching the working tree, because there is no forge to open a pull request on. Refused either way until a recorded `review` says the human approved the work. |
-| `train` | The stacked branches this workspace's requests own — each one's base, whether it has landed, and which is the tip a new request would be cut from. Read-only, and the only place branch metadata is read outside the libs. |
+| `publish` | With an `origin` remote, pushes the branch and prints the title for the pull request you open; with no remote, merges into trunk. Its gate reads `outcome` from this request's review artifact, without verifying a lifecycle event or sign-off file. It does not independently gate stacked ancestors, and `--force` bypasses the direct artifact gate. |
+| `train` | The stacked branches this workspace's requests own — each one's base, whether it has landed, and which is the tip a new request would be cut from. Read-only; `list` and `publish` also read branch metadata through the shared library. |
 | `worktree` | Stands up, tears down, or locates the throwaway checkout a `review` is QA'd in — detached at that request's branch, under `db/<slug>/worktrees/<id>/`. `--create` is idempotent, so a review abandoned mid-way costs the next one nothing. |
 | `signoff` | Writes the human's review decision to `db/<slug>/signoff/<id>.txt`, verbatim. The mirror of `new`, for the other end of the loop and for the same reason. Nothing is recorded in `index.jsonl`. |
 | `close` | Ends a request whose work has landed on the trunk: prunes the loop's metadata from its branch so it leaves the train, deletes the local branch, and appends a `closed` event. `--merge` merges it into the trunk first, for work landed here rather than on a forge; `--abandon` drops the work instead. |
@@ -98,7 +98,7 @@ loop/bin/check
 | `provider` | Lists bundles under `providers/` and writes the chosen id to `loop/.provider`. `LOOP_PROVIDER` still overrides at runtime. |
 | `check` | The lint gate: bash syntax, shellcheck (from PATH, or its container image), and `check-providers`. |
 
-Each takes `--help`.
+Each takes `--help` through `./bin/loop <command> --help`.
 
 ## Why it's built this way
 
@@ -232,9 +232,7 @@ given `id` is always its current state.
 context with zero parsing — a later step can read it straight into a prompt, or
 copy sections of it into a skill or command file. Frontmatter carries the few
 fields that need to stay structured (`id`, `status`, `step`, …), using the same
-tolerant, line-based convention
-`packages/adapters/claude/src/custom-agents.ts` already uses for
-`.claude/agents/*.md` — no YAML library.
+tolerant, line-based convention in `loop/bin/lib/db.sh` — no YAML library.
 
 ## Steps
 
@@ -270,7 +268,7 @@ The loop is made of nine **steps**, in order:
    automated security and performance audit of the whole request's diff, manual
    QA with the operator in a throwaway worktree at that branch, and their
    decision — which the step records but does not make. `loop/bin/publish`
-   pushes and opens the pull request afterwards, and only on approval.
+   pushes afterwards, after the accepted review artifact (or `--force`); the operator opens the pull request.
    *(built)*
 
 **The inner loop.** `plan` → `implement` → `verify` → `decide` (4-7) is a closed
@@ -327,8 +325,8 @@ changes are still there and still that request's. `loop/bin/land` is what ends
 the stint — not `record commit`. Recording a commit means the artifact was
 written and validated; the repository has not moved, and letting another
 request in at that point would cut its branch off a tree still holding
-uncommitted work. `land` is local: it commits and releases, and nothing is
-pushed until a review has approved it.
+uncommitted work. `land` is local: it commits and releases. The normal publish
+path waits for an accepted review artifact; `--force` bypasses it.
 
 `review` is deliberately outside the stint. It reads a throwaway worktree at
 the request's own branch, so a request under review never blocks the next one
@@ -449,7 +447,7 @@ enforces rather than something the overseer is trusted to remember. It is also
 why a dirty tree is refused at entry: whatever is in it belongs to somebody
 else, and it would ride into this request's branch and its pull request.
 
-**The chain lives in git, not in `db/`.** Three keys per branch, in the
+**The chain lives in git, not in `db/`.** Two keys per branch, in the
 workspace repo's own config:
 
 ```
@@ -471,7 +469,7 @@ out by running git.
 
 **A request leaves the train when it lands, and only then.** `loop/bin/close`
 fetches and asks whether the branch is contained in the default branch, then
-prunes those three keys — after which it is invisible to `train` and nobody
+prunes those two keys — after which it is invisible to `train` and nobody
 bases on it again. Requests already stacked behind it keep their recorded base
 even though it has gone: their history is written, and the base falls back to
 the default branch, which is where the vanished commits now live.
@@ -485,7 +483,7 @@ ref's own tree as proof that every patch is already upstream. That is plain
 git, so it answers for a self-hosted remote as readily as for a public forge,
 and it needs no credentials.
 
-### Nothing is public until a human says so
+### Publishing is gated by the review artifact
 
 The work of a request moves in three separate, separately-refusable steps, and
 only the third one is visible to anyone else:
@@ -497,24 +495,23 @@ only the third one is visible to anyone else:
 | `close` | ends the request once its work has landed | this machine |
 
 `publish` is refused until `db/<slug>/review/<id>.md` exists and its `outcome`
-is `approved` or `followups`. A review that came back `rejected` publishes
-nothing at all: its branch stays local, stays in the train, and the findings
-become requests cut off it.
+is `approved` or `followups`, unless the operator passes `--force`. It does not
+verify the lifecycle event or sign-off file, and it does not independently gate
+unpublished stacked ancestors. A rejected artifact fails this direct check.
 
 That split is why `review` reads a local branch rather than a pull request. A
 review that runs *after* the work is pushed is a formality — the blunder is
 already visible, and withdrawing it is its own small announcement. Running the
-audit and the QA against a local branch makes the human's approval the thing
-that publishes, rather than something that follows publication.
+audit and the QA against a local branch keeps the normal review before
+publication.
 
 Opening the pull request itself is deliberately left to a human. The loop has
 no opinion about which forge a remote lives on, and needs no credentials for
 one beyond the ssh key that pushes.
 
 **A project with no remote publishes by merging.** There is nowhere to push and
-no forge to open a pull request on, so the human's approval merges the branch
-into the trunk instead — which is the same gate doing the same job, since the
-approval is still the only thing that lands the work. The merge is done with
+no forge to open a pull request on, so passing the same artifact gate merges the
+branch into the trunk instead. The merge is done with
 plumbing rather than a checkout (`merge-tree`, `commit-tree`, `update-ref`),
 because by the time `publish` runs the stint has been released and another
 request may already own the working tree. A conflict is refused, never

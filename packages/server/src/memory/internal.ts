@@ -28,8 +28,7 @@ import type {
  * is user-writable, and a rule the user can edit is not a rule.
  *
  * Deliberately plain files. This is an append-mostly audit trail read a few
- * times per boot, and the SQLite store the design doc describes lives on the
- * other side of the trust boundary in `/workspace/_overseer/` for a different job.
+ * times per boot.
  */
 
 /**
@@ -73,8 +72,9 @@ function plansFile(): string {
   return path.join(root(), "plans.json");
 }
 
-/** Every action the overseer takes, before it is reported. Append-only, and
- * nothing in `overseer-personality` can filter it (spec/behaviour/overseer.md §6.4). */
+/** Actions the overseer chooses to record. Append-only and best effort; some
+ * callers start the append without waiting before they report the action.
+ * Nothing in `overseer-personality` can filter it (spec/behaviour/overseer.md §6.4). */
 export interface ActionRecord {
   at: string;
   /** Who initiated it. `overseer` is the component acting on its own. */
@@ -94,7 +94,7 @@ export interface WorldSnapshot {
   providers: DiscoveredProvider[];
   /** Last project the operator (or discovery default) made active. */
   last_active_project?: string;
-  /** Provider id the operator connected — never auto-picked. */
+  /** Provider id attached by the operator or discovery's authenticated fallback. */
   attached_provider?: string;
   /** Last theme the operator chose. Absent means samaritan (the default). */
   theme?: OverseerTheme;

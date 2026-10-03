@@ -13,7 +13,7 @@ run anything ([PROJECT.md](PROJECT.md) requirement 1).
 | Typecheck + lint | `./bin/check` | `tsc --noEmit` in every workspace; `oxlint` in `packages/web` |
 | Unit + integration | `./bin/test` | `node:test` in every workspace that has tests — `tsx --test` for server and adapters, `node --experimental-strip-types --test` for web |
 | Acceptance | `./bin/test-e2e [playwright args]` | Playwright, Chromium, in the dev stack's `e2e` service against `web:5173` |
-| Dev loop | `./bin/loop check` → `loop/bin/check` | `bash -n` on every loop script, `shellcheck` (stock rules, no suppressions), and `check-providers` |
+| Dev loop | `./bin/loop check` → `loop/bin/check` | `bash -n` on every loop script, `shellcheck` (warning/error diagnostics, local rule suppressions), and `check-providers` |
 | Provider registry | `loop/bin/check-providers` | each manifest's CLI and config directory stay inside its own bundle; every manifest with an `install` has a matching `# provider-cli: <id>` marker in the `Dockerfile`, and no marker lacks a manifest |
 
 `./bin/check` and `./bin/test` share the full stack's deps gate, so the built `protocol` and
@@ -37,7 +37,9 @@ adapter packages they import are current.
 - **E2E is serial, one world.** Tests share one server, one `overseer-personality` and one
   `state.json`, and the wizard's opening depends on what the last run left — so `workers: 1`, no
   `fullyParallel`. Timeouts are long (90s) because a boot is a paced sequence, not a page load.
-  `global-setup.ts` waits until the stack actually answers `200` before any test runs.
+  Truthy `CI` forbids focused tests, enables two retries and HTML reports; otherwise
+  there are zero retries and a list reporter.
+  `global-setup.ts` waits until the stack actually answers successfully (HTTP 2xx) before any test runs.
 - **Web tests stay pure.** Rules that matter — signal derivation, tiling, parsing — are written as
   plain functions in `packages/web/src/state` and friends so they can be tested without a browser;
   only flows that need a real page go to e2e.

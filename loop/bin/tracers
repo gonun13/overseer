@@ -23,8 +23,8 @@ Lists the vertical tracers in that request's plan, in plan order, with the
 phase they belong to, whether the plan declared them parallel, and their
 status from the implement record's ledger (pending until it says otherwise).
 
---json  one object per tracer: {tracer, phase, phase_label, parallel, status,
-        goal}. The form to read from a script or an agent.
+--json  one array of objects: [{tracer, phase, phase_label, parallel, status,
+        goal}, ...]. The form to read from a script or an agent.
 --next  print only the next group to implement, comma-separated and ready to
         pass to `loop/bin/step ... implement --tracer`. That is every pending
         parallel tracer of the lowest phase with work left, or the single next

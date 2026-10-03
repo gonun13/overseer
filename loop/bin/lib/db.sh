@@ -373,7 +373,7 @@ ensure_slug_dirs() {
 
 # record_frontmatter_get <file> <key> — line-based extraction between the
 # first two `---` delimiters, tolerant of malformed files, no YAML library.
-# Mirrors the convention packages/adapters/claude/src/custom-agents.ts
+# Mirrors the convention packages/adapters/claude/src/index.ts
 # uses for name/description frontmatter.
 record_frontmatter_get() {
   local file=$1 key=$2
@@ -878,7 +878,7 @@ impl_lock_claim() {
 }
 
 # impl_lock_release <slug> — drop the lock, whoever holds it. Called by
-# loop/bin/land once the work is actually committed and pushed, which is the
+# loop/bin/land once the work is committed locally, which is the
 # normal end of the stint, and by loop/bin/stint --release, which is the hatch
 # for a human cleaning up outside a session.
 impl_lock_release() {

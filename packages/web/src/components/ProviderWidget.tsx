@@ -20,7 +20,7 @@ import { StatusLight } from "./StatusLight";
  *
  * A widget is not a window: it follows the theme instead of inverting it, and it
  * is bracketed at the corners rather than framed and tabbed, so it reads as an
- * instrument sitting on the field (design-system.md §6.2). The readout opens
+ * instrument sitting on the field (spec/ui-ux.md §6.2). The readout opens
  * the provider picker. New sessions start from the left rail or the prompt.
  *
  * Usage gauges stay hidden until the provider has a real reading, from either
@@ -33,8 +33,8 @@ import { StatusLight } from "./StatusLight";
  *   presses CHECK USAGE, so there is no "retrieving…" to show and no miss to
  *   report; the button is the whole story until a reading comes back.
  *
- * The light is auth + reachability: green signed in, red when the CLI is down,
- * amber when it answered but is not signed in.
+ * The light uses the shared activity mapping: signed in is done, signed out is
+ * waiting, and an unreachable CLI is attention.
  */
 export function ProviderWidget({
   provider,

@@ -46,8 +46,9 @@ not improvise: allocating request ids and paths, stamping timestamps,
 validating what a step wrote, appending to the log, and serializing access to
 the project's working tree. That is sixteen commands — `list`, `new`, `step`, `record`, `tracers`,
 `stint`, `memory`, `land`, `publish`, `train`, `worktree`, `signoff`, `close`,
-`clear`, `provider`, `models` (plus the lints `check` and `check-providers`) — each taking a workspace name, printing JSON to
-stdout and human text to stderr. The
+`clear`, `provider`, `models` (plus the lints `check` and `check-providers`). Workspace
+commands take a workspace name; `provider`, `models` and the lints are global. Output
+may be JSON, tables or Markdown; use `--json` where offered. Diagnostics go to stderr. The
 overseer drives them and acts on their output. `loop/bin/step` hands a step one
 **named** JSON context (inputs, output path, and the literal frontmatter block
 to copy); `loop/bin/record` checks the written artifact against the same values
@@ -157,12 +158,13 @@ since re-running it would only re-judge work already judged.
 `loop/bin/stint --release` and `loop/bin/clear` are administrative cleanup
 outside a session; neither marks anything verified.
 
-**Nothing is public until a human approves it.** A request's work moves in
+**Publishing checks the selected review artifact.** A request's work moves in
 three separately-refusable stages: `land` commits it to a local branch,
-`publish` pushes that branch to origin, `close` ends the request once its work
-has landed on the default branch. Only `publish` is visible to anyone else, and
-it is refused until a recorded `review` says the human approved the work — a
-`rejected` review publishes nothing at all.
+`publish` pushes that branch to origin, and `close` ends the request once its work
+has landed on the default branch. `publish` accepts an `approved` or `followups`
+outcome in that request's review file. It does not verify the recorded lifecycle
+event or sign-off file, and it does not independently check unpublished stacked
+ancestry. `--force` bypasses the artifact check.
 
 Opening the pull request is deliberately a human's job. The loop has no opinion
 about which forge a remote lives on, and needs no credential for one beyond the
@@ -172,7 +174,7 @@ self-hosted remote rather than one vendor's API.
 That ordering is why `review` reads a local branch rather than a pushed one. A
 review that runs after the work is public is a formality: the mistake is
 already out, and withdrawing it is its own announcement. Auditing a local
-branch makes the human's approval the act that publishes. The cost is that the
+branch keeps the normal review before publication. The cost is that the
 `commit` step writes a pull-request title and body that may never be used —
 cheap, and it is `review` that most wants them, since a body describing what
 changed and what to look at is exactly a reviewer's briefing.
@@ -237,8 +239,10 @@ the whole request's diff for security and performance in a delegated subagent,
 walks the operator through manual QA in a throwaway `git worktree` at that
 request's branch, and records the outcome they chose — captured first,
 verbatim, by `loop/bin/signoff` into the second of the two `.txt` kinds.
-`loop/bin/publish` pushes the branch to origin, and is refused
-unless that review recorded `approved` or `followups`. `loop/bin/close` then
+`loop/bin/publish` pushes the branch to origin. Its gate reads `outcome` from the review
+artifact for that request; it does not verify the lifecycle event or sign-off file, and an
+approved descendant can publish unapproved stacked ancestry. `--force` bypasses the direct
+artifact gate. `loop/bin/close` then
 ends the request once its work has landed on the default branch — judged by
 ancestry, and failing that by an in-memory merge (`git merge-tree
 --write-tree`) that produces no change, which is what makes a squash or rebase
@@ -250,7 +254,7 @@ session to other terminals. Adding a step is a row in `bin/lib/db.sh`'s
 **The tool grant is sized for `implement`, not the overseer.** It is the only
 step that edits the project, `verify` is the other that runs it, and a subagent
 inherits the session's tools — so in-place edits and an unprefixed shell are granted to the
-session, where they were previously denied outright. What bounds it is a deny
-list per bundle for the irreversible verbs (`rm`, `sudo`, `git commit`,
-`git push`), `overseer.md`'s standing rule that only an `implement` subagent may
-change a file under the workspace, and a human watching the whole session.
+session, where they were previously denied outright. Claude's bundle denies irreversible verbs (`rm`, `sudo`, `git commit`, `git push`).
+Cursor runs with force/trust, sandbox disabled and no deny list; its restrictions are
+instructions, not enforced permissions. Both follow `overseer.md`'s rule that only an
+`implement` subagent may change workspace files, with a human watching the session.

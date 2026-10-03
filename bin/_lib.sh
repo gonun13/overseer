@@ -27,8 +27,6 @@ if [ -d "$REPO_ROOT/workspace" ] && [ -n "$(ls -A "$REPO_ROOT/workspace" 2>/dev/
   echo >&2
   echo "    mv workspace ../overseer-workspace" >&2
   echo >&2
-  echo "  Or keep them where they are by setting OVERSEER_WORKSPACE_HOST=./workspace" >&2
-  echo "  in .env (not recommended — see spec/data.md §1)." >&2
   exit 1
 fi
 

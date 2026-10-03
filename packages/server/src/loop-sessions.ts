@@ -11,7 +11,7 @@ import path from "node:path";
  *
  * Read straight from the file rather than through `loop/bin/list --json`, which
  * is the loop's stated read interface: that command resolves git branches and
- * PR state per open request, and the sessions list is rebuilt often enough that
+ * branch state per open request, and the sessions list is rebuilt often enough that
  * paying for a bash+jq process each time is the wrong trade. The cost is this
  * module duplicating two rules from `loop/bin/lib/db.sh` — where the file lives
  * (`running_path`) and that a lease whose holder is gone is not a lease

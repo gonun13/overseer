@@ -15,7 +15,7 @@ import { exitedBadly } from "./console-light.ts";
 import type { Project } from "../domain";
 
 /** Where a signal sends you when you click it. Every signal is actionable —
- * a message the operator can't act on is noise (design-system.md §4). */
+ * a message the operator can't act on is noise (spec/ui-ux.md §4). */
 export type Target =
   | { kind: "window"; window: WindowKind; payload?: string }
   | { kind: "settings" }

@@ -43,10 +43,10 @@ the providers window's sign-in already finished. Credentials are the shared cont
 | kill (tab control, or the row's ■) | the process ends, and window and row go at once — a deliberate kill is never reported as a failure |
 | CLI exits cleanly (`/exit`, `exit`) | the window closes and the console is dismissed |
 | CLI fails | the window stays, with the exit code, so the failure can be read; the console stays listed until dismissed |
-| tab reload | every console window comes back where it was, with its scrollback (512 KB ring), once discovery is done |
+| tab reload | console windows reopen in their saved order and tile, with scrollback (512 × 1024 UTF-16 code-unit ring), once discovery is done |
 | a second tab | attaches to the same consoles; resize is last-writer-wins |
 
-Window placement is remembered per browser ([data.md §5](../data.md#5-browser-storage)); the
+Window ids and opening order are remembered per browser ([data.md §5](../data.md#5-browser-storage)); the
 processes and scrollback are remembered by the server.
 
 ## 4. Activity

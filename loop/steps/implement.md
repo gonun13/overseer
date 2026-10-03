@@ -134,8 +134,6 @@ slug: {{frontmatter.slug}}
 status: {{frontmatter.status}}
 step: {{frontmatter.step}}
 implemented_at: {{frontmatter.implemented_at}}
-request_ref: {{frontmatter.request_ref}}
-research_ref: {{frontmatter.research_ref}}
 scope_ref: {{frontmatter.scope_ref}}
 plan_ref: {{frontmatter.plan_ref}}
 tracers: <the ids you worked, comma-separated>

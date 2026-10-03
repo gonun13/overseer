@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
-# Act on an approved review: push the request's branch to origin, or — in a repo
-# with no remote — merge it into the trunk.
+# Act on an approved/followups review artifact: push the request's branch to
+# origin, or — in a repo with no remote — merge it into the trunk. `--force`
+# bypasses the artifact check.
 #
 # This is deliberately the last step the loop takes. `implement` writes the
 # code, `land` commits it to a local branch, `review` audits that branch and
@@ -17,8 +18,8 @@
 #                      the ssh key the operator generates in settings.
 #
 #   no origin          merge the branch into the trunk, here. A pull request
-#                      needs a forge and there isn't one; the human's approval is
-#                      still the gate, and merging is what it now opens. The
+#                      needs a forge and there isn't one; the review artifact
+#                      gate is the same, and merging is what it opens. The
 #                      merge never touches the working tree — see
 #                      git_merge_into_trunk — because by now another request may
 #                      hold it.
@@ -107,7 +108,7 @@ if [ "$force" -ne 1 ]; then
     rejected)
       die "the review of $id rejected this work — nothing is published
 Its branch stays where it is and stays in the train, so follow-up requests are
-cut off it. Publish only what a human approved:
+cut off it. Use an accepted review artifact, or the explicit --force override:
   $LOOP_BIN_DIR/list $name --json" 3
       ;;
     "")
@@ -179,7 +180,7 @@ if git_has_origin "$repo"; then
 else
   # --- merge -------------------------------------------------------------
   # No remote, so there is nothing to push and no forge to open a pull request
-  # on. The approval merges the work into the trunk instead. The working tree
+  # on. Passing the publish gate merges the work into the trunk instead. The working tree
   # is left exactly as it was: another request may already hold it.
   merge_result=$(git_merge_into_trunk "$repo" "$branch" "$trunk")
   merged=true

@@ -11,7 +11,7 @@ import type { Project } from "../domain";
  * It spans two levels. The collapsed header is a readout, so it stays on the
  * field and blends with the background like the clock does. The list is what
  * you click into to act, so it is a **surface** and only takes on window
- * framing once it opens (design-system.md §6).
+ * framing once it opens (spec/ui-ux.md §6).
  */
 export function ProjectPanel({
   projects,

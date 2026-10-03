@@ -14,8 +14,8 @@ const execFileAsync = promisify(execFile);
  * loosening three properties of that module for one caller that shares none of
  * its assumptions.
  *
- * What this does share is the rule the directory exists for: every `git` the
- * server runs is spawned from `vcs/`.
+ * What this does share is the main server git surface: project operations are
+ * spawned from `vcs/`; personality scaffolding is the direct-call exception.
  */
 
 /**

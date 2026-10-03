@@ -69,9 +69,8 @@ export interface SpaceStatusEntry {
    * second `state` report on the same `(service, key)` replaces the first
    * rather than stacking under it.
    *
-   * `event` rows also carry one — it names what kind of event this was, which
-   * is what lets a service clear a run of them — but two events with the same
-   * key coexist happily.
+   * `event` rows also carry one — it names what kind of event this was.
+   * Two events with the same key coexist; clearing never removes event history.
    */
   key: string;
   /** Telegraphic, lowercase, present participle. The operations register, and
@@ -159,7 +158,7 @@ export type SpaceFrame =
   | {
       type: "space.status.clear";
       service: SpaceService;
-      /** Omitted clears every row the service owns. */
+      /** Omitted clears every state row the service owns; event history is retained. */
       key?: string;
     }
   | { type: "space.message"; message: SpaceMessage }

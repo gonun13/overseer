@@ -4,9 +4,9 @@
 #
 # Difference from docker-compose.yml: the source tree is bind-mounted so the
 # watchers see host edits. The production invariant that `/workspace` is the
-# only shared surface (spec/architecture.md §6) still holds for the *agent* — it is
-# handed /workspace, not /app — but a dev container does hold the repo. Do
-# not model production blast radius on this file.
+# only shared surface (spec/architecture.md §6) does not hold in dev: agent
+# shells can also access the writable repo at /app. Do not model production
+# blast radius on this file.
 #
 # The workspace lives outside the repo, so /app does not contain it and a
 # project has exactly one container path. While it was ./workspace, this file

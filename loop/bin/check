@@ -21,8 +21,7 @@ and loop/bin/check-providers.
 shellcheck runs from PATH when it's installed, otherwise from its official
 container image — the same everything-in-Docker fallback the rest of this
 repo uses. It is skipped, with a warning, only when neither is available.
-Nothing here suppresses a shellcheck rule; the scripts are written to pass
-a stock run.
+The gate checks warning/error diagnostics; scripts carry local rule suppressions.
 
 Exit codes: 0 all clean, 1 something failed.
 USAGE

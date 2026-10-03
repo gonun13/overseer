@@ -111,10 +111,9 @@ if step_is_exclusive "$step"; then
       # the artifact is committed and the repo has not moved. Say the recovery
       # rather than the refusal — this is the one half-failure in the stint
       # that leaves a request stranded with nothing obvious to type.
-      die "'commit' has already recorded for $id, but its work has not been pushed
-The record is committed; the repository has not moved. Committing, pushing,
-opening the pull request and handing the working tree back is a separate verb,
-so that a failed push leaves a retryable state rather than an unlogged one:
+      die "'commit' has already recorded for $id, but its work has not been committed
+The record is saved; the repository has not moved. Committing locally and
+handing the working tree back is a separate verb, so a failed commit is retryable:
   $LOOP_BIN_DIR/land $name $id" 3
     fi
     die "'$step' has already recorded for $id — '$onward' is what comes next

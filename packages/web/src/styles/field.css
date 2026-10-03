@@ -105,7 +105,7 @@
 }
 
 /* ---- the overseer space -----------------------------------------------------
-   Derived, ranked, and clickable. Not a log (design-system.md §4). Fills the
+   Derived, ranked, and clickable. Not a log (spec/ui-ux.md §4). Fills the
    stage while the field is being set up; docked, it takes the right rail's
    middle and scrolls there if the signals outgrow it. */
 .overseer-space {

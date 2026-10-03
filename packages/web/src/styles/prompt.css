@@ -1,6 +1,6 @@
 /* ---- right rail, foot: the prompt, the provider, the footer --------------
    The prompt is a surface: it is where you act, so it inverts the field at both
-   sizes. What the agent prints into it arrives as stamps (design-system.md §7). */
+   sizes. What the agent prints into it arrives as stamps (spec/ui-ux.md §7). */
 .dock {
   position: relative;
   z-index: 60;

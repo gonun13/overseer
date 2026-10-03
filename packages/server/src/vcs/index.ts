@@ -1,6 +1,6 @@
 /**
- * The server's version-control surface — every `git` the app runs comes from
- * here.
+ * The server's main version-control surface. Personality scaffolding invokes
+ * `git` directly while creating or restoring its dedicated project.
  *
  * Before this module the server spawned `git` from three unrelated places
  * (`project-git.ts`, `git-probe.ts`, and `project-create.ts`'s own

@@ -4,7 +4,7 @@
 # aren't already up.
 #
 #   ./bin/test-e2e                run every test
-#   ./bin/test-e2e --headed       any extra args pass through to `playwright test`
+#   ./bin/test-e2e --workers=1    any extra args pass through to `playwright test`
 #   ./bin/test-e2e tests/smoke.spec.ts
 . "$(dirname -- "$0")/_lib.sh"
 

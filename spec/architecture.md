@@ -4,7 +4,7 @@ Structure, components, boundaries and interfaces. Purpose and requirements are i
 
 **What it is:** a single-page, fullscreen web console for driving CLI coding agents. `claude` and `cursor` are fully wired providers; the catalog also lists stub providers (`codex`, `opencode`, `github-copilot`) whose CLIs ship in the image but whose adapters are not implemented yet. The architecture assumes more full adapters will follow.
 
-**Shape:** one Docker container holds the agent CLIs, their state, and the web server. The only bind mount is the workspace — a directory *outside* this repo, which contains git projects and an import/export staging directory. Auth and application state live in container-owned volumes.
+**Shape:** one Docker container holds the agent CLIs, their state, and the web server. In production the only bind mount is the workspace — a directory *outside* this repo, containing git projects. Development also binds the writable source repo at `/app`, accessible to agent shells. Auth and application state live in container-owned volumes.
 
 **Aesthetic:** a surveillance console, not a chat app — dense, monospace, border-only chrome, one focus zone at a time. See [ui-ux.md](ui-ux.md).
 
@@ -81,7 +81,7 @@ open a session on it — `provider.sh` plus that provider's own config tree.
   "id": "claude",
   "cli": "claude",
   "configDir": ".claude",
-  "install": { "kind": "npm", "spec": "@anthropic-ai/claude-code@2.1.226" },
+  "install": { "kind": "npm", "spec": "@anthropic-ai/claude-code@2.1.287" },
   "app": "adapter",
   "loop": "bundle"
 }
@@ -93,10 +93,9 @@ two role fields say. `app` is `adapter` when this server has real wiring,
 `none` when the app should not list it at all. `loop` is `bundle` when the
 directory carries `provider.sh`, `none` otherwise. `claude` and `cursor`
 are both `adapter`/`bundle` today: the loop runs on either and the app has real
-wiring for either. `loopSubagents: "unverified"` on `cursor` is a narrower
-claim than its adapter's `subagents` capability — the adapter reads and writes
-`.cursor/agents` files, but whether the *loop* delegates to them on cursor has
-not been confirmed.
+wiring for either. `loopSubagents: "unverified"` on `cursor` means the loop's
+delegation to subagents has not been confirmed. The app exposes login and usage checking,
+not subagent file management.
 
 Three consumers, no duplication between them:
 
@@ -124,7 +123,7 @@ Every CLI process runs in a PTY owned by the server's console registry
 - **Kinds.** `agent` (the provider CLI, via `consoleCommand`), `shell` (a login shell in the
   project) and `loop` (`/app/loop/run <project>`). All three go through one spawn helper
   (`pty.ts`).
-- **Attach, don't own.** A socket *attaches* to a console — it is sent the scrollback (a 512 KB
+- **Attach, don't own.** A socket *attaches* to a console — it is sent the scrollback (a 512 × 1024 UTF-16 code-unit
   ring), then live output — and *detaches* when its window closes or the tab goes away. The
   process keeps running until it exits or someone kills it. Resize is last-writer-wins.
 - **One CLI per transcript.** Opening an agent console on a session that already has a running
@@ -141,9 +140,10 @@ Every CLI process runs in a PTY owned by the server's console registry
   per-console token means only the CLI the server spawned can report for it. A CLI without hooks
   is read from its output: output means `working`, two quiet seconds mean `idle`.
 
-The session list (`session-index.ts`) is a separate, read-only index: every adapter's transcripts
+The session list (`session-index.ts`) is a separate index: every adapter's transcripts
 in every workspace project, rebuilt whenever a transcript changes (`transcript-monitor.ts`) and
 broadcast to every tab. The browser joins it with the console list to light each session.
+Building it also removes finished loop transcripts and updates their loop session records.
 
 What the operator sees of all this — opening, attaching, detaching, killing, a reload — is
 [behaviour/consoles.md](behaviour/consoles.md).
@@ -168,8 +168,6 @@ Plain pipes work with CLI 2.1.226; no PTY is required. Login is single-flight be
 
 **Cursor** (`agent login`, `packages/adapters/cursor/src/login.ts`) is a poll-until-authorized flow, not a paste-back one: the URL goes out the same way and there is no code to send back. Its exit code is likewise never trusted — `agent status --format json` is re-asked when the child ends.
 
-**Config import/export.** `/workspace/_overseer/` is the staging channel. IMPORT and EXPORT copy an allowlist of settings, skills, agents, and MCP configuration one direction at a time. Credentials and session history are never staged.
-
 **Compliance.** Subscription OAuth is restricted to Claude Code and claude.ai, while the Agent SDK requires API billing. Overseer therefore spawns the Claude Code binary. Re-check [Anthropic's legal and compliance docs](https://code.claude.com/docs/en/legal-and-compliance) before release.
 
 ### 2.1 Account usage
@@ -179,8 +177,8 @@ session window and the weekly cap — plus the CLI's own reset phrases.
 
 `getStatus()` reports auth only. When signed in it returns
 `usageState: "pending"` so discovery and login never wait on `/usage`. A
-background `refreshUsage()` asks `claude -p "/usage"` only (no second auth
-check — that can hang on the same outage), kills the process group on a
+background `refreshUsage()` asks `claude -p "/usage"`, re-checks auth when no windows
+are returned, kills the usage process group on a
 deadline (SIGTERM then SIGKILL), and pushes `provider.status` with `ready`
 windows or `unavailable` after a miss/timeout. The widget reads
 "retrieving usage… Ns" then either gauges or "usage currently not available".
@@ -191,8 +189,8 @@ consumption or billing data.
 
 ### 2.2 Git access
 
-**Every `git` the server runs goes through `packages/server/src/vcs/`.** Do not spawn `git`
-anywhere else. The module splits into `ops.ts` (on-demand operator operations, always fresh because
+**Server git generally goes through `packages/server/src/vcs/`.** Personality scaffolding directly
+spawns its initial add/commit sequence. The module splits into `ops.ts` (on-demand operator operations, always fresh because
 someone is waiting), `probe.ts` (the cached, gated read behind the project list), `ssh.ts` (the key
 store below) and `env.ts` (commit identity). Before it existed the server spawned `git` from three
 unrelated places with three different runners, and nothing made a change to *how* git is invoked
@@ -313,7 +311,6 @@ volumes:
 Two services. The Node server serves the built SPA and handles `/api/*` + `/ws` on the same port; agent and auth CLIs run as child processes, and so does the dev loop (§9), so no reverse proxy is needed locally. The sidecar exists only so a workspace project's own `docker compose` test command has a daemon that is not the host's — see §6.3, and [data.md §1](data.md#1-where-things-live) for why paths are stated by the image rather than repeated here.
 
 - `/workspace/<project>/` — one git project per directory. Session creation picks one; it becomes the process `cwd`.
-- `/workspace/_overseer/` — import/export staging only.
 - `/app/.overseer/` — internal memory ([data.md §2](data.md#2-internal-memory--appoverseer)).
 - The image is a plain Debian base with Node copied in from the pinned official image, not a `node:` base: this container is an agent host, and Node is one runtime among several — the provider CLIs between them ship npm globals and a self-contained bundle with its own node. Alongside Node it needs `git`, `ripgrep` and a shell, which the CLIs shell out to; `jq`, `flock`, GNU `find`/`sed`/`awk` and `shellcheck`, which the dev loop's bash does (§9); `openssh-client`, which git over ssh does (§2); and the Docker client (§6.3). Auth login uses plain pipes (§2). Every console is a PTY through `node-pty` (native module), so image builds include a short-lived native toolchain for that dependency. Run as non-root, at the host user's uid ([data.md §1](data.md#1-where-things-live)).
 - The remaining shared-write risk is host-side git activity while an agent edits the same project. Show each session's branch and dirty state so conflicts are visible.
@@ -325,7 +322,8 @@ Two services. The Node server serves the built SPA and handles `/api/*` + `/ws` 
 "Single-user, local" doesn't remove the problem:
 
 - This is **remote code execution as a service**. Publish the host port on `127.0.0.1`. LAN access requires authentication.
-- Check `Origin` on WebSocket upgrades and mutating HTTP requests; otherwise another page can drive the local server.
+- Check `Origin` on WebSocket upgrades. Mutating CLI hooks currently check loopback and their
+  per-console token, but do not check `Origin` even when a browser supplies one.
 - The container holds a live subscription token in `agent-home` — one per signed-in provider, since the app and the dev loop share it ([data.md §1](data.md#1-where-things-live)). Any RCE inside it exfiltrates all of them, which is also the argument for not mounting the host's own config.
 - Permission modes, including the CLI's own bypass, are chosen in the CLI's TUI inside its console. Overseer offers no mode control of its own and must not add one that bypasses the CLI's own opt-in gesture.
 

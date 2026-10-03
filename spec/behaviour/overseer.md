@@ -217,9 +217,9 @@ register. A feature that needs a fourth surface belongs elsewhere.
 
 ## 6. Memory
 
-### 6.0 External staging vs internal state
+### 6.0 External input vs internal state
 
-- `/workspace/_overseer/` is host-writable, untrusted import/export staging.
+- `/workspace/overseer-personality/personality.json` is host-writable advisory input.
 - `/app/.overseer/` is container-owned internal state backed by the `overseer-memory` volume.
 
 They are neither mirrors nor halves of one store. See [data.md §1](../data.md#1-where-things-live).
@@ -237,7 +237,8 @@ workspace path.
 Its layout and record shapes — `logs/`, `actions.jsonl`, `state.json` — are
 [data.md §2](../data.md#2-internal-memory--appoverseer). Behaviourally:
 
-- **`actions.jsonl`** records every overseer action before it is reported.
+- **`actions.jsonl`** records selected overseer actions. Some reports start the best-effort append
+  without waiting for it to finish.
 - **`state.json`** drives returning-instance behavior and remembers the active project and theme.
 - The server owns all access (`packages/server/src/memory/internal.ts`).
 - `./bin/reset` discards this volume and `agent-home`. `reset overseer` in the settings panel empties the
@@ -280,7 +281,7 @@ Validation lives in `packages/server/src/memory/personality/`.
 | Anything granting permissions or auth       | Permission belongs to the permission system, not to a prose file.    |
 | Anything changing paths or mounts           | The container's shape is a deployment fact, not a preference.        |
 | Anything overriding signal ranking or text  | Signals are derived from real state; editable signals are fiction.   |
-| Unknown fields                              | Rejected by default.                                                  |
+| Unknown fields                              | Rejected by default; `$schema` and `//`-prefixed metadata keys are ignored. |
 
 **A rejection is never silent.** A `waiting` signal names the field and reason and opens the project selector.
 

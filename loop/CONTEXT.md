@@ -11,8 +11,8 @@ word for a concept, or when a term's meaning is unclear from context.
   `req_<timestamp>_<hash>`. Carries a `status` (see below) through
   `db/personal/index.jsonl`.
 - **Step**: one stage a request passes through: `request`, `research`,
-  `scope`, `plan`, `implement`, `verify`, `decide`, `commit`, `land`,
-  `review`, `publish`, `close`.
+  `scope`, `plan`, `implement`, `verify`, `decide`, `commit`, `review`.
+  `land`, `publish` and `close` are standalone verbs, not steps.
 - **Stint**: the working-tree lock held by one request at a time, from the
   start of `implement` until `land` commits. Covers `implement`, `verify`,
   `decide`, `commit`. `loop/bin/stint` reports the holder; `list --json`
@@ -33,8 +33,8 @@ word for a concept, or when a term's meaning is unclear from context.
   distinction is made.
   _Avoid_: "the default branch" for the general concept — say **trunk**, which
   covers both worlds; "default branch" reads as origin's and only origin's.
-- **Train**: the chain of stacked branches for requests that have passed
-  `commit` but not yet `close`d — each cut from the tip of the one ahead of
+- **Train**: the chain of stacked branches for requests that have taken
+  the stint but not yet `close`d — each cut from the tip of the one ahead of
   it, the first cut from the **trunk**. `loop/bin/train` shows it. A request
   leaves the train only when `close` says its work landed on the trunk (true
   even for a `rejected` review, whose branch stays unpublished but stays in the
