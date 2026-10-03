@@ -1,6 +1,5 @@
 import { watch, type FSWatcher } from "node:fs";
 import { readFile } from "node:fs/promises";
-import { randomUUID } from "node:crypto";
 import type {
   DiscoveredProject,
   ServerMessage,

@@ -29,21 +29,9 @@ export interface PtySpawnOpts {
   env: NodeJS.ProcessEnv;
 }
 
-export type PtySpawner = (opts: PtySpawnOpts) => PtyProcess | Promise<PtyProcess>;
-
-let spawner: PtySpawner | undefined;
-
-/** Test seam — inject a fake PTY. Pass `undefined` to restore the default. */
-export function setPtySpawner(next: PtySpawner | undefined): void {
-  spawner = next;
-}
-
 async function spawnProcess(opts: PtySpawnOpts): Promise<PtyProcess> {
-  if (spawner !== undefined) return spawner(opts);
-
-  // Dynamic import so unit tests can inject a fake without loading the native
-  // module, and so a missing build surfaces as a failed open rather than
-  // taking down the whole server import graph.
+  // A missing native build surfaces as a failed open rather than taking down
+  // the whole server import graph.
   const pty = await import("node-pty");
   const proc = pty.spawn(opts.file, opts.args, {
     name: "xterm-256color",

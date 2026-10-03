@@ -121,5 +121,3 @@ export function createUsageCheck(deps: UsageCheckDeps = {}) {
     },
   };
 }
-
-export type UsageCheckService = ReturnType<typeof createUsageCheck>;

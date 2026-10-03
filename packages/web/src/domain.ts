@@ -63,10 +63,3 @@ export interface ProviderInfo {
   spend: string;
   context: string;
 }
-
-export interface WorkspaceInfo {
-  root: string;
-  staging: string;
-}
-
-export type DiffLine = { kind: "add" | "del" | "ctx"; text: string };

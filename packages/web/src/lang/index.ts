@@ -27,9 +27,3 @@ export function message(
   if (!vars) return template;
   return template.replace(/\{(\w+)\}/g, (_, name: string) => vars[name] ?? "");
 }
-
-export function messagesFor(
-  tone: OverseerTone | undefined,
-): OverseerMessages {
-  return BY_TONE[tone ?? "neutral"] ?? neutral;
-}

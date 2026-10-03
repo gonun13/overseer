@@ -338,11 +338,6 @@ function updateSnapshot(
   });
 }
 
-/** True when this instance has completed a discovery pass before. */
-export async function hasRunBefore(): Promise<boolean> {
-  return (await readSnapshot()) !== undefined;
-}
-
 /**
  * The wipe, in the three pieces the operator watches it happen in.
  *

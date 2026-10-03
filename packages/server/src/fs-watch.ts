@@ -1,4 +1,4 @@
-import { watch, type FSWatcher } from "node:fs";
+import type { FSWatcher } from "node:fs";
 
 const WATCH_RETRY_MS = 2_000;
 

@@ -146,5 +146,3 @@ export function createSessionIndex(broadcast: Broadcast, deps: SessionIndexDeps 
     },
   };
 }
-
-export type SessionIndex = ReturnType<typeof createSessionIndex>;

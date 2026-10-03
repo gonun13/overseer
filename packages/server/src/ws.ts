@@ -1,4 +1,3 @@
-import { randomUUID } from "node:crypto";
 import { realpath } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
 import type { Server } from "node:http";
@@ -23,7 +22,6 @@ import {
   createOverseerSpace,
   type OverseerSpace,
 } from "./overseer/space.js";
-import { reportProviderStatus } from "./overseer/provider-status.js";
 import { createUsageCheck } from "./usage-check.js";
 import {
   readLoopConfig,
