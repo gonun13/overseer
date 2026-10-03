@@ -12,7 +12,7 @@ import type { DiscoveryOutcome } from "./discovery.js";
  * it had changed.
  *
  * Everything here is about giving services one door to report through
- * (docs/overseer-behavior.md §2).
+ * (spec/behaviour/overseer.md §2).
  */
 
 /** The one status vocabulary, shared by every light, row, signal and message.

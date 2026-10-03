@@ -104,7 +104,9 @@ an altered one is rejected and the step has to be redone.
    `CHANGELOG.md` at its root, and this run changed something a user of the
    project can observe, add one line to it under the heading for the version
    being worked on — in the project's own existing style, matching the entries
-   already there. Nothing observable changed (a refactor, tests, plumbing,
+   already there. If the top heading is a version already released (dated, or
+   matching the project's current version field), add the line under an
+   undated `## Unreleased` heading above it instead, creating it if needed. Nothing observable changed (a refactor, tests, plumbing,
    docs) means no entry. No `CHANGELOG.md` means nothing to do; do not create
    one, and do not rewrite entries that are already released.
 11. **Do not touch version control.** No commit, no branch, no stash, no revert,

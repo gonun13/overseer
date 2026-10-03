@@ -22,7 +22,7 @@ const __dirname = path.dirname(fileURLToPath(import.meta.url));
 const webDist = path.resolve(__dirname, "../../web/dist");
 
 const port = Number(process.env.PORT ?? 3000);
-// Bind loopback-only by default (design doc §6); the Docker image sets
+// Bind loopback-only by default (spec/architecture.md §6); the Docker image sets
 // HOST=0.0.0.0 and relies on compose's port mapping instead — "127.0.0.1:3000:3000"
 // in production, "127.0.0.1:3001:3000" in dev so both stacks can run at once.
 const host = process.env.HOST ?? "127.0.0.1";

@@ -5,7 +5,7 @@ import { OUTCOME_ACTIVITY } from "../../status";
 /**
  * The overseer's report on its own work — discovery, the workspace monitor,
  * git operations, personality re-reads, and any later automation
- * (docs/overseer-behavior.md §3).
+ * (spec/behaviour/overseer.md §3).
  *
  * The one window kind summoned by the machine rather than the operator: no
  * footer link and no typed command opens it. It appears because a service

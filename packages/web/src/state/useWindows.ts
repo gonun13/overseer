@@ -15,7 +15,7 @@ let zSeq = 100;
 
 /** Every window fills the stage as one grid, in the order it was opened —
  * the harness view: everything on the desk visible at once, nothing stacked
- * over anything else (ui-ux-design.md §5). */
+ * over anything else (spec/ui-ux.md §5). */
 function retile(current: OpenWindow[], bounds: Bounds): OpenWindow[] {
   if (current.length === 0) return current;
   const cells = tileGrid(current.length, bounds);

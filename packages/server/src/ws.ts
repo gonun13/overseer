@@ -68,7 +68,7 @@ import { isInsideWorkspace, scanWorkspace } from "./workspace.js";
 
 /**
  * Any page in the browser can otherwise open a socket to localhost — check
- * Origin on the upgrade (design doc §6).
+ * Origin on the upgrade (spec/architecture.md §6).
  */
 function isAllowedOrigin(
   origin: string | undefined,
@@ -517,7 +517,7 @@ export function attachWebSocketServer(
       }
 
       // Discovery is the first family routed here; the session supervisor
-      // (webui design doc §1.2) joins this switch rather than replacing it.
+      // (spec/architecture.md §1.2) joins this switch rather than replacing it.
       switch (parsed.type) {
         case "operator.name": {
           const result = await setOperatorName(parsed.name);

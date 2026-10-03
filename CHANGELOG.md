@@ -3,7 +3,27 @@
 Operator-facing release notes, newest first — what an operator can now do or now sees, one line
 each. The `/changelog` window renders this file — so does clicking the version in the footer. The
 rules for writing an entry live in
-[architecture-design.md §8.4](docs/architecture-design.md#84-changelog).
+[spec/architecture.md §8.4](spec/architecture.md#84-changelog).
+
+## 0.5.1 — 2026-10-03
+
+### Changed
+
+- The field is three columns: projects, sessions and shells on the left; windows in the centre;
+  the clock, settings, overseer, prompt and provider on the right.
+- Every window — consoles, help, project, diffs — tiles the centre of the field on its own as you
+  open and close them; `/tile` puts them back after you drag one.
+- `/console` and the provider's NEW SESSION button are gone. Start a session with
+  `+ new session` on the left, or by typing a prompt.
+- The Claude Code provider is now called `claude`, matching its CLI. If `loop/.provider` or
+  `LOOP_PROVIDER` still says `claude-code`, change it to `claude` — the loop refuses to start
+  until you do.
+
+### Fixed
+
+- A session you just started shows in the sessions list straight away, instead of only after
+  its first reply.
+- A console ended by a kill or an interrupt no longer lights up as if it had failed.
 
 ## 0.5.0 — 2026-10-02
 

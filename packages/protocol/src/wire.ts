@@ -15,7 +15,7 @@ import type {
 
 /**
  * The `/ws` envelope. Discovery is the first traffic to go over this socket,
- * but it will not be the last — the session supervisor (webui design doc §1.2)
+ * but it will not be the last — the session supervisor (spec/architecture.md §1.2)
  * routes over the same connection. So the envelope is a plain `type`-tagged
  * union with no discovery-specific framing: new families join by adding
  * variants, not by wrapping.
@@ -68,7 +68,7 @@ export type ClientMessage =
   | { type: "auth.signout"; providerId: string }
   /** Erase the overseer's memory — internal `.overseer` and the external
    * `personality.json`. Provider auth is not memory and is left alone. Only
-   * sent after the operator answered the decision (ui-ux-design.md §5.2). */
+   * sent after the operator answered the decision (spec/ui-ux.md §5.4). */
   | { type: "memory.reset" }
   /**
    * Start a console. Consoles belong to the server, not the socket: closing
@@ -649,7 +649,7 @@ export interface LoopProviderInfo {
  * socket, so every tab with the loop tab open stays in sync after another
  * one changes it. Separate from `DiscoveredProvider`/`provider.status`:
  * the loop's provider selection and the app's attached provider are
- * independent (docs/architecture-design.md §9). */
+ * independent (spec/behaviour/dev-loop.md). */
 export interface LoopConfigMessage {
   type: "loop.config";
   /** `loop/.provider` — the provider the loop runs on next. */

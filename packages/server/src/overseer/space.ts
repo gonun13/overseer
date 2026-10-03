@@ -83,7 +83,7 @@ export function createOverseerSpace(
       const before = states.get(id);
       // A condition re-reported unchanged is not news. Dropping it here is
       // what keeps a periodic re-check from stuttering the window open (see
-      // the "does not re-summon itself" rule in overseer-behavior.md §3).
+      // the "does not re-summon itself" rule in spec/behaviour/overseer.md §3).
       if (
         before !== undefined &&
         before.outcome === entry.outcome &&

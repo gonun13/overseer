@@ -1,6 +1,6 @@
 #!/usr/bin/env sh
 # Start the dev stack. A fresh instance is headline-only until the overseer's
-# wizard discovers something (see docs/overseer-behavior.md).
+# wizard discovers something (see spec/behaviour/overseer.md).
 #
 #   ./bin/dev-start           start (rebuilds images if the Dockerfile changed)
 #   ./bin/dev-start --build   force an image rebuild

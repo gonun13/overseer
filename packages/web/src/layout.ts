@@ -3,7 +3,7 @@
  * (windows, and nothing else), and a right rail (clock, overseer, prompt,
  * provider). Every window lives inside the stage, so every placement — spawn,
  * tile, drag, resize, restore — asks the stage for its bounds here rather
- * than the viewport (ui-ux-design.md §1, §5).
+ * than the viewport (spec/ui-ux.md §1, §5).
  */
 
 export interface Bounds {

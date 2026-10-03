@@ -33,13 +33,13 @@ services:
     # entries behind otherwise, since the node entrypoint never calls wait().
     init: true
     ports:
-      - "127.0.0.1:3000:3000" # loopback only — this is RCE-as-a-service (design doc §6)
+      - "127.0.0.1:3000:3000" # loopback only — this is RCE-as-a-service (spec/architecture.md §6)
     volumes:
       # Every provider CLI's config and auth, for the app and the loop alike.
       # Container-owned; never bound to the host. Nothing from the image lives
       # under this path, because a volume shadows what it mounts over.
       - agent-home:/home/overseer
-      - overseer-memory:/app/.overseer # the overseer's internal memory (docs/overseer.md §6.2)
+      - overseer-memory:/app/.overseer # the overseer's internal memory (spec/behaviour/overseer.md §6.2)
       - loop-db:/app/loop/db # the dev loop's file store
       - ${OVERSEER_WORKSPACE_HOST:-../overseer-workspace}:/workspace # the only shared surface
     environment:
@@ -74,11 +74,11 @@ volumes:
   # Every provider's config and auth — Claude's subscription token, Cursor's,
   # and whatever the next CLI writes. One volume rather than one per provider:
   # adding a provider should not mean editing two compose files. A named volume
-  # and never a bind mount — the argument in docs/architecture-design.md §6
+  # and never a bind mount — the argument in spec/architecture.md §6
   # against mounting the operator's own ~/.claude. Discarded by ./bin/reset.
   agent-home:
   # Internal memory: logs, the action register, the world snapshot. A named
-  # volume and never a bind mount — the precedence rule in docs/overseer.md §6.1
+  # volume and never a bind mount — the precedence rule in spec/behaviour/overseer.md §6.1
   # only holds because nothing here is reachable from the host or from
   # /workspace.
   overseer-memory:

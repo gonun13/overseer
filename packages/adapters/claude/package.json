@@ -1,6 +1,6 @@
 {
   "name": "@overseer/adapter-claude",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "Spawns `claude` in bidirectional stream-json mode; normalizes its NDJSON into the protocol event union.",
   "type": "module",
   "main": "./dist/index.js",

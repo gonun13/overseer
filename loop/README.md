@@ -5,9 +5,9 @@ fixes, changes — against a project living under `/workspace/<name>/`, the host
 directory beside this repo. It exists outside the main Overseer app on purpose: it uses **only
 available system commands, bash scripts, a provider CLI (Claude Code or Cursor
 Agent), and plain files** — no Node/TS, no database server, nothing routes
-through npm. **It runs directly on the host for now.** It should run inside
-Docker, and can be folded into the main app later without that constraint
-changing what it already does.
+through npm. It runs inside Overseer's container, never on the host, and can be
+folded into the main app later without that changing what it already does. Its
+spec-level description is [`spec/behaviour/dev-loop.md`](../spec/behaviour/dev-loop.md).
 
 ## Usage
 
@@ -75,6 +75,7 @@ loop/bin/signoff <workspace-name> <request-id>    # decision text on stdin
 loop/bin/close <workspace-name> <request-id> [--merge] [--abandon] [--yes]
 loop/bin/clear <workspace-name> (--id <request-id> | --all) [--yes]
 loop/bin/provider [<id>]
+loop/bin/models [--json] | set <provider> <step|overseer> <model> | list-models [<provider>]
 loop/bin/check
 ```
 
@@ -562,7 +563,7 @@ the app rather than the loop's own. A bundle is `manifest.json`, `provider.sh`,
 and that provider's own config tree; the manifest's `loop` field says whether
 the loop can run it (`"bundle"`) or the app carries it alone (`"none"`), and its
 `app` field says the same in the other direction. See
-[architecture-design.md §1.1.2](../docs/architecture-design.md) for the whole
+[spec/architecture.md §1.1.2](../spec/architecture.md#112-the-provider-registry) for the whole
 shape. The session contract is two functions, because a provider's whole job is
 to open one session:
 

@@ -6,7 +6,7 @@
 
 /* ---------------------------------------------------------------------------
    Four levels. Samaritan is the reference and the default; machine is its
-   opposite at every level (ui-ux-design.md §2).
+   opposite at every level (spec/ui-ux.md §2).
 
      field    ground, the overseer space, the active project, widgets, and
               readouts in general — including the project panel's collapsed
@@ -222,7 +222,7 @@
 }
 
 /* The things that operate the machine rather than show its content, so
-   they sit on `--void` instead of stamp or surface (ui-ux-design.md §2). */
+   they sit on `--void` instead of stamp or surface (spec/ui-ux.md §2). */
 .window-tab,
 .session-ctl-values,
 .w-tabs {
@@ -265,7 +265,7 @@ button {
   cursor: pointer;
 }
 
-/* Three columns (ui-ux-design.md §1): a left rail for what to work on, the
+/* Three columns (spec/ui-ux.md §1): a left rail for what to work on, the
    stage for windows and nothing else, and a right rail for the machine. The
    rails take a fifth each, floored so their type never crushes; the stage
    takes the rest. Windows are absolutely positioned against the field, in

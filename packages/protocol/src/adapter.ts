@@ -29,7 +29,7 @@ export interface SessionMeta {
    * Set when this session is a dev-loop run rather than one the app started.
    * The loop mints its own id and records it in its lease, so the *supervisor*
    * stamps this by cross-referencing that lease — an adapter never learns what
-   * a loop is (docs/architecture-design.md's provider/adapter split).
+   * a loop is (spec/architecture.md's provider/adapter split).
    *
    * A loop session must never be resumed: its transcript belongs to a live
    * interactive PTY, and a second CLI writing the same JSONL corrupts it.

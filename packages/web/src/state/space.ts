@@ -37,7 +37,7 @@ export interface SpaceState {
    * Deliberately not bumped when a `state` row is revised: a row correcting
    * itself is the window doing its job, not new work starting, and re-opening
    * a window the operator closed over it would break the "does not re-summon
-   * itself" rule (docs/overseer-behavior.md §3).
+   * itself" rule (spec/behaviour/overseer.md §3).
    */
   tick: number;
 }

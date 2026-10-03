@@ -133,9 +133,8 @@ all of them at once.
   and push from the app or the agent. Works with any host, self-hosted included.
 - **Theme support** — samaritan (default) and machine already included.
 
-Architecture: [docs/architecture-design.md](docs/architecture-design.md) ·
-UI: [docs/ui-ux-design.md](docs/ui-ux-design.md) ·
-Behavior: [docs/overseer-behavior.md](docs/overseer-behavior.md)
+Spec: [spec/PROJECT.md](spec/PROJECT.md) — architecture, UI, data and behaviour all live under
+[`spec/`](spec/), in the precedence order [AGENTS.md](AGENTS.md) gives.
 
 Themes inspired by Person of Interest created by Jonathan Nolan
 

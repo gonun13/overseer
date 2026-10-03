@@ -44,8 +44,8 @@ export async function isInsideWorkspace(
 }
 
 /** Underscore-prefixed entries are the overseer's own staging area, not
- * projects — `/workspace/_overseer/` holds config import/export (webui design
- * doc §2). Not to be confused with `.overseer/` (docs/overseer.md §6.0). */
+ * projects — `/workspace/_overseer/` holds config import/export (spec/architecture.md
+ * §2). Not to be confused with `.overseer/` (spec/behaviour/overseer.md §6.0). */
 function isProjectCandidate(name: string): boolean {
   return !name.startsWith(".") && !name.startsWith("_");
 }

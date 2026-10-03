@@ -36,11 +36,11 @@ import {
  * flushed at the end — the status window renders a growing list, and a
  * batch arriving at completion would defeat the point of showing it at all.
  *
- * Furniture unlocks ride on each step's `done` frame (docs/overseer.md §4):
+ * Furniture unlocks ride on each step's `done` frame (spec/behaviour/overseer.md §4):
  * clock → personality project list → workspace scan → active project →
  * provider → prompt/footer.
  *
- * Every run is written to internal memory (docs/overseer.md §6.2): one log per
+ * Every run is written to internal memory (spec/behaviour/overseer.md §6.2): one log per
  * run, one action-register entry per step, and a world snapshot at the end.
  */
 

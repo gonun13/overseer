@@ -44,7 +44,7 @@ describe("space status rows", () => {
   it("does not re-summon the window when a state row only revises itself", () => {
     // A row correcting itself is the window doing its job, not new work — and
     // re-opening a window the operator closed would break the "does not
-    // re-summon itself" rule (docs/overseer-behavior.md §3).
+    // re-summon itself" rule (spec/behaviour/overseer.md §3).
     const first = applySpaceFrame(EMPTY_SPACE, {
       type: "space.status",
       entry: row({ key: "auth" }),

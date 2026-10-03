@@ -71,7 +71,7 @@ WORKDIR /app
 #   /app              code: packages/, loop/, providers/
 #   /home/overseer    every provider CLI's config and auth — the agent-home volume
 #   /workspace        the one surface shared with the host
-#   /app/.overseer    internal memory (docs/overseer.md §6.2)
+#   /app/.overseer    internal memory (spec/behaviour/overseer.md §6.2)
 #   /app/loop/db      the dev loop's file store
 #
 # NOTHING THAT AN IMAGE REBUILD MUST BE ABLE TO REPLACE MAY LIVE UNDER
@@ -124,7 +124,7 @@ RUN npm run build
 #   cursor          agent    adapter  bundle
 #
 # Versions are pinned: session history is an undocumented format that drifts
-# across releases (architecture-design.md §4). Bump deliberately, in the
+# across releases (spec/architecture.md §4). Bump deliberately, in the
 # manifest and here, never via a floating `@latest`.
 FROM base AS agents
 
@@ -229,7 +229,7 @@ ENV PORT=3000
 
 # Docker seeds a fresh named volume from the image's dir on first mount,
 # ownership included — without this the overseer user can't write its own
-# memory (docs/overseer.md §6.2) or the loop's file store.
+# memory (spec/behaviour/overseer.md §6.2) or the loop's file store.
 RUN mkdir -p /app/.overseer/logs /app/loop/db \
     && chown -R overseer:overseer /app/.overseer /app/loop/db /home/overseer
 

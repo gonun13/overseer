@@ -4,7 +4,7 @@
 #
 # Difference from docker-compose.yml: the source tree is bind-mounted so the
 # watchers see host edits. The production invariant that `/workspace` is the
-# only shared surface (design doc §6) still holds for the *agent* — it is
+# only shared surface (spec/architecture.md §6) still holds for the *agent* — it is
 # handed /workspace, not /app — but a dev container does hold the repo. Do
 # not model production blast radius on this file.
 #
@@ -95,7 +95,7 @@ services:
     # calls wait(), so every killed console left a <defunct> claude behind.
     init: true
     ports:
-      # Loopback only — this is RCE-as-a-service (design doc §6).
+      # Loopback only — this is RCE-as-a-service (spec/architecture.md §6).
       # Host :3001 so the dev API can run alongside production on :3000.
       # Container-internal stays 3000 (Vite proxies to http://server:3000).
       - "127.0.0.1:3001:3000"
@@ -129,11 +129,11 @@ services:
     volumes:
       - .:/app
       # Every provider CLI's config and auth, for the app and the loop alike.
-      # Container-owned; never bound to the host (design doc §6 — the argument
+      # Container-owned; never bound to the host (spec/architecture.md §6 — the argument
       # against mounting the operator's own ~/.claude). Nothing from the image
       # lives under this path, because a volume shadows what it mounts over.
       - agent-home:/home/overseer
-      # Internal memory (docs/overseer.md §6.2). This one matters more in dev
+      # Internal memory (spec/behaviour/overseer.md §6.2). This one matters more in dev
       # than in prod: /app is a bind mount of the repo here, so without this
       # named volume shadowing it the overseer's private store would be written
       # straight into the host working tree — exactly the thing it must not be.

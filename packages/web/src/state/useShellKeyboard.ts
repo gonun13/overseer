@@ -2,7 +2,7 @@ import { useEffect } from "react";
 
 interface ShellKeyboardOptions {
   /** A decision is up. Every command is off, including Escape: the decision is
-   * answered with its own two buttons or not at all (ui-ux-design.md §5.2). */
+   * answered with its own two buttons or not at all (spec/ui-ux.md §5.4). */
   blocked: boolean;
   settingsOpen: boolean;
   windowCount: number;

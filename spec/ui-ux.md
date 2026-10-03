@@ -1,4 +1,4 @@
-# Overseer — UI/UX Design
+# UI/UX
 
 **Reference:** Person of Interest TV show for inspiration on layout and interaction
 model. Colour and type below are Overseer's own.
@@ -7,7 +7,7 @@ model. Colour and type below are Overseer's own.
 offering controls. Everything is either **permanent furniture** or a **summoned surface**.
 
 This is a fixed instrument frame, not a dashboard or chat shell. Startup, discovery, and recovery behavior
-are specified in [overseer-behavior.md](overseer-behavior.md).
+are specified in [behaviour/overseer.md](behaviour/overseer.md).
 
 ---
 
@@ -60,15 +60,15 @@ authenticated provider is attached. Below 1024px is out of scope.
 
 | Level       | What lives there                                                                                         | Samaritan (default) | Machine            |
 | ----------- | -------------------------------------------------------------------------------------------------------- | ------------------- | ------------------ |
-| **field**   | ground, the overseer space, the active project, the clock, widgets, readouts, menus, the transcript page | light               | dark               |
+| **field**   | ground, the overseer space, the active project, the clock, widgets, readouts, menus | light               | dark               |
 | **surface** | what you act _through_ — windows, panels, the project list once it opens, and every input (§7.1)         | dark                | light              |
 | **stamp**   | what gets printed — session output, headings, and reference chips                                       | a darker light      | a lighter dark     |
 | **void**    | a window's own tab; an opened prompt control's option list                                               | near-black          | near-white         |
 
 A component's level follows **what it is, not where it sits**. Readouts stay on the field; work surfaces
 invert; stamps carry content; machine chrome such as window tabs and opened prompt-control options uses
-void, which matches the surface's solid ground so a tab continues the frame. `--page` is an opaque field
-used only by the transcript.
+void, which matches the surface's solid ground so a tab continues the frame. `--page` (an opaque field) was the
+chat transcript's ground and has had no consumer since `0.5.0`.
 
 Machine preserves Samaritan's alphas, contrast hierarchy, and token relationships. Dark grounds may need a
 wider numeric step to preserve the same perceived contrast; `:root` is the source of truth.
@@ -109,7 +109,7 @@ Rules:
 
 ## 3. Activity — the one status vocabulary
 
-Projects, sessions, capabilities and signals are all "an activity", and all use the same five values and the
+Projects, consoles, sessions and signals are all "an activity", and all use the same five values and the
 same round light.
 
 | Activity    | Light             | Means                                     |
@@ -137,7 +137,7 @@ answer** to what deserves attention.
   alone. Recovery may supply a verbatim alert word. Onboarding uses the same space for questions and choices.
   Beneath it, a rule widens 30→150px while busy; a loading bar replaces the `▲` during boot.
 - **Signals** — `[light] KICKER  sentence.` rows, most urgent first. The kicker is the category (`APPROVAL`,
-  `PROVIDER`, `CAPABILITY`, `SESSION`, `USAGE`, `PROJECT`, `WORKSPACE`, `PERSONALITY`, or `STANDBY`);
+  `CONSOLE`, `PROVIDER`, `USAGE`, `PROJECT`, `WORKSPACE`, `PERSONALITY`, or `STANDBY`);
   the sentence states what happened and what it means.
 - **Every signal is actionable** and opens the relevant window, panel, selector, prompt, or recovery action.
 - Signals are derived on every render, never stored.
@@ -180,7 +180,7 @@ command, or a system escalation.
 The **status window** is summoned automatically when a service starts work — it is where trigger logs from
 every service land. It shows telegraphic rows and may be dismissed without cancelling the operation. Rows are
 either conditions (which rewrite themselves in place) or events (which append). Lifecycle rules live in
-[overseer-behavior.md](overseer-behavior.md).
+[behaviour/overseer.md](behaviour/overseer.md).
 
 ### 5.1 Windows carry controls
 
@@ -218,22 +218,11 @@ terminal element's padding, so padding the host clips the right and bottom of th
 raises the next one and hands it the keyboard. The tab shows a status light — what the
 CLI is doing — in place of the usual mark.
 
-|                   | Treatment                                                                                   |
-| ----------------- | ------------------------------------------------------------------------------------------- |
-| stream            | xterm.js matching the Overseer theme                                                        |
-| close (×)         | **detach** — the process keeps running and stays in the session panel's list               |
-| kill              | its own tab control (and the row's ■): the process ends and the window and row go at once — a deliberate kill is never reported as a failure |
-| CLI exits cleanly | `/exit`, `exit`: the window closes and the console is dismissed                             |
-| CLI fails         | the window stays, with the exit code, so the failure can be read                            |
-| reload            | every console window comes back where it was, with its scrollback, once discovery is done   |
-| auth              | shared container credentials; onboarding pre-seeded                                         |
+xterm.js matches the Overseer theme. What closing, killing, an exit, a failure and a reload do to a
+console is [behaviour/consoles.md §3](behaviour/consoles.md#3-lifecycle).
 
 While focus is in a terminal the keyboard is the CLI's: Overseer's own keys stand down, except
 `Ctrl` + `` ` ``, which is how you leave.
-
-Credentials come from the same container `CLAUDE_CONFIG_DIR` volume as Overseer login. Before spawn, Overseer
-marks Claude's interactive onboarding complete (and trusts the project) so the TUI does not re-run the
-theme picker / browser login that pipe-based `claude auth login` already finished.
 
 The console is a continuous stream on the window surface (`--fill-solid`) — dark in samaritan, light in
 machine — not stamp paper. Frame chrome matches other windows (horizontal edges only).
@@ -241,9 +230,11 @@ machine — not stamp paper. Frame chrome matches other windows (horizontal edge
 ### 5.4 The decision — the one surface that blocks
 
 Windows are never modal (§5) and escalations become signals rather than dialogs (§10). **A decision is the
-single exception, and it exists only for an action that destroys memory** — today, `reset overseer` (§6.5 of
-[overseer-behavior.md](overseer-behavior.md)). A signal can be ignored and a window can be dismissed; neither
-is an acceptable way to answer "erase everything I know".
+single exception, and it exists only for an action that destroys something the operator cannot get
+back** — today, `reset overseer`, which erases memory (§6.5 of [behaviour/overseer.md](behaviour/overseer.md)),
+and taking over a loop run held elsewhere, which ends it ([behaviour/consoles.md §2](behaviour/consoles.md#2-opening--start-or-attach)).
+A signal can be ignored and a window can be dismissed; neither is an acceptable way to answer
+"erase everything I know".
 
 - Built from the window's parts — tab, frame, `w-btn` answers — but the **tab is centred**, which is the tell
   that this is not a window the operator summoned.
@@ -254,7 +245,7 @@ is an acceptable way to answer "erase everything I know".
   can still see what they are about to erase.
 - The field behind it is `inert`, not merely covered: a scrim stops the mouse and nothing else.
 - The decision states facts in plain machine copy. Personality belongs to the message, never to the terms
-  (§2.3 of [overseer-behavior.md](overseer-behavior.md)).
+  (§2.3 of [behaviour/overseer.md](behaviour/overseer.md)).
 
 ### 5.5 The file view
 
@@ -397,8 +388,8 @@ is never in the `Esc` chain.
 ## 8. Type
 
 - **Family:** IBM Plex Mono, fallback `ui-monospace, monospace`. One family everywhere.
-- **Scale:** 34/700 message · 19/600 active project · 17 clock · 15 project value · 14 window tab, prompt and
-  transcript · 13 signals and rows · 12 controls and window content · 11 secondary · 10 kickers.
+- **Scale:** message 26/700 on the stage centre, 18 docked in the rail, 34 for the first-run name ask · 19/600
+  active project · 17 clock · 15 project value · 14 window tab and prompt · 13 signals and rows · 12 controls and window content · 11 secondary · 10 kickers.
 - **Case:** UPPERCASE for labels, statuses, command labels, tab titles, kickers and the message. Left alone: agent
   prose, the operator's typed input, signal sentences, code, paths and diffs.
 - **Numbers:** `tabular-nums` wherever a value changes in place — clock, gauge, cost.
@@ -421,7 +412,6 @@ Motion means the system changed state. Never decoration.
 - **Furniture reveal** — newly knowable furniture settles into place once; it does not replay on ordinary updates.
 - **Teardown** — a confirmed reset takes one piece of furniture away per delete step, controls first and the
   clock last, so the report and the field say the same thing at the same time.
-- Transcript append is instant; auto-scroll unless the operator has scrolled up.
 - Honour `prefers-reduced-motion`; every transition becomes instant.
 
 ---
@@ -433,16 +423,15 @@ Motion means the system changed state. Never decoration.
 - Buttons shaped like stamps or persistently filled; use a selection mark. Ordinary hover bolds — only
   danger may fill.
 - A verb-labelled toggle for a small fixed choice; show all options inline (§6.3).
-- A widget styled as a window, or a window that does not invert. The transcript is the documented exception.
+- A widget styled as a window, or a window that does not invert.
 - Input and output that violate §7.1's contrast or material relationships.
-- Visible gaps inside a run of tool-call rows.
 - Describing a level in machine's terms. Samaritan is the reference; machine is derived by inversion.
 - Content that sets its own width inside a window.
 - A control that closes the panel it lives in as a side effect of being used.
 - Card-style layout containers: shadows, large radii, and boxed chrome.
 - A tab, chip or label that does not align to the edge of the thing it names.
 - Modals that block, and toasts. Escalations become a signal in the overseer space and change the message.
-  The decision (§5.4) is the only exception, and only for destroying memory.
+  The decision (§5.4) is the only exception, and only for an action that cannot be undone.
 - Spinners. Use the boot bar or message rule.
 - Message bubbles, side-aligned turns, avatars, emoji in chrome. Authorship is carried by stamp-vs-plain.
 - A readout the operator cannot act on sitting in the overseer space.

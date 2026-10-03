@@ -69,7 +69,7 @@ describe("validatePersonalityObject", () => {
     assert.deepEqual(rejected, [
       {
         field: "favoriteColor",
-        reason: "not a customizable field · see docs/overseer.md §6.4",
+        reason: "not a customizable field · see spec/behaviour/overseer.md §6.4",
       },
     ]);
   });

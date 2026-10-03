@@ -1,7 +1,7 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 
 /**
- * The one surface that blocks. Windows are never modal (ui-ux-design.md §5) and
+ * The one surface that blocks. Windows are never modal (spec/ui-ux.md §5) and
  * escalations become signals rather than dialogs — but a decision that erases
  * the overseer's memory cannot be answered by a signal the operator may ignore,
  * and it must not be dismissible by the gestures that dismiss everything else.

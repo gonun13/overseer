@@ -31,7 +31,7 @@ import type { SpaceFrame } from "@overseer/protocol";
  * stops being true.
  *
  * Everything here is derived from server events or the explicit absence of
- * them. Nothing is invented (docs/overseer.md §4).
+ * them. Nothing is invented (spec/behaviour/overseer.md §4).
  */
 
 /**
@@ -291,7 +291,7 @@ function personalityAlarmMessage(
 }
 
 /** Discovery outcomes are the same five activities in a different register —
- * no second vocabulary (docs/overseer.md §3). */
+ * no second vocabulary (spec/behaviour/overseer.md §3). */
 export type WizardAction =
   /** Socket is up *and* the server sent identity for the welcome beat. */
   | {
@@ -808,7 +808,7 @@ function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
  *
  * The prompt is the one exception, and it is a different kind of thing — a
  * control, not a readout. An input that cannot submit anywhere is not a
- * degraded readout, it is a broken control (docs/overseer.md §4).
+ * degraded readout, it is a broken control (spec/behaviour/overseer.md §4).
  */
 export interface Furniture {
   projectPanel: boolean;
@@ -874,7 +874,7 @@ export function welcomeNeedsTone(state: WizardState): boolean {
  *
  * A reset outranks the phase entirely. The decision window states the facts;
  * the message is the overseer reacting to being asked, which is the one thing
- * only it can say (docs/overseer-behavior.md §2.3).
+ * only it can say (spec/behaviour/overseer.md §2.3).
  */
 export function wizardMessage(state: WizardState): string | undefined {
   const tone = state.personality.tone;

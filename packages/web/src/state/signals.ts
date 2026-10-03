@@ -46,7 +46,7 @@ export interface Signal {
    *
    * Verbatim is the point: these are alarm words, and a tone pack that could
    * soften one would be changing severity, which personality may never do
-   * (docs/overseer-behavior.md §2.3). */
+   * (spec/behaviour/overseer.md §2.3). */
   message?: string;
 }
 
@@ -89,7 +89,7 @@ export function deriveSignals(world: WorldState): Signal[] {
 
   // A customization the operator wrote that did not take effect. Reported, not
   // dropped: silently ignoring it leaves them believing it worked, which is
-  // worse than refusing it out loud (docs/overseer.md §6.4).
+  // worse than refusing it out loud (spec/behaviour/overseer.md §6.4).
   for (const rejection of world.rejected ?? []) {
     signals.push({
       id: `personality-${rejection.field}`,
@@ -160,7 +160,7 @@ export function deriveSignals(world: WorldState): Signal[] {
     // credential because of anything the operator did, and everything
     // downstream of it is about to start failing. Its own signal, ranked above
     // "you have not signed in yet", because it is news rather than a step not
-    // taken (docs/overseer.md §2.2).
+    // taken (spec/behaviour/overseer.md §2.2).
     signals.push({
       id: "auth-expired",
       activity: "attention",
@@ -205,7 +205,7 @@ export function deriveSignals(world: WorldState): Signal[] {
 
   // The overseer is an independent unit, not a narrator of every console — an
   // agent working is doing exactly what it is supposed to and earns no signal
-  // of its own (docs/overseer.md §3). A process that died with an error is
+  // of its own (spec/behaviour/overseer.md §3). A process that died with an error is
   // something the operator did not already know to expect.
   for (const c of consoles) {
     if (!exitedBadly(c)) continue;
@@ -254,7 +254,7 @@ export function deriveSignals(world: WorldState): Signal[] {
  * the message and the list can never disagree — and by nothing else. A session
  * working normally is not a reason for the overseer to speak up: the overseer
  * is an independent unit, not a mirror of whatever a session happens to be
- * doing (docs/overseer-behavior.md §3).
+ * doing (spec/behaviour/overseer.md §3).
  *
  * Returns what to say, not the words. The caller resolves `key` against the
  * operator's tone pack; `text` is only set when a signal supplied a verbatim

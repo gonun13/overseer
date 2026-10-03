@@ -184,5 +184,5 @@ Nothing is dropped quietly. A refused field shows up in the overseer space as a
 signal naming the field and the reason, so you always know what did and did not
 take effect.
 
-See \`docs/overseer.md\` §6 in the overseer repo for the full model.
+See \`spec/behaviour/overseer.md\` §6 in the overseer repo for the full model.
 `;

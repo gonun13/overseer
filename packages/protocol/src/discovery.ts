@@ -13,7 +13,7 @@ import type { SpaceService } from "./space.js";
  * is a step that ran correctly and found bad news, which is a different thing
  * from a step that threw — and the operator acts on them differently. Maps
  * one-to-one onto the `Activity` vocabulary the UI already has, so a step needs
- * no colour or icon of its own (docs/overseer.md §3).
+ * no colour or icon of its own (spec/behaviour/overseer.md §3).
  */
 export type DiscoveryOutcome =
   /** Ran, found what it was looking for. → `done` / [OK] */
@@ -80,14 +80,14 @@ export interface DiscoveredProvider {
 
 /** A customization the overseer refused to apply, and why. Surfaced to the
  * operator as a signal — a silently dropped customization is worse than a
- * refused one (docs/overseer.md §6.4). */
+ * refused one (spec/behaviour/overseer.md §6.4). */
 export interface RejectedCustomization {
   field: string;
   reason: string;
 }
 
 /** Furniture a discovery step can unlock. Permanent once revealed
- * (docs/overseer.md §4). */
+ * (spec/behaviour/overseer.md §4). */
 export type FurnitureReveal =
   | "clock"
   | "projectPanel"
@@ -180,7 +180,7 @@ export type DiscoveryEvent =
     };
 
 /** The customizable surface, post-validation. Everything outside this shape was
- * either rejected or never offered (docs/overseer.md §6.4). */
+ * either rejected or never offered (spec/behaviour/overseer.md §6.4). */
 export interface AppliedPersonality {
   tone?: "neutral" | "dry" | "warm";
   name?: string;

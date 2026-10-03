@@ -2,7 +2,7 @@ import type { SpaceMessageKey } from "@overseer/protocol";
 
 /**
  * Overseer copy. Personality may change *how* a message reads, never *what* a
- * signal or operation reports (docs/overseer-behavior.md §2.3). Each tone file
+ * signal or operation reports (spec/behaviour/overseer.md §2.3). Each tone file
  * is a full set; `message()` falls back to neutral for any missing key.
  *
  * Keyed off the protocol's `SpaceMessageKey` so the server cannot name a line

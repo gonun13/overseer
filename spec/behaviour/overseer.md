@@ -1,13 +1,13 @@
 # The Overseer — Behavioral Spec
 
-Three docs, three concerns. [architecture-design.md](architecture-design.md) defines the system,
-[ui-ux-design.md](ui-ux-design.md) defines the interface, and this document defines **behavior**: what the
-overseer says, when it says it, and what it remembers.
+[architecture.md](../architecture.md) defines the system, [ui-ux.md](../ui-ux.md) defines the interface,
+[data.md](../data.md) defines the stores, and this document defines the overseer's **behavior**: what it
+says, when it says it, and what it remembers.
 
-This document is the **ship bar for `0.1.x`** — see [architecture-design.md §8](architecture-design.md#8-versioning).
+This document is the **ship bar for `0.1.x`** — see [architecture.md §8](../architecture.md#8-versioning).
 
-Visual details are not repeated here; see [the overseer space](ui-ux-design.md#4-the-overseer-space) and
-[windows](ui-ux-design.md#5-windows).
+Visual details are not repeated here; see [the overseer space](../ui-ux.md#4-the-overseer-space) and
+[windows](../ui-ux.md#5-windows).
 
 ---
 
@@ -22,13 +22,13 @@ project. It is four things at once:
   discovery.
 - **Automation trigger** — will start agents, scripts, and `claude` commands on the operator's behalf.
 - **Notification point** — turns escalations into signals and messages, never toasts or modals
-  ([UI anti-patterns](ui-ux-design.md#10-anti-patterns)).
+  ([UI anti-patterns](../ui-ux.md#10-anti-patterns)).
 
 ### What it is not
 
 - **Not chat.** Conversation happens in the provider's own CLI, in a console; the overseer speaks only about state.
 - **Not a dashboard.** Every signal is actionable
-  ([UI anti-patterns](ui-ux-design.md#10-anti-patterns)).
+  ([UI anti-patterns](../ui-ux.md#10-anti-patterns)).
 - **Not a log.** The screen shows derived conclusions; records stay in internal memory (§6).
 
 ---
@@ -81,7 +81,7 @@ outranks all of it (§6.5). All copy comes from `packages/web/src/lang/` and `pa
 never ad hoc call sites.
 
 Message changes normally swap instantly; about 15% type out. Reduced motion makes every change instant
-([motion](ui-ux-design.md#9-motion)).
+([motion](../ui-ux.md#9-motion)).
 
 ### 2.2 Signals
 
@@ -164,7 +164,7 @@ Rows read **conditions first, then happenings** (`spaceRows`).
 - **Does not re-summon itself** for the same discovery run once dismissed. An operator who closed it said they
   had seen enough; anything that genuinely needs them becomes a signal instead. A later worker event is a
   *new* run and may open the window again.
-- Otherwise it follows the standard [window rules](ui-ux-design.md#5-windows).
+- Otherwise it follows the standard [window rules](../ui-ux.md#5-windows).
 
 ---
 
@@ -203,7 +203,7 @@ Discovery step order: time → (create personality if missing) → read personal
 active project → check providers → release the prompt.
 
 Under reduced motion, animations become instant; phases and information remain
-([motion](ui-ux-design.md#9-motion)).
+([motion](../ui-ux.md#9-motion)).
 
 ---
 
@@ -222,7 +222,7 @@ register. A feature that needs a fourth surface belongs elsewhere.
 - `/workspace/_overseer/` is host-writable, untrusted import/export staging.
 - `/app/.overseer/` is container-owned internal state backed by the `overseer-memory` volume.
 
-They are neither mirrors nor halves of one store. See [container layout](architecture-design.md#5-container).
+They are neither mirrors nor halves of one store. See [data.md §1](../data.md#1-where-things-live).
 
 ### 6.1 The precedence rule
 
@@ -234,19 +234,12 @@ They are neither mirrors nor halves of one store. See [container layout](archite
 `/app/.overseer` is backed by a named volume and is not exposed through the workspace bind or accepted as a
 workspace path.
 
-```
-.overseer/
-  logs/            structured operation logs — one file per run (discovery, wizard, later agent/script/CLI runs)
-  actions.jsonl    append-only action register: timestamp, actor, action, outcome
-  state.json       last-known world snapshot — discovery results, last active project, theme
-  index.sqlite     planned usage history, session metadata, and search index
-```
+Its layout and record shapes — `logs/`, `actions.jsonl`, `state.json` — are
+[data.md §2](../data.md#2-internal-memory--appoverseer). Behaviourally:
 
 - **`actions.jsonl`** records every overseer action before it is reported.
 - **`state.json`** drives returning-instance behavior and remembers the active project and theme.
-- **`index.sqlite`** stores application indexes and estimates; it is not billing truth.
-- The server owns all access; current log/state access lives in
-  `packages/server/src/memory/internal.ts`.
+- The server owns all access (`packages/server/src/memory/internal.ts`).
 - `./bin/reset` discards this volume and `agent-home`. `reset overseer` in the settings panel empties the
   store from inside the running server and leaves auth alone (§6.5).
 
@@ -262,9 +255,8 @@ the signal reloads the app; discovery restores defaults on boot and reports it.
 That complaint describes an accident. A reset deletes the same file on purpose, so the wizard ignores the
 monitor's report while one is running (§6.5) — the reload it would ask for is already coming.
 
-The project appears in the normal project panel. Edit it on the host, in a project session, or through the
-[async side-task pattern](architecture-design.md#13-async-side-tasks-skills-and-subagent-editing). Its current
-contents are limited to the allowlisted presentation fields below.
+The project appears in the normal project panel. Edit it on the host, or in a console
+session in that project. Its current contents are limited to the allowlisted presentation fields below.
 
 ### 6.4 The customization boundary
 
@@ -296,7 +288,7 @@ Validation lives in `packages/server/src/memory/personality/`.
 
 `reset overseer` in the settings panel's danger row is the operator's way of making the overseer a stranger
 again. It is the one action that destroys memory, so it is the one action that blocks the interface to ask:
-a [decision](ui-ux-design.md#54-the-decision--the-one-surface-that-blocks) goes up, and until it is answered
+a [decision](../ui-ux.md#54-the-decision--the-one-surface-that-blocks) goes up, and until it is answered
 nothing else in the field can be clicked or tabbed to.
 
 **What a confirmed reset erases**, as one `memory.reset` frame handled in `packages/server/src/ws.ts`:

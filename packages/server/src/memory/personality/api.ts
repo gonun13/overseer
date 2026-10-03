@@ -26,7 +26,7 @@ import {
  * External memory — `overseer-personality`, an ordinary git project under the
  * workspace mount that the operator can edit like any other.
  *
- * It is **advisory input, not configuration with authority** (docs/overseer.md
+ * It is **advisory input, not configuration with authority** (spec/behaviour/overseer.md
  * §6.1). Internal memory always wins. This facade is the boundary that makes
  * that true: it reads the project's config, admits the fields on an allowlist,
  * and refuses everything else — including anything it does not recognise. An

@@ -24,7 +24,7 @@ import type {
  * That is the load-bearing property, not an implementation detail: nothing here
  * is reachable from the host or from any workspace project, which is the only
  * reason "internal memory takes precedence over `overseer-personality`"
- * (docs/overseer.md §6.1) is a rule and not a suggestion. Anything host-writable
+ * (spec/behaviour/overseer.md §6.1) is a rule and not a suggestion. Anything host-writable
  * is user-writable, and a rule the user can edit is not a rule.
  *
  * Deliberately plain files. This is an append-mostly audit trail read a few
@@ -74,7 +74,7 @@ function plansFile(): string {
 }
 
 /** Every action the overseer takes, before it is reported. Append-only, and
- * nothing in `overseer-personality` can filter it (docs/overseer.md §6.4). */
+ * nothing in `overseer-personality` can filter it (spec/behaviour/overseer.md §6.4). */
 export interface ActionRecord {
   at: string;
   /** Who initiated it. `overseer` is the component acting on its own. */

@@ -32,7 +32,7 @@ const AFTER_NAME_MS = 2000;
  *
  * During the wizard's opening phases the signal list is empty and the message
  * is the whole message — that is the "message-only" state a fresh instance
- * boots into, not a special mode (docs/overseer.md §4).
+ * boots into, not a special mode (spec/behaviour/overseer.md §4).
  */
 export function OverseerSpace({
   signals,
@@ -77,7 +77,7 @@ export function OverseerSpace({
   const asking = onSubmitName !== undefined;
   const pickingTone = onSubmitTone !== undefined;
   // The rule widens for the overseer's own urgency, not a session's — a
-  // session working normally never touches this (docs/overseer.md §3).
+  // session working normally never touches this (spec/behaviour/overseer.md §3).
   const busy = ACTIVITY_PULSES[message.activity];
   // Keep the typing hook mounted across ask → greet so "welcome, name" types
   // out instead of appearing in one frame (useOccasionalTyping skips mount).

@@ -108,7 +108,7 @@ export function useShellPresentation(
    * Only the words are chosen here; `activity` travels separately and is what
    * the status light beside the line reads. That split is what lets the
    * message be a sentence in the operator's tone without losing the severity
-   * the uppercase word used to carry (docs/overseer-behavior.md §2.1).
+   * the uppercase word used to carry (spec/behaviour/overseer.md §2.1).
    */
   const derived = messageFor(signals);
   const tone = wizard.personality.tone;
