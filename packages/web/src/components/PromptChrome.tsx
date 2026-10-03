@@ -6,7 +6,8 @@ interface PromptChromeProps {
   promptVisible: boolean;
   footerVisible: boolean;
   promptFocused: boolean;
-  rightInstrument?: ReactNode;
+  /** The provider widget — sits between the prompt and the footer. */
+  instrument?: ReactNode;
   onPromptFocus: () => void;
   onPromptBlur: () => void;
   onPromptSubmit: (input: string) => void;
@@ -14,12 +15,12 @@ interface PromptChromeProps {
   onOpenChangelog: () => void;
 }
 
-/** Bottom-of-field chrome for the prompt terminal and footer. */
+/** Foot of the right rail: the prompt, the provider instrument, the footer. */
 export function PromptChrome({
   promptVisible,
   footerVisible,
   promptFocused,
-  rightInstrument,
+  instrument,
   onPromptFocus,
   onPromptBlur,
   onPromptSubmit,
@@ -27,48 +28,45 @@ export function PromptChrome({
   onOpenChangelog,
 }: PromptChromeProps) {
   return (
-    <>
-      {rightInstrument}
-
-      <div className="dock">
-        {promptVisible && (
-          <Prompt
-            focused={promptFocused}
-            onFocus={onPromptFocus}
-            onBlur={onPromptBlur}
-            onSubmit={onPromptSubmit}
-          />
-        )}
-        {footerVisible && (
-          <p className="footer settles-in">
-            {/* The version is the changelog's own handle: an operator who
-                notices the number is the one asking what changed in it. Reads
-                as footer type until hovered — `.footer-link` inherits, so this
-                is a word you can click, not a control. */}
-            <button
-              type="button"
-              className="footer-link"
-              onClick={onOpenChangelog}
-            >
-              {overseerVersionLabel()}
-            </button>
-            {promptVisible && (
-              <>
-                {" "}
-                | ask for{" "}
-                <button
-                  type="button"
-                  className="footer-link"
-                  style={{ color: "var(--accent)" }}
-                  onClick={onOpenHelp}
-                >
-                  help
-                </button>
-              </>
-            )}
-          </p>
-        )}
-      </div>
-    </>
+    <div className="dock">
+      {promptVisible && (
+        <Prompt
+          focused={promptFocused}
+          onFocus={onPromptFocus}
+          onBlur={onPromptBlur}
+          onSubmit={onPromptSubmit}
+        />
+      )}
+      {instrument}
+      {footerVisible && (
+        <p className="footer settles-in">
+          {/* The version is the changelog's own handle: an operator who
+              notices the number is the one asking what changed in it. Reads
+              as footer type until hovered — `.footer-link` inherits, so this
+              is a word you can click, not a control. */}
+          <button
+            type="button"
+            className="footer-link"
+            onClick={onOpenChangelog}
+          >
+            {overseerVersionLabel()}
+          </button>
+          {promptVisible && (
+            <>
+              {" "}
+              | ask for{" "}
+              <button
+                type="button"
+                className="footer-link"
+                style={{ color: "var(--accent)" }}
+                onClick={onOpenHelp}
+              >
+                help
+              </button>
+            </>
+          )}
+        </p>
+      )}
+    </div>
   );
 }

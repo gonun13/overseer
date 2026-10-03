@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# The claude-code provider. Implements the provider contract from
+# The claude provider. Implements the provider contract from
 # bin/lib/providers.sh: check that the CLI is there, and open an interactive
-# session on it. Everything CLI-specific to claude-code lives in this file —
+# session on it. Everything CLI-specific to claude lives in this file —
 # orchestration and the step instructions never see a flag or a binary name.
 #
 # The session's cwd is the workspace project: the directory the operator asked
@@ -33,7 +33,7 @@ provider_check_available() {
 # directory chosen for the CLI's benefit rather than the operator's.
 provider_interactive_ready() {
   local dir=$1
-  local mod="$REPO_ROOT/packages/adapters/claude-code/dist/interactive-ready.js"
+  local mod="$REPO_ROOT/packages/adapters/claude/dist/interactive-ready.js"
 
   if [ ! -f "$mod" ]; then
     log_info "could not pre-set onboarding state ($mod is missing) — the CLI may ask you to trust '$dir'"
@@ -104,7 +104,7 @@ provider_session() {
 }
 
 # provider_list_models — this account's models, from the same `initialize`
-# control request the app's own adapter probes (packages/adapters/claude-code
+# control request the app's own adapter probes (packages/adapters/claude
 # /src/options.ts) — there is no plain-text `claude models` command. As JSON
 # on stdout: `{"models":[{"value","label"}...],"defaultModel"}`.
 #

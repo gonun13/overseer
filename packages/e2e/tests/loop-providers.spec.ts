@@ -14,14 +14,14 @@ test("switches to the loop tab and opens a provider's model window", async ({
   await page.getByRole("button", { name: "loop", exact: true }).click();
   await expect(page.getByText("loop provider")).toBeVisible();
 
-  // claude-code is always loop-runnable — the loop's own fallback default —
+  // claude is always loop-runnable — the loop's own fallback default —
   // so its row is a stable anchor regardless of which providers this
   // instance has installed or signed into.
-  const claudeRow = page.locator(".w-row", { hasText: "claude-code" });
+  const claudeRow = page.locator(".w-row", { hasText: "claude" });
   await expect(claudeRow).toBeVisible();
 
   await claudeRow.getByRole("button", { name: "models" }).click();
-  await expect(page.getByText("claude-code · step models")).toBeVisible();
+  await expect(page.getByText("claude · step models")).toBeVisible();
 
   // The overseer slot plus every loop step should be listed.
   await expect(page.locator(".loop-slot-name", { hasText: "overseer" })).toBeVisible();
@@ -43,16 +43,16 @@ test("shows a non-active provider's real models, not just a free-text field", as
   const cursorRow = page.locator(".w-row", { hasText: "cursor" });
   if ((await cursorRow.count()) === 0) test.skip();
 
-  // Make cursor the loop's active provider, so opening claude-code's model
+  // Make cursor the loop's active provider, so opening claude's model
   // window below is deliberately the non-active case — the bug this covers
   // was the model list only ever working for whichever provider happened to
   // be selected.
   await cursorRow.click();
   await expect(cursorRow).toContainText("▪");
 
-  const claudeRow = page.locator(".w-row", { hasText: "claude-code" });
+  const claudeRow = page.locator(".w-row", { hasText: "claude" });
   await claudeRow.getByRole("button", { name: "models" }).click();
-  await expect(page.getByText("claude-code · step models")).toBeVisible();
+  await expect(page.getByText("claude · step models")).toBeVisible();
 
   await page.locator(".loop-slot-head", { hasText: "overseer" }).click();
   // A real model list — not the free-text fallback, which has no listbox.

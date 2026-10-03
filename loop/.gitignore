@@ -2,7 +2,7 @@
 /db/
 
 # Local provider selection (loop/bin/provider). Default without this file is
-# claude-code; LOOP_PROVIDER still overrides at runtime when set.
+# claude; LOOP_PROVIDER still overrides at runtime when set.
 /.provider
 
 # Per-provider model allocation (loop/bin/models). Absent entirely falls back

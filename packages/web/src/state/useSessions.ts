@@ -35,6 +35,21 @@ export function metaToSession(meta: SessionMeta, running?: ConsoleInfo): Session
   };
 }
 
+/** A running console's session before its transcript reaches disk. */
+export function consoleToSession(running: ConsoleInfo): Session {
+  return {
+    id: running.sessionId!,
+    activity: consoleLight(running),
+    name: "new session",
+    projectId: running.projectPath,
+    providerId: running.providerId ?? "",
+    branch: "",
+    lastActiveAt: running.startedAt,
+    consoleId: running.id,
+    ...(running.kind === "loop" ? { origin: "loop" as const } : {}),
+  };
+}
+
 /**
  * Every provider session in the workspace, from the transcripts the CLIs
  * write. The server rebuilds and broadcasts the list whenever a transcript
@@ -77,9 +92,15 @@ export function useSessions(
     for (const c of consoles) {
       if (c.sessionId !== undefined && c.status === "running") running.set(c.sessionId, c);
     }
-    return metas
-      .map((meta) => metaToSession(meta, running.get(meta.id)))
-      .sort((a, b) => b.lastActiveAt.localeCompare(a.lastActiveAt));
+    const listed = new Set(metas.map((meta) => meta.id));
+    return [
+      ...metas.map((meta) => metaToSession(meta, running.get(meta.id))),
+      // A CLI writes its transcript only once the first turn lands, so a
+      // console just started is a session the index cannot see yet.
+      ...[...running.values()]
+        .filter((c) => !listed.has(c.sessionId!))
+        .map(consoleToSession),
+    ].sort((a, b) => b.lastActiveAt.localeCompare(a.lastActiveAt));
   }, [metas, consoles]);
 
   const deleteSession = useCallback(

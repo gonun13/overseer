@@ -23,7 +23,7 @@ function snapshot(providerId?: string): WorldSnapshot {
 
 function adapterWatching(dir: string | undefined): AgentAdapter {
   return {
-    id: "claude-code",
+    id: "claude",
     capabilities: {} as AgentAdapter["capabilities"],
     createSession: async () => {
       throw new Error("unused");
@@ -68,7 +68,7 @@ describe("startTranscriptMonitor", () => {
   it("watches the attached adapter's transcript directory", async () => {
     const watch = fakeWatch();
     const stop = startTranscriptMonitor(() => {}, {
-      readSnapshot: async () => snapshot("claude-code"),
+      readSnapshot: async () => snapshot("claude"),
       getAdapter: () => adapterWatching("/home/overseer/.claude/projects"),
       watchDir: watch.watchDir,
       debounceMs: 5,
@@ -116,7 +116,7 @@ describe("startTranscriptMonitor", () => {
         refreshes += 1;
       },
       {
-        readSnapshot: async () => snapshot("claude-code"),
+        readSnapshot: async () => snapshot("claude"),
         getAdapter: () => adapterWatching("/projects"),
         watchDir: watch.watchDir,
         debounceMs: 20,
@@ -141,7 +141,7 @@ describe("startTranscriptMonitor", () => {
         refreshes += 1;
       },
       {
-        readSnapshot: async () => snapshot("claude-code"),
+        readSnapshot: async () => snapshot("claude"),
         getAdapter: () => adapterWatching("/projects"),
         watchDir: watch.watchDir,
         debounceMs: 10,
@@ -169,7 +169,7 @@ describe("startTranscriptMonitor", () => {
         refreshes += 1;
       },
       {
-        readSnapshot: async () => snapshot("claude-code"),
+        readSnapshot: async () => snapshot("claude"),
         getAdapter: () => adapterWatching("/projects"),
         watchDir: watch.watchDir,
         debounceMs: 5,
@@ -194,7 +194,7 @@ describe("startTranscriptMonitor", () => {
         if (started === 1) await blocked;
       },
       {
-        readSnapshot: async () => snapshot("claude-code"),
+        readSnapshot: async () => snapshot("claude"),
         getAdapter: () => adapterWatching("/projects"),
         watchDir: watch.watchDir,
         debounceMs: 5,

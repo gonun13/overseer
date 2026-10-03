@@ -37,10 +37,10 @@ function harness(opts: { running?: string[]; loops?: string[] } = {}) {
   const broadcasts: ServerMessage[] = [];
   const deleted: string[] = [];
   const claude = fakeAdapter(
-    "claude-code",
+    "claude",
     {
-      "/workspace/a": [meta("c1", "claude-code", "/workspace/a", "2026-10-01T00:00:00Z")],
-      "/workspace/b": [meta("c2", "claude-code", "/workspace/b", "2026-10-02T00:00:00Z")],
+      "/workspace/a": [meta("c1", "claude", "/workspace/a", "2026-10-01T00:00:00Z")],
+      "/workspace/b": [meta("c2", "claude", "/workspace/b", "2026-10-02T00:00:00Z")],
     },
     deleted,
   );

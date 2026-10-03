@@ -36,7 +36,7 @@ export const cursorAdapter: AgentAdapter = {
   async getStatus(): Promise<AdapterStatus> {
     const status = await readAuthStatus();
     // No refreshUsage exists below — cursor exposes no subscription-window
-    // reading this adapter could ask for (unlike claude-code's `/usage`).
+    // reading this adapter could ask for (unlike claude's `/usage`).
     // Stamp `unavailable` up front, signed in or not, rather than leaving
     // `usageState` undefined: the widget's fallback reads an absent state on
     // an authenticated status as "pending" and shows a countdown for a

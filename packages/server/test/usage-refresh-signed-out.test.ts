@@ -41,7 +41,7 @@ async function seed(): Promise<void> {
     projects: [],
     providers: [
       {
-        id: "claude-code",
+        id: "claude",
         login: true,
         status: {
           authenticated: true,
@@ -60,10 +60,10 @@ describe("noteProviderSignedOut", () => {
     const frames: ServerMessage[] = [];
     startUsageRefresh((message) => frames.push(message));
 
-    await noteProviderSignedOut("claude-code", { authenticated: false });
+    await noteProviderSignedOut("claude", { authenticated: false });
 
     const snapshot = await readSnapshot();
-    const status = snapshot?.providers.find((p) => p.id === "claude-code")
+    const status = snapshot?.providers.find((p) => p.id === "claude")
       ?.status;
     assert.equal(status?.authenticated, false);
     assert.equal(status?.usageState, undefined);
@@ -78,10 +78,10 @@ describe("noteProviderSignedOut", () => {
     const frames: ServerMessage[] = [];
     startUsageRefresh((message) => frames.push(message));
 
-    await noteProviderSignedOut("claude-code", { authenticated: true });
+    await noteProviderSignedOut("claude", { authenticated: true });
 
     const snapshot = await readSnapshot();
-    const status = snapshot?.providers.find((p) => p.id === "claude-code")
+    const status = snapshot?.providers.find((p) => p.id === "claude")
       ?.status;
     assert.equal(status?.usageState, "ready");
     assert.equal(status?.usage?.length, 1);

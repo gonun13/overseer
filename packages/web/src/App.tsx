@@ -7,7 +7,7 @@ import { OverseerSpace } from "./components/OverseerSpace";
 import { ProjectPanel } from "./components/ProjectPanel";
 import { PromptChrome } from "./components/PromptChrome";
 import { ProviderWidget } from "./components/ProviderWidget";
-import { SessionPanel } from "./components/SessionPanel";
+import { SessionActions, SessionPanel } from "./components/SessionPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
 import { WindowStackHost } from "./components/WindowStackHost";
 import type { Session } from "./domain";
@@ -21,6 +21,7 @@ import {
 } from "./state/console-layout";
 import { useConsoles, type ConsoleOpenRequest } from "./state/useConsoles";
 import { useDiscovery } from "./state/useDiscovery";
+import { furnitureFor } from "./state/wizard";
 import { useLoopConfig } from "./state/useLoopConfig";
 import { usePromptSession } from "./state/usePromptSession";
 import { useSessions } from "./state/useSessions";
@@ -126,18 +127,22 @@ export default function App() {
   // stopped, only this tab's view of them did. Once per page, against the
   // first list the server sends — and nothing is saved before that, or the
   // empty desk of a fresh page would overwrite the layout it is about to
-  // restore.
+  // restore. Not before discovery has revealed the session panel: the field
+  // comes up in discovery's order, and the consoles are part of the field.
   const restored = useRef(false);
+  const sessionsRevealed = furnitureFor(wizard).sessions;
   useEffect(() => {
-    if (restored.current || !consoles.listed) return;
+    if (restored.current || !consoles.listed || !sessionsRevealed) return;
     restored.current = true;
     const byId = new Map(consoleList.map((c) => [c.id, c]));
     for (const saved of loadConsoleLayout()) {
       const info = byId.get(saved.consoleId);
       if (info === undefined) continue;
-      open("console", info.id, info.title, undefined, saved);
+      // Saved for which consoles were on the desk and in what order; the
+      // tile decides where.
+      open("console", info.id, info.title);
     }
-  }, [consoles.listed, consoleList, open]);
+  }, [consoles.listed, sessionsRevealed, consoleList, open]);
 
   useEffect(() => {
     if (restored.current) saveConsoleLayout(windows);
@@ -179,7 +184,7 @@ export default function App() {
     [close, forgetPending, windows],
   );
 
-  const tileConsoles = useCallback(() => tile("console"), [tile]);
+  const tileWindows = tile;
 
   /** Raise the console window furthest down the stack — repeated, it walks
    * through every one — and hand it the keyboard. */
@@ -289,16 +294,20 @@ export default function App() {
     openConsole({ kind: "loop", projectPath, takeover: true });
   }, [loopTakeoverFor, openConsole]);
 
-  const projectSessions = useMemo(
-    () => sessions.filter((session) => session.projectId === activeProject?.path),
-    [sessions, activeProject?.path],
-  );
-
   const running = useMemo(
     () => consoleList.filter((c) => c.status === "running"),
     [consoleList],
   );
-  const killConsole = consoles.kill;
+  /** Kill is deliberate: the console ends and goes — window, row and all —
+   * at once. Ending a CLI by signal exits non-zero (129 for a hangup), and
+   * left listed that read as a failure the overseer had to report. */
+  const killConsole = useCallback(
+    (id: string) => {
+      closeWhere((w) => w.kind === "console" && w.payload === id);
+      dismissConsole(id);
+    },
+    [closeWhere, dismissConsole],
+  );
   const killAllConsoles = useCallback(() => {
     for (const c of running) killConsole(c.id);
   }, [running, killConsole]);
@@ -330,9 +339,8 @@ export default function App() {
     openProjectSelector,
     toggleTheme,
     openLoop,
-    openConsole: () => newSession(),
     openShell: newShell,
-    tileConsoles,
+    tileWindows,
   });
   const focusPrompt = prompt.focus;
   const submitCommand = prompt.submit;
@@ -431,98 +439,120 @@ export default function App() {
     [newSession, open, openProjectSelector, openSettings, showConsoleById, startLogin],
   );
 
+  // The overseer docks into the right rail once the field is set up — the
+  // stage is for windows. Boot, the first-run asks and the goodbye are the
+  // whole of the field, so they keep the stage centre.
+  const overseerDocked = shell.furniture.sessions && wizard.reset !== "goodbye";
+  const overseerSpace = (
+    <OverseerSpace
+      docked={overseerDocked}
+      signals={shell.signals}
+      message={shell.message}
+      loading={shell.loading}
+      typingChance={shell.typingChance}
+      holdCaret={shell.holdCaret}
+      onGoodbyeClick={shell.onGoodbyeClick}
+      onFollow={followSignal}
+      onSubmitName={shell.askingName ? wizard.submitOperatorName : undefined}
+      namePrefix={shell.namePrefix}
+      onSubmitTone={shell.pickingTone ? wizard.submitOperatorTone : undefined}
+      selectedTone={wizard.personality.tone ?? "neutral"}
+      onMessageReady={wizard.onMessageReady}
+    />
+  );
+
   return (
     <>
       {/* `inert` rather than a scrim alone: a covering layer stops the mouse
           and nothing else, and the field behind a decision must not be
           reachable by Tab either. */}
       <div className="field" inert={deciding}>
-        {shell.furniture.projectPanel && (
-          <ProjectPanel
-            projects={shell.projects}
-            active={shell.activeProject}
-            open={projectsOpen}
-            onToggle={toggleProjects}
-            // Consoles are not scoped to the active project: every one keeps
-            // running, and its window stays where it is, across a switch.
-            onSelect={(project) => wizard.selectProject(project.path)}
-            onCreate={() => open("projectCreate")}
-            onManage={(project) =>
-              open("project", project.path, undefined, project.name)
-            }
-          />
-        )}
+        {/* Left rail: what to work on — the project, every project, every
+            console and session, and the ways to start another. */}
+        <aside className="rail rail-left">
+          {shell.furniture.activeProject && (
+            <ActiveProject
+              project={shell.activeProject}
+              onPick={openProjectSelector}
+              // No payload: `openWindow` targets whatever is active, the same
+              // path the readout is describing.
+              onOpen={() => openWindow("project")}
+            />
+          )}
 
-        {shell.furniture.activeProject && (
-          <ActiveProject
-            project={shell.activeProject}
-            onPick={openProjectSelector}
-            // No payload: `openWindow` targets whatever is active, the same
-            // path the readout is describing.
-            onOpen={() => openWindow("project")}
-          />
-        )}
+          {shell.furniture.projectPanel && (
+            <ProjectPanel
+              projects={shell.projects}
+              active={shell.activeProject}
+              open={projectsOpen}
+              onToggle={toggleProjects}
+              // Consoles are not scoped to the active project: every one keeps
+              // running, and its window stays where it is, across a switch.
+              onSelect={(project) => wizard.selectProject(project.path)}
+              onCreate={() => open("projectCreate")}
+              onManage={(project) =>
+                open("project", project.path, undefined, project.name)
+              }
+            />
+          )}
 
-        {shell.furniture.clock && <Clock onOpenSettings={openSettings} />}
-
-        <OverseerSpace
-          signals={shell.signals}
-          message={shell.message}
-          loading={shell.loading}
-          typingChance={shell.typingChance}
-          holdCaret={shell.holdCaret}
-          onGoodbyeClick={shell.onGoodbyeClick}
-          onFollow={followSignal}
-          onSubmitName={
-            shell.askingName ? wizard.submitOperatorName : undefined
-          }
-          namePrefix={shell.namePrefix}
-          onSubmitTone={
-            shell.pickingTone ? wizard.submitOperatorTone : undefined
-          }
-          selectedTone={wizard.personality.tone ?? "neutral"}
-          onMessageReady={wizard.onMessageReady}
-        />
-
-        {shell.furniture.sessions && (
-          <SessionPanel
-            consoles={consoleList}
-            sessions={projectSessions}
-            projectName={activeProject?.name}
-            open={sessionsOpen}
-            canStartSession={canStartSession}
-            onToggle={toggleSessions}
-            onShowConsole={showConsole}
-            onKillConsole={killConsole}
-            onDismissConsole={dismissConsole}
-            onSelectSession={openSession}
-            onDeleteSession={deleteSession}
-            onNewSession={() => newSession()}
-            onNewShell={newShell}
-            onTile={tileConsoles}
-          />
-        )}
-
-        <PromptChrome
-          promptVisible={shell.furniture.prompt}
-          footerVisible={shell.furniture.footer}
-          promptFocused={prompt.focused}
-          rightInstrument={
-            shell.furniture.providerWidget ? (
-              <ProviderWidget
-                provider={shell.provider}
-                usageCheck={usageCheck}
-                onOpenProviders={() => open("providers")}
-                onOpenConsole={() => newSession()}
+          {shell.furniture.sessions && (
+            <>
+              <SessionPanel
+                consoles={consoleList}
+                sessions={sessions}
+                projectPath={activeProject?.path}
+                projectName={activeProject?.name}
+                open={sessionsOpen}
+                onToggle={toggleSessions}
+                onShowConsole={showConsole}
+                onKillConsole={killConsole}
+                onDismissConsole={dismissConsole}
+                onSelectSession={openSession}
+                onDeleteSession={deleteSession}
               />
-            ) : undefined
-          }
-          onPromptFocus={focusPrompt}
-          onPromptBlur={prompt.blur}
-          onPromptSubmit={submitPrompt}
-          onOpenHelp={openHelp}
-          onOpenChangelog={openChangelog}
-        />
+              <SessionActions
+                canStartSession={canStartSession}
+                windowCount={windows.length}
+                onNewSession={() => newSession()}
+                onNewShell={newShell}
+                onTile={tileWindows}
+              />
+            </>
+          )}
+        </aside>
+
+        {/* The stage: windows only. Consoles tile it; everything else floats
+            inside it. Until the field is set up, the overseer speaks here. */}
+        <main className="stage">{!overseerDocked && overseerSpace}</main>
+
+        {/* Right rail: the machine — time and settings, the overseer, the
+            prompt, the provider, version and help. */}
+        <aside className="rail rail-right">
+          {shell.furniture.clock && <Clock onOpenSettings={openSettings} />}
+
+          {overseerDocked && overseerSpace}
+
+          <PromptChrome
+            promptVisible={shell.furniture.prompt}
+            footerVisible={shell.furniture.footer}
+            promptFocused={prompt.focused}
+            instrument={
+              shell.furniture.providerWidget ? (
+                <ProviderWidget
+                  provider={shell.provider}
+                  usageCheck={usageCheck}
+                  onOpenProviders={() => open("providers")}
+                />
+              ) : undefined
+            }
+            onPromptFocus={focusPrompt}
+            onPromptBlur={prompt.blur}
+            onPromptSubmit={submitPrompt}
+            onOpenHelp={openHelp}
+            onOpenChangelog={openChangelog}
+          />
+        </aside>
 
         <WindowStackHost
           windows={windows}

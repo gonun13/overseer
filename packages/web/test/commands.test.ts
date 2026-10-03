@@ -30,7 +30,7 @@ describe("matchCommand", () => {
   it("matches a canonical name or alias", () => {
     assert.equal(matchCommand("/help")?.name, "help");
     assert.equal(matchCommand("/HELP")?.name, "help");
-    assert.equal(matchCommand("/term")?.name, "console");
+    assert.equal(matchCommand("/bash")?.name, "shell");
   });
 
   it("ignores a bare slash and unknown names", () => {
@@ -38,8 +38,12 @@ describe("matchCommand", () => {
     assert.equal(matchCommand("/nope"), undefined);
   });
 
+  it("has no /console: every session is already a console", () => {
+    assert.equal(matchCommand("/console"), undefined);
+    assert.equal(matchCommand("/term"), undefined);
+  });
+
   it("starts consoles rather than opening a window", () => {
-    assert.deepEqual(matchCommand("/console")?.action, { type: "console" });
     assert.deepEqual(matchCommand("/bash")?.action, { type: "shell" });
     assert.deepEqual(matchCommand("/tile")?.action, { type: "tile" });
   });
@@ -72,8 +76,8 @@ describe("suggestCommands", () => {
       ["help"],
     );
     assert.deepEqual(
-      suggestCommands("/term").map((command) => command.name),
-      ["console"],
+      suggestCommands("/sh").map((command) => command.name),
+      ["shell"],
     );
   });
 });

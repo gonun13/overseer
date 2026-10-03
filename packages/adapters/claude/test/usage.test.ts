@@ -3,7 +3,7 @@ import { chmod, mkdtemp, readFile, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
-import { claudeCodeAdapter } from "../src/index.js";
+import { claudeAdapter } from "../src/index.js";
 import { parseUsageReport, readUsageWindows, withUsage } from "../src/usage.js";
 
 /**
@@ -168,13 +168,13 @@ exit 1
   });
 
   it("getStatus returns pending usage when signed in; refreshUsage fills windows", async () => {
-    const status = await claudeCodeAdapter.getStatus();
+    const status = await claudeAdapter.getStatus();
     assert.equal(status.authenticated, true);
     assert.equal(status.version, "2.1.226");
     assert.equal(status.usageState, "pending");
     assert.equal(status.usage, undefined);
 
-    const refreshed = await claudeCodeAdapter.refreshUsage!();
+    const refreshed = await claudeAdapter.refreshUsage!();
     assert.equal(refreshed.usageState, "ready");
     assert.equal(refreshed.usage?.[0]?.used, 0.16);
     assert.equal(refreshed.usage?.[1]?.used, 0.11);
@@ -202,7 +202,7 @@ exit 1
     );
     await chmod(claude, 0o755);
     try {
-      const status = await claudeCodeAdapter.refreshUsage!();
+      const status = await claudeAdapter.refreshUsage!();
       assert.equal(status.authenticated, false);
       assert.equal(status.usageState, undefined);
       assert.equal(status.usage, undefined);

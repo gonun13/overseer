@@ -110,11 +110,18 @@ export function useConsoles(
     setPending((current) => current.filter((p) => p.reqId !== reqId));
   }, []);
 
-  const kill = useCallback((id: string) => send({ type: "console.kill", id }), [send]);
+  /** Forget a console: the server ends it if it is still running and drops
+   * it from the list. Removed here at once rather than on the server's next
+   * list, so its row and window go the moment the operator asks. This is
+   * also what kill is — an operator's kill is deliberate, so it is never an
+   * exit to report or a row to dismiss afterwards. */
   const dismiss = useCallback(
-    (id: string) => send({ type: "console.dismiss", id }),
+    (id: string) => {
+      setConsoles((current) => current.filter((c) => c.id !== id));
+      send({ type: "console.dismiss", id });
+    },
     [send],
   );
 
-  return { consoles, listed, pending, open, forgetPending, kill, dismiss };
+  return { consoles, listed, pending, open, forgetPending, dismiss };
 }

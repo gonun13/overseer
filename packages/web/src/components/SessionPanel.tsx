@@ -4,14 +4,17 @@ import { ChevronIcon, CloseIcon, StopIcon, TrashIcon } from "./icons";
 import type { Session } from "../domain";
 import { ACTIVITY_RANK, type Activity } from "../status";
 import { consoleLight } from "../state/useConsoles";
+import { railGroups } from "../state/session-rail";
 
 /**
- * Bottom-left. Two lists that open upward over a readout header:
+ * Left rail, under the project panel. A readout header over two groups
+ * (`railGroups`):
  *
- * - every console the server is running, in any project — the dock windows
- *   come back from, since closing a console window only detaches it;
- * - the active project's sessions, lit by the console running each one.
- *   Picking one shows its console, or resumes it in a new one.
+ * - sessions: every agent and loop console the server is running, in any
+ *   project — the dock windows come back from, since closing a console window
+ *   only detaches it — then the active project's sessions no console holds.
+ *   Picking one shows its console, or resumes it in a new one;
+ * - shells: every plain shell.
  *
  * Selecting never closes the panel: like the project panel this is a status
  * list first, and the lights are how agents in flight are seen at all.
@@ -19,35 +22,30 @@ import { consoleLight } from "../state/useConsoles";
 export function SessionPanel({
   consoles,
   sessions,
+  projectPath,
   projectName,
   open,
-  canStartSession,
   onToggle,
   onShowConsole,
   onKillConsole,
   onDismissConsole,
   onSelectSession,
   onDeleteSession,
-  onNewSession,
-  onNewShell,
-  onTile,
 }: {
   consoles: ConsoleInfo[];
+  /** Every session in the workspace; the rail scopes the dormant ones. */
   sessions: Session[];
+  projectPath?: string;
   projectName?: string;
   open: boolean;
-  /** An attached, signed-in provider — otherwise "new session" is hidden. */
-  canStartSession: boolean;
   onToggle: () => void;
   onShowConsole: (console: ConsoleInfo) => void;
   onKillConsole: (id: string) => void;
   onDismissConsole: (id: string) => void;
   onSelectSession: (session: Session) => void;
   onDeleteSession: (id: string) => void;
-  onNewSession: () => void;
-  onNewShell: () => void;
-  onTile: () => void;
 }) {
+  const groups = railGroups(consoles, sessions, projectPath);
   const running = consoles.filter((c) => c.status === "running");
   const hottest = consoles
     .map(consoleLight)
@@ -58,113 +56,9 @@ export function SessionPanel({
 
   return (
     <section className="sessions settles-in">
-      <div className={`sessions-list ${open ? "open" : ""}`}>
-        <p className="sessions-section">consoles</p>
-        {consoles.length === 0 && <p className="sessions-empty">none running</p>}
-        {consoles.map((c) => (
-          <div
-            key={c.id}
-            role="button"
-            tabIndex={0}
-            className="session-row"
-            onClick={() => onShowConsole(c)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onShowConsole(c);
-              }
-            }}
-          >
-            <StatusLight activity={consoleLight(c)} />
-            <span className="session-row-name">{c.title}</span>
-            <span className="session-row-note">
-              {c.status === "exited" ? "exited" : c.activity === "waiting" ? "waiting" : c.kind}
-            </span>
-            {c.status === "running" ? (
-              <button
-                className="session-row-stop"
-                aria-label={`kill ${c.title}`}
-                title="kill"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onKillConsole(c.id);
-                }}
-              >
-                <StopIcon />
-              </button>
-            ) : (
-              <button
-                className="session-row-delete"
-                aria-label={`dismiss ${c.title}`}
-                title="dismiss"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDismissConsole(c.id);
-                }}
-              >
-                <CloseIcon />
-              </button>
-            )}
-          </div>
-        ))}
-
-        <p className="sessions-section">sessions · {projectName ?? "no project"}</p>
-        {sessions.length === 0 && <p className="sessions-empty">no sessions yet</p>}
-        {sessions.map((session) => (
-          <div
-            key={session.id}
-            role="button"
-            tabIndex={0}
-            className={`session-row ${session.consoleId !== undefined ? "current" : ""}`}
-            onClick={() => onSelectSession(session)}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                onSelectSession(session);
-              }
-            }}
-          >
-            <StatusLight activity={session.activity} />
-            <span className="session-row-name">{session.name}</span>
-            <span className="session-row-note">{session.branch || session.providerId}</span>
-            {/* Not while a CLI is writing the transcript — a running console
-                or a loop run — since deleting it from under that process
-                would only have it rewritten. */}
-            {session.origin !== "loop" && session.consoleId === undefined && (
-              <button
-                className="session-row-delete"
-                aria-label={`delete ${session.name}`}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onDeleteSession(session.id);
-                }}
-              >
-                <TrashIcon />
-              </button>
-            )}
-          </div>
-        ))}
-
-        <div className="sessions-actions">
-          {canStartSession && (
-            <button className="session-row session-new" onClick={onNewSession}>
-              + new session
-            </button>
-          )}
-          <button className="session-row session-new" onClick={onNewShell}>
-            + shell
-          </button>
-          {running.length > 1 && (
-            <button className="session-row session-new" onClick={onTile}>
-              tile
-            </button>
-          )}
-        </div>
-      </div>
-
       <div className="sessions-head">
         <StatusLight activity={hottest} size={10} />
-        <span className="sessions-kicker">consoles</span>
+        <span className="sessions-kicker">sessions</span>
         <span className="sessions-value">
           {running.length === 0 ? "none" : `${running.length} running`}
         </span>
@@ -177,6 +71,178 @@ export function SessionPanel({
           <ChevronIcon open={open} />
         </button>
       </div>
+      <div className={`sessions-list ${open ? "open" : ""}`}>
+        <p className="sessions-section">sessions · {projectName ?? "no project"}</p>
+        {groups.sessions.length === 0 && <p className="sessions-empty">no sessions yet</p>}
+        {groups.sessions.map((row) =>
+          row.kind === "console" ? (
+            <ConsoleRow
+              key={row.console.id}
+              console={row.console}
+              name={row.name}
+              note={consoleNote(row.console, projectPath)}
+              onShow={onShowConsole}
+              onKill={onKillConsole}
+              onDismiss={onDismissConsole}
+            />
+          ) : (
+            <div
+              key={row.session.id}
+              role="button"
+              tabIndex={0}
+              className="session-row"
+              onClick={() => onSelectSession(row.session)}
+              onKeyDown={(e) => {
+                if (e.key === "Enter" || e.key === " ") {
+                  e.preventDefault();
+                  onSelectSession(row.session);
+                }
+              }}
+            >
+              <StatusLight activity={row.session.activity} />
+              <span className="session-row-name">{row.session.name}</span>
+              <span className="session-row-note">
+                {row.session.branch || row.session.providerId}
+              </span>
+              {/* Not for a loop run's transcript, which its lease owns. A
+                  session a console is running is listed as that console. */}
+              {row.session.origin !== "loop" && (
+                <button
+                  className="session-row-delete"
+                  aria-label={`delete ${row.session.name}`}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onDeleteSession(row.session.id);
+                  }}
+                >
+                  <TrashIcon />
+                </button>
+              )}
+            </div>
+          ),
+        )}
+
+        <p className="sessions-section">shells</p>
+        {groups.shells.length === 0 && <p className="sessions-empty">none running</p>}
+        {groups.shells.map((c) => (
+          <ConsoleRow
+            key={c.id}
+            console={c}
+            name={c.title}
+            note={consoleNote(c, projectPath)}
+            onShow={onShowConsole}
+            onKill={onKillConsole}
+            onDismiss={onDismissConsole}
+          />
+        ))}
+      </div>
     </section>
+  );
+}
+
+/** What a console row says beside its name: its state when that is news,
+ * otherwise where it runs when that is not the active project. */
+function consoleNote(c: ConsoleInfo, projectPath: string | undefined): string {
+  if (c.status === "exited") return "exited";
+  if (c.activity === "waiting") return "waiting";
+  if (c.projectPath !== projectPath) return c.projectPath.split("/").pop() ?? c.projectPath;
+  return c.kind === "agent" ? (c.providerId ?? c.kind) : c.kind;
+}
+
+function ConsoleRow({
+  console: c,
+  name,
+  note,
+  onShow,
+  onKill,
+  onDismiss,
+}: {
+  console: ConsoleInfo;
+  name: string;
+  note: string;
+  onShow: (console: ConsoleInfo) => void;
+  onKill: (id: string) => void;
+  onDismiss: (id: string) => void;
+}) {
+  return (
+    <div
+      role="button"
+      tabIndex={0}
+      className={`session-row ${c.status === "running" && c.kind !== "shell" ? "current" : ""}`}
+      onClick={() => onShow(c)}
+      onKeyDown={(e) => {
+        if (e.key === "Enter" || e.key === " ") {
+          e.preventDefault();
+          onShow(c);
+        }
+      }}
+    >
+      <StatusLight activity={consoleLight(c)} />
+      <span className="session-row-name">{name}</span>
+      <span className="session-row-note">{note}</span>
+      {c.status === "running" ? (
+        <button
+          className="session-row-stop"
+          aria-label={`kill ${name}`}
+          title="kill"
+          onClick={(e) => {
+            e.stopPropagation();
+            onKill(c.id);
+          }}
+        >
+          <StopIcon />
+        </button>
+      ) : (
+        <button
+          className="session-row-delete"
+          aria-label={`dismiss ${name}`}
+          title="dismiss"
+          onClick={(e) => {
+            e.stopPropagation();
+            onDismiss(c.id);
+          }}
+        >
+          <CloseIcon />
+        </button>
+      )}
+    </div>
+  );
+}
+
+/**
+ * Foot of the left rail: the ways a console starts. `tile` only once there is
+ * more than one window to lay out — the stage re-tiles on its own whenever
+ * one opens or closes, so this is the way back after a drag or resize.
+ */
+export function SessionActions({
+  canStartSession,
+  windowCount,
+  onNewSession,
+  onNewShell,
+  onTile,
+}: {
+  /** An attached, signed-in provider — otherwise "new session" is hidden. */
+  canStartSession: boolean;
+  windowCount: number;
+  onNewSession: () => void;
+  onNewShell: () => void;
+  onTile: () => void;
+}) {
+  return (
+    <div className="sessions-actions settles-in">
+      {canStartSession && (
+        <button className="rail-btn" onClick={onNewSession}>
+          + new session
+        </button>
+      )}
+      <button className="rail-btn" onClick={onNewShell}>
+        + shell
+      </button>
+      {windowCount > 1 && (
+        <button className="rail-btn" onClick={onTile}>
+          tile
+        </button>
+      )}
+    </div>
   );
 }

@@ -13,14 +13,14 @@
 ```
 bin/                  docker shortcuts — the only supported way to run anything
 providers/            one directory per agent CLI, read by the app and the loop alike
-                      (claude-code, cursor, codex, opencode, github-copilot)
+                      (claude, cursor, codex, opencode, github-copilot)
 packages/
   protocol/           shared TS types — the frontend/backend/adapter contract
   web/                React + Vite + Tailwind SPA
   server/             Node: WS + REST, static SPA host, adapter registry, console registry,
                       session index, CLI hook endpoint
   adapters/
-    claude-code/      Claude Code adapter — login, usage, console command line + hooks, transcripts
+    claude/      Claude Code adapter — login, usage, console command line + hooks, transcripts
     cursor/           Cursor adapter — login, usage, console command line, transcripts
   e2e/                Playwright acceptance tests (container-only)
 loop/                 the dev-loop CLI — bash, a provider CLI, and plain files
@@ -30,7 +30,7 @@ loop/                 the dev-loop CLI — bash, a provider CLI, and plain files
 
 **A harness, not a replacement.** Every agent interaction happens in the provider's own CLI, running in a PTY the server owns and the browser shows through xterm.js (§1.2). Overseer does not re-implement what the CLIs already do — transcripts, approvals, models, agents, skills, plans are all the CLI's own. What it adds is the desk around them: many consoles across many projects at once, a session list across all of them, monitoring, projects, git, auth and the dev loop. Adapters translate the few provider-specific things that remain — how to log in, how to read usage, what command line starts or resumes a session, where transcripts live — into `protocol/`. Catalog stubs live in the server registry (`stub-adapters.ts`) until they earn a real `packages/adapters/<id>/` package.
 
-**Provider vs adapter.** Two words for the two sides of the same id string (`"claude-code"`, `"codex"`, …):
+**Provider vs adapter.** Two words for the two sides of the same id string (`"claude"`, `"codex"`, …):
 
 | Term         | Layer            | Where it appears                                                                                                              |
 | ------------ | ---------------- | ----------------------------------------------------------------------------------------------------------------------------- |
@@ -43,7 +43,7 @@ One provider is attached at a time, and it is backed by exactly one adapter.
 
 ```typescript
 interface AgentAdapter {
-  id: string; // "claude-code"
+  id: string; // "claude"
   capabilities: AdapterCapabilities; // { login, usageCheck }
   getStatus(): Promise<AdapterStatus>;
   refreshUsage?(): Promise<AdapterStatus>;
@@ -76,7 +76,7 @@ open a session on it — `provider.sh` plus that provider's own config tree.
 
 ```json
 {
-  "id": "claude-code",
+  "id": "claude",
   "cli": "claude",
   "configDir": ".claude",
   "install": { "kind": "npm", "spec": "@anthropic-ai/claude-code@2.1.226" },
@@ -89,7 +89,7 @@ A provider can be implemented on one side, the other, or both, which is what the
 two role fields say. `app` is `adapter` when this server has real wiring,
 `stub` when the CLI is in the image but sessions/auth/console are not built yet,
 `none` when the app should not list it at all. `loop` is `bundle` when the
-directory carries `provider.sh`, `none` otherwise. `claude-code` and `cursor`
+directory carries `provider.sh`, `none` otherwise. `claude` and `cursor`
 are both `adapter`/`bundle` today: the loop runs on either and the app has real
 wiring for either. `loopSubagents: "unverified"` on `cursor` is a narrower
 claim than its adapter's `subagents` capability — the adapter reads and writes
@@ -450,7 +450,7 @@ The repo is private and unpublished. Every workspace package stays in **lockstep
 | `@overseer/protocol`            | shared types                  |
 | `@overseer/web`                 | SPA — footer reads root version via `appVersion.ts` |
 | `@overseer/server`              | API / WS                      |
-| `@overseer/adapter-claude-code` | adapter                       |
+| `@overseer/adapter-claude` | adapter                       |
 | `@overseer/adapter-cursor`      | adapter                       |
 | `@overseer/e2e`                 | Playwright suite              |
 
@@ -476,11 +476,11 @@ and a startup check that refuses to run and prints what to do. Neither is option
 | --------- | --------------- | -------- |
 | `0.0.x`   | —               | Scaffold only: repo layout, container, no behavioral spec live. |
 | `0.1.x`   | [overseer-behavior.md](overseer-behavior.md) | **Overseer shell** — wizard phases (§4), progressive furniture (§4), internal memory (§6.2), `overseer-personality` (§6.3), workspace discovery, provider status surfacing via `getStatus()`. The overseer path uses real server state; other windows stay empty until live APIs land. |
-| `0.2.x`   | §1 (process model), §3 rows 1–2 + 5, §9 | **Live sessions & providers** — stream-json sessions that spawn, stream, resume and delete, for **two** real adapters (`claude-code`, `cursor`), each declaring its own `AdapterCapabilities`; session controls populated from the CLI's own report; runtime `set_model` and `set_permission_mode`; project creation into `/workspace`; the dev loop (§9) driven from inside the app. Approvals, capabilities and turn context are **not** in this tier — their windows exist and declare themselves unavailable. |
+| `0.2.x`   | §1 (process model), §3 rows 1–2 + 5, §9 | **Live sessions & providers** — stream-json sessions that spawn, stream, resume and delete, for **two** real adapters (`claude`, `cursor`), each declaring its own `AdapterCapabilities`; session controls populated from the CLI's own report; runtime `set_model` and `set_permission_mode`; project creation into `/workspace`; the dev loop (§9) driven from inside the app. Approvals, capabilities and turn context are **not** in this tier — their windows exist and declare themselves unavailable. |
 | `0.3.x`   | [ui-ux-design.md](ui-ux-design.md) §5.5 | **The working tree, readable** — a changed file in the project window opens to its unified diff against the last commit, with a toggle to the file's current contents. Modified, added, deleted, renamed, untracked, binary and no-commits-yet all render honestly rather than as an empty frame, and a diff too large to show is clipped and says so. Diffs of a *tool turn's* own `Edit`/`Write` input stay out of tier — that entry point keeps its unavailable note until a turn target can be resolved to a project and a file. |
-| `0.4.x`   | §1.3, §3 row "Skills inventory + import" | **Skills, importable** — the capabilities window's skills tab lists what the attached provider's CLI will actually resolve, across both scopes, and imports from a git url or files off the operator's machine. Both published shapes are accepted: a folder holding a `SKILL.md`, and a flat `<name>.md` whose frontmatter carries a description, which is wrapped into the folder the CLI expects. A source holding several installs all of them, skipping `_`-prefixed templates and anything already present. Each adapter owns its own layout and its own import: `claude-code` writes `.claude/skills`, `cursor` writes `.cursor/skills` and additionally *lists* the four other config directories its CLI reads, marked as belonging elsewhere and refused for delete. Skills reach app sessions with no injection step, because both CLIs already discover the directories the adapter writes to. MCP stays unavailable, and authoring a skill's prose in place (§1.3) is out of tier. |
+| `0.4.x`   | §1.3, §3 row "Skills inventory + import" | **Skills, importable** — the capabilities window's skills tab lists what the attached provider's CLI will actually resolve, across both scopes, and imports from a git url or files off the operator's machine. Both published shapes are accepted: a folder holding a `SKILL.md`, and a flat `<name>.md` whose frontmatter carries a description, which is wrapped into the folder the CLI expects. A source holding several installs all of them, skipping `_`-prefixed templates and anything already present. Each adapter owns its own layout and its own import: `claude` writes `.claude/skills`, `cursor` writes `.cursor/skills` and additionally *lists* the four other config directories its CLI reads, marked as belonging elsewhere and refused for delete. Skills reach app sessions with no injection step, because both CLIs already discover the directories the adapter writes to. MCP stays unavailable, and authoring a skill's prose in place (§1.3) is out of tier. |
 | `0.5+`    | TBD             | Reserve the next MINOR for the next coherent pre-MVP tier once it is written into a design doc and given a row in this table. Do not invent a number in advance. |
-| `1.0.0`   | §3 **MVP**      | **Core loop** — every row in the MVP table (§3) works end-to-end for `claude-code`: spawn/resume sessions, stream transcript + tools, inline approval, model/mode controls, subscription login from the UI, usage surfacing, crash/auth failure handling. |
+| `1.0.0`   | §3 **MVP**      | **Core loop** — every row in the MVP table (§3) works end-to-end for `claude`: spawn/resume sessions, stream transcript + tools, inline approval, model/mode controls, subscription login from the UI, usage surfacing, crash/auth failure handling. |
 | `1.x`     | §3 **Important**| Additive features from the Important tier. Each MINOR should map to a closed subset of that table (call it out in release notes). |
 | `2.x+`    | §3 **Nice to have** + later providers | Major product expansion; breaking protocol or UX contract bumps MAJOR. |
 
@@ -495,7 +495,7 @@ empty frame that reads as a working-but-idle surface
 (`codex`, `opencode`, `github-copilot`) are also out of tier. The raw OPEN CONSOLE PTY escape hatch
 (ui-ux-design.md §5.3) is separate from the MVP "Console" zone in §3 and shipped in `0.1.x`.
 
-**Explicit non-goals for `0.4.x`:** skills in dev-loop sessions. `providers/claude-code/provider.sh`
+**Explicit non-goals for `0.4.x`:** skills in dev-loop sessions. `providers/claude/provider.sh`
 runs the CLI with `--setting-sources ""` so the loop bundle reads only its own settings file, and
 that switch suppresses skill discovery in both scopes — verified against `claude 2.1.226`, where a
 skill that resolves normally answers `Unknown command` under the flag. Widening it is not the fix:
@@ -621,14 +621,14 @@ shared registry at `providers/<id>/` (§1.1.2) — `manifest.json` plus
 because a provider's whole job is to open one session. **Invariant:** the only
 config a session sees is its own bundle's — never `loop/` root, never another
 provider. Each bundle enforces that with whatever its CLI gives it, and the two
-differ: `claude-code` takes `--settings <file>` with `--setting-sources ""`, so
+differ: `claude` takes `--settings <file>` with `--setting-sources ""`, so
 no discovery runs at all, while `cursor` has no config-path flag and pins the
 process's working directory to the bundle instead. Stating the mechanism per
 bundle rather than as one sentence matters, because the weaker form is only as
 good as the CLI's preference for the nearest config — and the repo root is
 itself a git root carrying `.claude/`. **The session's workspace is always the
 project**, never the bundle: the operator asked for a project, and `implement`
-edits one. Both `claude-code` (CLI `claude`) and
+edits one. Both `claude` (CLI `claude`) and
 `cursor` (CLI `agent`) are real implementations; which one runs is the loop's
 own choice, in `loop/.provider`, and stays separate from the app's
 `attached_provider` (§2). `loop/bin/check-providers` lints that a provider's

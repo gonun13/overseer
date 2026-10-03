@@ -1,5 +1,6 @@
 import { useEffect, useRef, useState, type ReactNode } from "react";
 import type { Activity } from "../status";
+import { stageBounds } from "../layout";
 import { CloseIcon, ResizeIcon } from "./icons";
 import { StatusLight } from "./StatusLight";
 
@@ -39,7 +40,8 @@ export function Window({
   y: number;
   z: number;
   width: number;
-  /** Body height when resizable. Absent = CSS max-height default. */
+  /** Whole window height, tab included — every tiled window has one. Absent
+   * = the body's CSS max-height default. */
   height?: number;
   /** `console` fills flush; `session` fills the body so the transcript can grow.
    * Either may expose a resize grip when `onResize` is set. */
@@ -83,16 +85,17 @@ export function Window({
 
     function onPointerMove(e: PointerEvent) {
       if (!drag.current) return;
-      // Keep the whole frame on-screen horizontally: a window that hangs off the
-      // right edge is the one thing that could make the field scroll sideways.
+      // Keep the whole frame on the stage horizontally — windows never cross
+      // onto a rail — and enough of the tab below its top to grab it back.
+      const stage = stageBounds();
       onMove(
         Math.max(
-          0,
-          Math.min(window.innerWidth - width, e.clientX - drag.current.dx),
+          stage.left,
+          Math.min(stage.right - width, e.clientX - drag.current.dx),
         ),
         Math.max(
-          28,
-          Math.min(window.innerHeight - 60, e.clientY - drag.current.dy),
+          stage.top,
+          Math.min(stage.bottom - 60, e.clientY - drag.current.dy),
         ),
       );
     }
@@ -114,17 +117,18 @@ export function Window({
 
     function onPointerMove(e: PointerEvent) {
       if (!resize.current) return;
+      const stage = stageBounds();
       const nextW = Math.max(
         MIN_WIDTH,
         Math.min(
-          window.innerWidth - x - 16,
+          stage.right - x,
           resize.current.startW + (e.clientX - resize.current.startX),
         ),
       );
       const nextH = Math.max(
         MIN_HEIGHT,
         Math.min(
-          window.innerHeight - y - 48,
+          stage.bottom - y,
           resize.current.startH + (e.clientY - resize.current.startY),
         ),
       );
@@ -143,15 +147,10 @@ export function Window({
     };
   }, [resizing, onResize, x, y]);
 
-  const bodyStyle =
-    height !== undefined && expanded
-      ? { maxHeight: "none" as const, height }
-      : undefined;
-
   return (
     <div
-      className={`window ${variant ? `window-${variant}` : ""} ${dragging || resizing ? "dragging" : ""}`}
-      style={{ left: x, top: y, width, zIndex: z }}
+      className={`window ${variant ? `window-${variant}` : ""} ${height !== undefined ? "window-sized" : ""} ${dragging || resizing ? "dragging" : ""}`}
+      style={{ left: x, top: y, width, height, zIndex: z }}
       data-window-id={windowId}
       onPointerDown={(e) => {
         onRaise();
@@ -172,34 +171,41 @@ export function Window({
         ) : (
           <span style={{ color: "var(--mark-fill)" }}>▽</span>
         )}
-        <span style={{ opacity: 0.5, fontSize: 12 }}>///</span>
-        <span>{title}</span>
+        <span className="window-tab-sep" aria-hidden>
+          ///
+        </span>
+        <span className="window-tab-title" title={title}>
+          {title}
+        </span>
         {detail !== undefined && detail !== "" && (
           <>
             <span className="window-tab-detail" aria-hidden>
               ·
             </span>
-            <span className="window-tab-detail">{detail}</span>
+            <span className="window-tab-detail window-tab-project" title={detail}>
+              {detail}
+            </span>
           </>
         )}
-        {actions}
-        <button
-          className="tab-close"
-          onClick={onClose}
-          title={closeLabel}
-          aria-label={
-            detail !== undefined && detail !== ""
-              ? `${closeLabel ?? "close"} ${title} ${detail}`
-              : `${closeLabel ?? "close"} ${title}`
-          }
-        >
-          <CloseIcon />
-        </button>
+        <span className="window-tab-end">
+          {actions}
+          <button
+            className="tab-close"
+            onClick={onClose}
+            title={closeLabel ?? "close"}
+            aria-label={
+              detail !== undefined && detail !== ""
+                ? `${closeLabel ?? "close"} ${title} ${detail}`
+                : `${closeLabel ?? "close"} ${title}`
+            }
+          >
+            <CloseIcon />
+          </button>
+        </span>
       </div>
       <div className="window-frame">
         <div
           className={`window-body no-drag ${expanded ? "expanded" : ""}`}
-          style={bodyStyle}
         >
           {children}
         </div>

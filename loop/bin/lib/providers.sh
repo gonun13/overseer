@@ -65,7 +65,7 @@ resolve_provider_id() {
     fi
   fi
 
-  printf 'claude-code'
+  printf 'claude'
 }
 
 # list_provider_ids — one id per line for every bundle the loop can run.

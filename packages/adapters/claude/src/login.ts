@@ -382,7 +382,7 @@ export function startLogin(
             await ensureInteractiveReady();
           } catch (error) {
             console.error(
-              "adapter-claude-code: could not mark interactive onboarding complete",
+              "adapter-claude: could not mark interactive onboarding complete",
               error,
             );
           }

@@ -10,7 +10,7 @@ import type { SessionMeta } from "@overseer/protocol";
  *   ~/.cursor/projects/<slug>/agent-transcripts/<chatId>/<chatId>.jsonl
  *   ~/.cursor/chats/<hash>/<chatId>/meta.json      {createdAtMs, updatedAtMs, cwd, ...}
  *
- * `<slug>` looked collision-prone the way claude-code's own project slug is
+ * `<slug>` looked collision-prone the way claude's own project slug is
  * (a lossy sanitize of the path, not a reversible encoding), so this never
  * inverts one — `.workspace-trusted`'s `workspacePath` is the exact original
  * path instead, written every time this adapter opens a session (it always
@@ -233,7 +233,7 @@ export async function deleteSession(projectDir: string, sessionId: string): Prom
 }
 
 /** Directory the server watches for sessions this adapter did not start —
- * one level above the per-project slugs, same reasoning as claude-code's. */
+ * one level above the per-project slugs, same reasoning as claude's. */
 export function sessionsWatchPath(): string {
   return projectsRoot();
 }

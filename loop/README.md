@@ -49,7 +49,7 @@ Anything under `loop/bin/` can be run the same way — `./bin/loop list personal
 reads what is open without starting a session.
 
 Which provider runs the overseer is controlled by `loop/.provider` (local,
-gitignored; defaults to `claude-code` when absent) or a one-off
+gitignored; defaults to `claude` when absent) or a one-off
 `LOOP_PROVIDER=<id>` environment override. Use `loop/bin/provider` to list and
 pick one.
 
@@ -232,7 +232,7 @@ context with zero parsing — a later step can read it straight into a prompt, o
 copy sections of it into a skill or command file. Frontmatter carries the few
 fields that need to stay structured (`id`, `status`, `step`, …), using the same
 tolerant, line-based convention
-`packages/adapters/claude-code/src/custom-agents.ts` already uses for
+`packages/adapters/claude/src/custom-agents.ts` already uses for
 `.claude/agents/*.md` — no YAML library.
 
 ## Steps
@@ -574,7 +574,7 @@ provider_session <prompt> <workspace_dir>
 **Invariant:** when a provider is active, the only config the session sees is
 that bundle's own — never `loop/` root, never the repo's own, never another
 provider's tree. How that is enforced is the bundle's business, because it
-depends on what its CLI offers: `claude-code` is handed its settings file by
+depends on what its CLI offers: `claude` is handed its settings file by
 name with discovery switched off entirely, while `cursor` has no config-path
 flag, so its bundle keeps the process's working directory on itself.
 
@@ -583,7 +583,7 @@ the operator named and the one `implement` edits. Only the weaker of the two
 CLIs ties config to that same directory, and it is the one whose cwd therefore
 stays on the bundle; neither opens the operator onto a config folder.
 
-Real providers today: `claude-code` (`providers/claude-code/`, CLI `claude`) and
+Real providers today: `claude` (`providers/claude/`, CLI `claude`) and
 `cursor` (`providers/cursor/`, CLI `agent`). Which one the *loop* runs stays its
 own choice, in `loop/.provider`: Overseer's "currently attached provider" is
 about the app's own sessions, and the two are deliberately not the same setting

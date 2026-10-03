@@ -11,6 +11,7 @@ import {
   type Activity,
 } from "../status.ts";
 import type { WindowKind } from "../windows";
+import { exitedBadly } from "./console-light.ts";
 import type { Project } from "../domain";
 
 /** Where a signal sends you when you click it. Every signal is actionable —
@@ -207,7 +208,7 @@ export function deriveSignals(world: WorldState): Signal[] {
   // of its own (docs/overseer.md §3). A process that died with an error is
   // something the operator did not already know to expect.
   for (const c of consoles) {
-    if (c.status !== "exited" || c.exitCode === 0 || c.signal !== undefined) continue;
+    if (!exitedBadly(c)) continue;
     signals.push({
       id: `exited-${c.id}`,
       activity: "attention",

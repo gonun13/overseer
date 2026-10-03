@@ -1,41 +1,25 @@
-import { useCallback, useState } from "react";
+import { useCallback, useEffect, useState } from "react";
 import { WINDOW_SPEC, type OpenWindow, type WindowKind } from "../windows";
+import {
+  MIN_WINDOW_W,
+  stageBounds,
+  tileGrid,
+  type Bounds,
+  type Geometry,
+} from "../layout";
 
 let seq = 0;
 /** Above every piece of permanent furniture, below the settings panel. Windows
  * carry this inline, so it — not the .window rule — decides the stack. */
 let zSeq = 100;
 
-/** The gutter the right-hand column keeps, matching the provider instrument. */
-const RIGHT_MARGIN = 26;
-/** No window spawns under the clock/settings corner. */
-const TOP_CLEARANCE = 56;
-/**
- * How tall the providers window is taken to be when centring it. It has no
- * fixed `h` — the body grows with the provider list — so this is an
- * assumption, not a measurement of a window that has not rendered yet.
- *
- * Deliberately short of the ~420 a full provider list actually renders at: a
- * low figure biases the spawn *down* the field, which keeps the top edge clear
- * of the overseer report in the same top-right corner. Measured on a 900-tall
- * viewport, it lands the frame at y 320 with the widget still uncovered below.
- */
-const PROVIDERS_ASSUMED_HEIGHT = 260;
-
-/** Right edge of the field, less the gutter — clamped onto narrow viewports. */
-function rightAlignedX(width: number): number {
-  return Math.max(24, window.innerWidth - width - RIGHT_MARGIN);
-}
-
-/**
- * Vertically centred for a window of `assumedHeight`, nudged by `cascade` for
- * repeats of the same kind and kept clear of the top corner.
- */
-function midRightY(assumedHeight: number, cascade: number): number {
-  return Math.max(
-    TOP_CLEARANCE,
-    Math.round((window.innerHeight - assumedHeight) / 2) + cascade,
-  );
+/** Every window fills the stage as one grid, in the order it was opened —
+ * the harness view: everything on the desk visible at once, nothing stacked
+ * over anything else (ui-ux-design.md §5). */
+function retile(current: OpenWindow[], bounds: Bounds): OpenWindow[] {
+  if (current.length === 0) return current;
+  const cells = tileGrid(current.length, bounds);
+  return current.map((w, i) => ({ ...w, ...cells[i] }));
 }
 
 export function useWindows() {
@@ -49,16 +33,37 @@ export function useWindows() {
     );
   }, []);
 
+  /** Wrap an updater so that any window opening or closing re-tiles the
+   * stage in the same render — a new window never flashes at a spawn point. */
+  const update = useCallback(
+    (fn: (current: OpenWindow[]) => OpenWindow[]) => {
+      setWindows((current) => {
+        const next = fn(current);
+        return next.length !== current.length
+          ? retile(next, stageBounds())
+          : next;
+      });
+    },
+    [],
+  );
+
+  // The stage follows the viewport.
+  useEffect(() => {
+    function onResize() {
+      setWindows((current) => retile(current, stageBounds()));
+    }
+    window.addEventListener("resize", onResize);
+    return () => window.removeEventListener("resize", onResize);
+  }, []);
+
   const open = useCallback(
     (
       kind: WindowKind,
       payload?: unknown,
       title?: string,
       detail?: string,
-      /** Exact placement — a restored layout, not a fresh spawn. */
-      geometry?: WindowGeometry,
     ) => {
-      setWindows((current) => {
+      update((current) => {
         // Re-summoning a window that's already up raises it rather than stacking a duplicate.
         const existing = current.find(
           (w) => w.kind === kind && w.payload === payload,
@@ -67,194 +72,61 @@ export function useWindows() {
           return current.map((w) => (w === existing ? { ...w, z: ++zSeq } : w));
         }
 
-        const spec = WINDOW_SPEC[kind];
-        if (geometry !== undefined) {
-          return [
-            ...current,
-            {
-              id: `${kind}-${++seq}`,
-              kind,
-              title: title ?? spec.title,
-              ...(detail !== undefined ? { detail } : {}),
-              ...clampGeometry(geometry),
-              z: ++zSeq,
-              payload,
-            },
-          ];
-        }
-        // Each kind has its own home; only repeats of the same kind cascade off it.
-        const cascade = current.filter((w) => w.kind === kind).length * 24;
-        // Clamp on spawn so a window never lands off-screen on a small viewport.
-        const width = Math.min(spec.w, window.innerWidth - 64);
-        const height =
-          spec.h === undefined
-            ? undefined
-            : Math.min(spec.h, window.innerHeight - 160);
-        const detailFields =
-          detail !== undefined ? ({ detail } as const) : ({} as const);
-
-        // Providers opens mid-right: right-aligned with the instrument that
-        // summoned it (design-system.md §6.2), but vertically centred rather
-        // than stacked directly above the widget — the operator reads it at
-        // eye level, and the bottom-right corner stays the instrument's.
-        if (kind === "providers") {
-          return [
-            ...current,
-            {
-              id: `${kind}-${++seq}`,
-              kind,
-              title: title ?? spec.title,
-              ...detailFields,
-              x: rightAlignedX(width),
-              y: midRightY(PROVIDERS_ASSUMED_HEIGHT, cascade),
-              w: width,
-              z: ++zSeq,
-              payload,
-            },
-          ];
-        }
-
-        // Loop models opens from a row in the providers window's loop tab —
-        // right-aligned the same way, with its top edge a fixed step above
-        // providers' own (assumed) top edge, so it follows providers wherever
-        // that lands. A fixed offset rather than providers' assumed height
-        // *plus* this window's own (its `h` is tall enough, at ~380, that
-        // subtracting both pushed the window up near the very top of the
-        // viewport on an ordinary screen height — nowhere close to "just
-        // above").
-        if (kind === "loopModels") {
-          const stackAbove = 70;
-          const bodyH = height ?? spec.h ?? 380;
-          return [
-            ...current,
-            {
-              id: `${kind}-${++seq}`,
-              kind,
-              title: title ?? spec.title,
-              ...detailFields,
-              x: rightAlignedX(width),
-              y: Math.max(
-                56,
-                midRightY(PROVIDERS_ASSUMED_HEIGHT, cascade) - stackAbove,
-              ),
-              w: width,
-              h: bodyH,
-              z: ++zSeq,
-              payload,
-            },
-          ];
-        }
-
-        // Console: mid-right — right-aligned like the provider instrument, but
-        // vertically centred so a tall terminal doesn't sit on top of it.
-        if (kind === "console") {
-          const margin = 26;
-          const bodyH = height ?? 480;
-          const chrome = 36; // tab above the body
-          return [
-            ...current,
-            {
-              id: `${kind}-${++seq}`,
-              kind,
-              title: title ?? spec.title,
-              ...detailFields,
-              x: Math.max(24, window.innerWidth - width - margin),
-              y: Math.max(
-                56,
-                Math.min(
-                  window.innerHeight - bodyH - chrome - 24,
-                  Math.round((window.innerHeight - bodyH - chrome) / 2) +
-                    cascade,
-                ),
-              ),
-              w: width,
-              h: bodyH,
-              z: ++zSeq,
-              payload,
-            },
-          ];
-        }
-
-        // Project: top-centre — the git surface for the project the operator
-        // is already looking at, so it opens directly under the centred
-        // active-project readout (top 18, ~60 tall) rather than off in the
-        // middle of the field. Centred horizontally on the viewport, clamped
-        // so it never lands off-screen.
-        if (kind === "project") {
-          return [
-            ...current,
-            {
-              id: `${kind}-${++seq}`,
-              kind,
-              title: title ?? spec.title,
-              ...detailFields,
-              x: Math.max(
-                24,
-                Math.min(
-                  Math.round((window.innerWidth - width) / 2) + cascade,
-                  window.innerWidth - width - 24,
-                ),
-              ),
-              y: Math.max(56, 96 + cascade),
-              w: width,
-              ...(height !== undefined ? { h: height } : {}),
-              z: ++zSeq,
-              payload,
-            },
-          ];
-        }
-
         return [
           ...current,
           {
             id: `${kind}-${++seq}`,
             kind,
-            title: title ?? spec.title,
-            ...detailFields,
-            x: Math.max(
-              24,
-              Math.min(spec.x + cascade, window.innerWidth - width - 24),
-            ),
-            y: Math.max(
-              56,
-              Math.min(spec.y + cascade, window.innerHeight - 200),
-            ),
-            w: width,
-            ...(height !== undefined ? { h: height } : {}),
+            title: title ?? WINDOW_SPEC[kind].title,
+            ...(detail !== undefined ? { detail } : {}),
+            // Placeholder geometry: `update` tiles it before it renders.
+            x: 0,
+            y: 0,
+            w: MIN_WINDOW_W,
             z: ++zSeq,
             payload,
           },
         ];
       });
     },
-    [],
+    [update],
   );
 
-  const close = useCallback((id: string) => {
-    setWindows((current) => current.filter((w) => w.id !== id));
-  }, []);
+  const close = useCallback(
+    (id: string) => update((current) => current.filter((w) => w.id !== id)),
+    [update],
+  );
 
   /** Dismisses the topmost window by stacking order, not insertion order. */
   const closeTop = useCallback(() => {
-    setWindows((current) => {
+    update((current) => {
       if (current.length === 0) return current;
       const top = current.reduce((a, b) => (b.z > a.z ? b : a));
       return current.filter((w) => w !== top);
     });
-  }, []);
+  }, [update]);
 
   const closeAll = useCallback(() => setWindows([]), []);
 
   /** Dismiss every window of a kind. */
-  const closeKind = useCallback((kind: WindowKind) => {
-    setWindows((current) => current.filter((w) => w.kind !== kind));
-  }, []);
+  const closeKind = useCallback(
+    (kind: WindowKind) =>
+      update((current) => current.filter((w) => w.kind !== kind)),
+    [update],
+  );
 
   /** Dismiss every window matching a predicate (e.g. consoles another tab
    * dismissed). */
-  const closeWhere = useCallback((predicate: (w: OpenWindow) => boolean) => {
-    setWindows((current) => current.filter((w) => !predicate(w)));
-  }, []);
+  const closeWhere = useCallback(
+    (predicate: (w: OpenWindow) => boolean) =>
+      update((current) => {
+        const next = current.filter((w) => !predicate(w));
+        // Called from an effect on every console-list change: bail out with
+        // the same array when nothing matched, or React re-renders forever.
+        return next.length === current.length ? current : next;
+      }),
+    [update],
+  );
 
   // `.map()` always allocates, so an updater written that way hands React a new
   // array even when nothing matched or nothing changed — and React re-renders on
@@ -316,7 +188,7 @@ export function useWindows() {
       title?: string,
       detail?: string,
     ) => {
-      setWindows((current) => {
+      update((current) => {
         const placeholder = current.find((w) => w.kind === kind && w.payload === from);
         if (placeholder === undefined) return current;
         const existing = current.find((w) => w.kind === kind && w.payload === to);
@@ -337,38 +209,13 @@ export function useWindows() {
         );
       });
     },
-    [],
+    [update],
   );
 
-  /** Lay every window of a kind out in a grid filling the field. */
-  const tile = useCallback((kind: WindowKind) => {
-    setWindows((current) => {
-      const targets = current.filter((w) => w.kind === kind);
-      if (targets.length === 0) return current;
-      const n = targets.length;
-      const cols = Math.ceil(Math.sqrt(n));
-      const rows = Math.ceil(n / cols);
-      const left = 16;
-      const top = TOP_CLEARANCE + 40;
-      const gap = 12;
-      const chrome = 36; // tab above the body
-      const bottom = 120; // the furniture along the bottom edge
-      const cellW = Math.floor((window.innerWidth - left * 2 - gap * (cols - 1)) / cols);
-      const cellH = Math.floor((window.innerHeight - top - bottom - gap * (rows - 1)) / rows);
-      const placed = new Map<string, OpenWindow>();
-      targets.forEach((w, i) => {
-        const col = i % cols;
-        const row = Math.floor(i / cols);
-        placed.set(w.id, {
-          ...w,
-          x: left + col * (cellW + gap),
-          y: top + row * (cellH + gap),
-          w: Math.max(320, cellW),
-          h: Math.max(160, cellH - chrome),
-        });
-      });
-      return current.map((w) => placed.get(w.id) ?? w);
-    });
+  /** Put every window back on the grid — after the operator has dragged or
+   * resized some. */
+  const tile = useCallback(() => {
+    setWindows((current) => retile(current, stageBounds()));
   }, []);
 
   return {
@@ -388,22 +235,4 @@ export function useWindows() {
   };
 }
 
-export interface WindowGeometry {
-  x: number;
-  y: number;
-  w: number;
-  h?: number;
-}
-
-/** A saved layout may come from a bigger screen — keep it reachable. */
-function clampGeometry(g: WindowGeometry): WindowGeometry {
-  const w = Math.max(320, Math.min(g.w, window.innerWidth - 32));
-  return {
-    x: Math.max(0, Math.min(g.x, window.innerWidth - w)),
-    y: Math.max(28, Math.min(g.y, window.innerHeight - 120)),
-    w,
-    ...(g.h !== undefined
-      ? { h: Math.max(160, Math.min(g.h, window.innerHeight - 120)) }
-      : {}),
-  };
-}
+export type WindowGeometry = Geometry;

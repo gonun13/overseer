@@ -12,22 +12,28 @@ rules for writing an entry live in
 - Overseer is now a harness around the providers' own CLIs. Every session runs in the CLI's real
   terminal, in a console window — the same slash commands, approvals, models and agents you get
   from the CLI itself, as soon as the provider ships them.
-- Open as many consoles as you like, in any project, and arrange them anywhere. `/tile` lays them
-  out in a grid; ctrl+` walks through them.
-- Closing a console window no longer ends it. The CLI keeps running, stays in the consoles list
-  in the bottom-left panel, and comes back with everything it printed when you open it again. A
+- The field is three columns: projects, sessions and shells on the left; windows in the centre;
+  the clock, settings, overseer, prompt and provider on the right.
+- Open as many consoles as you like, in any project. Every window — consoles, help, project,
+  diffs — tiles the centre of the field on its own as you open and close them; `/tile` puts them
+  back after you drag one. ctrl+` walks through the consoles.
+- Closing a console window no longer ends it. The CLI keeps running, stays in the sessions list
+  on the left, and comes back with everything it printed when you open it again. A
   reload puts every window back where it was. Kill is its own button.
 - Clicking a session resumes it in a console, or shows the console already running it. The list
-  covers every project and every provider.
+  covers every project and every provider, and shows a session from the moment it starts.
 - Typing into the prompt bar starts a new session with that as its opening prompt.
 - `/shell` opens a plain shell in the active project.
 - A Claude Code session waiting on a permission prompt lights up, and the overseer points you to
   its console.
+- The Claude Code provider is now called `claude`, matching its CLI.
 
 ### Removed
 
 - The chat window, its model / mode / agent controls, inline approvals, the capabilities window
   (skills, subagents, mcp) and the plans window. All of them are in the CLI itself now.
+- `/console` and the provider's NEW SESSION button. Every session is a console: start one with
+  `+ new session` on the left, or by typing a prompt.
 
 ## 0.4.6 — 2026-09-14
 

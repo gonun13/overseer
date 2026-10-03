@@ -48,8 +48,8 @@ async function refreshUsage(): Promise<AdapterStatus> {
   return { authenticated: true, usage, usageState: "ready" };
 }
 
-export const claudeCodeAdapter: AgentAdapter = {
-  id: "claude-code",
+export const claudeAdapter: AgentAdapter = {
+  id: "claude",
   capabilities,
   getStatus,
   refreshUsage,
@@ -101,4 +101,4 @@ export async function deleteSession(
   return deleteSessionTranscript(configDir(), projectDir, sessionId);
 }
 
-export default claudeCodeAdapter;
+export default claudeAdapter;

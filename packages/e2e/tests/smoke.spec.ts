@@ -86,7 +86,11 @@ test("offers a new session only when a provider is signed in", async ({
   const widget = page.getByRole("button", { name: /choose provider/i });
   await expect(widget).toBeVisible({ timeout: 45_000 });
 
-  const newSession = page.locator(".widget-console");
+  // The left rail's action, not the widget's: every session is a console, so
+  // the widget no longer offers one of its own.
+  const newSession = page.locator(".sessions-actions").getByRole("button", {
+    name: "+ new session",
+  });
   if (await widget.getByText("signed in", { exact: true }).isVisible()) {
     await expect(newSession).toBeVisible();
     await newSession.click();
@@ -96,7 +100,7 @@ test("offers a new session only when a provider is signed in", async ({
     await expect(term).toBeVisible({ timeout: 15_000 });
     const win = page.locator(".window-console").last();
     await win.getByRole("button", { name: /^kill / }).click();
-    await win.getByRole("button", { name: /^close / }).click();
+    await win.getByRole("button", { name: /^(close|detach) / }).click();
     return;
   }
 

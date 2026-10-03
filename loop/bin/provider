@@ -48,7 +48,7 @@ current=""
 if [ -f "$LOOP_DIR/.provider" ]; then
   current=$(tr -d '[:space:]' < "$LOOP_DIR/.provider")
 fi
-[ -n "$current" ] || current="claude-code"
+[ -n "$current" ] || current="claude"
 
 print_list() {
   local i=1 id mark

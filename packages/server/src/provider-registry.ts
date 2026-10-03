@@ -37,7 +37,7 @@ export interface ProviderManifest {
   /**
    * Whether this bundle's ability to delegate a loop step to a subagent is
    * confirmed working. Absent means `"verified"` — every bundle that
-   * predates this field (`claude-code`) keeps behaving exactly as it does
+   * predates this field (`claude`) keeps behaving exactly as it does
    * today without its manifest changing. Mirrors
    * `loop/bin/lib/db.sh`'s `provider_subagents_verified`, which is the
    * function that actually gates delegation; this field only exists so the

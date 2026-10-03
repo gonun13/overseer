@@ -26,7 +26,7 @@ describe("readLoopConfig", () => {
         return {
           stdout: JSON.stringify({
             providers: {
-              "claude-code": { overseer: null, steps: { request: "haiku" } },
+              "claude": { overseer: null, steps: { request: "haiku" } },
               cursor: { overseer: "auto", steps: {} },
             },
             steps: ["request", "commit"],
@@ -34,13 +34,13 @@ describe("readLoopConfig", () => {
           }),
         };
       },
-      readProviderManifests: () => [manifest("claude-code"), manifest("cursor", "unverified")],
+      readProviderManifests: () => [manifest("claude"), manifest("cursor", "unverified")],
     });
 
     assert.equal(config.current, "cursor");
     assert.deepEqual(config.steps, ["request", "commit"]);
 
-    const claude = config.providers.find((p) => p.id === "claude-code");
+    const claude = config.providers.find((p) => p.id === "claude");
     assert.equal(claude?.subagentsVerified, true, "absent manifest field reads as verified");
     assert.deepEqual(claude?.steps, { request: "haiku" });
 
@@ -127,7 +127,7 @@ describe("readLoopModels", () => {
   });
 
   it("omits defaultModel when the script reports null", async () => {
-    const result = await readLoopModels("claude-code", {
+    const result = await readLoopModels("claude", {
       run: async () => ({ stdout: JSON.stringify({ models: [], defaultModel: null }) }),
     });
     assert.deepEqual(result.models, []);

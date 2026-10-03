@@ -13,7 +13,7 @@ import {
 import { writeSnapshot } from "../src/memory/internal.js";
 
 /**
- * The broker against the real `claude-code` adapter, with a stand-in `claude`
+ * The broker against the real `claude` adapter, with a stand-in `claude`
  * on PATH. Both failure modes covered here are silent — the operator sees a
  * button that does nothing and the server logs nothing — so neither would turn
  * up in manual testing.
@@ -64,7 +64,7 @@ before(async () => {
     workspaceRoot: "/workspace",
     projects: [],
     providers: [
-      { id: "claude-code", status: { authenticated: false }, login: true },
+      { id: "claude", status: { authenticated: false }, login: true },
     ],
   });
 });
@@ -105,14 +105,14 @@ describe("login broker", () => {
     const { broadcast, waitFor } = recorder();
     const replayed: AuthStateMessage[] = [];
 
-    assert.deepEqual(startLogin("claude-code", broadcast, noop), { ok: true });
+    assert.deepEqual(startLogin("claude", broadcast, noop), { ok: true });
     const first = await waitFor((f) => f.phase === "awaiting-code");
 
     // The second asker is replayed the running flow's state — same URL, since
     // the code the operator holds is only redeemable by the process that
     // printed it.
     assert.deepEqual(
-      startLogin("claude-code", broadcast, (f) => replayed.push(f)),
+      startLogin("claude", broadcast, (f) => replayed.push(f)),
       { ok: true },
     );
     assert.equal(replayed.length, 1);
@@ -130,7 +130,7 @@ describe("login broker", () => {
     // exactly that frame, so a click landed in the gap, took the join branch,
     // was replayed the dead frame and spawned nothing.
     const { broadcast, waitFor } = recorder();
-    startLogin("claude-code", broadcast, noop);
+    startLogin("claude", broadcast, noop);
     await waitFor((f) => f.phase === "awaiting-code");
     cancelLogin();
 
@@ -142,7 +142,7 @@ describe("login broker", () => {
     const retry = recorder();
     const replayed: AuthStateMessage[] = [];
     assert.deepEqual(
-      startLogin("claude-code", retry.broadcast, (f) => replayed.push(f)),
+      startLogin("claude", retry.broadcast, (f) => replayed.push(f)),
       { ok: true },
     );
     assert.equal(replayed.length, 0, "a fresh start must not be a join");

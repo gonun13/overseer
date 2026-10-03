@@ -14,48 +14,43 @@ are specified in [overseer-behavior.md](overseer-behavior.md).
 ## 1. The field
 
 Fullscreen and fixed, with no page or horizontal scrolling. The background is a soft radial vignette.
-The steady-state layout is:
+The field is **three columns**: two rails of furniture around a stage that holds windows and nothing
+else. It is a harness for many agents at once, so the middle of the screen belongs to their consoles.
 
 ```
-┌───────────────────────────────────────────────────────────────────────────────┐
-│ ● PROJECT  billing-service   ▾      ACTIVE PROJECT          14:32:07    [⚙]   │
-│ ├ ● billing-service  fix/refund…  2 appr │ billing-service  tue 10 aug        │
-│ ├ ● overseer         main         running│  fix/refund-race · dirty           │
-│ ├ ● docs-site        main         3 files│                                    │
-│ └ ○ infra            main                │                                    │
-│                                                                                │
-│                                 ATTENTION            ← message                │
-│                                 ─────────                                      │
-│                                     ▲                                          │
-│    ● APPROVAL     2 tool calls are waiting on your decision.                   │
-│    ● CAPABILITY   sentry MCP needs authentication · tools unavailable.         │
-│    ● SESSION      overseer / web shell · editing packages/web/src/App.tsx.     │
-│                                          ↑ the overseer space                  │
-│                                                                                │
-│ │1 MODEL    opus-5    ▾                                    ┌            ┐      │
-│ │2 MODE     ask       ▾                                     PROVIDER  ●        │
-│ │   ▪ ask                    ┌────────────────────────────┐ claude-code       │
-│ │     auto-accept            │ › message billing-service  │ usage ▓▓▓▓▓░ 78%  │
-│ │     plan                   └────────────────────────────┘                    │
-│ │     bypass              v0.1 | ask for HELP | open CONSOLE └            ┘    │
-│ │3 AGENT    default   ▾                                                        │
-│ │4 CONTEXT  2 attached ›                                                       │
-└───────────────────────────────────────────────────────────────────────────────┘
+┌ left rail · 1/5 ──────┬──────────────── stage · 3/5 ────────────────┬ right rail · 1/5 ─────┐
+│ ACTIVE PROJECT        │ ○ /// SHELL · API      ✕ │ ● /// CLAUDE · API  ✕ │        14:32:07  [⚙] │
+│ ● BILLING-SERVICE     │ ┌──────────────────────┐ │ ┌──────────────────┐ │                       │
+│ fix/refund… · dirty   │ │ $ npm test           │ │ │ > refactor the…  │ │  NOTHING. AS USUAL    │
+│                       │ │                      │ │ │                  │ │        ───            │
+│ ● PROJECT billing… ▴  │ └──────────────────────┘ │ └──────────────────┘ │         ▲             │
+│ │● billing-service    │ ● /// CLAUDE · DOCS   ✕ │                       │ ● APPROVAL            │
+│ │○ overseer           │ ┌──────────────────────┐ │                       │   2 tool calls are…   │
+│ │○ docs-site          │ │ ✻ thinking…          │ │                       │                       │
+│ ● SESSIONS 3 RUNNING ▴│ └──────────────────────┘ │                       │ › message billing-…   │
+│ │● claude · api       │                                                 │ ┌ PROVIDER       ● ┐ │
+│ │○ shell · api        │                                                 │  claude              │
+│ │ sessions · billing  │                                                 │  usage ▓▓▓▓▓░ 78%    │
+│ [+ NEW SESSION] [+ SH]│                                                 │ v0.5 | ask for HELP  │
+└───────────────────────┴─────────────────────────────────────────────────┴──────────────────────┘
 ```
 
-| Region        | Owns                                                                          |
-| ------------- | ----------------------------------------------------------------------------- |
-| top-left      | **project panel** — persistent status list of every project, and the selector |
-| top-centre    | **active project** — target for new prompts and sessions                       |
-| top-right     | **clock** and the **settings** gear                                           |
-| centre        | **the overseer space** — message plus ranked, clickable signals              |
-| bottom-left   | **session panel** — every console, and the active project's sessions          |
-| bottom-centre | **the prompt** — one command line — and the footer                            |
-| bottom-right  | **provider widget** — provider, auth, usage, spend                            |
+| Region      | Owns, top to bottom                                                                                     |
+| ----------- | ------------------------------------------------------------------------------------------------------- |
+| left rail   | **active project** · **project panel** · **session panel** (sessions, shells) · the start buttons     |
+| stage       | **windows only** — every window tiles it                                                                |
+| right rail  | **clock** and the **settings** gear · **the overseer space** · **the prompt** · **provider widget** · footer |
 
-Furniture appears progressively as its state becomes knowable; the prompt appears only after an authenticated
-provider is attached. Widths are capped and centred. Windows stay within the viewport. Below 1024px is out of
-scope.
+The rails take a fifth of the width each, floored at 260px; the stage takes the rest. A hairline in
+`--stamp-edge` is all that separates a rail from the stage — rails are furniture on the field, not
+panels. Each rail is a column that never scrolls sideways; its lists scroll inside themselves.
+
+While the field is still being set up — boot, the first-run name and tone asks, the goodbye — there is
+nothing for the stage to hold, and **the overseer space speaks from the stage centre**. Once the session
+panel is revealed it docks into the right rail and the stage is handed to windows.
+
+Furniture appears progressively as its state becomes knowable; the prompt appears only after an
+authenticated provider is attached. Below 1024px is out of scope.
 
 ---
 
@@ -135,7 +130,8 @@ Rank order for anything that sorts by status: `attention → waiting → working
 
 ## 4. The overseer space
 
-The centre region: a **derived, ranked answer** to what deserves attention.
+The right rail's middle (the stage centre while the field is being set up, §1): a **derived, ranked
+answer** to what deserves attention.
 
 - **Message** — one uppercase line in the operator's tone, taken from the most urgent signal and set as text
   alone. Recovery may supply a verbatim alert word. Onboarding uses the same space for questions and choices.
@@ -157,21 +153,29 @@ new widget.
 **The summonable primitive**, and a _surface_ — it inverts the theme. Opened by a signal click, a typed
 command, or a system escalation.
 
-- `position: absolute`, spawned at an assigned position, clamped on spawn and while dragging so no part can
-  leave the viewport.
+- `position: absolute`, **confined to the stage** (§1) and **tiled**: every window, of every kind, takes
+  a cell of one near-square grid over the stage, in the order it was opened, with a 2px gap between
+  cells. The grid re-tiles whenever a window opens or closes and when the viewport resizes. A window can
+  still be dragged or resized (never onto a rail); `/tile` puts everything back on the grid. A tiled
+  window's height is its whole box, tab included, and the body flexes to fill it, scrolling vertically.
+  Columns never go narrower than 320px: a crowded stage gets more rows instead, and cells never overlap.
+  `packages/web/src/layout.ts` owns the stage bounds and the grid.
 - The **frame width is the contract**: it comes from `WINDOW_SPEC`, and content never sets its own width.
   Long paths ellipsise, preformatted blocks wrap (`pre-wrap` + `overflow-wrap: anywhere`). **Windows scroll
   vertically only** — a window that scrolls sideways has failed to lay out.
 - **Borders on the horizontal edges only** — `border-width: 2px 0.5px`, left/right transparent. This is what
   keeps them from reading as cards.
-- The **tab is a flow child of the window box**, sitting on top of the frame: `--void`, not a stamp, because
-  it is the machine's own label for the window rather than anything the window contains — matching the
-  frame's solid ground in both themes, `--mark-fill` `▽` glyph (red in samaritan, blue in machine),
-  `///` separator, the label, then a **close ✕**. Because it is in flow, its left edge _is_ the
-  frame's left edge; there is no offset left to drift. It wipes in via `clip-path`.
+- The **tab is a flow child of the window box**, sitting on top of the frame and **exactly as wide as
+  it**: `--void`, not a stamp, because it is the machine's own label for the window rather than anything
+  the window contains — matching the frame's solid ground in both themes. Left to right: the
+  `--mark-fill` `▽` glyph (a status light on a console), `///`, the **name**, `·` and the **project**
+  (dim), then the window's controls and the **close ✕** pinned to the right edge. A console's name is
+  the session it runs, or `shell` / `loop` / the provider before there is one; its project is the
+  console's own, not the active one. Name and project ellipsise — the project first — and the tab
+  never overflows; the close is always on screen. It wipes in via `clip-path`.
 - Window chrome is draggable; `.no-drag`, inputs, and buttons remain interactive.
 - Dismissed by the ✕, or `Esc` for the topmost surface.
-- **Multiple windows coexist and may overlap.** They are not modal and never block the prompt.
+- **Multiple windows coexist side by side.** They are not modal and never block the prompt.
 
 The **status window** is summoned automatically when a service starts work — it is where trigger logs from
 every service land. It shows telegraphic rows and may be dismissed without cancelling the operation. Rows are
@@ -203,22 +207,25 @@ content. `w-editor` is an input and therefore uses the input ground (§7.1).
 ### 5.3 The console
 
 The console is where all agent work happens: the provider CLI's own TUI, a plain shell, or a dev-loop run,
-in an xterm.js surface bridged over `/ws` to a PTY the server owns. Open one from the provider widget
-(new session), the session panel (`+ new session`, `+ shell`, or a session row), the prompt bar (a typed
-prompt starts a session on it), or with `/console`, `/shell`, `/loop`.
+in an xterm.js surface bridged over `/ws` to a PTY the server owns. Every session is a console, so there
+is no separate "open console": start one from the left rail (`+ new session`, `+ shell`, or a session
+row), the prompt bar (a typed prompt starts a session on it), or with `/shell`, `/loop`.
 
-Any number can be open, in any project, anywhere on the field. `/tile` lays them out in a grid;
-`Ctrl` + `` ` `` raises the next one and hands it the keyboard. The tab shows a status light — what the
+Any number can be open, in any project, tiled on the stage with every other window (§5). `/tile` (or
+`tile` in the left rail) puts them back on the grid after a drag. The terminal's inset is padding on
+xterm's own element, never on its host: the fit addon sizes the grid from the host's box less the
+terminal element's padding, so padding the host clips the right and bottom of the CLI. `Ctrl` + `` ` ``
+raises the next one and hands it the keyboard. The tab shows a status light — what the
 CLI is doing — in place of the usual mark.
 
 |                   | Treatment                                                                                   |
 | ----------------- | ------------------------------------------------------------------------------------------- |
 | stream            | xterm.js matching the Overseer theme                                                        |
-| close (×)         | **detach** — the process keeps running and stays in the session panel's consoles list      |
-| kill              | its own tab control; the console stays listed as exited until dismissed                    |
+| close (×)         | **detach** — the process keeps running and stays in the session panel's list               |
+| kill              | its own tab control (and the row's ■): the process ends and the window and row go at once — a deliberate kill is never reported as a failure |
 | CLI exits cleanly | `/exit`, `exit`: the window closes and the console is dismissed                             |
 | CLI fails         | the window stays, with the exit code, so the failure can be read                            |
-| reload            | every console window comes back where it was, with its scrollback                           |
+| reload            | every console window comes back where it was, with its scrollback, once discovery is done   |
 | auth              | shared container credentials; onboarding pre-seeded                                         |
 
 While focus is in a terminal the keyboard is the CLI's: Overseer's own keys stand down, except
@@ -240,8 +247,8 @@ is an acceptable way to answer "erase everything I know".
 
 - Built from the window's parts — tab, frame, `w-btn` answers — but the **tab is centred**, which is the tell
   that this is not a window the operator summoned.
-- **Centred horizontally and placed above the message**, never over it: the overseer answers the decision in
-  the message, so the question and its answer must be readable together.
+- **Centred on the stage**, clear of the right rail: the overseer answers the decision in the message,
+  so the question and its answer must be readable side by side.
 - **No ✕, no drag, no `Esc`, no dismiss-on-outside-click.** It is answered by its two buttons or not at all.
 - Above the settings panel in the stack, over a `--scrim` wash of the field — thin enough that the operator
   can still see what they are about to erase.
@@ -298,36 +305,43 @@ Furniture is not summoned or dismissed, but it appears progressively as discover
 meaningful. Nothing takes it away except a confirmed reset (§5.4), which removes it a piece at a time. Readouts stay on the field; opened project choices use a surface, and opened prompt-control
 options use void.
 
-1. **ProjectPanel** (top-left) — appears after project discovery and opens by default. It is a status panel
-   before it is a selector: its lights show work in projects that are **not** active. Each row
+1. **ActiveProject** (left rail, top) — kicker, light, name, branch · dirty state. New prompts and
+   sessions target it; existing sessions retain their own project. The workspace path is implied and not
+   shown. Unset, the name reads `NONE` in `--accent`. When git cannot answer, the meta line says so
+   rather than inventing `clean`. Clicking the readout opens the project panel.
+2. **ProjectPanel** (left rail) — appears after project discovery and opens by default. It is a status
+   panel before it is a selector: its lights show work in projects that are **not** active. Each row
    is a light, a name, a branch, and a note saying why the light is lit; the active row is marked with an
-   accent bar in `--mark-fill`, since the list is a surface. **Selecting a project never closes the panel —
-   only the chevron in its header does.** The list scrolls vertically at 44vh. Future selectable scopes
-   (sessions, worktrees) belong in this same panel, not in a new corner.
-2. **ActiveProject** (top-centre) — kicker, light, name, branch · dirty state. New prompts and sessions target
-   it; existing sessions retain their own project. The workspace path is implied and not shown. Unset, the name reads
-   `NONE` in `--accent`. When git cannot answer, the meta line says so rather than inventing `clean`.
-   Clicking the readout opens the project panel.
-3. **Clock** (top-right) — `HH:MM:SS` tabular plus the date, and the gear that opens settings. The gear
-   is unboxed and drawn larger than the other glyphs: the clock beside it has no frame either, so a
-   border would make the gear the only boxed thing in that corner. A glyph big enough to hit does not
-   need one. `.icon-btn` — the boxed variant — stays for small glyphs that do, like the panel's ✕.
-4. **SessionPanel** (bottom-left) — the project panel's two levels, mirrored: a readout header
-   (`CONSOLES · 3 RUNNING`, lit by the most urgent console) with a surface list opening upward over it.
-   The list has two sections. **Consoles** — every console the server runs, in any project, each with
-   its light, kill (running) or dismiss (exited); picking one brings its window back, which is how a
-   detached console is found again. **Sessions** — the active project's sessions from the CLIs' own
-   transcripts, lit by the console running each; picking one shows that console or resumes the session
-   in a new one. Under them, `+ new session`, `+ shell` and, with two or more running, `tile`. Selecting
-   never closes the panel.
-5. **ProviderWidget** (bottom-right) — see §6.2. When signed in, `NEW SESSION` with SESSION in `--ok` sits under it.
-6. **Prompt** (bottom-centre) — appears only after an authenticated provider is attached (§7).
-7. **Footer** — one line under the prompt: product, version, and `ask for HELP` with HELP in `--accent`.
+   accent bar in `--mark-fill`, since the list is a surface. Long names ellipsise. **Selecting a project
+   never closes the panel — only the chevron in its header does.** The list takes at most 40% of the rail
+   and scrolls vertically inside it.
+3. **SessionPanel** (left rail, under projects) — the project panel's two levels again: a readout header
+   (`SESSIONS · 3 RUNNING`, lit by the most urgent console) with a surface list opening downward under
+   it and taking the rail's remaining height. The list has two groups. **Sessions** — every agent and
+   loop console the server runs, in any project, each with its light, kill (running) or dismiss
+   (exited), then the active project's sessions from the CLIs' own transcripts that no console holds.
+   A console that has not written its transcript yet is a session all the same. Picking a console
+   brings its window back, which is how a detached one is found again; picking a dormant session
+   resumes it in a new console. **Shells** — every plain shell, the same way. Selecting never closes
+   the panel.
+4. **Start buttons** (left rail, foot) — `+ new session` (only with a signed-in provider), `+ shell`
+   and, with two or more running, `tile`. Field-level `.rail-btn`s: the rail is not a surface.
+5. **Clock** (right rail, top) — `HH:MM:SS` tabular plus the date, and the gear that opens settings. The
+   gear is unboxed and drawn larger than the other glyphs: the clock beside it has no frame either, so
+   a border would make the gear the only boxed thing there. `.icon-btn` — the boxed variant — stays
+   for small glyphs that do, like the panel's ✕.
+6. **The overseer space** (right rail, middle, once docked — §1, §4) — the message at 18px and the
+   signals beneath it, each signal's sentence on its own line under its light and kicker. Scrolls
+   vertically if the signals outgrow the rail.
+7. **Prompt** (right rail, foot) — appears only after an authenticated provider is attached (§7).
+8. **ProviderWidget** (right rail, under the prompt) — see §6.2. It is a readout and the way into the
+   providers window; it does not start sessions.
+9. **Footer** — one line under the widget: product, version, and `ask for HELP` with HELP in `--accent`.
 
 ### 6.1 Panels
 
 A **panel** is edge-anchored, single, fixed, and a surface. Settings is the only one today. It slides in from
-the right, carries a 2px leading border, and closes on `Esc` or its ✕.
+the right over the right rail, carries a 2px leading border, and closes on `Esc` or its ✕.
 
 Rule of thumb: _the work_ gets windows, _the machine_ gets panels.
 
@@ -357,7 +371,7 @@ never use a hover fill.
 
 ## 7. The prompt
 
-One line at the bottom of the field, on the dark input surface (`--fill`/`--ink`). It never grows into a
+One line at the foot of the right rail, on the dark input surface (`--fill`/`--ink`). It never grows into a
 transcript — conversations live in consoles (§5.3).
 
 - A leading `/` starts a command; names autocomplete from `packages/web/src/commands.ts` and open the

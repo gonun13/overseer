@@ -18,12 +18,12 @@ packages/e2e/test-results/
 .codex/
 .opencode/
 
-# The claude-code and cursor bundles' `.claude/`/`.cursor/` are versioned config —
+# The claude and cursor bundles' `.claude/`/`.cursor/` are versioned config —
 # the permissions a loop session runs under — not container-owned runtime state. The
 # blanket rules above ignore them at any depth, so un-ignore these. `.claude/` lived
 # in loop/.gitignore until the provider bundles moved to the shared providers/.
-!providers/claude-code/.claude/
-!providers/claude-code/.claude/**
+!providers/claude/.claude/
+!providers/claude/.claude/**
 !providers/cursor/.cursor/
 !providers/cursor/.cursor/**
 

@@ -1,17 +1,27 @@
-/* ---- top left: the project panel -----------------------------------------
+/* ---- left rail: the project panel -----------------------------------------
    Split across two levels. The header is a readout — it names the active
    project the same way the clock names the time — so it stays on the field and
    blends with the background. The list is what you click into to act, so it is
    a *surface* and only appears, framed, once it opens. Permanent and open by
    default: a status panel first and a selector second, so selecting never
    closes it — only the chevron does. */
+.projects,
+.sessions {
+  display: flex;
+  flex-direction: column;
+  min-height: 0;
+  width: 100%;
+}
+
+/* Projects and sessions share the rail's height: projects take what they
+   need up to a cap, sessions the rest. Each list scrolls inside itself. */
 .projects {
-  position: absolute;
-  left: 26px;
-  top: 20px;
-  z-index: 40;
-  width: 320px;
-  max-width: 32vw;
+  flex: 0 1 auto;
+  max-height: 40%;
+}
+
+.sessions {
+  flex: 1 1 auto;
 }
 
 .projects-head,
@@ -71,7 +81,10 @@
    collapsed, there is no surface there yet, just the field header above it. */
 .projects-list.open,
 .sessions-list.open {
-  max-height: 44vh;
+  max-height: 100vh;
+  min-height: 0;
+  flex: 0 1 auto;
+  overflow-x: hidden;
   overflow-y: auto;
   opacity: 1;
   border-style: solid;
@@ -109,8 +122,15 @@
   padding-left: 7px;
 }
 
+/* The rail is a fifth of the field: a long name ellipsises rather than
+   wrapping the row onto two lines. */
 .project-row-name,
 .session-row-name {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
   text-transform: uppercase;
   letter-spacing: 0.5px;
 }
@@ -174,44 +194,18 @@
   color: var(--mark-fill);
 }
 
-/* ---- bottom left: the sessions panel --------------------------------------
-   The project panel's two levels — field readout, surface list — mirrored for
-   the bottom of the field: bottom-anchored so the list opens *upward* and the
-   header stays put beneath it. That is why the head carries its rule on top:
-   the rule always sits between the header and the list, whichever side the
-   list is on. */
-.sessions {
-  position: absolute;
-  left: 26px;
-  bottom: 26px;
-  z-index: 40;
-  width: 260px;
-  max-width: 28vw;
-}
-
-.sessions-head {
-  border-bottom: none;
-  border-top: 1px solid var(--edge);
-}
+/* ---- left rail: the sessions panel ---------------------------------------
+   The project panel's two levels — field readout, surface list — under it in
+   the same rail, opening downward the same way. */
 
 /* Inside the list, so it reads as the surface's own line rather than a note on
-   the field — the list is the only place a session can be started from. */
+   the field. */
 .sessions-empty {
   margin: 0;
   padding: 8px 9px;
   border-bottom: 1px solid var(--ink-rule);
   color: var(--ink-faint);
   font-size: 12px;
-}
-
-.session-new {
-  color: var(--ink-dim);
-  font-size: 12px;
-  border-bottom: none;
-}
-
-.session-new:hover {
-  color: var(--accent-fill);
 }
 
 .project-new {
@@ -321,11 +315,11 @@
   margin-top: 0;
 }
 
+/* Foot of the left rail: how a console starts. */
 .sessions-actions {
+  flex: none;
   display: flex;
-  gap: 4px;
-}
-
-.sessions-actions .session-new {
-  flex: 1;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: auto;
 }

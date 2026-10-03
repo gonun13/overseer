@@ -7,7 +7,7 @@
 
 A single-page web console for driving CLI coding agents. 
 
-For now only `claude-code` and `cursor` are fully wired providers but others are ready to be implemented.
+For now only `claude` and `cursor` are fully wired providers but others are ready to be implemented.
 
 Built sandboxed, with the paranoid in mind: protect the host from runaway LLMs.
 Agents run in Docker, not on your desktop — they cannot wipe your home directory or
@@ -113,9 +113,10 @@ agent conversation happens in the CLI's real TUI, in a console window. Overseer 
 a single terminal cannot: many consoles across many projects on one desk, and a view of
 all of them at once.
 
-- **Consoles** — any number of console windows, across projects, arranged freely (`/tile`
-  lays them out in a grid). A console is the provider CLI (`/console`, or type a prompt
-  into the prompt bar), a plain shell (`/shell`), or the dev loop (`/loop`).
+- **Consoles** — any number of console windows, across projects, tiled across the centre
+  of the field between a left rail (projects, sessions, shells) and a right rail (clock,
+  overseer, prompt, provider). A console is the provider CLI (`+ new session`, or type a
+  prompt into the prompt bar), a plain shell (`/shell`), or the dev loop (`/loop`).
 - **Consoles outlive the tab** — closing a window only detaches it; the process keeps
   running on the server. A reload puts every window back where it was, with its
   scrollback. Kill is a separate, explicit control.

@@ -24,21 +24,21 @@ function row(
 describe("space status rows", () => {
   it("supersedes a state row in place rather than stacking a second one", () => {
     // The reported bug: after signing in, the window still read
-    // "checking provider auth... [BLOCKED] attached claude-code · not
+    // "checking provider auth... [BLOCKED] attached claude · not
     // authenticated" while the signal list had already corrected itself.
     let space = applySpaceFrame(EMPTY_SPACE, {
       type: "space.status",
-      entry: row({ key: "auth", detail: "attached claude-code · not authenticated" }),
+      entry: row({ key: "auth", detail: "attached claude · not authenticated" }),
     });
     space = applySpaceFrame(space, {
       type: "space.status",
-      entry: row({ key: "auth", outcome: "ok", detail: "attached claude-code" }),
+      entry: row({ key: "auth", outcome: "ok", detail: "attached claude" }),
     });
 
     const rows = spaceRows(space);
     assert.equal(rows.length, 1);
     assert.equal(rows[0]?.outcome, "ok");
-    assert.equal(rows[0]?.detail, "attached claude-code");
+    assert.equal(rows[0]?.detail, "attached claude");
   });
 
   it("does not re-summon the window when a state row only revises itself", () => {
@@ -151,7 +151,7 @@ describe("discovery steps in the space", () => {
       runId: "r",
       id: "providers",
       outcome: "blocked",
-      detail: "attached claude-code · not authenticated",
+      detail: "attached claude · not authenticated",
       service: "providers",
       spaceKey: "auth",
     });
@@ -159,7 +159,7 @@ describe("discovery steps in the space", () => {
     // Now the login reports the same key through the ordinary space API.
     space = applySpaceFrame(space, {
       type: "space.status",
-      entry: row({ key: "auth", outcome: "ok", detail: "attached claude-code" }),
+      entry: row({ key: "auth", outcome: "ok", detail: "attached claude" }),
     });
 
     const rows = spaceRows(space);

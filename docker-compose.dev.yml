@@ -66,7 +66,7 @@ services:
       - node-modules-protocol:/app/packages/protocol/node_modules
       - node-modules-web:/app/packages/web/node_modules
       - node-modules-server:/app/packages/server/node_modules
-      - node-modules-claude-code:/app/packages/adapters/claude-code/node_modules
+      - node-modules-claude:/app/packages/adapters/claude/node_modules
       - node-modules-cursor:/app/packages/adapters/cursor/node_modules
     environment:
       # Bind mounts on Docker Desktop do not deliver inotify reliably; polling
@@ -77,7 +77,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "test -f /app/packages/protocol/dist/index.js && test -f /app/packages/adapters/claude-code/dist/index.js && test -f /app/packages/adapters/cursor/dist/index.js",
+          "test -f /app/packages/protocol/dist/index.js && test -f /app/packages/adapters/claude/dist/index.js && test -f /app/packages/adapters/cursor/dist/index.js",
         ]
       interval: 2s
       timeout: 5s
@@ -143,7 +143,7 @@ services:
       - node-modules-protocol:/app/packages/protocol/node_modules
       - node-modules-web:/app/packages/web/node_modules
       - node-modules-server:/app/packages/server/node_modules
-      - node-modules-claude-code:/app/packages/adapters/claude-code/node_modules
+      - node-modules-claude:/app/packages/adapters/claude/node_modules
       - node-modules-cursor:/app/packages/adapters/cursor/node_modules
       # Anonymous volume shadows any stale build a host `npm run build` left in
       # web/dist. The server refuses to serve it in dev anyway (NODE_ENV
@@ -169,7 +169,7 @@ services:
       - node-modules-protocol:/app/packages/protocol/node_modules
       - node-modules-web:/app/packages/web/node_modules
       - node-modules-server:/app/packages/server/node_modules
-      - node-modules-claude-code:/app/packages/adapters/claude-code/node_modules
+      - node-modules-claude:/app/packages/adapters/claude/node_modules
       - node-modules-cursor:/app/packages/adapters/cursor/node_modules
     depends_on:
       deps:
@@ -196,7 +196,7 @@ services:
       - node-modules-protocol:/app/packages/protocol/node_modules
       - node-modules-web:/app/packages/web/node_modules
       - node-modules-server:/app/packages/server/node_modules
-      - node-modules-claude-code:/app/packages/adapters/claude-code/node_modules
+      - node-modules-claude:/app/packages/adapters/claude/node_modules
       - node-modules-cursor:/app/packages/adapters/cursor/node_modules
       - node-modules-e2e:/app/packages/e2e/node_modules
       # Reports and traces land on the host so a failure can be inspected
@@ -227,6 +227,6 @@ volumes:
   node-modules-protocol:
   node-modules-web:
   node-modules-server:
-  node-modules-claude-code:
+  node-modules-claude:
   node-modules-cursor:
   node-modules-e2e:

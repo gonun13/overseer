@@ -115,6 +115,18 @@ export function WindowStackHost({
     );
   };
 
+  /** A console's tab: the session it runs (or what it is, before the CLI
+   * has named one — `shell`, `loop`, the provider), then the project. The
+   * server's own title already ends in the project, so it is not reused. */
+  const consoleTab = (info: ConsoleInfo): { title: string; detail: string } => {
+    const session = sessions.find((s) => s.consoleId === info.id);
+    const what = info.kind === "agent" ? (info.providerId ?? "agent") : info.kind;
+    return {
+      title: session?.name ?? what,
+      detail: info.projectPath.split("/").filter(Boolean).pop() ?? info.projectPath,
+    };
+  };
+
   return windows.map((windowState) => {
     const payload = String(windowState.payload ?? "");
     const consoleInfo =
@@ -124,13 +136,17 @@ export function WindowStackHost({
         ? pendingConsoles.find((p) => `${PENDING_PREFIX}${p.reqId}` === payload)
         : undefined;
     const running = consoleInfo?.status === "running";
+    const tab =
+      consoleInfo !== undefined
+        ? consoleTab(consoleInfo)
+        : { title: windowState.title, detail: windowState.detail };
 
     return (
       <Window
         key={windowState.id}
         windowId={windowState.id}
-        title={windowState.title}
-        detail={windowState.detail}
+        title={tab.title}
+        detail={tab.detail}
         x={windowState.x}
         y={windowState.y}
         z={windowState.z}

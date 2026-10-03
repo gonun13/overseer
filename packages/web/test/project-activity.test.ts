@@ -9,7 +9,7 @@ function consoleIn(projectPath: string, extra: Partial<ConsoleInfo>): ConsoleInf
     id: `${projectPath}-${extra.activity ?? "idle"}`,
     kind: "agent",
     projectPath,
-    title: "claude-code",
+    title: "claude",
     startedAt: "2026-10-02T00:00:00Z",
     status: "running",
     activity: "idle",

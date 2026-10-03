@@ -24,7 +24,9 @@ const TYPE_MS = 200;
 const AFTER_NAME_MS = 2000;
 
 /**
- * The centre of the field. Not a log and not a dashboard: a ranked, derived
+ * The overseer's corner of the field: the stage centre while the field is
+ * still being set up (boot, first-run asks, goodbye), and docked into the
+ * right rail once windows need the stage. Not a log and not a dashboard: a ranked, derived
  * answer to "what should I be looking at?". Every line is clickable and opens
  * the thing it is talking about (design-system.md §4).
  *
@@ -45,7 +47,10 @@ export function OverseerSpace({
   onSubmitTone,
   selectedTone = "neutral",
   onMessageReady,
+  docked = false,
 }: {
+  /** In the right rail rather than the stage centre — tighter type. */
+  docked?: boolean;
   signals: Signal[];
   message: { text: string; activity: Activity };
   /** Boot phase (minimum beat and any socket wait); nothing is known yet. */
@@ -90,7 +95,7 @@ export function OverseerSpace({
   }, [asking, typing, display, message.text, onMessageReady]);
 
   return (
-    <div className="overseer-space">
+    <div className={`overseer-space${docked ? " docked" : ""}`}>
       {asking ? (
         <NameAsk prefix={namePrefix} onSubmit={onSubmitName} />
       ) : (

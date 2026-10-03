@@ -21,12 +21,12 @@ import { StatusLight } from "./StatusLight";
  * A widget is not a window: it follows the theme instead of inverting it, and it
  * is bracketed at the corners rather than framed and tabbed, so it reads as an
  * instrument sitting on the field (design-system.md §6.2). The readout opens
- * the provider picker; when a provider is signed in, OPEN CONSOLE sits under it.
+ * the provider picker. New sessions start from the left rail or the prompt.
  *
  * Usage gauges stay hidden until the provider has a real reading, from either
  * of two paths that never both apply to one provider:
  *
- * - automatic (`refreshUsage`, claude-code) — the widget counts down while a
+ * - automatic (`refreshUsage`, claude) — the widget counts down while a
  *   refresh is in flight and says so after a miss, because something is
  *   genuinely happening on its own;
  * - on demand (`checkUsage`, cursor) — nothing happens until the operator
@@ -40,12 +40,10 @@ export function ProviderWidget({
   provider,
   usageCheck,
   onOpenProviders,
-  onOpenConsole,
 }: {
   provider: ProviderInfo;
   usageCheck: UsageCheckState;
   onOpenProviders: () => void;
-  onOpenConsole: () => void;
 }) {
   const activity = providerAuthActivity(provider);
   const attached = provider.name !== "";
@@ -175,16 +173,6 @@ export function ProviderWidget({
           {usageCheck.checking ? "reading" : "check"}{" "}
           <span className="widget-action-word">usage</span>
           {!usageCheck.checking && windows.length > 0 ? " again" : ""}
-        </button>
-      )}
-
-      {provider.authenticated && (
-        <button
-          type="button"
-          className="widget-console"
-          onClick={onOpenConsole}
-        >
-          new <span className="widget-console-word">session</span>
         </button>
       )}
     </div>

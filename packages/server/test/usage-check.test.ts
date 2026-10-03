@@ -124,17 +124,17 @@ describe("usage-check", () => {
 
   it("refuses rather than asking when the adapter has no checkUsage", async () => {
     const stub = {
-      id: "claude-code",
+      id: "claude",
       getStatus: async () => ({ authenticated: true }),
     } as unknown as AgentAdapter;
     const service = createUsageCheck(
-      deps(stub, () => "/workspace/demo", () => "claude-code"),
+      deps(stub, () => "/workspace/demo", () => "claude"),
     );
 
     const result = await service.check();
     assert.equal(result.ok, false);
     if (!result.ok) {
-      assert.match(result.reason, /claude-code has no usage report/);
+      assert.match(result.reason, /claude has no usage report/);
     }
   });
 

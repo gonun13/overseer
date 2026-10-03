@@ -35,7 +35,7 @@ function harness(overrides: Partial<ConsoleRegistryDeps> = {}) {
   const hookUrls: string[] = [];
 
   const adapter = {
-    id: "claude-code",
+    id: "claude",
     getStatus: async () => status,
     consoleCommand: async (opts: { cwd: string; sessionId?: string; resume?: boolean; hookUrl?: string }) => {
       if (opts.hookUrl !== undefined) hookUrls.push(opts.hookUrl);
@@ -89,7 +89,7 @@ function harness(overrides: Partial<ConsoleRegistryDeps> = {}) {
   const registry = createConsoleRegistry({
     broadcast: (m) => broadcasts.push(m),
     hookBase: "http://127.0.0.1:3000",
-    getAdapter: (id) => (id === "claude-code" ? adapter : undefined),
+    getAdapter: (id) => (id === "claude" ? adapter : undefined),
     isInsideWorkspace: async (p) => p.startsWith("/workspace/"),
     recordAction: async () => undefined,
     loopSessionIndex: async () => new Map(),
@@ -113,7 +113,7 @@ function harness(overrides: Partial<ConsoleRegistryDeps> = {}) {
 const agent = (extra: Partial<OpenRequest> = {}): OpenRequest => ({
   kind: "agent",
   projectPath: "/workspace/a",
-  providerId: "claude-code",
+  providerId: "claude",
   cols: 80,
   rows: 24,
   ...extra,

@@ -314,7 +314,7 @@ overseer_model() {
 # given provider (the resolved one by default) to actually delegate a step to
 # a subagent. A manifest's `loopSubagents` field of exactly "unverified" says
 # no; absent, or any other value, says yes — so every bundle that predates
-# this field (i.e. claude-code) keeps behaving exactly as it does today
+# this field (i.e. claude) keeps behaving exactly as it does today
 # without its manifest changing. See providers/cursor/manifest.json for the
 # one bundle that currently sets it.
 # shellcheck disable=SC2120 # most callers pass no id and take the resolved
@@ -373,7 +373,7 @@ ensure_slug_dirs() {
 
 # record_frontmatter_get <file> <key> — line-based extraction between the
 # first two `---` delimiters, tolerant of malformed files, no YAML library.
-# Mirrors the convention packages/adapters/claude-code/src/custom-agents.ts
+# Mirrors the convention packages/adapters/claude/src/custom-agents.ts
 # uses for name/description frontmatter.
 record_frontmatter_get() {
   local file=$1 key=$2

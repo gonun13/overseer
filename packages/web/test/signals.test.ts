@@ -8,8 +8,8 @@ function consoleInfo(extra: Partial<ConsoleInfo>): ConsoleInfo {
     id: "c1",
     kind: "agent",
     projectPath: "/workspace/demo",
-    providerId: "claude-code",
-    title: "claude-code · demo",
+    providerId: "claude",
+    title: "claude · demo",
     startedAt: "2026-10-02T00:00:00Z",
     status: "running",
     activity: "idle",
@@ -22,7 +22,7 @@ const baseWorld = {
   projects: [],
   consoles: [] as ConsoleInfo[],
   provider: {
-    name: "claude-code",
+    name: "claude",
     authenticated: true,
     usage: [] as { id: string; label: string; used: number }[],
   },
@@ -41,7 +41,7 @@ describe("deriveSignals usage", () => {
     assert.ok(usage);
     assert.equal(usage.activity, "attention");
     assert.equal(usage.message, undefined);
-    assert.match(usage.text, /^claude-code · 83% of the week window is spent\.$/);
+    assert.match(usage.text, /^claude · 83% of the week window is spent\.$/);
     assert.equal(messageFor(signals).key, "attention");
   });
 
@@ -59,7 +59,7 @@ describe("deriveSignals usage", () => {
     assert.equal(usage.message, undefined);
     assert.match(
       usage.text,
-      /^claude-code · week limit reached · sessions cannot start until it resets\.$/,
+      /^claude · week limit reached · sessions cannot start until it resets\.$/,
     );
     assert.equal(messageFor(signals).key, "blocked");
   });
@@ -108,5 +108,15 @@ describe("deriveSignals consoles", () => {
       consoles: [consoleInfo({ status: "exited", exitCode: 0, signal: 15 })],
     });
     assert.equal(killed.find((signal) => signal.id === "exited-c1"), undefined);
+  });
+
+  it("reads 128 + signal exit codes as ended, not failed", () => {
+    for (const exitCode of [129, 130, 137, 143]) {
+      const ended = deriveSignals({
+        ...baseWorld,
+        consoles: [consoleInfo({ status: "exited", exitCode })],
+      });
+      assert.equal(ended.find((signal) => signal.id === "exited-c1"), undefined, `${exitCode}`);
+    }
   });
 });

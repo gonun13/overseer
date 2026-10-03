@@ -90,7 +90,7 @@ describe("cursor transcripts", () => {
     assert.equal(sessions[0]?.lastActiveAt, new Date(2000).toISOString());
   });
 
-  it("truncates a long title the same way claude-code's does", async () => {
+  it("truncates a long title the same way claude's does", async () => {
     await trustProject("demo2", "/workspace/demo2");
     const long = "a".repeat(60);
     await writeTranscript("demo2", "chat-long", [userTurn(long)], {

@@ -10,15 +10,39 @@
   z-index: 100;
 }
 
+/* A sized window — every tiled one — has its whole height set, tab
+   included; the frame and body flex to fill whatever the tab leaves. */
+.window.window-sized .window-frame {
+  flex: 1;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+}
+
+.window.window-sized .window-body {
+  flex: 1;
+  min-height: 0;
+}
+
+.window.window-sized .window-body.expanded {
+  max-height: none;
+}
+
 .window.dragging {
   opacity: 0.6;
 }
 
+/* As wide as the window and never wider: light, title, project, then the
+   window's own controls pinned to the right edge. Title and project give up
+   width (ellipsis) before the controls do — the close must always be there. */
 .window-tab {
   display: flex;
   align-items: center;
   gap: 6px;
+  width: 100%;
+  min-width: 0;
   padding: 4px 6px 4px 7px;
+  overflow: hidden;
   font-size: 14px;
   letter-spacing: 0.5px;
   text-transform: uppercase;
@@ -30,6 +54,34 @@
 
 .window-tab.revealed {
   clip-path: inset(0 0 0 0);
+}
+
+.window-tab-sep {
+  flex: none;
+  opacity: 0.5;
+  font-size: 12px;
+}
+
+.window-tab-title {
+  flex: 0 1 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+/* The project yields first: a long session name keeps more of itself. */
+.window-tab-project {
+  flex: 0 3 auto;
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.window-tab-end {
+  flex: none;
+  display: flex;
+  align-items: center;
+  margin-left: auto;
 }
 
 /* Same voice as `.w-row-secondary`: natural case, dim, smaller than the tab. */
@@ -157,16 +209,16 @@
   animation: settle-in 200ms ease-out both;
 }
 
-/* Above the message, not over it: the overseer answers this in the message
-   while the decision is up, so the two must be readable together. The bottom
-   edge sits clear of the vertical centre where the message lives. */
+/* Centred on the stage — the middle fifth-to-four-fifths of the field is also
+   the viewport's middle — so the right rail's message, where the overseer
+   answers it, stays readable beside it. */
 .decision {
   position: absolute;
   left: 50%;
-  bottom: calc(50% + 72px);
-  transform: translateX(-50%);
-  width: min(460px, calc(100vw - 48px));
-  max-height: calc(50% - 72px - 56px);
+  top: 50%;
+  transform: translate(-50%, -50%);
+  width: min(460px, calc(60vw - 48px));
+  max-height: calc(100% - 112px);
   display: flex;
   flex-direction: column;
   /* Centred, where a window's tab is left-anchored — the tab is the tell. */
@@ -176,6 +228,7 @@
 .decision-tab {
   cursor: default;
   flex: none;
+  width: auto;
 }
 
 .decision .window-frame {
@@ -184,7 +237,7 @@
 }
 
 .decision .window-body.expanded {
-  max-height: min(280px, calc(50vh - 140px));
+  max-height: min(280px, calc(100vh - 220px));
 }
 
 /* Two large answers, centred as a pair but kept apart so a miss of one cannot
@@ -799,15 +852,19 @@ a.w-btn {
   margin: 10px 12px 0;
 }
 
+/* The inset lives on xterm's own element, not on this host: the fit addon
+   sizes the grid from the host's computed box (border-box here, so padding
+   included) less the *terminal element's* padding. Padding the host made the
+   grid a padding's width too wide and tall, clipping the right and bottom. */
 .console-term {
   flex: 1;
   min-height: 0;
-  padding: 8px 10px;
   cursor: text;
 }
 
 .console-term .xterm {
   height: 100%;
+  padding: 8px 10px;
 }
 
 .console-term .xterm-viewport {

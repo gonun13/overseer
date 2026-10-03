@@ -12,7 +12,6 @@ export interface Command {
     | { type: "theme" }
     | { type: "close-all" }
     | { type: "loop" }
-    | { type: "console" }
     | { type: "shell" }
     | { type: "tile" };
 }
@@ -42,12 +41,6 @@ export const COMMANDS: Command[] = [
     action: { type: "open", kind: "gitConfig" },
   },
   {
-    name: "console",
-    aliases: ["new", "term", "terminal"],
-    help: "new session in the attached provider's cli, in the active project",
-    action: { type: "console" },
-  },
-  {
     name: "shell",
     aliases: ["bash", "sh"],
     help: "a plain shell in the active project",
@@ -56,7 +49,7 @@ export const COMMANDS: Command[] = [
   {
     name: "tile",
     aliases: ["grid", "arrange"],
-    help: "lay every console window out in a grid",
+    help: "put every window back on the grid",
     action: { type: "tile" },
   },
   {

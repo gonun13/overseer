@@ -59,8 +59,10 @@ async function cleanUp(page: Page) {
       .first()
       .click();
   }
-  for (const kill of await page.locator(".sessions .session-row-stop").all()) {
-    await kill.click();
+  // One at a time from the top: a kill takes its row away, so positions taken
+  // up front go stale.
+  while ((await page.locator(".sessions .session-row-stop").count()) > 0) {
+    await page.locator(".sessions .session-row-stop").first().click();
   }
   await expect(page.locator(".sessions .session-row-stop")).toHaveCount(0, {
     timeout: 15_000,
@@ -122,6 +124,14 @@ test("several consoles run side by side and tile", async ({ page }) => {
   await openShell(page);
   await openShell(page);
   await expect(page.locator(".window-console")).toHaveCount(2);
+
+  // They tile on their own, inside the stage — never over a rail.
+  const stage = (await page.locator(".stage").boundingBox())!;
+  for (const w of await page.locator(".window-console").all()) {
+    const box = (await w.boundingBox())!;
+    expect(box.x).toBeGreaterThanOrEqual(stage.x);
+    expect(box.x + box.width).toBeLessThanOrEqual(stage.x + stage.width + 1);
+  }
 
   await page.getByRole("button", { name: "tile" }).click();
   const boxes = await Promise.all(

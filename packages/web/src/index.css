@@ -265,11 +265,65 @@ button {
   cursor: pointer;
 }
 
+/* Three columns (ui-ux-design.md §1): a left rail for what to work on, the
+   stage for windows and nothing else, and a right rail for the machine. The
+   rails take a fifth each, floored so their type never crushes; the stage
+   takes the rest. Windows are absolutely positioned against the field, in
+   viewport coordinates, and clamped to the stage in layout.ts. */
 .field {
   position: relative;
+  display: grid;
+  grid-template-columns: minmax(260px, 1fr) minmax(0, 3fr) minmax(260px, 1fr);
   height: 100%;
   width: 100%;
   overflow: hidden;
+}
+
+.rail {
+  position: relative;
+  z-index: 40;
+  display: flex;
+  flex-direction: column;
+  gap: 18px;
+  min-width: 0;
+  min-height: 0;
+  padding: 20px 20px 22px;
+  overflow: hidden;
+}
+
+/* A hairline is all that separates a rail from the stage — the rails are
+   furniture on the field, not panels, so they get no ground of their own. */
+.rail-left {
+  border-right: 1px solid var(--stamp-edge);
+}
+
+.rail-right {
+  border-left: 1px solid var(--stamp-edge);
+}
+
+.stage {
+  position: relative;
+  min-width: 0;
+  min-height: 0;
+}
+
+/* Field-level button for the rail's own actions — `.w-btn`'s shape with the
+   field's ink, since the rail is not a surface. */
+.rail-btn {
+  padding: 3px 8px;
+  border: 1px solid var(--text-dim);
+  color: var(--text-dim);
+  font-size: 11px;
+  letter-spacing: 0.5px;
+  text-transform: uppercase;
+}
+
+.rail-btn:hover {
+  padding: 2px 7px;
+  border-width: 2px;
+  border-color: var(--text);
+  color: var(--text);
+  font-weight: 700;
 }
 
 /* ---- status light --------------------------------------------------------

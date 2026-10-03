@@ -4,7 +4,7 @@ import type { SessionMeta } from "@overseer/protocol";
 import { projectDirSlug } from "./project-slug.js";
 import { resolveSessionTitle } from "./session-titles.js";
 
-const ADAPTER_ID = "claude-code";
+const ADAPTER_ID = "claude";
 
 export function sessionJsonlPath(
   configDir: string,

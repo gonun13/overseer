@@ -7,7 +7,7 @@ import { consoleCommand, hookSettings } from "../src/console.js";
 
 /** The console command line: session flags and the hook settings layer. */
 
-describe("claude-code consoleCommand", () => {
+describe("claude consoleCommand", () => {
   let dir: string;
   let previous: string | undefined;
 

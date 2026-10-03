@@ -15,9 +15,8 @@ interface PromptTerminalActions {
   openProjectSelector: () => void;
   toggleTheme: () => void;
   openLoop: () => void;
-  openConsole: () => void;
   openShell: () => void;
-  tileConsoles: () => void;
+  tileWindows: () => void;
 }
 
 /**
@@ -32,9 +31,8 @@ export function usePromptSession({
   openProjectSelector,
   toggleTheme,
   openLoop,
-  openConsole,
   openShell,
-  tileConsoles,
+  tileWindows,
 }: PromptTerminalActions) {
   const [focused, setFocused] = useState(false);
 
@@ -70,14 +68,11 @@ export function usePromptSession({
           case "loop":
             openLoop();
             return true;
-          case "console":
-            openConsole();
-            return true;
           case "shell":
             openShell();
             return true;
           case "tile":
-            tileConsoles();
+            tileWindows();
             return true;
         }
         return true;
@@ -86,9 +81,8 @@ export function usePromptSession({
     },
     [
       closeAllWindows,
-      openConsole,
-      openShell,
-      tileConsoles,
+          openShell,
+      tileWindows,
       openLoop,
       openProjectSelector,
       openSettings,

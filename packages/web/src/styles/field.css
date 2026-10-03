@@ -1,16 +1,13 @@
-/* ---- top centre: the active project -------------------------------------- */
+/* ---- left rail, top: the active project ----------------------------------- */
 .active-project {
-  position: absolute;
-  left: 50%;
-  top: 18px;
-  transform: translateX(-50%);
-  z-index: 30;
+  flex: none;
   display: flex;
   flex-direction: column;
-  align-items: center;
+  align-items: flex-start;
   gap: 3px;
-  max-width: 40vw;
-  text-align: center;
+  width: 100%;
+  min-width: 0;
+  text-align: left;
 }
 
 .ap-kicker {
@@ -22,6 +19,9 @@
 
 .ap-name {
   display: flex;
+  max-width: 100%;
+  overflow: hidden;
+  white-space: nowrap;
   align-items: center;
   gap: 8px;
   font-size: 19px;
@@ -44,14 +44,12 @@
   color: var(--text-dim);
 }
 
-/* ---- top right: clock and settings --------------------------------------- */
+/* ---- right rail, top: clock and settings --------------------------------- */
 .clock {
-  position: absolute;
-  right: 24px;
-  top: 20px;
-  z-index: 40;
+  flex: none;
   display: flex;
   align-items: center;
+  justify-content: flex-end;
   gap: 12px;
 }
 
@@ -106,19 +104,54 @@
   color: var(--text);
 }
 
-/* ---- centre: the overseer space ------------------------------------------
-   Derived, ranked, and clickable. Not a log (design-system.md §4). */
+/* ---- the overseer space -----------------------------------------------------
+   Derived, ranked, and clickable. Not a log (design-system.md §4). Fills the
+   stage while the field is being set up; docked, it takes the right rail's
+   middle and scrolls there if the signals outgrow it. */
 .overseer-space {
   position: absolute;
-  inset-inline: 0;
-  top: 110px;
-  bottom: 180px;
+  inset: 0;
   z-index: 10;
   display: flex;
   flex-direction: column;
   align-items: center;
   justify-content: center;
   padding: 0 24px;
+}
+
+.overseer-space.docked {
+  position: static;
+  flex: 1 1 auto;
+  min-height: 0;
+  justify-content: flex-start;
+  padding: 12px 0 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+}
+
+.overseer-space.docked .os-message {
+  font-size: 18px;
+}
+
+.overseer-space.docked .os-signals {
+  margin-top: 18px;
+}
+
+/* Too narrow for kicker and sentence side by side: the light and kicker
+   make the first line, the sentence takes the full width beneath. */
+.overseer-space.docked .os-signal {
+  flex-wrap: wrap;
+  gap: 2px 8px;
+  padding: 6px 4px;
+}
+
+.overseer-space.docked .os-kicker {
+  width: auto;
+}
+
+.overseer-space.docked .os-text {
+  flex-basis: 100%;
+  padding-left: 18px;
 }
 
 /* The overseer's one-liner. Was `.os-headline`, a single activity word at

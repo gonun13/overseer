@@ -99,7 +99,7 @@ export function useLoopConfig(
   );
 
   /** Ask for one provider's model list. Costs a CLI round-trip on the
-   * server (a control request for claude-code, a plain command for cursor),
+   * server (a control request for claude, a plain command for cursor),
    * so this is explicit and on-demand — called by the model setup window
    * when it opens for a given provider, not fetched for every provider up
    * front. */

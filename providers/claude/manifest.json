@@ -1,5 +1,5 @@
 {
-  "id": "claude-code",
+  "id": "claude",
   "cli": "claude",
   "configDir": ".claude",
   "install": { "kind": "npm", "spec": "@anthropic-ai/claude-code@2.1.287" },

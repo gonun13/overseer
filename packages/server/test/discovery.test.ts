@@ -11,27 +11,27 @@ const provider = (id: string, authenticated: boolean): DiscoveredProvider => ({
 
 describe("pickAttachedProvider", () => {
   it("restores the previous pick when it is still registered, authenticated or not", () => {
-    const results = [provider("claude-code", true), provider("cursor", false)];
+    const results = [provider("claude", true), provider("cursor", false)];
     assert.equal(pickAttachedProvider("cursor", results)?.id, "cursor");
   });
 
   it("auto-attaches the first signed-in provider when nothing was ever picked", () => {
-    const results = [provider("claude-code", false), provider("cursor", true)];
+    const results = [provider("claude", false), provider("cursor", true)];
     assert.equal(pickAttachedProvider(undefined, results)?.id, "cursor");
   });
 
   it("auto-attaches when the previous pick is no longer registered (uninstalled, memory reset)", () => {
     const results = [provider("cursor", true)];
-    assert.equal(pickAttachedProvider("claude-code", results)?.id, "cursor");
+    assert.equal(pickAttachedProvider("claude", results)?.id, "cursor");
   });
 
   it("never auto-attaches an unauthenticated provider — that would trigger an unasked-for login flow", () => {
-    const results = [provider("claude-code", false), provider("cursor", false)];
+    const results = [provider("claude", false), provider("cursor", false)];
     assert.equal(pickAttachedProvider(undefined, results), undefined);
   });
 
   it("picks the first signed-in provider in list order when more than one qualifies", () => {
-    const results = [provider("codex", true), provider("claude-code", true)];
+    const results = [provider("codex", true), provider("claude", true)];
     assert.equal(pickAttachedProvider(undefined, results)?.id, "codex");
   });
 

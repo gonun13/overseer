@@ -24,14 +24,14 @@ import type { AdapterStatus, LoginHandle, LoginUpdate } from "@overseer/protocol
  *   Open a browser and navigate to this link: <url>
  *
  * Then nothing further was observed before the capture's timeout — no code
- * to paste back. This is a poll-until-authorized flow, not claude-code's
+ * to paste back. This is a poll-until-authorized flow, not claude's
  * paste-a-code one: `submitCode` has nothing to do (see below). The actual
  * success/cancel/failure lines past that point were **not** captured —
  * completing them would have required a real browser to authorize against,
  * which this environment does not have. `done` therefore never trusts the
  * exit code (unverified whether cancel and success both exit 0, as they do
- * for claude-code) — it re-asks `agent status --format json`, the same
- * caution claude-code's login.ts applies for a proven reason.
+ * for claude) — it re-asks `agent status --format json`, the same
+ * caution claude's login.ts applies for a proven reason.
  */
 
 // ---- the CLI's surface, in one place --------------------------------------
@@ -222,7 +222,7 @@ export function startLogin(
       // No verified vocabulary for cursor's own failure text (capturing it
       // would need a real browser authorization to run the flow to its end)
       // — kept as a possible reason, shown only if the flow does not recover
-      // on its own, exactly as claude-code's login.ts treats an unrecognized
+      // on its own, exactly as claude's login.ts treats an unrecognized
       // stderr line.
       failure ??= line;
     }),

@@ -34,7 +34,7 @@ require_cmd() {
   command -v "$1" >/dev/null 2>&1 || die "required command not found on PATH: $1"
 }
 
-# slugify <name> — mirrors packages/adapters/claude-code/src/project-slug.ts:
+# slugify <name> — mirrors packages/adapters/claude/src/project-slug.ts:
 # a lossy 1:1 replace of every non-alphanumeric char with '-', no run-collapsing.
 slugify() {
   printf '%s' "$1" | sed -E 's/[^A-Za-z0-9]/-/g'

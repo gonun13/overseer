@@ -14,10 +14,10 @@ function collector() {
 }
 
 const signedOut = [
-  { id: "claude-code", status: { authenticated: false }, login: true, usageCheck: true },
+  { id: "claude", status: { authenticated: false }, login: true, usageCheck: true },
 ];
 const signedIn = [
-  { id: "claude-code", status: { authenticated: true }, login: true, usageCheck: true },
+  { id: "claude", status: { authenticated: true }, login: true, usageCheck: true },
 ];
 
 describe("overseer space", () => {
@@ -32,7 +32,7 @@ describe("overseer space", () => {
       mode: "state" as const,
       label: "checking provider auth",
       outcome: "blocked" as const,
-      detail: "attached claude-code · not authenticated",
+      detail: "attached claude · not authenticated",
     };
 
     space.status(entry);
@@ -111,7 +111,7 @@ describe("overseer space", () => {
   it("carries the last message into a replay", () => {
     const { broadcast } = collector();
     const space = createOverseerSpace(broadcast);
-    space.say({ key: "authRestored", activity: "done", vars: { provider: "claude-code" } });
+    space.say({ key: "authRestored", activity: "done", vars: { provider: "claude" } });
     assert.equal(space.replay().message?.key, "authRestored");
   });
 });
@@ -124,8 +124,8 @@ describe("provider rows", () => {
     const { sent, broadcast } = collector();
     const space = createOverseerSpace(broadcast);
 
-    reportProviderStatus(space, signedOut, "claude-code");
-    reportProviderStatus(space, signedIn, "claude-code");
+    reportProviderStatus(space, signedOut, "claude");
+    reportProviderStatus(space, signedIn, "claude");
 
     const rows = space.replay().entries;
     assert.equal(rows.length, 2);
@@ -144,8 +144,8 @@ describe("provider rows", () => {
   });
 
   it("holds the prompt until the attached provider is the signed-in one", () => {
-    assert.equal(promptReady(signedIn, "claude-code"), true);
-    assert.equal(promptReady(signedOut, "claude-code"), false);
+    assert.equal(promptReady(signedIn, "claude"), true);
+    assert.equal(promptReady(signedOut, "claude"), false);
     // Signed in, but not the provider that is attached.
     assert.equal(promptReady(signedIn, "cursor"), false);
     assert.equal(promptReady(signedIn, undefined), false);
@@ -155,9 +155,9 @@ describe("provider rows", () => {
     assert.equal(authDetail([], undefined), "no providers registered");
     assert.equal(authDetail(signedOut, undefined), "1 registered · none attached");
     assert.equal(
-      authDetail(signedOut, "claude-code"),
-      "attached claude-code · not authenticated",
+      authDetail(signedOut, "claude"),
+      "attached claude · not authenticated",
     );
-    assert.equal(authDetail(signedIn, "claude-code"), "attached claude-code");
+    assert.equal(authDetail(signedIn, "claude"), "attached claude");
   });
 });

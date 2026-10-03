@@ -1,13 +1,9 @@
-/* ---- bottom right: the provider widget -----------------------------------
+/* ---- right rail: the provider widget --------------------------------------
    Widgets stay on the field. They are bracketed at the corners rather than
    framed and tabbed, so they read as instruments sitting on the background and
    can never be mistaken for windows (design-system.md §6.2). */
 .widget {
-  position: absolute;
-  right: 26px;
-  bottom: 26px;
-  z-index: 30;
-  width: 252px;
+  width: 100%;
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -121,11 +117,9 @@
   margin-left: 0;
 }
 
-/* Same register as the old footer console link — a word you can click, with
-   the noun in --ok. CONSOLE is mounted when the provider is signed in; CHECK
-   USAGE only for a provider whose adapter answers on demand rather than on a
-   timer (AdapterCapabilities.usageCheck). */
-.widget-console,
+/* A word you can click, with the noun in --ok. CHECK USAGE is mounted only for
+   a provider whose adapter answers on demand rather than on a timer
+   (AdapterCapabilities.usageCheck). */
 .widget-action {
   margin: 0;
   padding: 0 2px;
@@ -140,12 +134,10 @@
   cursor: pointer;
 }
 
-.widget-console:hover,
 .widget-action:not(:disabled):hover {
   color: var(--text);
 }
 
-.widget-console-word,
 .widget-action-word {
   color: var(--ok);
 }
