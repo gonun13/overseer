@@ -128,7 +128,6 @@ detail `bob→linda · …`.
 - A console's tab: the callsign is its title (`LINDA`), never the session's title, and its detail
   is the project, plus `<n> queued` while relays wait.
 - The session panel: the callsign names the row, for consoles and dormant sessions alike, beside
-  the project; the note at its right names the provider, plus `<n> queued` while relays wait. A
-  session without a callsign keeps its name.
+  the project, with `<n> queued` at its right while relays wait. A session without a callsign keeps its name.
 - Signals about a console name it by callsign first.
 - `@` suggestions and `overseer who`.

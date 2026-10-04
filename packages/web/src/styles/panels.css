@@ -169,10 +169,13 @@
   letter-spacing: 1px;
 }
 
-/* Trailing icon button, subtle at rest so the row still reads as its note
-   first — it only announces itself as destructive on hover. */
+/* Trailing icon button, subtle at rest so the row still reads as its name
+   first — it only announces itself as destructive on hover. Right-aligned
+   on its own: a session row has no note ahead of it unless relays wait, and
+   then the note does the pushing instead. */
 .session-row-delete,
 .session-row-stop {
+  margin-left: auto;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -180,6 +183,11 @@
   width: 18px;
   height: 18px;
   color: var(--ink-faint);
+}
+
+.session-row-note + .session-row-delete,
+.session-row-note + .session-row-stop {
+  margin-left: 0;
 }
 
 .session-row-delete:hover,
@@ -308,21 +316,6 @@
   font-size: 10px;
   line-height: 1.4;
   overflow-wrap: anywhere;
-}
-
-/* Section labels inside the sessions panel — consoles first, then the active
-   project's sessions. Readout type, not rows. */
-.sessions-section {
-  margin: 8px 0 2px;
-  padding: 0 9px;
-  color: var(--ink-faint);
-  font-size: 10px;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-}
-
-.sessions-section:first-child {
-  margin-top: 0;
 }
 
 /* Foot of the left rail: how a console starts. */

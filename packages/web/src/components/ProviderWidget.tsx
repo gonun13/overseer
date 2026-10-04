@@ -72,6 +72,8 @@ export function ProviderWidget({
     usageCheck.checked &&
     usageCheck.windows.length === 0;
 
+  const authLabel = providerAuthLabel(provider);
+
   return (
     <div className="widget settles-in">
       <button
@@ -96,9 +98,10 @@ export function ProviderWidget({
               {provider.version && (
                 <span className="widget-dim">v{provider.version}</span>
               )}
-            </span>
-            <span className="widget-row">
-              <span className="widget-dim">{providerAuthLabel(provider)}</span>
+              {/* Ellipsised on this line when long; the hover has it whole. */}
+              <span className="widget-dim widget-auth" title={authLabel}>
+                {authLabel}
+              </span>
             </span>
 
             {windows.length > 0 && (

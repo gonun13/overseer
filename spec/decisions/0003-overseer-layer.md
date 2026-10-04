@@ -8,8 +8,9 @@ sat in the right rail, and the provider widget sat between the prompt and the fo
 
 What this changes in settled spec:
 
-- **Status is no longer a window.** The rows render under the signals in the overseer space: in the
-  stage centre during discovery, docked in the right rail afterwards. Nothing summons or dismisses
+- **Status is no longer a window.** The rows render under the signals in the right rail's overseer
+  layer, there from discovery's first step while the message still speaks from the stage centre, so
+  they never move when the message and signals dock above them. Nothing summons or dismisses
   them, so the summon rules are gone; the rows still follow the state/event split, and the list
   follows its newest row unless the operator scrolls up. The three output surfaces are message,
   signals and status. Updated behaviour/overseer.md §2, §2.3, §3, §4, §5, §6.5 and §7; ui-ux.md §4

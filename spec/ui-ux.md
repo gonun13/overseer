@@ -28,8 +28,8 @@ else. It is a harness for many agents at once, so the middle of the screen belon
 │ │○ overseer           │ ┌──────────────────────┐ │                       │   2 tool calls are…   │
 │ │○ docs-site          │ │ ✻ thinking…          │ │                       │ STATUS                │
 │ ● SESSIONS 3 RUNNING ▴│ └──────────────────────┘ │                       │ ● scanning…  .. [OK]  │
-│ │● claude · api       │                                                 │ ● committed… .. [OK]  │
-│ │○ shell · api        │                                                 │                       │
+│ │● LINDA · api        │                                                 │ ● committed… .. [OK]  │
+│ │○ SHELL · api        │                                                 │                       │
 │ [+ NEW SESSION] [+ SH]│                                                 │ › message billing-…   │
 │ ┌ PROVIDER        ● ┐ │                                                 │                       │
 │  claude  usage 78%    │                                                 │ v0.5 | ask for HELP   │
@@ -48,8 +48,9 @@ panels. Each rail is a column that never scrolls sideways; its lists scroll insi
 
 While the field is still being set up — boot, the first-run name and tone asks, discovery, the
 goodbye — there is nothing for the stage to hold, and **the overseer space speaks from the stage
-centre**, its status rows under the message. Once the session panel is revealed it docks into the
-right rail's **overseer layer**, above the prompt, and the stage is handed to windows.
+centre**. Its status rows do not: from discovery's first step they are already in the right rail's
+**overseer layer**, where they stay. Once the session panel is revealed the message and signals dock
+into the layer above them, and the stage is handed to windows.
 
 Furniture appears progressively as its state becomes knowable; the prompt appears only after an
 authenticated provider is attached. Below 1024px is out of scope.
@@ -136,7 +137,8 @@ Rank order for anything that sorts by status: `approval → attention → waitin
 The right rail's middle (the stage centre while the field is being set up, §1): a **derived, ranked
 answer** to what deserves attention, and the services' own report under it. Docked, it and the prompt
 beneath it make up the **overseer layer** — everything the overseer says, and the line the operator
-answers it on.
+answers it on. Status is in the layer from discovery's first step, before the message and signals
+dock (§1).
 
 - **Message** — one uppercase line in the operator's tone, taken from the most urgent signal and set as text
   alone. Recovery may supply a verbatim alert word. Onboarding uses the same space for questions and choices.
@@ -148,10 +150,11 @@ answers it on.
 - Signals are derived on every render, never stored.
 - When no other signal needs attention, exactly one `idle` signal remains: standby.
   Consoles may still be working; standby invites another session.
-- **Status** — under the signals, a `STATUS` kicker over telegraphic rows of service work: trigger logs
-  from every service land here. Rows are either conditions (which rewrite themselves in place) or events
-  (which append); the list follows its newest row unless the operator has scrolled up. It is part of the
-  space, not a window — nothing summons or dismisses it. Format and lifecycle live in
+- **Status** — under the signals, at the foot of the layer just over the prompt, a `STATUS` kicker over
+  telegraphic rows of service work: trigger logs from every service land here. Rows are either
+  conditions (which rewrite themselves in place) or events (which append); the list follows its newest
+  row unless the operator has scrolled up. It is never in the stage centre, so docking the message and
+  signals above it does not move it. It is not a window — nothing summons or dismisses it. Format and lifecycle live in
   [behaviour/overseer.md §3](behaviour/overseer.md#3-status).
 
 Semantics live in `packages/web/src/state/signals.ts`. New system state earns a derivation rule there, not a
@@ -320,17 +323,17 @@ options use void.
    and scrolls vertically inside it.
 3. **SessionPanel** (left rail, under projects) — the project panel's two levels again: a readout header
    (`SESSIONS · 3 RUNNING`, lit by the most urgent console) with a surface list opening downward under
-   it and taking the rail's remaining height. The list has two groups. **Sessions** — every agent and
-   loop console the server runs, in any project, each with its light, kill (running) or dismiss
-   (exited), then the active project's sessions from the CLIs' own transcripts that no console holds.
-   A console that has not written its transcript yet is a session all the same. Picking a console
-   brings its window back, which is how a detached one is found again; picking a dormant session
-   resumes it in a new console. A row reads like a project row: on the left its light, the agent's
-   callsign (a dormant session without one keeps its name), a `·` and, dim, the project; on the right a note
-   naming what it runs — the provider, `shell`, `loop` — plus `<n> queued` while relays wait, then
-   the kill (running), dismiss (exited) or delete (dormant) icon. What the console is doing is its
-   light's to show. **Shells** — every plain shell, the same way, named `shell`. Selecting never
-   closes the panel.
+   it and taking the rail's remaining height. The list is **one list, not grouped**: every console the
+   server runs — agent, loop and plain shell, in any project, in the order they started — then the
+   active project's sessions from the CLIs' own transcripts that no console holds. A console that has
+   not written its transcript yet is a session all the same. Picking a console brings its window back,
+   which is how a detached one is found again; picking a dormant session resumes it in a new console.
+   A row reads like a project row: on the left its light, its name — the agent's callsign (a dormant
+   session without one keeps its name; a console without one is called `shell`, `loop` or the
+   provider) — a `·` and, dim, the project; on the right `<n> queued` while relays wait and the kill
+   (running), dismiss (exited) or delete (dormant) icon. It does not name the provider; what the
+   console is doing is its light's to show.
+   Selecting never closes the panel.
 4. **Start buttons** (left rail, under the session panel) — `+ new session` (only with a signed-in
    provider), `+ shell` and, with two or more running, `tile`. Field-level `.rail-btn`s: the rail is
    not a surface.
@@ -341,11 +344,12 @@ options use void.
    gear is unboxed and drawn larger than the other glyphs: the clock beside it has no frame either, so
    a border would make the gear the only boxed thing there. `.icon-btn` — the boxed variant — stays
    for small glyphs that do, like the panel's ✕.
-7. **The overseer layer** (right rail, between the clock and the footer) — the overseer space once
-   docked (§1, §4) over the prompt. The message at 18px, the signals beneath it with each signal's
-   sentence on its own line under its light and kicker, then the status rows. The signals take what
-   they need and the status rows the rest of the layer; each scrolls vertically inside itself, so a
-   long status log never pushes a signal out of view.
+7. **The overseer layer** (right rail, between the clock and the footer) — the overseer space (§4)
+   over the prompt. The message at 18px and the signals beneath it, each signal's sentence on its own
+   line under its light and kicker, once docked (§1); the status rows from discovery's first step,
+   sitting at the layer's foot. The signals take what they need and the status rows the rest of the
+   layer; each scrolls vertically inside itself, so a long status log never pushes a signal out of
+   view.
 8. **Prompt** (the overseer layer's foot) — appears only after an authenticated provider is attached
    (§7).
 9. **Footer** (right rail, foot) — one line under the layer: product, version, and `ask for HELP` with

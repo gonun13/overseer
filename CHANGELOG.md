@@ -9,10 +9,13 @@ rules for writing an entry live in
 
 ### Changed
 
-- The overseer's status rows no longer open in a window over your consoles. They sit under the
-  signals, and the message, signals, status and prompt now stack together in the right rail, with
-  the version and help under them.
-- The provider widget sits at the foot of the left rail, under the session buttons.
+- The overseer's status rows no longer open in a window over your consoles. They sit in the right
+  rail from the first discovery step, and the message, signals, status and prompt now stack together
+  there, with the version and help under them.
+- The provider widget sits at the foot of the left rail, under the session buttons, and is more
+  compact: the sign-in state shares the provider's line.
+- The session list is one list: shells sit with the agents rather than in a group of their own, and
+  each row shows its name and project, without the provider.
 
 ## 0.6.0 — 2026-10-04
 

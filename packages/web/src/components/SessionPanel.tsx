@@ -4,17 +4,16 @@ import { ChevronIcon, CloseIcon, StopIcon, TrashIcon } from "./icons";
 import type { Session } from "../domain";
 import { ACTIVITY_RANK, type Activity } from "../status";
 import { consoleLight } from "../state/useConsoles";
-import { agentName, consoleKind, projectName as nameOf, railGroups } from "../state/session-rail";
+import { agentName, projectName as nameOf, railRows } from "../state/session-rail";
 
 /**
- * Left rail, under the project panel. A readout header over two groups
- * (`railGroups`):
- *
- * - sessions: every agent and loop console the server is running, in any
- *   project — the dock windows come back from, since closing a console window
- *   only detaches it — then the active project's sessions no console holds.
- *   Picking one shows its console, or resumes it in a new one;
- * - shells: every plain shell.
+ * Left rail, under the project panel. A readout header over one list
+ * (`railRows`): every console the server is running — agent, loop and shell,
+ * in any project — the dock windows come back from, since closing a console
+ * window only detaches it; then the active project's sessions no console
+ * holds. Picking one shows its console, or resumes it in a new one. A row is
+ * its light, its name and its project; what it is doing is the light's to
+ * show.
  *
  * Selecting never closes the panel: like the project panel this is a status
  * list first, and the lights are how agents in flight are seen at all.
@@ -23,7 +22,6 @@ export function SessionPanel({
   consoles,
   sessions,
   projectPath,
-  projectName,
   open,
   onToggle,
   onShowConsole,
@@ -36,7 +34,6 @@ export function SessionPanel({
   /** Every session in the workspace; the rail scopes the dormant ones. */
   sessions: Session[];
   projectPath?: string;
-  projectName?: string;
   open: boolean;
   onToggle: () => void;
   onShowConsole: (console: ConsoleInfo) => void;
@@ -45,7 +42,7 @@ export function SessionPanel({
   onSelectSession: (session: Session) => void;
   onDeleteSession: (id: string) => void;
 }) {
-  const groups = railGroups(consoles, sessions, projectPath);
+  const rows = railRows(consoles, sessions, projectPath);
   const running = consoles.filter((c) => c.status === "running");
   const hottest = consoles
     .map(consoleLight)
@@ -72,9 +69,8 @@ export function SessionPanel({
         </button>
       </div>
       <div className={`sessions-list ${open ? "open" : ""}`}>
-        <p className="sessions-section">sessions · {projectName ?? "no project"}</p>
-        {groups.sessions.length === 0 && <p className="sessions-empty">no sessions yet</p>}
-        {groups.sessions.map((row) =>
+        {rows.length === 0 && <p className="sessions-empty">no sessions yet</p>}
+        {rows.map((row) =>
           row.kind === "console" ? (
             <ConsoleRow
               key={row.console.id}
@@ -106,7 +102,6 @@ export function SessionPanel({
                 ·
               </span>
               <span className="session-row-project">{nameOf(row.session.projectId)}</span>
-              <span className="session-row-note">{row.session.providerId}</span>
               {/* Not for a loop run's transcript, which its lease owns. A
                   session a console is running is listed as that console. */}
               {row.session.origin !== "loop" && (
@@ -124,30 +119,9 @@ export function SessionPanel({
             </div>
           ),
         )}
-
-        <p className="sessions-section">shells</p>
-        {groups.shells.length === 0 && <p className="sessions-empty">none running</p>}
-        {groups.shells.map((c) => (
-          <ConsoleRow
-            key={c.id}
-            console={c}
-            name={consoleKind(c)}
-            onShow={onShowConsole}
-            onKill={onKillConsole}
-            onDismiss={onDismissConsole}
-          />
-        ))}
       </div>
     </section>
   );
-}
-
-/** What a console row says at its right, before the icon: what it runs —
- * the provider, `shell`, `loop` — and the relays waiting on it, the pending
- * mark (spec/ui-ux.md §6). Its state is the light's to show. */
-function consoleNote(c: ConsoleInfo): string {
-  const what = consoleKind(c);
-  return c.pendingRelays !== undefined ? `${what} · ${c.pendingRelays} queued` : what;
 }
 
 function ConsoleRow({
@@ -182,7 +156,10 @@ function ConsoleRow({
         ·
       </span>
       <span className="session-row-project">{nameOf(c.projectPath)}</span>
-      <span className="session-row-note">{consoleNote(c)}</span>
+      {/* The relays waiting on it, the pending mark (spec/ui-ux.md §6). */}
+      {c.pendingRelays !== undefined && (
+        <span className="session-row-note">{c.pendingRelays} queued</span>
+      )}
       {c.status === "running" ? (
         <button
           className="session-row-stop"

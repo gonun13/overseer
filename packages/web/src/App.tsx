@@ -10,6 +10,7 @@ import { Prompt } from "./components/Prompt";
 import { ProviderWidget } from "./components/ProviderWidget";
 import { SessionActions, SessionPanel } from "./components/SessionPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
+import { StatusRows } from "./components/StatusRows";
 import { WindowStackHost } from "./components/WindowStackHost";
 import type { Session } from "./domain";
 import type { Signal } from "./state/signals";
@@ -500,7 +501,6 @@ export default function App() {
     <OverseerSpace
       docked={overseerDocked}
       signals={shell.signals}
-      rows={shell.statusRows}
       message={shell.message}
       loading={shell.loading}
       typingChance={shell.typingChance}
@@ -557,7 +557,6 @@ export default function App() {
                 consoles={consoleList}
                 sessions={sessions}
                 projectPath={activeProject?.path}
-                projectName={activeProject?.name}
                 open={sessionsOpen}
                 onToggle={toggleSessions}
                 onShowConsole={showConsole}
@@ -597,6 +596,9 @@ export default function App() {
 
           <div className="overseer-layer">
             {overseerDocked && overseerSpace}
+            {/* In the rail from discovery's first step, even while the
+                message still speaks from the stage centre. */}
+            <StatusRows rows={shell.statusRows} />
             {shell.furniture.prompt && (
               <div className="dock">
                 <Prompt

@@ -119,12 +119,12 @@
   padding: 0 24px;
 }
 
-/* Docked, the signals take what they need and the status rows the rest,
-   each scrolling inside itself — so a long status log never pushes an
-   actionable signal out of view. */
+/* Docked, the space takes what its signals need and the status rows under it
+   the rest of the layer, each scrolling inside itself — so a long status log
+   never pushes an actionable signal out of view. */
 .overseer-space.docked {
   position: static;
-  flex: 1 1 auto;
+  flex: 0 1 auto;
   min-height: 0;
   justify-content: flex-start;
   padding: 12px 0 0;
@@ -416,33 +416,23 @@
 }
 
 /* ---- the status rows ------------------------------------------------------
-   The services' telegraphic report under the signals (spec/behaviour/
-   overseer.md §3). The window's step log on the field rather than a surface,
-   so its ink is re-pointed at the field's text. */
+   The services' telegraphic report, in the overseer layer from discovery's
+   first step (spec/behaviour/overseer.md §3). It takes the layer's spare
+   height and sits at the foot of it, so the overseer space docking above only
+   eats empty room and the rows stay where they were. The window's step log on
+   the field rather than a surface, so its ink is re-pointed at the field's
+   text. */
 .os-status {
+  flex: 1 1 0;
   display: flex;
   flex-direction: column;
-  width: 100%;
-  max-width: 420px;
-  min-height: 0;
-  margin-top: 28px;
-  color: var(--text-dim);
-}
-
-.overseer-space:not(.docked) .os-status-rows {
-  max-height: 40vh;
-}
-
-.overseer-space.docked .os-status {
-  flex: 1 1 0;
   min-height: 96px;
-  max-width: none;
-  margin-top: 18px;
+  color: var(--text-dim);
 }
 
 .os-status-kicker {
   flex: none;
-  margin: 0 0 4px;
+  margin: auto 0 4px;
   padding: 0 4px;
   font-size: 10px;
   letter-spacing: 1.5px;
@@ -451,6 +441,7 @@
 }
 
 .os-status-rows {
+  flex: 0 1 auto;
   min-height: 0;
   padding: 0 4px;
   overflow-x: hidden;

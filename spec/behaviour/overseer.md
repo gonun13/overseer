@@ -116,8 +116,9 @@ Personality may change message phrasing, never meaning or severity. `activity` i
 
 ## 3. Status
 
-The status rows sit under the signals in the overseer space — in the stage centre during discovery, in
-the right rail's overseer layer once docked. They are where trigger logs from every service land,
+The status rows sit under the signals in the right rail's overseer layer, just over the prompt. They are
+there from discovery's first step — while the message still speaks from the stage centre — so the
+message and signals docking above them later does not move them. They are where trigger logs from every service land,
 centrally managed rather than fired ad hoc. Status is not a window: no command opens it and nothing
 dismisses it.
 
