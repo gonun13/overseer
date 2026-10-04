@@ -139,6 +139,9 @@ export function useDiscovery(): DiscoveryController {
     (message: ServerMessage) => {
       if (
         message.type.startsWith("console.") ||
+        // Relay rides the console channel: it is about consoles, and the
+        // held list is what its signals derive from.
+        message.type === "relay.held" ||
         (message.type === "error" && message.about?.startsWith("console."))
       ) {
         for (const listener of consoleListeners.current) listener(message);

@@ -24,6 +24,8 @@ import { useDiscovery } from "./state/useDiscovery";
 import { furnitureFor } from "./state/wizard";
 import { useLoopConfig } from "./state/useLoopConfig";
 import { usePromptSession } from "./state/usePromptSession";
+import { useRelay } from "./state/useRelay";
+import type { Addressee } from "./commands";
 import { useSessions } from "./state/useSessions";
 import { useShellKeyboard } from "./state/useShellKeyboard";
 import { useShellPresentation } from "./state/useShellPresentation";
@@ -209,7 +211,8 @@ export default function App() {
     wizard.connected,
     consoleList,
   );
-  const shell = useShellPresentation(wizard, open, consoleList);
+  const relay = useRelay(wizard.send, wizard.subscribeConsole);
+  const shell = useShellPresentation(wizard, open, consoleList, relay.held);
   const activeProject = shell.activeProject;
   const attachedProviderId = wizard.attachedProviderId;
   const canStartSession = shell.provider.authenticated && attachedProviderId !== undefined;
@@ -332,6 +335,47 @@ export default function App() {
     [open, wizard.activeProjectPath, wizard.projects],
   );
 
+  /** Every agent `@` can address: running ones, then dormant named sessions
+   * of the active project (spec/behaviour/relay.md §2). */
+  const agents = useMemo((): Addressee[] => {
+    const live = consoleList.filter(
+      (c) => c.kind === "agent" && c.status === "running" && c.callsign !== undefined,
+    );
+    const liveSessions = new Set(live.map((c) => c.sessionId));
+    return [
+      ...live.map((c) => {
+        const title = sessions.find((s) => s.id === c.sessionId)?.name;
+        return { callsign: c.callsign!, running: true, ...(title !== undefined ? { title } : {}) };
+      }),
+      ...sessions
+        .filter(
+          (s) =>
+            s.callsign !== undefined &&
+            s.origin !== "loop" &&
+            s.projectId === activeProject?.path &&
+            !liveSessions.has(s.id),
+        )
+        .map((s) => ({ callsign: s.callsign!, title: s.name, running: false })),
+    ];
+  }, [activeProject?.path, consoleList, sessions]);
+
+  /** `@linda` alone: that agent's console, or its session resumed. */
+  const showAgent = useCallback(
+    (callsign: string) => {
+      const needle = callsign.toLowerCase();
+      const live = consoleList.find(
+        (c) => c.kind === "agent" && c.status === "running" && c.callsign?.toLowerCase() === needle,
+      );
+      if (live !== undefined) {
+        showConsole(live);
+        return;
+      }
+      const session = sessions.find((s) => s.callsign?.toLowerCase() === needle);
+      if (session !== undefined) openSession(session);
+    },
+    [consoleList, openSession, sessions, showConsole],
+  );
+
   const prompt = usePromptSession({
     openWindow,
     closeAllWindows: closeAll,
@@ -341,6 +385,10 @@ export default function App() {
     openLoop,
     openShell: newShell,
     tileWindows,
+    relayTo: relay.relay,
+    showAgent,
+    renameAgent: relay.rename,
+    dropRelays: relay.dropAll,
   });
   const focusPrompt = prompt.focus;
   const submitCommand = prompt.submit;
@@ -410,6 +458,7 @@ export default function App() {
     if (wizard.reset === "goodbye") closeAll();
   }, [wizard.reset, closeAll]);
 
+  const releaseRelay = relay.release;
   const followSignal = useCallback(
     (signal: Signal) => {
       switch (signal.target.kind) {
@@ -434,9 +483,12 @@ export default function App() {
         case "restart":
           location.reload();
           return;
+        case "relay":
+          releaseRelay(signal.target.id, true);
+          return;
       }
     },
-    [newSession, open, openProjectSelector, openSettings, showConsoleById, startLogin],
+    [newSession, open, openProjectSelector, openSettings, releaseRelay, showConsoleById, startLogin],
   );
 
   // The overseer docks into the right rail once the field is set up — the
@@ -549,6 +601,7 @@ export default function App() {
             onPromptFocus={focusPrompt}
             onPromptBlur={prompt.blur}
             onPromptSubmit={submitPrompt}
+            agents={agents}
             onOpenHelp={openHelp}
             onOpenChangelog={openChangelog}
           />

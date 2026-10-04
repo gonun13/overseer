@@ -36,6 +36,8 @@ export interface Session {
   origin?: "loop";
   /** Workspace the loop run belongs to. Only set with `origin: "loop"`. */
   loopWorkspace?: string;
+  /** The session's person name (spec/behaviour/relay.md). */
+  callsign?: string;
 }
 
 /** What the provider widget reads out. Empty strings mean "not been told yet",

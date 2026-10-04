@@ -120,3 +120,27 @@ describe("deriveSignals consoles", () => {
     }
   });
 });
+
+describe("deriveSignals relays", () => {
+  it("asks the operator about a held agent relay, releasing it when followed", () => {
+    const signals = deriveSignals({
+      ...baseWorld,
+      heldRelays: [{ id: "h1", from: "Bob", to: "Linda", text: "rebuild it", at: "" }],
+    });
+    const held = signals.find((s) => s.id === "relay-h1")!;
+    assert.equal(held.activity, "approval");
+    assert.deepEqual(held.target, { kind: "relay", id: "h1" });
+    assert.match(held.text, /^Bob wants to relay to Linda: "rebuild it"/);
+  });
+
+  it("names a waiting console by its callsign first", () => {
+    const signals = deriveSignals({
+      ...baseWorld,
+      consoles: [consoleInfo({ activity: "waiting", callsign: "Linda" })],
+    });
+    assert.equal(
+      signals.find((s) => s.id === "waiting-c1")!.text,
+      "Linda (claude · demo) is waiting for you.",
+    );
+  });
+});

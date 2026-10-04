@@ -3,7 +3,7 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
-import { consoleCommand, hookSettings } from "../src/console.js";
+import { consoleCommand, hookSettings, relayBrief, relayInput } from "../src/console.js";
 
 /** The console command line: session flags and the hook settings layer. */
 
@@ -81,5 +81,22 @@ describe("claude consoleCommand", () => {
         assert.match(entry.hooks[0]!.command, /\|\| true$/);
       }
     }
+  });
+
+  it("tells a named agent who it is, before the opening prompt", async () => {
+    const command = await consoleCommand({ cwd: "/workspace/a", callsign: "Linda", prompt: "go" });
+    assert.deepEqual(command.args, ["--append-system-prompt", relayBrief("Linda"), "--", "go"]);
+    assert.match(relayBrief("Linda"), /You are Linda/);
+    assert.match(relayBrief("Linda"), /overseer tell/);
+  });
+});
+
+describe("claude relayInput", () => {
+  it("submits a relay as one bracketed paste and Enter", () => {
+    assert.equal(relayInput("one\ntwo"), "\x1b[200~one\ntwo\x1b[201~\r");
+  });
+
+  it("strips paste markers that would end the paste early", () => {
+    assert.equal(relayInput("a\x1b[201~b\x1b[200~"), "\x1b[200~ab\x1b[201~\r");
   });
 });

@@ -2,6 +2,7 @@ import { realpath } from "node:fs/promises";
 import type { IncomingMessage } from "node:http";
 import type { Server } from "node:http";
 import path from "node:path";
+import { fileURLToPath } from "node:url";
 import {
   isClientMessage,
   type DiscoveryEvent,
@@ -37,8 +38,11 @@ import {
   submitCode,
 } from "./login.js";
 import { createSessionIndex } from "./session-index.js";
+import { createCallsignBook } from "./callsigns.js";
+import { createRelay, type Relay } from "./relay.js";
 import {
   clearActionRegister,
+  clearCallsigns,
   clearRunLogs,
   clearSnapshot,
   readSnapshot,
@@ -206,6 +210,13 @@ async function resolveInProject(
   return projectDir;
 }
 
+/**
+ * The `overseer` command agents relay with (spec/behaviour/relay.md §5.1).
+ * Resolved from this module, which sits one level under `packages/server` in
+ * both `src/` and `dist/`.
+ */
+const RELAY_BIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../relay-bin");
+
 export function attachWebSocketServer(
   httpServer: Server,
   opts: { hookBase?: string } = {},
@@ -219,6 +230,8 @@ export function attachWebSocketServer(
   /** Rebuild and broadcast the sessions list — for the monitor that notices
    * a transcript change (transcript-monitor.ts). */
   refreshSessions: () => Promise<unknown>;
+  /** Callsign relay — `index.ts` routes agents' `/relay` requests into it. */
+  relay: Relay;
 } {
   const wss = new WebSocketServer({ noServer: true });
 
@@ -229,9 +242,31 @@ export function attachWebSocketServer(
     }
   };
 
+  /**
+   * Agent callsigns and the relay that types prompts into them
+   * (spec/behaviour/relay.md). Built around the registry and the session
+   * index; each closure reads the others lazily.
+   */
+  const callsigns = createCallsignBook({
+    exists: (key) =>
+      consoles.list().some((c) => c.id === key || c.sessionId === key) ||
+      sessionIndex.current().some((s) => s.id === key),
+  });
+
   const consoles = createConsoleRegistry({
     broadcast,
     ...(opts.hookBase !== undefined ? { hookBase: opts.hookBase } : {}),
+    callsigns,
+    relayBin: RELAY_BIN,
+    onActivity: (id, activity) => relay.onActivity(id, activity),
+    onExit: (id) => relay.onExit(id),
+    // A session whose CLI never wrote a transcript — opened and closed
+    // without a turn — is gone with its console, and so is its name.
+    onDismiss: (info) => {
+      if (info.sessionId === undefined) return;
+      if (sessionIndex.current().some((s) => s.id === info.sessionId)) return;
+      callsigns.release(info.sessionId);
+    },
   });
 
   /**
@@ -242,6 +277,16 @@ export function attachWebSocketServer(
 
   const sessionIndex = createSessionIndex(broadcast, {
     isRunning: (sessionId) => consoles.findBySession(sessionId) !== undefined,
+    callsignOf: (sessionId) => callsigns.nameOf(sessionId),
+    onDelete: (sessionId) => callsigns.release(sessionId),
+  });
+
+  const relay = createRelay({
+    consoles,
+    callsigns,
+    sessions: () => sessionIndex.current(),
+    space,
+    broadcast,
   });
   const usageCheck = createUsageCheck();
 
@@ -489,6 +534,8 @@ export function attachWebSocketServer(
       // only holds for a tab that happens to click the button again.
       const auth = currentAuthState();
       if (auth !== undefined) send(auth);
+      const held = relay.held();
+      if (held.length > 0) send({ type: "relay.held", held });
       void sessionIndex.list();
     })();
 
@@ -1091,6 +1138,17 @@ export function attachWebSocketServer(
               if (!result.ok) throw new Error(result.reason);
             });
             await erase("erasing run logs", clearRunLogs);
+            await erase("erasing callsigns", async () => {
+              await clearCallsigns();
+              // Running consoles keep their names: renaming an agent under
+              // the operator mid-turn would be stranger than the reset.
+              const running = consoles
+                .list()
+                .filter((c) => c.status === "running")
+                .map((c) => consoles.callsignKeyOf(c.id))
+                .filter((key): key is string => key !== undefined);
+              callsigns.forget(running);
+            });
             await erase("erasing action register", clearActionRegister);
             await erase("erasing memory", clearSnapshot);
           } finally {
@@ -1173,6 +1231,7 @@ export function attachWebSocketServer(
         case "console.input": {
           const result = consoles.input(parsed.id, parsed.data);
           if (!result.ok) send(consoleError("console.input", result.reason));
+          else relay.noteInput(parsed.id, parsed.data);
           return;
         }
         case "console.resize": {
@@ -1188,6 +1247,44 @@ export function attachWebSocketServer(
           return;
         case "console.list":
           send({ type: "console.list", consoles: consoles.list() });
+          return;
+        case "console.relay": {
+          const outcome = await relay.relay({
+            to: parsed.to,
+            text: parsed.text,
+            from: { kind: "operator" },
+          });
+          send({
+            type: "console.relayed",
+            reqId: parsed.reqId,
+            to: outcome.to,
+            state: outcome.state,
+            ...(outcome.reason !== undefined ? { reason: outcome.reason } : {}),
+          });
+          return;
+        }
+        case "callsign.rename": {
+          await callsigns.ready;
+          const result = callsigns.rename(parsed.from, parsed.to);
+          // Reported where relays are, since the prompt bar has no surface
+          // of its own to refuse in (spec/behaviour/relay.md §1.1).
+          space.status({
+            service: "relay",
+            key: "rename",
+            mode: "event",
+            label: `renaming ${parsed.from.toLowerCase()}...`,
+            outcome: result.ok ? "ok" : "failed",
+            detail: result.ok ? `${parsed.from.toLowerCase()} → ${parsed.to}` : result.reason,
+            action: "callsign:rename",
+            actor: "operator",
+          });
+          if (!result.ok) return;
+          consoles.renameCallsign(result.key, parsed.to);
+          await sessionIndex.list();
+          return;
+        }
+        case "relay.release":
+          await relay.release(parsed.id, parsed.release);
           return;
         case "provider.checkUsage": {
           const result = await usageCheck.check();
@@ -1279,5 +1376,6 @@ export function attachWebSocketServer(
     broadcast,
     space,
     refreshSessions: () => sessionIndex.list(),
+    relay,
   };
 }

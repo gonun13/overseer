@@ -9,6 +9,7 @@ import type { DiscoveryController } from "../state/useDiscovery";
 import type { LoopConfigState, LoopModelsEntry } from "../state/useLoopConfig";
 import { consoleLight, type PendingConsole } from "../state/useConsoles";
 import { PENDING_PREFIX } from "../state/console-layout";
+import { agentName, consoleKind, projectName } from "../state/session-rail";
 import type { OpenWindow, WindowKind } from "../windows";
 import { Window } from "./Window";
 import { ChangelogWindow } from "./windows/ChangelogWindow";
@@ -115,15 +116,15 @@ export function WindowStackHost({
     );
   };
 
-  /** A console's tab: the session it runs (or what it is, before the CLI
-   * has named one — `shell`, `loop`, the provider), then the project. The
-   * server's own title already ends in the project, so it is not reused. */
+  /** A console's tab: its callsign (or what it is without one — `shell`,
+   * `loop`, the provider), then the project. Not the session's title. */
   const consoleTab = (info: ConsoleInfo): { title: string; detail: string } => {
-    const session = sessions.find((s) => s.consoleId === info.id);
-    const what = info.kind === "agent" ? (info.providerId ?? "agent") : info.kind;
+    const project = projectName(info.projectPath);
     return {
-      title: session?.name ?? what,
-      detail: info.projectPath.split("/").filter(Boolean).pop() ?? info.projectPath,
+      title: agentName(info.callsign, consoleKind(info)),
+      // Relays queued for it ride on the tab too (spec/ui-ux.md §5.3).
+      detail:
+        info.pendingRelays !== undefined ? `${project} · ${info.pendingRelays} queued` : project,
     };
   };
 

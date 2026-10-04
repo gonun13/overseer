@@ -122,6 +122,11 @@ all of them at once.
 - **Monitoring** — Claude Code reports through hooks, so a console waiting on a
   permission prompt lights up and the overseer points you straight at it. Other CLIs
   are watched by their output.
+- **Callsigns** — every agent session has a person's name (`/rename` changes it).
+  `@linda <message>` in the prompt types a prompt into Linda's CLI once it is idle,
+  resuming the session if it is dormant. Inside an agent console, `overseer who` and
+  `overseer tell <name> <message>` let agents address each other; one that relays too
+  often is held for your approval.
 
 Prompt commands also accept these aliases: `/provider` for `/providers`, `/session`
 for `/sessions`, `/gitconfig` for `/git`, `/bash` or `/sh` for `/shell`, `/grid` or

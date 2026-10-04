@@ -21,6 +21,8 @@ project. It is four things at once:
   Project changes under `/workspace` stream from `packages/server/src/workspace-monitor.ts` without rerunning
   discovery.
 - **Automation trigger** — will start agents, scripts, and `claude` commands on the operator's behalf.
+  Today it relays: it types a prompt into an agent console addressed by callsign, verbatim, when that
+  console is idle ([relay.md](relay.md)). Routing a prompt is not conversing with the operator.
 - **Notification point** — turns escalations into signals and messages, never toasts or modals
   ([UI anti-patterns](../ui-ux.md#10-anti-patterns)).
 
@@ -299,12 +301,13 @@ nothing else in the field can be clicked or tabbed to.
 | `state.json` — the world snapshot             | Yes    | Its existence is what makes the next boot a return visit (§6.2). |
 | `actions.jsonl` — the action register         | Yes    | The record is of an instance that will not exist.                |
 | `logs/` — every run log                       | Yes    | Same.                                                             |
+| `callsigns.json` — session names              | Yes    | Names were given by this instance ([relay.md](relay.md)).        |
 | `personality.json`                            | Yes    | The name and tone were given to this instance (§6.3).            |
 | The `overseer-personality` project around it  | No     | An ordinary git project with the operator's own history in it.   |
 | Workspace projects                            | No     | Never the overseer's to remove.                                  |
 | Provider auth (`agent-home`)                  | No     | Sign-in is not memory. `./bin/reset` is what discards that.      |
 
-The order is `personality.json` → run logs → action register → snapshot (`erasing memory`). The snapshot
+The order is `personality.json` → run logs → callsigns → action register → snapshot (`erasing memory`). The snapshot
 goes last so the status window ends on memory itself; the register is still cleared before that so the
 deletes' own audit lines do not survive as the new instance's first memory. A wipe that fails stops there
 and keeps that trail, which is the one case worth having it.
@@ -341,4 +344,5 @@ becomes the message, because a first-run boot would quietly contradict memory th
 | WS routing + discovery pass   | `packages/server/src/ws.ts`, `packages/server/src/discovery.ts` |
 | Workspace monitor (live projects) | `packages/server/src/workspace-monitor.ts` |
 | Internal memory               | `packages/server/src/memory/internal.ts`         |
+| Callsigns + relay             | `packages/server/src/callsigns.ts`, `packages/server/src/relay.ts` |
 | External memory + validation  | `packages/server/src/memory/personality/`      |

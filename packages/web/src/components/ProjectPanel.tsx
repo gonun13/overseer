@@ -63,6 +63,9 @@ export function ProjectPanel({
           >
             <StatusLight activity={project.activity} />
             <span className="project-row-name">{project.name}</span>
+            <span className="row-sep" aria-hidden>
+              ·
+            </span>
             <span className="project-row-branch">
               {project.branch ?? "branch unknown"}
               {project.dirty === true ? " ●" : ""}

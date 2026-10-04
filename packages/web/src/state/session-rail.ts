@@ -1,6 +1,23 @@
 import type { ConsoleInfo } from "@overseer/protocol";
 import type { Session } from "../domain";
 
+/** What a console or session is called on its tab and rail row: the
+ * callsign that addresses it, else `fallback` — never the session's title,
+ * which the CLI owns and the operator does not need to read there. */
+export function agentName(callsign: string | undefined, fallback: string): string {
+  return callsign ?? fallback;
+}
+
+/** A project's name: the last segment of its path. */
+export function projectName(path: string): string {
+  return path.split("/").filter(Boolean).pop() ?? path;
+}
+
+/** What a console is before it has a callsign: `shell`, `loop`, the provider. */
+export function consoleKind(c: ConsoleInfo): string {
+  return c.kind === "agent" ? (c.providerId ?? "agent") : c.kind;
+}
+
 /** One row of the left rail's lists: a console, or a session with none. */
 export type RailRow =
   | { kind: "console"; console: ConsoleInfo; name: string; session?: Session }
@@ -38,7 +55,7 @@ export function railGroups(
     consoleRows.push({
       kind: "console",
       console: c,
-      name: session?.name ?? c.title,
+      name: agentName(c.callsign, consoleKind(c)),
       ...(session !== undefined ? { session } : {}),
     });
   }

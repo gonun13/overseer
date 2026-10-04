@@ -35,6 +35,8 @@ code, UI copy and docs; do not coin synonyms (see the "renaming things" anti-pat
 | **Attach / detach** | A browser window joining or leaving a running console. Detaching never ends the process. |
 | **Kill** | Explicitly ending a console's process. Never reported as a failure. |
 | **Transcript** | The CLI's own on-disk record of a session. Read only to list and delete. |
+| **Callsign** | A session's person name (`Linda`), unique across remembered sessions. How the operator and other agents address it ([behaviour/relay.md](behaviour/relay.md)). |
+| **Relay** | A prompt the overseer types into an agent console on someone's behalf — the operator's `@callsign`, or another agent's `overseer tell`. Verbatim; never answered. |
 
 ## 4. The overseer
 
@@ -77,6 +79,8 @@ These hold everywhere; code that breaks one is a bug, a spec change that breaks 
 11. **No private key leaves the container.** Only the public half of the git ssh key is ever shown.
 12. **`publish` gates the selected request only.** It reads that request's review artifact (or
     accepts `--force`); stacked ancestors are not independently gated.
+13. **A relay is typed only into an idle console with no operator draft.** Never into one that is
+    working, waiting or not yet reported; it queues until then.
 
 ## 6. Dev loop vocabulary
 

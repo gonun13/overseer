@@ -23,9 +23,9 @@ adapter packages they import are current.
 
 | Package | Directory | Covers |
 |---|---|---|
-| `server` | `packages/server/test/*.test.ts` | console registry, discovery, session index and transcript monitor, overseer space, memory reset, personality validation, provider registry, usage, login broker, git (`vcs`) and its wire handlers, loop config and leases, workspace monitor |
+| `server` | `packages/server/test/*.test.ts` | console registry, callsigns and relay, discovery, session index and transcript monitor, overseer space, memory reset, personality validation, provider registry, usage, login broker, git (`vcs`) and its wire handlers, loop config and leases, workspace monitor |
 | `web` | `packages/web/test/*.test.ts` | pure state: signals, space store, layout grid, commands, changelog parser, file view, session rail, git actions |
-| `adapters/claude` | `packages/adapters/claude/test/` | console command line and hooks, transcript (JSONL) parsing, session titles, login, usage — with recorded fixtures in `test/fixtures/` |
+| `adapters/claude` | `packages/adapters/claude/test/` | console command line, hooks and relay input, transcript (JSONL) parsing, session titles, login, usage — with recorded fixtures in `test/fixtures/` |
 | `adapters/cursor` | `packages/adapters/cursor/test/` | adapter, transcripts, usage |
 | `e2e` | `packages/e2e/tests/*.spec.ts` | boot and wizard (`smoke`), overseer space, consoles, git access, loop providers, changelog window |
 

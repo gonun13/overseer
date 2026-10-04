@@ -1,5 +1,5 @@
 import { useCallback, useState } from "react";
-import { matchCommand } from "../commands";
+import { addressInput, commandArgs, matchCommand } from "../commands";
 import type { WindowKind } from "../windows";
 
 type OpenWindow = (
@@ -17,12 +17,19 @@ interface PromptTerminalActions {
   openLoop: () => void;
   openShell: () => void;
   tileWindows: () => void;
+  /** Relay text to an agent by callsign (spec/behaviour/relay.md §2). */
+  relayTo: (callsign: string, text: string) => void;
+  /** Bring an agent's console up, resuming it if dormant. */
+  showAgent: (callsign: string) => void;
+  renameAgent: (from: string, to: string) => void;
+  dropRelays: () => void;
 }
 
 /**
- * Owns focus and slash-command routing for the prompt terminal. A leading `/`
- * dispatches a UI action; anything else is the opening prompt of a new
- * console session in the active project (the caller's business).
+ * Owns focus and routing for the prompt terminal. A leading `/` dispatches a
+ * UI action; a leading `@` addresses an agent; anything else is the opening
+ * prompt of a new console session in the active project (the caller's
+ * business).
  */
 export function usePromptSession({
   openWindow,
@@ -33,6 +40,10 @@ export function usePromptSession({
   openLoop,
   openShell,
   tileWindows,
+  relayTo,
+  showAgent,
+  renameAgent,
+  dropRelays,
 }: PromptTerminalActions) {
   const [focused, setFocused] = useState(false);
 
@@ -40,12 +51,19 @@ export function usePromptSession({
   const blur = useCallback(() => setFocused(false), []);
 
   /**
-   * Returns true when the input was a slash command — matched and dispatched,
-   * or unknown and ignored. False means the caller should start a session
-   * with it.
+   * Returns true when the input was a slash command or addressed to an agent —
+   * dispatched, or malformed and ignored. False means the caller should start
+   * a session with it.
    */
   const submit = useCallback(
     (input: string): boolean => {
+      const addressed = addressInput(input);
+      if (addressed !== undefined) {
+        if (addressed.to === "") return true;
+        if (addressed.text === "") showAgent(addressed.to);
+        else relayTo(addressed.to, addressed.text);
+        return true;
+      }
       if (slashInput(input)) {
         const command = matchCommand(input);
         if (!command) return true;
@@ -74,6 +92,14 @@ export function usePromptSession({
           case "tile":
             tileWindows();
             return true;
+          case "rename": {
+            const [from, to] = commandArgs(input);
+            if (from !== undefined && to !== undefined) renameAgent(from, to);
+            return true;
+          }
+          case "drop-relays":
+            dropRelays();
+            return true;
         }
         return true;
       }
@@ -81,7 +107,11 @@ export function usePromptSession({
     },
     [
       closeAllWindows,
-          openShell,
+      dropRelays,
+      openShell,
+      relayTo,
+      renameAgent,
+      showAgent,
       tileWindows,
       openLoop,
       openProjectSelector,

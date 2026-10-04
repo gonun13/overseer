@@ -13,7 +13,9 @@ export interface Command {
     | { type: "close-all" }
     | { type: "loop" }
     | { type: "shell" }
-    | { type: "tile" };
+    | { type: "tile" }
+    | { type: "rename" }
+    | { type: "drop-relays" };
 }
 
 export const COMMANDS: Command[] = [
@@ -56,6 +58,16 @@ export const COMMANDS: Command[] = [
     name: "loop",
     help: "run the dev loop for the active project",
     action: { type: "loop" },
+  },
+  {
+    name: "rename",
+    help: "rename an agent — /rename <callsign> <new>",
+    action: { type: "rename" },
+  },
+  {
+    name: "drop",
+    help: "drop every agent relay held for your approval",
+    action: { type: "drop-relays" },
   },
   {
     name: "settings",
@@ -112,16 +124,57 @@ export function matchCommand(input: string): Command | undefined {
   return COMMANDS.find((command) => namesOf(command).includes(needle));
 }
 
+/** What follows a command's name — `/rename linda lucy` → `["linda", "lucy"]`. */
+export function commandArgs(input: string): string[] {
+  return input.trim().split(/\s+/).slice(1);
+}
+
 /**
  * Commands whose name or alias starts with the token after `/`. An empty
- * token lists every command; input that is not a slash command lists none.
+ * token lists every command; input that is not a slash command lists none,
+ * and neither does one already past its name — the operator is typing
+ * arguments, and Enter must run what they typed.
  */
 export function suggestCommands(input: string): Command[] {
   const name = slashName(input);
   if (name === undefined) return [];
+  if (/^\/\S*\s/.test(input.trimStart())) return [];
   if (name === "") return COMMANDS;
   const needle = name.toLowerCase();
   return COMMANDS.filter((command) =>
     namesOf(command).some((candidate) => candidate.startsWith(needle)),
   );
+}
+
+/** One agent a prompt can address — running, or a dormant named session. */
+export interface Addressee {
+  callsign: string;
+  /** What it is on: its session title. */
+  title?: string;
+  running: boolean;
+}
+
+/**
+ * `@linda build it` → `{ to: "linda", text: "build it" }`. `undefined` when
+ * this is not addressed input. `""` as `to` means only `@` is typed so far.
+ */
+export function addressInput(input: string): { to: string; text: string } | undefined {
+  const trimmed = input.trim();
+  if (!trimmed.startsWith("@")) return undefined;
+  const match = /^@(\S*)\s*([\s\S]*)$/.exec(trimmed)!;
+  return { to: match[1]!, text: match[2]! };
+}
+
+/**
+ * Callsigns starting with what follows `@`, running agents first (spec/
+ * behaviour/relay.md §2). None once the name is complete and the message has
+ * begun — Enter then relays it.
+ */
+export function suggestAddressees(input: string, agents: Addressee[]): Addressee[] {
+  const trimmed = input.trimStart();
+  if (!trimmed.startsWith("@") || /^@\S*\s/.test(trimmed)) return [];
+  const needle = trimmed.slice(1).toLowerCase();
+  return agents
+    .filter((agent) => agent.callsign.toLowerCase().startsWith(needle))
+    .sort((a, b) => Number(b.running) - Number(a.running));
 }

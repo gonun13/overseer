@@ -44,6 +44,31 @@ export function hookSettings(hookUrl: string): string {
 }
 
 /**
+ * What an agent is told about the others (spec/behaviour/relay.md §5.1),
+ * appended to Claude Code's own system prompt rather than replacing it.
+ */
+export function relayBrief(callsign: string): string {
+  return [
+    `You are ${callsign}, one of several coding agents the operator runs side by side in Overseer.`,
+    "`overseer who` lists the other agents, their projects and what they are on;",
+    "`overseer tell <name> <message>` sends one of them a prompt, delivered when it is idle.",
+    "A prompt starting `[from <name>]` was relayed by that agent, not typed by the operator.",
+    "Relay only when the operator's task calls for it; relays are rate-limited.",
+  ].join(" ");
+}
+
+/**
+ * A relay, typed into the TUI as one submitted prompt: a bracketed paste, so
+ * newlines inside it stay in the prompt instead of submitting it early, then
+ * Enter. Paste markers inside the text are stripped — they would end the
+ * paste partway.
+ */
+export function relayInput(text: string): string {
+  const clean = text.replace(/\x1b\[20[01]~/g, "");
+  return `\x1b[200~${clean}\x1b[201~\r`;
+}
+
+/**
  * Before spawn we mark interactive onboarding complete so the TUI does not
  * re-ask for a browser login the pipe-based auth flow already finished.
  */
@@ -56,6 +81,9 @@ export async function consoleCommand(opts: ConsoleOpts): Promise<ConsoleCommand>
   }
   if (opts.hookUrl !== undefined) {
     args.push("--settings", hookSettings(opts.hookUrl));
+  }
+  if (opts.callsign !== undefined) {
+    args.push("--append-system-prompt", relayBrief(opts.callsign));
   }
   // After `--`, so a prompt that starts with a dash is still a prompt.
   if (opts.prompt !== undefined) args.push("--", opts.prompt);

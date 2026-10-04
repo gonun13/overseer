@@ -116,6 +116,17 @@ export type ClientMessage =
   | { type: "console.dismiss"; id: string }
   /** Ask for the console list (also pushed on every change). */
   | { type: "console.list" }
+  /**
+   * Relay `text` to the agent session called `to` (spec/behaviour/relay.md):
+   * typed into its console once it is idle, resuming it first if dormant.
+   * Answered with `console.relayed` to this socket; progress is reported to
+   * the overseer space for every tab.
+   */
+  | { type: "console.relay"; reqId: string; to: string; text: string }
+  /** Rename a session's callsign. The outcome is reported to the overseer space. */
+  | { type: "callsign.rename"; from: string; to: string }
+  /** Release (`true`) or drop (`false`) an agent relay held past its limits. */
+  | { type: "relay.release"; id: string; release: boolean }
   /** List every session in the workspace — every project, every provider. */
   | { type: "session.list" }
   /** Permanently delete a session's transcript. Refused while a console runs
@@ -564,6 +575,41 @@ export interface ConsoleInfo {
   activity: ConsoleActivity;
   /** True when activity comes from CLI hooks rather than output heuristics. */
   hooked: boolean;
+  /** The session's person name — agent consoles only (spec/behaviour/relay.md). */
+  callsign?: string;
+  /** Relays queued for this console, not yet typed. Absent when none. */
+  pendingRelays?: number;
+}
+
+/**
+ * How a relay was taken. `waking` resumed a dormant session first; `held`
+ * (agent relays only) waits on the operator; `refused` carries why. Delivery
+ * itself is reported to the overseer space, since it may come long after.
+ */
+export type RelayState = "delivered" | "queued" | "waking" | "held" | "refused";
+
+/** The answer to `console.relay`, to the socket that asked. */
+export interface ConsoleRelayedMessage {
+  type: "console.relayed";
+  reqId: string;
+  to: string;
+  state: RelayState;
+  reason?: string;
+}
+
+/** An agent relay held past its rate or cooldown, waiting on the operator. */
+export interface HeldRelay {
+  id: string;
+  from: string;
+  to: string;
+  text: string;
+  at: string;
+}
+
+/** Every held agent relay — broadcast on any change. Signals derive from it. */
+export interface RelayHeldMessage {
+  type: "relay.held";
+  held: HeldRelay[];
 }
 
 /** The console requested by `reqId` is up. The requesting socket is already
@@ -721,6 +767,8 @@ export type ServerMessage =
   | ConsoleExitMessage
   | ConsoleListMessage
   | ConsoleStateMessage
+  | ConsoleRelayedMessage
+  | RelayHeldMessage
   | SessionListMessage
   | SessionMetaMessage
   | LoopConfigMessage
@@ -734,6 +782,8 @@ export const CONSOLE_MAX_INPUT_CHARS = 64_000;
 export const SESSION_MAX_ID_CHARS = 64;
 export const SESSION_MAX_TEXT_CHARS = 64_000;
 export const SESSION_MAX_NAME_CHARS = 256;
+/** A callsign as typed: 2–16 letters, digits or hyphens, leading letter. */
+export const CALLSIGN_PATTERN = /^[A-Za-z][A-Za-z0-9-]{1,15}$/;
 /** A model id, as a menu value — not free text. */
 export const SESSION_MAX_MODEL_CHARS = 128;
 
@@ -870,6 +920,24 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     return isConsoleId((value as { id?: unknown }).id);
   }
   if (type === "console.list") return true;
+  if (type === "console.relay") {
+    const msg = value as { reqId?: unknown; to?: unknown; text?: unknown };
+    return (
+      isConsoleId(msg.reqId) &&
+      isCallsignToken(msg.to) &&
+      typeof msg.text === "string" &&
+      msg.text.length <= SESSION_MAX_TEXT_CHARS
+    );
+  }
+  if (type === "callsign.rename") {
+    const msg = value as { from?: unknown; to?: unknown };
+    // `to` is validated as a callsign by the server, so a refusal can say why.
+    return isCallsignToken(msg.from) && isCallsignToken(msg.to);
+  }
+  if (type === "relay.release") {
+    const msg = value as { id?: unknown; release?: unknown };
+    return isConsoleId(msg.id) && typeof msg.release === "boolean";
+  }
   if (type === "session.list") return true;
   if (type === "session.delete") {
     return isSessionId((value as { sessionId?: unknown }).sessionId);
@@ -1074,6 +1142,11 @@ function isRepoRelativePath(value: unknown): value is string {
   if (value.startsWith("/") || value.startsWith("-")) return false;
   if (value.includes("\0") || value.includes("\\")) return false;
   return value.split("/").every((segment) => segment !== ".." && segment !== "");
+}
+
+/** Loose shape for a name in a frame — the server owns callsign rules. */
+function isCallsignToken(value: unknown): value is string {
+  return typeof value === "string" && value.length > 0 && value.length <= 64;
 }
 
 function isSessionId(value: unknown): value is string {

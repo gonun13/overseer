@@ -212,6 +212,8 @@ RUN npm ci --omit=dev --workspace packages/server \
 
 COPY --from=builder /app/packages/protocol/dist packages/protocol/dist
 COPY --from=builder /app/packages/server/dist packages/server/dist
+# The `overseer` relay command agent consoles get on PATH — a script, not built.
+COPY --chmod=755 packages/server/relay-bin packages/server/relay-bin
 COPY --from=builder /app/packages/adapters/claude/dist packages/adapters/claude/dist
 COPY --from=builder /app/packages/adapters/cursor/dist packages/adapters/cursor/dist
 COPY --from=builder /app/packages/web/dist packages/web/dist

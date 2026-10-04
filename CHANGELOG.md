@@ -7,6 +7,18 @@ rules for writing an entry live in
 
 ## Unreleased
 
+### Added
+
+- Every agent session gets a callsign — a person's name like Linda — shown on its tab and in the
+  session list; `/rename linda lucy` changes it. Tabs now show just the callsign and the
+  project, not the session's title; session-list rows show the callsign and project on the left,
+  and the provider (or `shell`) with the kill button on the right.
+- Type `@linda <message>` in the prompt to send that session a prompt; it is typed in once the
+  session is idle and has no half-typed draft of yours, and a session that is not running is
+  resumed first. `@linda` alone brings its console up.
+- Agents can message each other with `overseer who` and `overseer tell <name> <message>`; an
+  agent that sends too often is held for your approval, and `/drop` drops what is held.
+
 ### Fixed
 
 - Documentation and CLI help now match the current commands, configuration, provider status,

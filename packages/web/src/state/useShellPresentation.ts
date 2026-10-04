@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useRef } from "react";
-import type { ConsoleInfo } from "@overseer/protocol";
+import type { ConsoleInfo, HeldRelay } from "@overseer/protocol";
 import type { Project, ProviderInfo } from "../domain";
 import type { WindowKind } from "../windows";
 import { deriveSignals, messageFor, type Signal } from "./signals";
@@ -18,6 +18,7 @@ import { projectsWithConsoleActivity } from "./project-activity";
 
 /** Stable empty state so OverseerSpace does not repeat its ranking work during boot. */
 const EMPTY_SIGNALS: Signal[] = [];
+const NO_HELD_RELAYS: HeldRelay[] = [];
 
 type OpenWindow = (
   kind: WindowKind,
@@ -33,6 +34,7 @@ export function useShellPresentation(
   wizard: DiscoveryController,
   openWindow: OpenWindow,
   consoles: ConsoleInfo[] = [],
+  heldRelays: HeldRelay[] = NO_HELD_RELAYS,
 ) {
   const furniture = furnitureFor(wizard);
   const projects = useMemo(
@@ -79,8 +81,10 @@ export function useShellPresentation(
         personalityMissing: wizard.personalityMissing,
         personalityRescued: wizard.personalityRescued,
         personalityRescueMessage: wizard.personalityRescueMessage,
+        heldRelays,
       }),
     [
+      heldRelays,
       projects,
       activeProject,
       consoles,

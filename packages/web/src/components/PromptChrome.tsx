@@ -1,5 +1,6 @@
 import type { ReactNode } from "react";
 import { overseerVersionLabel } from "../appVersion";
+import type { Addressee } from "../commands";
 import { Prompt } from "./Prompt";
 
 interface PromptChromeProps {
@@ -11,6 +12,8 @@ interface PromptChromeProps {
   onPromptFocus: () => void;
   onPromptBlur: () => void;
   onPromptSubmit: (input: string) => void;
+  /** Agents the prompt's `@` can address. */
+  agents: Addressee[];
   onOpenHelp: () => void;
   onOpenChangelog: () => void;
 }
@@ -24,6 +27,7 @@ export function PromptChrome({
   onPromptFocus,
   onPromptBlur,
   onPromptSubmit,
+  agents,
   onOpenHelp,
   onOpenChangelog,
 }: PromptChromeProps) {
@@ -35,6 +39,7 @@ export function PromptChrome({
           onFocus={onPromptFocus}
           onBlur={onPromptBlur}
           onSubmit={onPromptSubmit}
+          agents={agents}
         />
       )}
       {instrument}

@@ -4,7 +4,7 @@ import { ChevronIcon, CloseIcon, StopIcon, TrashIcon } from "./icons";
 import type { Session } from "../domain";
 import { ACTIVITY_RANK, type Activity } from "../status";
 import { consoleLight } from "../state/useConsoles";
-import { railGroups } from "../state/session-rail";
+import { agentName, consoleKind, projectName as nameOf, railGroups } from "../state/session-rail";
 
 /**
  * Left rail, under the project panel. A readout header over two groups
@@ -80,7 +80,6 @@ export function SessionPanel({
               key={row.console.id}
               console={row.console}
               name={row.name}
-              note={consoleNote(row.console, projectPath)}
               onShow={onShowConsole}
               onKill={onKillConsole}
               onDismiss={onDismissConsole}
@@ -100,10 +99,14 @@ export function SessionPanel({
               }}
             >
               <StatusLight activity={row.session.activity} />
-              <span className="session-row-name">{row.session.name}</span>
-              <span className="session-row-note">
-                {row.session.branch || row.session.providerId}
+              <span className="session-row-name">
+                {agentName(row.session.callsign, row.session.name)}
               </span>
+              <span className="row-sep" aria-hidden>
+                ·
+              </span>
+              <span className="session-row-project">{nameOf(row.session.projectId)}</span>
+              <span className="session-row-note">{row.session.providerId}</span>
               {/* Not for a loop run's transcript, which its lease owns. A
                   session a console is running is listed as that console. */}
               {row.session.origin !== "loop" && (
@@ -128,8 +131,7 @@ export function SessionPanel({
           <ConsoleRow
             key={c.id}
             console={c}
-            name={c.title}
-            note={consoleNote(c, projectPath)}
+            name={consoleKind(c)}
             onShow={onShowConsole}
             onKill={onKillConsole}
             onDismiss={onDismissConsole}
@@ -140,26 +142,23 @@ export function SessionPanel({
   );
 }
 
-/** What a console row says beside its name: its state when that is news,
- * otherwise where it runs when that is not the active project. */
-function consoleNote(c: ConsoleInfo, projectPath: string | undefined): string {
-  if (c.status === "exited") return "exited";
-  if (c.activity === "waiting") return "waiting";
-  if (c.projectPath !== projectPath) return c.projectPath.split("/").pop() ?? c.projectPath;
-  return c.kind === "agent" ? (c.providerId ?? c.kind) : c.kind;
+/** What a console row says at its right, before the icon: what it runs —
+ * the provider, `shell`, `loop` — and the relays waiting on it, the pending
+ * mark (spec/ui-ux.md §6). Its state is the light's to show. */
+function consoleNote(c: ConsoleInfo): string {
+  const what = consoleKind(c);
+  return c.pendingRelays !== undefined ? `${what} · ${c.pendingRelays} queued` : what;
 }
 
 function ConsoleRow({
   console: c,
   name,
-  note,
   onShow,
   onKill,
   onDismiss,
 }: {
   console: ConsoleInfo;
   name: string;
-  note: string;
   onShow: (console: ConsoleInfo) => void;
   onKill: (id: string) => void;
   onDismiss: (id: string) => void;
@@ -179,7 +178,11 @@ function ConsoleRow({
     >
       <StatusLight activity={consoleLight(c)} />
       <span className="session-row-name">{name}</span>
-      <span className="session-row-note">{note}</span>
+      <span className="row-sep" aria-hidden>
+        ·
+      </span>
+      <span className="session-row-project">{nameOf(c.projectPath)}</span>
+      <span className="session-row-note">{consoleNote(c)}</span>
       {c.status === "running" ? (
         <button
           className="session-row-stop"

@@ -40,7 +40,8 @@ export type SpaceService =
   | "personality"
   | "git"
   | "memory"
-  | "session";
+  | "session"
+  | "relay";
 
 /**
  * Why a row exists, and therefore what may happen to it later.

@@ -11,6 +11,7 @@ import type {
   ServerMessage,
 } from "@overseer/protocol";
 import { getAdapter } from "./adapters.js";
+import type { CallsignBook } from "./callsigns.js";
 import { loopSessionIndex, takeoverLoop } from "./loop-sessions.js";
 import { recordAction } from "./memory/internal.js";
 import { consoleEnv, spawnPty, type PtyHandle } from "./pty.js";
@@ -63,6 +64,9 @@ interface LiveConsole {
   scrollbackChars: number;
   sinks: Set<ConsoleSink>;
   quietTimer?: ReturnType<typeof setTimeout>;
+  /** What the callsign book knows this console's name by — its session id,
+   * or its own id when the CLI runs no known session. */
+  callsignKey?: string;
 }
 
 export interface ConsoleRegistryDeps {
@@ -83,6 +87,17 @@ export interface ConsoleRegistryDeps {
   loop?: (name: string) => { file: string; args: string[]; cwd: string };
   quietMs?: number;
   now?: () => Date;
+  /** Names agent consoles (spec/behaviour/relay.md §1). Absent: no callsigns. */
+  callsigns?: CallsignBook;
+  /** Directory holding the `overseer` relay command, put on an agent
+   * console's `PATH` beside its relay URL. Needs `hookBase` and `callsigns`. */
+  relayBin?: string;
+  /** Activity changed — what relay waits on to deliver. */
+  onActivity?: (id: string, activity: ConsoleActivity) => void;
+  /** The process ended. */
+  onExit?: (id: string) => void;
+  /** The console was forgotten. */
+  onDismiss?: (info: ConsoleInfo) => void;
 }
 
 export interface ConsoleRegistry {
@@ -103,6 +118,14 @@ export interface ConsoleRegistry {
   reportHook(id: string, token: string, activity: string): boolean;
   /** The running console on this provider session, if any. */
   findBySession(sessionId: string): ConsoleInfo | undefined;
+  /** The console a relay token belongs to: running, agent, token matches. */
+  verify(id: string, token: string): ConsoleInfo | undefined;
+  /** How many relays wait on this console — shown on its tab and row. */
+  setPending(id: string, count: number): void;
+  /** A callsign was renamed: relabel every console known by `key`. */
+  renameCallsign(key: string, callsign: string): void;
+  /** The callsign-book key of a console, for a rename or a reset. */
+  callsignKeyOf(id: string): string | undefined;
   /** Kill everything — server shutdown. */
   dispose(): void;
 }
@@ -136,6 +159,9 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
   const now = deps.now ?? (() => new Date());
 
   const consoles = new Map<string, LiveConsole>();
+  /** Agents can reach `/relay` only when they have a URL and a command. */
+  const relayEnabled =
+    deps.hookBase !== undefined && deps.relayBin !== undefined && deps.callsigns !== undefined;
 
   const list = () => [...consoles.values()].map((c) => ({ ...c.info }));
   const announceList = () => deps.broadcast({ type: "console.list", consoles: list() });
@@ -144,6 +170,7 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
     if (record.info.activity === activity) return;
     record.info.activity = activity;
     deps.broadcast({ type: "console.state", id: record.info.id, activity });
+    deps.onActivity?.(record.info.id, activity);
   };
 
   const pushScrollback = (record: LiveConsole, data: string) => {
@@ -208,7 +235,15 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
     id: string,
     hookToken: string,
   ): Promise<
-    | { ok: true; command: ConsoleCommand; title: string; providerId?: string; sessionId?: string }
+    | {
+        ok: true;
+        command: ConsoleCommand;
+        title: string;
+        providerId?: string;
+        sessionId?: string;
+        callsign?: string;
+        callsignKey?: string;
+      }
     | { ok: false; reason: string }
   > => {
     const name = path.basename(request.projectPath);
@@ -277,6 +312,16 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
     const hookUrl =
       deps.hookBase !== undefined ? `${deps.hookBase}/hooks/${id}/${hookToken}` : undefined;
 
+    // Named before the CLI starts, so it can be told who it is. Keyed by the
+    // session it will run; re-keyed below if the CLI did not take the id.
+    let callsign: string | undefined;
+    let callsignKey: string | undefined;
+    if (deps.callsigns !== undefined) {
+      await deps.callsigns.ready;
+      callsignKey = sessionId ?? id;
+      callsign = deps.callsigns.assign(callsignKey, sessionId !== undefined);
+    }
+
     try {
       const command = await adapter.consoleCommand({
         cwd: request.projectPath,
@@ -284,16 +329,30 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
         ...(resume ? { resume: true } : {}),
         ...(request.prompt !== undefined && !resume ? { prompt: request.prompt } : {}),
         ...(hookUrl !== undefined ? { hookUrl } : {}),
+        ...(callsign !== undefined && relayEnabled ? { callsign } : {}),
       });
       // Only keep the id when the CLI really runs that session: a resume, or
       // a CLI that took the minted id.
       const adopted = resume || command.args.includes(sessionId ?? "\0");
+      if (!adopted && callsignKey !== undefined && callsignKey !== id) {
+        deps.callsigns!.move(callsignKey, id, false);
+        callsignKey = id;
+      }
+      if (callsign !== undefined && relayEnabled) {
+        command.env = {
+          ...command.env,
+          OVERSEER_CALLSIGN: callsign,
+          OVERSEER_RELAY_URL: `${deps.hookBase}/relay/${id}/${hookToken}`,
+          PATH: `${deps.relayBin}:${command.env?.PATH ?? process.env.PATH ?? ""}`,
+        };
+      }
       return {
         ok: true,
         command,
         title: `${providerId} · ${name}`,
         providerId,
         ...(adopted && sessionId !== undefined ? { sessionId } : {}),
+        ...(callsign !== undefined ? { callsign, callsignKey: callsignKey! } : {}),
       };
     } catch (error) {
       return {
@@ -355,12 +414,14 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
           status: "running",
           activity: "unknown",
           hooked: resolved.command.hooked === true,
+          ...(resolved.callsign !== undefined ? { callsign: resolved.callsign } : {}),
         },
         handle,
         hookToken,
         scrollback: [],
         scrollbackChars: 0,
         sinks: new Set(),
+        ...(resolved.callsignKey !== undefined ? { callsignKey: resolved.callsignKey } : {}),
       };
       consoles.set(id, record);
 
@@ -381,6 +442,8 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
         record.info.exitCode = info.exitCode;
         if (info.signal !== undefined) record.info.signal = info.signal;
         record.info.activity = "idle";
+        delete record.info.pendingRelays;
+        deps.onExit?.(id);
         for (const target of record.sinks) {
           target({
             type: "console.exit",
@@ -443,6 +506,9 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
       if (record.quietTimer !== undefined) clearTimeout(record.quietTimer);
       consoles.delete(id);
       record.handle.kill();
+      // A name keyed by the console itself has nothing left to name.
+      if (record.callsignKey === id) deps.callsigns?.release(id);
+      deps.onDismiss?.({ ...record.info });
       announceList();
       return { ok: true };
     },
@@ -462,6 +528,35 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
       const record = runningOn(sessionId);
       return record === undefined ? undefined : { ...record.info };
     },
+
+    verify(id, token) {
+      const record = consoles.get(id);
+      if (record === undefined || record.hookToken !== token) return undefined;
+      if (record.info.status !== "running" || record.info.kind !== "agent") return undefined;
+      return { ...record.info };
+    },
+
+    setPending(id, count) {
+      const record = consoles.get(id);
+      if (record === undefined) return;
+      const before = record.info.pendingRelays ?? 0;
+      if (before === count) return;
+      if (count > 0) record.info.pendingRelays = count;
+      else delete record.info.pendingRelays;
+      announceList();
+    },
+
+    renameCallsign(key, callsign) {
+      let changed = false;
+      for (const record of consoles.values()) {
+        if (record.callsignKey !== key) continue;
+        record.info.callsign = callsign;
+        changed = true;
+      }
+      if (changed) announceList();
+    },
+
+    callsignKeyOf: (id) => consoles.get(id)?.callsignKey,
 
     dispose() {
       for (const record of consoles.values()) {

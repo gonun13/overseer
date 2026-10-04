@@ -6,6 +6,7 @@ import type {
   ConsoleExit,
   ServerMessage,
 } from "@overseer/protocol";
+import { createCallsignBook } from "../src/callsigns.js";
 import {
   createConsoleRegistry,
   type ConsoleRegistryDeps,
@@ -33,12 +34,14 @@ function harness(overrides: Partial<ConsoleRegistryDeps> = {}) {
   const status: AdapterStatus = { authenticated: true };
   let minted = 0;
   const hookUrls: string[] = [];
+  const commandOpts: Array<{ callsign?: string }> = [];
 
   const adapter = {
     id: "claude",
     getStatus: async () => status,
-    consoleCommand: async (opts: { cwd: string; sessionId?: string; resume?: boolean; hookUrl?: string }) => {
+    consoleCommand: async (opts: { cwd: string; sessionId?: string; resume?: boolean; hookUrl?: string; callsign?: string }) => {
       if (opts.hookUrl !== undefined) hookUrls.push(opts.hookUrl);
+      commandOpts.push(opts);
       return {
       file: "claude",
       args:
@@ -107,7 +110,7 @@ function harness(overrides: Partial<ConsoleRegistryDeps> = {}) {
     return { frames, send };
   };
 
-  return { registry, broadcasts, ptys, status, sink, hookUrls };
+  return { registry, broadcasts, ptys, status, sink, hookUrls, commandOpts };
 }
 
 const agent = (extra: Partial<OpenRequest> = {}): OpenRequest => ({
@@ -284,6 +287,63 @@ describe("console registry", () => {
     assert.equal(registry.list()[0]!.activity, "working");
     await new Promise((resolve) => setTimeout(resolve, 30));
     assert.equal(registry.list()[0]!.activity, "idle");
+  });
+
+  it("names an agent console, keeps the name on resume, and tells it how to relay", async () => {
+    const callsigns = createCallsignBook({ read: async () => ({}), write: async () => undefined });
+    const { registry, ptys, commandOpts } = harness({ callsigns, relayBin: "/app/relay-bin" });
+    const first = await registry.open(agent());
+    assert.ok(first.ok);
+    assert.equal(first.console.callsign, "Linda");
+    assert.equal(commandOpts[0]!.callsign, "Linda");
+    const env = ptys[0]!.opts.env;
+    assert.equal(env.OVERSEER_CALLSIGN, "Linda");
+    assert.match(env.OVERSEER_RELAY_URL!, new RegExp(`/relay/${first.console.id}/[0-9a-f]+$`));
+    assert.ok(env.PATH!.startsWith("/app/relay-bin:"));
+
+    const token = /\/relay\/[^/]+\/([0-9a-f]+)$/.exec(env.OVERSEER_RELAY_URL!)![1]!;
+    assert.equal(registry.verify(first.console.id, token)?.callsign, "Linda");
+    assert.equal(registry.verify(first.console.id, "wrong"), undefined);
+
+    ptys[0]!.emitExit({ exitCode: 0 });
+    const resumed = await registry.open(agent({ sessionId: "minted-1", resume: true }));
+    assert.ok(resumed.ok);
+    assert.equal(resumed.console.callsign, "Linda");
+
+    const shell = await registry.open({ ...agent(), kind: "shell" });
+    assert.ok(shell.ok);
+    assert.equal(shell.console.callsign, undefined);
+    assert.equal(ptys.at(-1)!.opts.env.OVERSEER_RELAY_URL, undefined);
+  });
+
+  it("relabels consoles on rename and carries a pending count", async () => {
+    const callsigns = createCallsignBook({ read: async () => ({}), write: async () => undefined });
+    const { registry } = harness({ callsigns });
+    const result = await registry.open(agent());
+    assert.ok(result.ok);
+    const key = registry.callsignKeyOf(result.console.id)!;
+    assert.equal(key, "minted-1");
+    registry.renameCallsign(key, "Lucy");
+    assert.equal(registry.list()[0]!.callsign, "Lucy");
+    registry.setPending(result.console.id, 2);
+    assert.equal(registry.list()[0]!.pendingRelays, 2);
+    registry.setPending(result.console.id, 0);
+    assert.equal(registry.list()[0]!.pendingRelays, undefined);
+  });
+
+  it("reports activity changes and exits to its listeners", async () => {
+    const seen: string[] = [];
+    const { registry, ptys, hookUrls } = harness({
+      onActivity: (id, activity) => seen.push(`${id}:${activity}`),
+      onExit: (id) => seen.push(`${id}:exit`),
+    });
+    const result = await registry.open(agent());
+    assert.ok(result.ok);
+    const [, id, token] = /\/hooks\/([^/]+)\/([0-9a-f]+)$/.exec(hookUrls[0]!)!;
+    registry.reportHook(id!, token!, "working");
+    registry.reportHook(id!, token!, "working");
+    ptys[0]!.emitExit({ exitCode: 0 });
+    assert.deepEqual(seen, [`${id}:working`, `${id}:exit`]);
   });
 
   it("attaches to a project's running loop rather than starting a second", async () => {

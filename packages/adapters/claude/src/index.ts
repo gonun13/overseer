@@ -10,7 +10,7 @@ import type {
   SessionMeta,
 } from "@overseer/protocol";
 import { configDir } from "./config-dir.js";
-import { consoleCommand } from "./console.js";
+import { consoleCommand, relayInput } from "./console.js";
 import { deleteSessionTranscript, listSessionsForProject } from "./jsonl.js";
 import { readAuthStatus, signOut, startLogin } from "./login.js";
 import { resolveSessionTitle } from "./session-titles.js";
@@ -60,6 +60,7 @@ export const claudeAdapter: AgentAdapter = {
   consoleCommand(opts: ConsoleOpts): Promise<ConsoleCommand> {
     return consoleCommand(opts);
   },
+  relayInput,
   sessionsWatchPath(): string {
     // One directory above the per-project slugs, so a project the CLI has not
     // written to before is still covered — the slug directory itself only

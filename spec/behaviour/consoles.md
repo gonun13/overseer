@@ -14,7 +14,8 @@ How a console looks is [ui-ux.md §5.3](../ui-ux.md#53-the-console); this file i
 | `shell` | a login shell in the project | `+ shell`, `/shell` |
 | `loop` | `/app/loop/run <project>` ([dev-loop.md](dev-loop.md)) | `/loop`, a loop session row |
 
-A new console targets the **active project**; an existing one keeps its own.
+A new console targets the **active project**; an existing one keeps its own. An `agent` console
+carries a **callsign** and can be relayed to ([relay.md](relay.md)).
 
 ## 2. Opening — start or attach
 
@@ -68,7 +69,8 @@ The session panel merges two sources: every console the server runs (any project
 project's dormant sessions read from the providers' own transcripts by the session index
 (rebuilt whenever a transcript changes, broadcast to every tab). Picking a console brings its
 window back — which is how a detached console is found again; picking a dormant session resumes it
-in a new console (`claude --resume`, `agent --resume`).
+in a new console (`claude --resume`, `agent --resume`). Agent rows lead with their callsign
+([relay.md §6](relay.md#6-where-callsigns-show)).
 
 ## 6. Keyboard
 

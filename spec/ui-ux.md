@@ -220,7 +220,10 @@ Any number can be open, in any project, tiled on the stage with every other wind
 xterm's own element, never on its host: the fit addon sizes the grid from the host's box less the
 terminal element's padding, so padding the host clips the right and bottom of the CLI. `Ctrl` + `` ` ``
 raises the next one and hands it the keyboard. The tab shows a status light — what the
-CLI is doing — in place of the usual mark.
+CLI is doing — in place of the usual mark. A console's tab names the agent and the project, nothing
+more: the title is its callsign (`LINDA`), or what it is without one (`shell`, `loop`, the
+provider), never the session's title; the detail is the project, and adds `<n> queued` while relays
+wait for it ([behaviour/relay.md §6](behaviour/relay.md#6-where-callsigns-show)).
 
 xterm.js matches the Overseer theme. What closing, killing, an exit, a failure and a reload do to a
 console is [behaviour/consoles.md §3](behaviour/consoles.md#3-lifecycle).
@@ -306,7 +309,8 @@ options use void.
    rather than inventing `clean`. Clicking the readout opens the project panel.
 2. **ProjectPanel** (left rail) — appears after project discovery and opens by default. It is a status
    panel before it is a selector: its lights show work in projects that are **not** active. Each row
-   is a light, a name, a branch, and a note saying why the light is lit; the active row is marked with an
+   is a light, a name, a branch (set off from the name by a `·`, as a window tab sets off its detail),
+   and a note saying why the light is lit; the active row is marked with an
    accent bar in `--mark-fill`, since the list is a surface. Long names ellipsise. **Selecting a project
    never closes the panel — only the chevron in its header does.** The list takes at most 40% of the rail
    and scrolls vertically inside it.
@@ -317,8 +321,12 @@ options use void.
    (exited), then the active project's sessions from the CLIs' own transcripts that no console holds.
    A console that has not written its transcript yet is a session all the same. Picking a console
    brings its window back, which is how a detached one is found again; picking a dormant session
-   resumes it in a new console. **Shells** — every plain shell, the same way. Selecting never closes
-   the panel.
+   resumes it in a new console. A row reads like a project row: on the left its light, the agent's
+   callsign (a dormant session without one keeps its name), a `·` and, dim, the project; on the right a note
+   naming what it runs — the provider, `shell`, `loop` — plus `<n> queued` while relays wait, then
+   the kill (running), dismiss (exited) or delete (dormant) icon. What the console is doing is its
+   light's to show. **Shells** — every plain shell, the same way, named `shell`. Selecting never
+   closes the panel.
 4. **Start buttons** (left rail, foot) — `+ new session` (only with a signed-in provider), `+ shell`
    and, with two or more running, `tile`. Field-level `.rail-btn`s: the rail is not a surface.
 5. **Clock** (right rail, top) — `HH:MM:SS` tabular plus the date, and the gear that opens settings. The
@@ -371,6 +379,9 @@ transcript — conversations live in consoles (§5.3).
 
 - A leading `/` starts a command; names autocomplete from `packages/web/src/commands.ts` and open the
   corresponding surface or action.
+- A leading `@` addresses an agent by callsign; callsigns autocomplete (Enter raises the highlighted
+  agent, Tab completes it), and `@linda <text>` relays the text to that session instead of starting
+  one ([behaviour/relay.md §2](behaviour/relay.md#2-addressing--callsign)).
 - Anything else starts a new session in the active project with it as the opening prompt, in a new console.
 - **No exec button.** `Enter` runs it.
 

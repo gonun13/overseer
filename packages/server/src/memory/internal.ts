@@ -72,6 +72,10 @@ function plansFile(): string {
   return path.join(root(), "plans.json");
 }
 
+function callsignsFile(): string {
+  return path.join(root(), "callsigns.json");
+}
+
 /** Actions the overseer chooses to record. Append-only and best effort; some
  * callers start the append without waiting before they report the action.
  * Nothing in `overseer-personality` can filter it (spec/behaviour/overseer.md §6.4). */
@@ -262,8 +266,8 @@ async function publishSnapshot(
   });
 }
 
-/** The temp-then-rename publish itself, for the two files in this store that
- * both need it. */
+/** The temp-then-rename publish itself, for the files in this store that
+ * need it. */
 async function publishJson(file: string, body: unknown): Promise<void> {
   const tmp = `${file}.${randomUUID()}.tmp`;
   try {
@@ -358,6 +362,40 @@ export function clearSnapshot(): Promise<void> {
   });
 }
 
+/**
+ * Session id → callsign (spec/behaviour/relay.md §1). Missing or unreadable
+ * reads as empty: names are a convenience, and a torn file must not stop a
+ * console from opening — the next write replaces it whole.
+ */
+export async function readCallsigns(): Promise<Record<string, string>> {
+  let raw: string;
+  try {
+    raw = await readFile(callsignsFile(), "utf8");
+  } catch {
+    return {};
+  }
+  try {
+    const parsed: unknown = JSON.parse(raw);
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
+    const out: Record<string, string> = {};
+    for (const [key, value] of Object.entries(parsed)) {
+      if (typeof value === "string") out[key] = value;
+    }
+    return out;
+  } catch {
+    return {};
+  }
+}
+
+/** Replace the whole map, under the same lock and publish as the snapshot. */
+export function writeCallsigns(map: Record<string, string>): Promise<void> {
+  return serialized(() => publishJson(callsignsFile(), map));
+}
+
+export function clearCallsigns(): Promise<void> {
+  return serialized(() => rm(callsignsFile(), { force: true }));
+}
+
 /** Plans are no longer tracked, but an older instance may have left its
  * store behind — a reset still removes it. */
 export function clearPlanStore(): Promise<void> {
@@ -385,6 +423,7 @@ export async function clearInternalMemory(): Promise<void> {
   await clearSnapshot();
   await clearPlanStore();
   await clearRunLogs();
+  await clearCallsigns();
   await clearActionRegister();
 }
 

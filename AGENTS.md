@@ -9,7 +9,7 @@ When specs disagree, respect them in this order (higher wins):
 2. domain, architecture — [`spec/domain.md`](spec/domain.md), [`spec/architecture.md`](spec/architecture.md)
 3. ui-ux, data — [`spec/ui-ux.md`](spec/ui-ux.md), [`spec/data.md`](spec/data.md)
 4. behaviour, decisions — [`spec/behaviour/`](spec/behaviour/) (`overseer.md`, `consoles.md`,
-   `dev-loop.md`), [`spec/decisions/`](spec/decisions/)
+   `relay.md`, `dev-loop.md`), [`spec/decisions/`](spec/decisions/)
 5. tests — [`spec/tests.md`](spec/tests.md)
 
 Implement and review against these docs before inventing behaviour.

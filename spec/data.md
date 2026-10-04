@@ -52,7 +52,7 @@ paths, or a workspace project's own bind mounts resolve to empty directories
 ([architecture.md §6.3](architecture.md#63-the-daemon-that-builds-workspace-projects)).
 
 What discards what: `./bin/reset` drops every volume, auth included; `reset overseer` in settings
-removes `state.json`, `actions.jsonl`, run logs and `personality.json`. A legacy `plans.json`, if
+removes `state.json`, `actions.jsonl`, run logs, `callsigns.json` and `personality.json`. A legacy `plans.json`, if
 present from an older build, survives ([behaviour/overseer.md §6.5](behaviour/overseer.md#65-resetting-the-overseer--forgetting-on-purpose)).
 
 ---
@@ -67,6 +67,7 @@ The server owns all access, in `packages/server/src/memory/internal.ts`.
   logs/<run>.jsonl   structured operation log — one file per run (discovery, wizard, later runs)
   actions.jsonl      append-only action register
   state.json         last-known world snapshot
+  callsigns.json     session id → callsign
 ```
 
 | Store | Shape (`internal.ts`) | Rule |
@@ -74,6 +75,7 @@ The server owns all access, in `packages/server/src/memory/internal.ts`.
 | `actions.jsonl` | `ActionRecord` — `at`, `actor` (`overseer` \| `operator`), `action`, `outcome` (`ok` \| `blocked` \| `failed` \| `skipped`), optional `detail` | A report starts a best-effort asynchronous append, then broadcasts without waiting. Never filtered or muted by configuration. |
 | `state.json` | `WorldSnapshot` — `at`, `runCount`, `workspaceRoot`, `projects`, `providers`, `last_active_project?`, `attached_provider?`, `theme?`, `git_identity?` | Its existence is what makes a boot a return visit. Restore `attached_provider` when registered; otherwise attach the first authenticated provider. |
 | `logs/` | one JSONL file per run id | Records, not screen content; the status window shows derived rows. |
+| `callsigns.json` | `{ [sessionId]: callsign }` | Written on assign, rename and release. Consoles keyed by console id are not persisted. [behaviour/relay.md §1](behaviour/relay.md#1-callsigns). |
 
 A usage-history / session / search index (`index.sqlite`) was planned in earlier drafts and does
 not exist; the session list is rebuilt in memory from transcripts (§3).
@@ -102,10 +104,10 @@ This spec does not restate its types; change the type, and the compiler finds ev
 | Contract | Source of truth | Notes |
 |---|---|---|
 | WebSocket frames (`/ws`) | `protocol/src/wire.ts` | Discriminated union on `type`, namespaced `project.*`, `console.*`, `git.*`, `loop.*`, `auth.*`, `session.*`, `operator.*`, `provider.*`, `theme.*`, `memory.*`, `workspace.*`, `discovery.*`, plus `connected` and `error`. Almost all app traffic goes here. |
-| Adapter runtime | `protocol/src/adapter.ts` | `AgentAdapter`, `AdapterStatus`, capabilities — see [architecture.md §1.1](architecture.md#11-the-adapter-interface). |
+| Adapter runtime | `protocol/src/adapter.ts` | `AgentAdapter`, `AdapterStatus`, capabilities — see [architecture.md §1.1](architecture.md#11-the-adapter-interface). `relayInput` is how a CLI is typed a relay. |
 | Activity vocabulary | `protocol/src/space.ts` (`Activity`) | The six values in [ui-ux.md §3](ui-ux.md#3-activity--the-one-status-vocabulary). |
 | Discovery events | `protocol/src/discovery.ts` | |
-| HTTP | `packages/server/src/index.ts` | `GET /api/health`; `POST /hooks/<console>/<token>` (loopback only, per-console token — [architecture.md §6.1](architecture.md#61-approvals-and-hooks)); the built SPA. |
+| HTTP | `packages/server/src/index.ts` | `GET /api/health`; `POST /hooks/<console>/<token>`, `POST /relay/<console>/<token>` and `POST /relay/<console>/<token>/roster` (loopback only, per-console token — [architecture.md §6.1](architecture.md#61-approvals-and-hooks)); the built SPA. |
 | Provider manifest | `providers/<id>/manifest.json` | `id`, `cli`, `configDir`, `install`, `app` (`adapter` \| `stub` \| `none`), `loop` (`bundle` \| `none`), optional `loopSubagents` — [architecture.md §1.1.2](architecture.md#112-the-provider-registry). |
 | `personality.json` | `packages/server/src/memory/personality/` | Allowlisted fields only — [behaviour/overseer.md §6.4](behaviour/overseer.md#64-the-customization-boundary). |
 | Dev-loop store | `loop/bin/lib/db.sh` (`LOOP_STEPS`) | `db/<slug>/<step>/<id>.md`, `index.jsonl`, `memory.md`, `implement.lock`, branch metadata in the project's `.git/config` — [behaviour/dev-loop.md](behaviour/dev-loop.md) (file taxonomy, the train). |

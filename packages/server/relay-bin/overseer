@@ -1,0 +1,92 @@
+#!/usr/bin/env node
+// `overseer` — how an agent console reaches the other agents
+// (spec/behaviour/relay.md §5.1). Talks to this console's own relay URL, so an
+// agent can only relay as itself. Only on PATH inside agent consoles.
+
+const url = process.env.OVERSEER_RELAY_URL;
+const self = process.env.OVERSEER_CALLSIGN;
+
+const usage = `usage:
+  overseer whoami                  this console's callsign
+  overseer who                     every agent: callsign, project, activity, session title
+  overseer tell <callsign> <text>  relay a prompt (reads stdin when no text is given)`;
+
+function fail(message) {
+  process.stderr.write(`overseer: ${message}\n`);
+  process.exit(1);
+}
+
+async function post(path, body) {
+  let res;
+  try {
+    res = await fetch(`${url}${path}`, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    });
+  } catch (error) {
+    fail(`cannot reach the overseer (${error.message})`);
+  }
+  if (res.status === 404) fail("this console is not a running agent the overseer knows");
+  if (!res.ok && res.status !== 400) fail(`the overseer answered ${res.status}`);
+  return res.json();
+}
+
+async function readStdin() {
+  if (process.stdin.isTTY) return "";
+  const chunks = [];
+  for await (const chunk of process.stdin) chunks.push(chunk);
+  return Buffer.concat(chunks).toString("utf8");
+}
+
+async function main() {
+  const [command, ...rest] = process.argv.slice(2);
+  if (command === undefined || command === "help" || command === "--help" || command === "-h") {
+    process.stdout.write(`${usage}\n`);
+    return;
+  }
+  if (url === undefined || self === undefined) {
+    fail("not inside an Overseer agent console (OVERSEER_RELAY_URL is not set)");
+  }
+
+  if (command === "whoami") {
+    process.stdout.write(`${self}\n`);
+    return;
+  }
+
+  if (command === "who") {
+    const { roster } = await post("/roster");
+    for (const agent of roster) {
+      const me = agent.callsign.toLowerCase() === self.toLowerCase() ? " (you)" : "";
+      const title = agent.title !== undefined ? ` · ${agent.title}` : "";
+      process.stdout.write(`${agent.callsign}${me} · ${agent.project} · ${agent.activity}${title}\n`);
+    }
+    return;
+  }
+
+  if (command === "tell") {
+    const [to, ...words] = rest;
+    if (to === undefined) fail(`tell needs a callsign\n${usage}`);
+    const text = words.length > 0 ? words.join(" ") : (await readStdin()).trim();
+    if (text === "") fail("nothing to relay");
+    const outcome = await post("", { to, text });
+    const name = outcome.to ?? to;
+    switch (outcome.state) {
+      case "delivered":
+        process.stdout.write(`delivered to ${name}\n`);
+        return;
+      case "queued":
+        process.stdout.write(`queued for ${name} · delivered when ${name} is idle\n`);
+        return;
+      case "held":
+        process.stdout.write(`held for the operator's approval · relay limit reached\n`);
+        return;
+      default:
+        fail(`refused · ${outcome.reason ?? "unknown reason"}`);
+    }
+  }
+
+  fail(`unknown command: ${command}\n${usage}`);
+}
+
+main();

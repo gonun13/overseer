@@ -69,6 +69,7 @@ One developer, on their own local machine. There is no multi-user story and no a
 | Stores, formats, contracts | [data.md](data.md) |
 | The overseer's voice, wizard and memory | [behaviour/overseer.md](behaviour/overseer.md) |
 | Consoles and sessions | [behaviour/consoles.md](behaviour/consoles.md) |
+| Callsigns and relay | [behaviour/relay.md](behaviour/relay.md) |
 | The dev loop | [behaviour/dev-loop.md](behaviour/dev-loop.md) |
 | Changes to this spec | [decisions/](decisions/) |
 | How to test and verify | [tests.md](tests.md) |

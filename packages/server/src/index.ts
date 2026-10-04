@@ -2,6 +2,7 @@ import { createServer } from "node:http";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
+import { SESSION_MAX_TEXT_CHARS } from "@overseer/protocol";
 import { attachWebSocketServer } from "./ws.js";
 import { startTranscriptMonitor } from "./transcript-monitor.js";
 import { startUsageRefresh } from "./usage-refresh.js";
@@ -57,7 +58,7 @@ if (process.env.NODE_ENV === "production") {
 const httpServer = createServer(app);
 // CLIs run in this same container, so their hooks reach the server on
 // loopback whatever interface it is bound to.
-const { broadcast, space, refreshSessions, consoles } = attachWebSocketServer(
+const { broadcast, space, refreshSessions, consoles, relay } = attachWebSocketServer(
   httpServer,
   { hookBase: `http://127.0.0.1:${port}` },
 );
@@ -76,7 +77,54 @@ app.post("/hooks/:id/:token", (req, res) => {
   res.status(ok ? 204 : 404).end();
 });
 
+// Agent-to-agent relay (spec/behaviour/relay.md §5): the `overseer` command
+// in an agent console posts here with that console's own hook token, so an
+// agent can only ever relay as itself. Both routes are POST: the SPA's
+// catch-all already owns GET.
+app.post("/relay/:id/:token", async (req, res) => {
+  if (!isLoopback(req.socket.remoteAddress ?? "")) {
+    res.status(403).end();
+    return;
+  }
+  const self = consoles.verify(req.params.id, req.params.token);
+  if (self?.callsign === undefined) {
+    res.status(404).end();
+    return;
+  }
+  const body = (req.body ?? {}) as { to?: unknown; text?: unknown };
+  if (
+    typeof body.to !== "string" ||
+    body.to.length === 0 ||
+    body.to.length > 64 ||
+    typeof body.text !== "string" ||
+    body.text.length > SESSION_MAX_TEXT_CHARS
+  ) {
+    res.status(400).json({ state: "refused", reason: "expected { to, text }" });
+    return;
+  }
+  const outcome = await relay.relay({
+    to: body.to,
+    text: body.text,
+    from: { kind: "agent", consoleId: self.id, callsign: self.callsign },
+  });
+  res.json(outcome);
+});
+
+app.post("/relay/:id/:token/roster", (req, res) => {
+  if (!isLoopback(req.socket.remoteAddress ?? "")) {
+    res.status(403).end();
+    return;
+  }
+  const self = consoles.verify(req.params.id, req.params.token);
+  if (self?.callsign === undefined) {
+    res.status(404).end();
+    return;
+  }
+  res.json({ self: self.callsign, roster: relay.roster() });
+});
+
 process.on("SIGTERM", () => {
+  relay.dispose();
   consoles.dispose();
   process.exit(0);
 });

@@ -140,7 +140,17 @@
   color: var(--mark-fill);
 }
 
-.project-row-branch {
+/* The center dot between a row's name and what follows it — the same
+   separator a window tab puts between its title and detail. */
+.row-sep {
+  flex: none;
+  color: var(--ink-faint);
+}
+
+/* The project a session runs in, beside its agent's name: dim like a
+   project row's branch, since the name is what the row is read by. */
+.project-row-branch,
+.session-row-project {
   min-width: 0;
   overflow: hidden;
   text-overflow: ellipsis;
@@ -159,8 +169,8 @@
   letter-spacing: 1px;
 }
 
-/* Trailing icon button, subtle at rest so the row still reads as the branch
-   note first — it only announces itself as destructive on hover. */
+/* Trailing icon button, subtle at rest so the row still reads as its note
+   first — it only announces itself as destructive on hover. */
 .session-row-delete,
 .session-row-stop {
   display: flex;

@@ -32,6 +32,7 @@ export function HelpWindow({ provider }: { provider: ProviderInfo }) {
           "ctrl/cmd + p         collapse or expand projects",
           "ctrl/cmd + ,         open settings",
           "/                    start a command; tab completes",
+          "@                    address an agent by callsign; tab completes",
           "esc                  dismiss the topmost thing",
           "                     (inside a console, keys belong to the cli)",
         ].join("\n")}
@@ -40,7 +41,7 @@ export function HelpWindow({ provider }: { provider: ProviderInfo }) {
       <WTitle>anything else</WTitle>
       <div className="w-pre">
         {
-          "text that does not start with / starts a new session\nin the active project, with it as the opening prompt.\n+ new session and + shell on the left do the same\nwithout one.\n\nconsoles tile the centre of the field on their own;\n/tile puts them back after a drag.\n\nclosing a console window only detaches it — the cli\nkeeps running and stays in the sessions list. kill\nends it."
+          "@linda <message> types the message into linda's cli\nonce it is idle; @linda alone brings it up.\n\ntext that does not start with / or @ starts a new session\nin the active project, with it as the opening prompt.\n+ new session and + shell on the left do the same\nwithout one.\n\nconsoles tile the centre of the field on their own;\n/tile puts them back after a drag.\n\nclosing a console window only detaches it — the cli\nkeeps running and stays in the sessions list. kill\nends it."
         }
       </div>
     </div>

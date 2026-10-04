@@ -139,6 +139,8 @@ Every CLI process runs in a PTY owned by the server's console registry
   `Stop`) that `curl` the server's loopback-only `POST /hooks/<console>/<token>?activity=…`. The
   per-console token means only the CLI the server spawned can report for it. A CLI without hooks
   is read from its output: output means `working`, two quiet seconds mean `idle`.
+- **Relay.** Activity is also what gates a relay: `relay.ts` types a queued prompt into an agent
+  console only on an idle transition with no operator draft ([behaviour/relay.md](behaviour/relay.md)).
 
 The session list (`session-index.ts`) is a separate index: every adapter's transcripts
 in every workspace project, rebuilt whenever a transcript changes (`transcript-monitor.ts`) and
@@ -255,6 +257,8 @@ around it. Ordered by priority.
 | Resume a session                          | Sessions  | `claude --resume`, `agent --resume`; attach if already running            |
 | Session list, every project and provider  | Sessions  | `session-index.ts` over adapter transcripts, rebuilt on transcript change |
 | Waiting / working / idle lights           | Consoles  | Claude Code hooks → `/hooks`; output heuristics otherwise                 |
+| Callsigns and `@callsign` relay           | Prompt    | `callsigns.ts`, `relay.ts`; typed into an idle console via `relayInput`   |
+| Agents address each other                 | Consoles  | `overseer who`/`tell` → `/relay`; framed, rate-limited, approval past cap  |
 | Plain shell in a project                  | Consoles  | `kind: "shell"`                                                           |
 | Dev loop in a console                     | Consoles  | `kind: "loop"`, take-over decision for a run held elsewhere              |
 | Plan utilization + estimated spend        | Provider  | `/usage` via refreshUsage (§2.1)                                          |
@@ -333,6 +337,12 @@ Approvals are answered in the CLI's own TUI, in its console. Overseer only learn
 pending, through the `Notification` hook (§1.2), and points the operator at the console. The hook
 endpoint accepts loopback requests only, and each console's URL carries a random token, so a
 process in the container cannot report for a console it was not started as.
+
+The relay endpoint (`/relay/<console>/<token>`, [behaviour/relay.md §5](behaviour/relay.md#5-agent-to-agent))
+uses the same token and the same loopback rule: an agent can relay only as itself. The token is
+in the agent's environment, so any process in that console can relay as it — the same reach the
+agent already has by typing. What bounds agent relays is the rate, the cooldown and the operator's
+approval past them, not the token.
 
 ---
 

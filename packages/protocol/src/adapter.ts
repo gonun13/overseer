@@ -37,6 +37,11 @@ export interface SessionMeta {
   origin?: "loop";
   /** Workspace slug whose lease owns this run. Only set with `origin: "loop"`. */
   loopWorkspace?: string;
+  /**
+   * The session's person name (spec/behaviour/relay.md §1). Stamped by the
+   * server from internal memory, like `origin` — an adapter never sets it.
+   */
+  callsign?: string;
 }
 
 /**
@@ -199,6 +204,12 @@ export interface ConsoleOpts {
    * server falls back to watching PTY output.
    */
   hookUrl?: string;
+  /**
+   * This console's callsign (spec/behaviour/relay.md §5.1). An adapter whose
+   * CLI takes an appended system prompt tells the agent who it is and how to
+   * reach the others; the env vars and `overseer` command are the server's.
+   */
+  callsign?: string;
 }
 
 /**
@@ -287,6 +298,12 @@ export interface AgentAdapter {
    * before returning.
    */
   consoleCommand?(opts: ConsoleOpts): Promise<ConsoleCommand>;
+  /**
+   * The bytes that submit `text` as one prompt in this CLI's TUI — what a
+   * relay writes into the PTY (spec/behaviour/relay.md §3). Absent: the CLI
+   * cannot be relayed to, and the server refuses rather than guess.
+   */
+  relayInput?(text: string): string;
   /**
    * Directory the adapter writes session transcripts under, for the server to
    * watch so a session started in any console reaches the list. Absent when the

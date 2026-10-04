@@ -84,7 +84,11 @@ test("a shell console keeps running when its window closes, and comes back", asy
   // Close is detach: the window goes, the console stays listed as running.
   await win.getByRole("button", { name: /^detach / }).click();
   await expect(page.locator(".window-console")).toHaveCount(0);
-  const row = page.locator(".sessions .session-row", { hasText: /shell ·/ }).first();
+  const row = page
+    .locator(".sessions .session-row", {
+      has: page.locator(".session-row-name", { hasText: /^shell$/ }),
+    })
+    .first();
   await expect(row).toBeVisible();
 
   // Picking it from the list reattaches — with what it printed meanwhile.
@@ -168,6 +172,43 @@ test("kill all consoles from settings, after a confirm", async ({ page }) => {
   await page.getByRole("button", { name: /kill them all/ }).click();
   await expect(killAll).toBeDisabled({ timeout: 15_000 });
   await page.getByRole("button", { name: "close settings" }).click();
+
+  await cleanUp(page);
+});
+
+test("an agent console carries a callsign the prompt can address", async ({ page }) => {
+  await settle(page);
+  // An agent console needs a signed-in provider; without one there is no
+  // prompt and nothing to name, and that is a correct build too.
+  const newSession = page.locator(".sessions-actions").getByRole("button", {
+    name: "+ new session",
+  });
+  if ((await newSession.count()) === 0) return;
+
+  await newSession.click();
+  const win = page.locator(".window-console").last();
+  await expect(win.locator(".xterm")).toBeVisible({ timeout: 15_000 });
+
+  // The rail row is named by the callsign alone (spec/behaviour/relay.md §6).
+  const row = page.locator(".sessions .session-row-name").first();
+  await expect(row).toHaveText(/^[A-Z][a-z]+\d*$/);
+  const callsign = (await row.textContent()) ?? "";
+
+  // Detached, `@callsign` alone brings it back — no prompt is typed into the
+  // CLI, so no model turn is spent.
+  await win.getByRole("button", { name: /^detach / }).click();
+  await expect(page.locator(".window-console")).toHaveCount(0);
+  await page.locator(".prompt-bar").click();
+  await page.keyboard.type(`@${callsign}`);
+  await expect(page.getByRole("option", { name: new RegExp(`^@${callsign}`) })).toBeVisible();
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".window-console")).toHaveCount(1);
+
+  // A name nobody holds is refused out loud, in the status window.
+  await page.locator(".prompt-bar").click();
+  await page.keyboard.type("@nobody hello");
+  await page.keyboard.press("Enter");
+  await expect(page.locator(".w-steps").getByText(/no agent called nobody/i).first()).toBeVisible();
 
   await cleanUp(page);
 });

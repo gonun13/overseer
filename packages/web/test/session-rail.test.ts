@@ -47,16 +47,26 @@ describe("railGroups", () => {
     assert.deepEqual(groups.shells.map((c) => c.id), ["s1"]);
   });
 
-  it("lists a session a console holds once, as that console, under its name", () => {
+  it("lists a session a console holds once, as that console, under its callsign", () => {
     const groups = railGroups(
-      [consoleOf("c1", { sessionId: "x" })],
+      [consoleOf("c1", { sessionId: "x", callsign: "Linda" })],
       [session("x", { name: "refactor", consoleId: "c1" }), session("y")],
       "/workspace/a",
     );
     assert.equal(groups.sessions.length, 2);
     const [first, second] = groups.sessions;
-    assert.ok(first?.kind === "console" && first.name === "refactor");
+    assert.ok(first?.kind === "console" && first.name === "Linda");
     assert.ok(second?.kind === "session" && second.session.id === "y");
+  });
+
+  it("names a console without a callsign by what it is, never its session's title", () => {
+    const groups = railGroups(
+      [consoleOf("c1", { sessionId: "x" })],
+      [session("x", { name: "refactor", consoleId: "c1" })],
+      "/workspace/a",
+    );
+    const [first] = groups.sessions;
+    assert.ok(first?.kind === "console" && first.name === "claude");
   });
 
   it("keeps consoles from every project but dormant sessions from the active one", () => {

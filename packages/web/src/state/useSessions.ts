@@ -32,6 +32,9 @@ export function metaToSession(meta: SessionMeta, running?: ConsoleInfo): Session
     ...(running !== undefined ? { consoleId: running.id } : {}),
     ...(meta.origin !== undefined ? { origin: meta.origin } : {}),
     ...(meta.loopWorkspace !== undefined ? { loopWorkspace: meta.loopWorkspace } : {}),
+    ...((running?.callsign ?? meta.callsign) !== undefined
+      ? { callsign: (running?.callsign ?? meta.callsign)! }
+      : {}),
   };
 }
 
@@ -47,6 +50,7 @@ export function consoleToSession(running: ConsoleInfo): Session {
     lastActiveAt: running.startedAt,
     consoleId: running.id,
     ...(running.kind === "loop" ? { origin: "loop" as const } : {}),
+    ...(running.callsign !== undefined ? { callsign: running.callsign } : {}),
   };
 }
 

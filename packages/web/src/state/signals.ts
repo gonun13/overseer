@@ -1,6 +1,7 @@
 import type {
   AdapterUsageWindow,
   ConsoleInfo,
+  HeldRelay,
   SpaceMessageKey,
   RejectedCustomization,
   UntrackedFolder,
@@ -29,7 +30,9 @@ export type Target =
    * *and* starts the flow, so following the signal is one click, not two. */
   | { kind: "login" }
   /** Full boot — used when `overseer-personality` must be restored by discovery. */
-  | { kind: "restart" };
+  | { kind: "restart" }
+  /** Releases one agent relay held past its limits (spec/behaviour/relay.md §5.2). */
+  | { kind: "relay"; id: string };
 
 export interface Signal {
   id: string;
@@ -76,6 +79,13 @@ export interface WorldState {
   personalityRescueMessage?: string;
   /** Workspace folders that are not git projects. */
   untrackedFolders?: UntrackedFolder[];
+  /** Agent relays held past their limits, waiting on the operator. */
+  heldRelays?: HeldRelay[];
+}
+
+/** How a signal names a console: its callsign first, when it has one. */
+function consoleName(c: ConsoleInfo): string {
+  return c.callsign === undefined ? c.title : `${c.callsign} (${c.title})`;
 }
 
 /**
@@ -198,7 +208,7 @@ export function deriveSignals(world: WorldState): Signal[] {
       id: `waiting-${c.id}`,
       activity: "approval",
       kicker: "approval",
-      text: `${c.title} is waiting for you.`,
+      text: `${consoleName(c)} is waiting for you.`,
       target: { kind: "console", id: c.id },
     });
   }
@@ -213,8 +223,21 @@ export function deriveSignals(world: WorldState): Signal[] {
       id: `exited-${c.id}`,
       activity: "attention",
       kicker: "console",
-      text: `${c.title} exited with code ${c.exitCode ?? "?"}.`,
+      text: `${consoleName(c)} exited with code ${c.exitCode ?? "?"}.`,
       target: { kind: "console", id: c.id },
+    });
+  }
+
+  // One agent prompting another past the rate or cooldown — nothing reaches
+  // the target until the operator says so. Following the signal releases it;
+  // `/drop` drops every held relay.
+  for (const held of world.heldRelays ?? []) {
+    signals.push({
+      id: `relay-${held.id}`,
+      activity: "approval",
+      kicker: "relay",
+      text: `${held.from} wants to relay to ${held.to}: "${held.text}" · follow to release, /drop to drop.`,
+      target: { kind: "relay", id: held.id },
     });
   }
 

@@ -36,6 +36,10 @@ export interface SessionIndexDeps {
   /** Whether a console is running this session right now. */
   isRunning?: (sessionId: string) => boolean;
   recordAction?: typeof recordAction;
+  /** A session's callsign, from internal memory (spec/behaviour/relay.md). */
+  callsignOf?: (sessionId: string) => string | undefined;
+  /** A transcript was deleted — its callsign goes with it. */
+  onDelete?: (sessionId: string) => void;
 }
 
 async function defaultListProjects(): Promise<string[]> {
@@ -50,6 +54,7 @@ export function createSessionIndex(broadcast: Broadcast, deps: SessionIndexDeps 
   const sweep = deps.sweepDeadLoopSessions ?? sweepDeadLoopSessions;
   const isRunning = deps.isRunning ?? (() => false);
   const recordActionFn = deps.recordAction ?? recordAction;
+  const callsignOf = deps.callsignOf ?? (() => undefined);
 
   /** The last list, so a delete knows which adapter and project own an id. */
   let known = new Map<string, SessionMeta>();
@@ -82,7 +87,10 @@ export function createSessionIndex(broadcast: Broadcast, deps: SessionIndexDeps 
     const loops = await loopSessionIndexFn();
     const stamped = all.map((meta) => {
       const lease = loops.get(meta.id);
-      if (lease === undefined) return meta;
+      if (lease === undefined) {
+        const callsign = callsignOf(meta.id);
+        return callsign === undefined ? meta : { ...meta, callsign };
+      }
       return {
         ...meta,
         // Named after what it is, not the loop's kickoff prompt — which is
@@ -113,6 +121,9 @@ export function createSessionIndex(broadcast: Broadcast, deps: SessionIndexDeps 
   return {
     list,
 
+    /** The last list built, without rebuilding — for relay's lookups. */
+    current: (): SessionMeta[] => [...known.values()],
+
     /** Permanently remove a session's transcript. */
     async delete(sessionId: string): Promise<SessionResult> {
       const meta = known.get(sessionId);
@@ -141,6 +152,7 @@ export function createSessionIndex(broadcast: Broadcast, deps: SessionIndexDeps 
         outcome: "ok",
         detail: `${meta.adapterId} · ${sessionId}`,
       });
+      deps.onDelete?.(sessionId);
       await list();
       return { ok: true };
     },
