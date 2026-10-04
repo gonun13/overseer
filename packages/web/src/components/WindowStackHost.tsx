@@ -20,8 +20,6 @@ import { DiffWindow } from "./windows/DiffWindow";
 import { FolderWindow } from "./windows/FolderWindow";
 import { HelpWindow } from "./windows/HelpWindow";
 import { LoopModelsWindow } from "./windows/LoopModelsWindow";
-import { OverseerWindow } from "./windows/OverseerWindow";
-import { spaceRows } from "../state/space";
 import { ProjectCreateWindow } from "./windows/ProjectCreateWindow";
 import { ProjectWindow } from "./windows/ProjectWindow";
 import { ProvidersWindow } from "./windows/ProvidersWindow";
@@ -177,9 +175,6 @@ export function WindowStackHost({
             : undefined
         }
       >
-        {windowState.kind === "overseer" && (
-          <OverseerWindow rows={spaceRows(wizard.space)} />
-        )}
         {windowState.kind === "providers" && (
           <ProvidersWindow
             providers={wizard.providers}

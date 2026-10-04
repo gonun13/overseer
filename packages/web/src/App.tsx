@@ -5,7 +5,8 @@ import { Clock } from "./components/Clock";
 import { DecisionWindow } from "./components/DecisionWindow";
 import { OverseerSpace } from "./components/OverseerSpace";
 import { ProjectPanel } from "./components/ProjectPanel";
-import { PromptChrome } from "./components/PromptChrome";
+import { Footer } from "./components/Footer";
+import { Prompt } from "./components/Prompt";
 import { ProviderWidget } from "./components/ProviderWidget";
 import { SessionActions, SessionPanel } from "./components/SessionPanel";
 import { SettingsPanel } from "./components/SettingsPanel";
@@ -212,7 +213,7 @@ export default function App() {
     consoleList,
   );
   const relay = useRelay(wizard.send, wizard.subscribeConsole);
-  const shell = useShellPresentation(wizard, open, consoleList, relay.held);
+  const shell = useShellPresentation(wizard, consoleList, relay.held);
   const activeProject = shell.activeProject;
   const attachedProviderId = wizard.attachedProviderId;
   const canStartSession = shell.provider.authenticated && attachedProviderId !== undefined;
@@ -499,6 +500,7 @@ export default function App() {
     <OverseerSpace
       docked={overseerDocked}
       signals={shell.signals}
+      rows={shell.statusRows}
       message={shell.message}
       loading={shell.loading}
       typingChance={shell.typingChance}
@@ -520,7 +522,8 @@ export default function App() {
           reachable by Tab either. */}
       <div className="field" inert={deciding}>
         {/* Left rail: what to work on — the project, every project, every
-            console and session, and the ways to start another. */}
+            console and session, the ways to start another, and the provider
+            they run on. */}
         <aside className="rail rail-left">
           {shell.furniture.activeProject && (
             <ActiveProject
@@ -572,39 +575,48 @@ export default function App() {
               />
             </>
           )}
+
+          {shell.furniture.providerWidget && (
+            <ProviderWidget
+              provider={shell.provider}
+              usageCheck={usageCheck}
+              onOpenProviders={() => open("providers")}
+            />
+          )}
         </aside>
 
         {/* The stage: windows only. Consoles tile it; everything else floats
             inside it. Until the field is set up, the overseer speaks here. */}
         <main className="stage">{!overseerDocked && overseerSpace}</main>
 
-        {/* Right rail: the machine — time and settings, the overseer, the
-            prompt, the provider, version and help. */}
+        {/* Right rail: the machine — time and settings, then the overseer's
+            layer (its message, signals and status, and the prompt that
+            answers it), then version and help. */}
         <aside className="rail rail-right">
           {shell.furniture.clock && <Clock onOpenSettings={openSettings} />}
 
-          {overseerDocked && overseerSpace}
-
-          <PromptChrome
-            promptVisible={shell.furniture.prompt}
-            footerVisible={shell.furniture.footer}
-            promptFocused={prompt.focused}
-            instrument={
-              shell.furniture.providerWidget ? (
-                <ProviderWidget
-                  provider={shell.provider}
-                  usageCheck={usageCheck}
-                  onOpenProviders={() => open("providers")}
+          <div className="overseer-layer">
+            {overseerDocked && overseerSpace}
+            {shell.furniture.prompt && (
+              <div className="dock">
+                <Prompt
+                  focused={prompt.focused}
+                  onFocus={focusPrompt}
+                  onBlur={prompt.blur}
+                  onSubmit={submitPrompt}
+                  agents={agents}
                 />
-              ) : undefined
-            }
-            onPromptFocus={focusPrompt}
-            onPromptBlur={prompt.blur}
-            onPromptSubmit={submitPrompt}
-            agents={agents}
-            onOpenHelp={openHelp}
-            onOpenChangelog={openChangelog}
-          />
+              </div>
+            )}
+          </div>
+
+          {shell.furniture.footer && (
+            <Footer
+              helpVisible={shell.furniture.prompt}
+              onOpenHelp={openHelp}
+              onOpenChangelog={openChangelog}
+            />
+          )}
         </aside>
 
         <WindowStackHost

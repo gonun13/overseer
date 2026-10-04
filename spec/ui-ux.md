@@ -26,28 +26,30 @@ else. It is a harness for many agents at once, so the middle of the screen belon
 │ ● PROJECT billing… ▴  │ └──────────────────────┘ │ └──────────────────┘ │         ▲             │
 │ │● billing-service    │ ● /// CLAUDE · DOCS   ✕ │                       │ ● APPROVAL            │
 │ │○ overseer           │ ┌──────────────────────┐ │                       │   2 tool calls are…   │
-│ │○ docs-site          │ │ ✻ thinking…          │ │                       │                       │
-│ ● SESSIONS 3 RUNNING ▴│ └──────────────────────┘ │                       │ › message billing-…   │
-│ │● claude · api       │                                                 │ ┌ PROVIDER       ● ┐ │
-│ │○ shell · api        │                                                 │  claude              │
-│ │ sessions · billing  │                                                 │  usage ▓▓▓▓▓░ 78%    │
-│ [+ NEW SESSION] [+ SH]│                                                 │ v0.5 | ask for HELP  │
+│ │○ docs-site          │ │ ✻ thinking…          │ │                       │ STATUS                │
+│ ● SESSIONS 3 RUNNING ▴│ └──────────────────────┘ │                       │ ● scanning…  .. [OK]  │
+│ │● claude · api       │                                                 │ ● committed… .. [OK]  │
+│ │○ shell · api        │                                                 │                       │
+│ [+ NEW SESSION] [+ SH]│                                                 │ › message billing-…   │
+│ ┌ PROVIDER        ● ┐ │                                                 │                       │
+│  claude  usage 78%    │                                                 │ v0.5 | ask for HELP   │
 └───────────────────────┴─────────────────────────────────────────────────┴──────────────────────┘
 ```
 
 | Region      | Owns, top to bottom                                                                                     |
 | ----------- | ------------------------------------------------------------------------------------------------------- |
-| left rail   | **active project** · **project panel** · **session panel** (sessions, shells) · the start buttons     |
+| left rail   | **active project** · **project panel** · **session panel** (sessions, shells) · the start buttons · **provider widget** |
 | stage       | **windows only** — every window tiles it                                                                |
-| right rail  | **clock** and the **settings** gear · **the overseer space** · **the prompt** · **provider widget** · footer |
+| right rail  | **clock** and the **settings** gear · **the overseer layer** (message, signals, status, **the prompt**) · footer |
 
 The rails take a fifth of the width each, floored at 260px; the stage takes the rest. A hairline in
 `--stamp-edge` is all that separates a rail from the stage — rails are furniture on the field, not
 panels. Each rail is a column that never scrolls sideways; its lists scroll inside themselves.
 
-While the field is still being set up — boot, the first-run name and tone asks, the goodbye — there is
-nothing for the stage to hold, and **the overseer space speaks from the stage centre**. Once the session
-panel is revealed it docks into the right rail and the stage is handed to windows.
+While the field is still being set up — boot, the first-run name and tone asks, discovery, the
+goodbye — there is nothing for the stage to hold, and **the overseer space speaks from the stage
+centre**, its status rows under the message. Once the session panel is revealed it docks into the
+right rail's **overseer layer**, above the prompt, and the stage is handed to windows.
 
 Furniture appears progressively as its state becomes knowable; the prompt appears only after an
 authenticated provider is attached. Below 1024px is out of scope.
@@ -132,7 +134,9 @@ Rank order for anything that sorts by status: `approval → attention → waitin
 ## 4. The overseer space
 
 The right rail's middle (the stage centre while the field is being set up, §1): a **derived, ranked
-answer** to what deserves attention.
+answer** to what deserves attention, and the services' own report under it. Docked, it and the prompt
+beneath it make up the **overseer layer** — everything the overseer says, and the line the operator
+answers it on.
 
 - **Message** — one uppercase line in the operator's tone, taken from the most urgent signal and set as text
   alone. Recovery may supply a verbatim alert word. Onboarding uses the same space for questions and choices.
@@ -144,6 +148,11 @@ answer** to what deserves attention.
 - Signals are derived on every render, never stored.
 - When no other signal needs attention, exactly one `idle` signal remains: standby.
   Consoles may still be working; standby invites another session.
+- **Status** — under the signals, a `STATUS` kicker over telegraphic rows of service work: trigger logs
+  from every service land here. Rows are either conditions (which rewrite themselves in place) or events
+  (which append); the list follows its newest row unless the operator has scrolled up. It is part of the
+  space, not a window — nothing summons or dismisses it. Format and lifecycle live in
+  [behaviour/overseer.md §3](behaviour/overseer.md#3-status).
 
 Semantics live in `packages/web/src/state/signals.ts`. New system state earns a derivation rule there, not a
 new widget.
@@ -180,11 +189,6 @@ command, or a system escalation.
 - Window chrome is draggable; `.no-drag`, inputs, and buttons remain interactive.
 - Dismissed by the ✕, or `Esc` for the topmost surface.
 - **Multiple windows coexist side by side.** They are not modal and never block the prompt.
-
-The **status window** is summoned automatically when a service starts work — it is where trigger logs from
-every service land. It shows telegraphic rows and may be dismissed without cancelling the operation. Rows are
-either conditions (which rewrite themselves in place) or events (which append). Lifecycle rules live in
-[behaviour/overseer.md](behaviour/overseer.md).
 
 ### 5.1 Windows carry controls
 
@@ -327,19 +331,25 @@ options use void.
    the kill (running), dismiss (exited) or delete (dormant) icon. What the console is doing is its
    light's to show. **Shells** — every plain shell, the same way, named `shell`. Selecting never
    closes the panel.
-4. **Start buttons** (left rail, foot) — `+ new session` (only with a signed-in provider), `+ shell`
-   and, with two or more running, `tile`. Field-level `.rail-btn`s: the rail is not a surface.
-5. **Clock** (right rail, top) — `HH:MM:SS` tabular plus the date, and the gear that opens settings. The
+4. **Start buttons** (left rail, under the session panel) — `+ new session` (only with a signed-in
+   provider), `+ shell` and, with two or more running, `tile`. Field-level `.rail-btn`s: the rail is
+   not a surface.
+5. **ProviderWidget** (left rail, foot) — see §6.2. It is a readout and the way into the providers
+   window; it does not start sessions. It sits at the foot of the rail from the moment it mounts, even
+   before the session panel above it is revealed.
+6. **Clock** (right rail, top) — `HH:MM:SS` tabular plus the date, and the gear that opens settings. The
    gear is unboxed and drawn larger than the other glyphs: the clock beside it has no frame either, so
    a border would make the gear the only boxed thing there. `.icon-btn` — the boxed variant — stays
    for small glyphs that do, like the panel's ✕.
-6. **The overseer space** (right rail, middle, once docked — §1, §4) — the message at 18px and the
-   signals beneath it, each signal's sentence on its own line under its light and kicker. Scrolls
-   vertically if the signals outgrow the rail.
-7. **Prompt** (right rail, foot) — appears only after an authenticated provider is attached (§7).
-8. **ProviderWidget** (right rail, under the prompt) — see §6.2. It is a readout and the way into the
-   providers window; it does not start sessions.
-9. **Footer** — one line under the widget: product, version, and `ask for HELP` with HELP in `--accent`.
+7. **The overseer layer** (right rail, between the clock and the footer) — the overseer space once
+   docked (§1, §4) over the prompt. The message at 18px, the signals beneath it with each signal's
+   sentence on its own line under its light and kicker, then the status rows. The signals take what
+   they need and the status rows the rest of the layer; each scrolls vertically inside itself, so a
+   long status log never pushes a signal out of view.
+8. **Prompt** (the overseer layer's foot) — appears only after an authenticated provider is attached
+   (§7).
+9. **Footer** (right rail, foot) — one line under the layer: product, version, and `ask for HELP` with
+   HELP in `--accent`.
 
 ### 6.1 Panels
 
@@ -374,7 +384,7 @@ never use a hover fill.
 
 ## 7. The prompt
 
-At the foot of the right rail, on the dark input surface (`--fill`/`--ink`). One line tall at rest; a draft
+At the foot of the overseer layer, in the right rail, on the dark input surface (`--fill`/`--ink`). One line tall at rest; a draft
 wraps and the bar grows down from its first line so everything typed stays in view, up to 40% of the
 viewport, past which the draft scrolls inside the bar. `Shift` + `Enter` breaks a line. It never grows into a
 transcript — conversations live in consoles (§5.3).

@@ -1,8 +1,11 @@
-/* ---- right rail: the provider widget --------------------------------------
+/* ---- left rail, foot: the provider widget ---------------------------------
    Widgets stay on the field. They are bracketed at the corners rather than
    framed and tabbed, so they read as instruments sitting on the background and
-   can never be mistaken for windows (spec/ui-ux.md §6.2). */
+   can never be mistaken for windows (spec/ui-ux.md §6.2). Pinned to the foot
+   of the rail even before the session panel above it is revealed. */
 .widget {
+  flex: none;
+  margin-top: auto;
   width: 100%;
   display: flex;
   flex-direction: column;

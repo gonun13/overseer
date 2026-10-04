@@ -10,10 +10,10 @@ import type {
  * The client half of the overseer space.
  *
  * One store behind all three surfaces, so they cannot disagree about the
- * world. Before this, the status window was an append-only array in
+ * world. Before this, the status list was an append-only array in
  * `wizard.steps` while signals were derived per render — which is why a login
  * fixed the signal list and left `checking provider auth... [BLOCKED]`
- * standing in the window above it.
+ * standing in the list above it.
  *
  * Rows are held in two buckets because they mean different things (see
  * `SpaceStatusMode`): `state` rows are a keyed map of conditions that hold
@@ -31,13 +31,11 @@ export interface SpaceState {
    * the signal list can both outrank this — see `useShellPresentation`. */
   message?: SpaceMessage;
   /**
-   * Bumped whenever a row *appears*. Drives the auto-summon in
-   * `useShellPresentation`.
+   * Bumped whenever a row *appears*. A reset's teardown counts it: each row
+   * that lands costs a piece of furniture (`wizard.ts`).
    *
    * Deliberately not bumped when a `state` row is revised: a row correcting
-   * itself is the window doing its job, not new work starting, and re-opening
-   * a window the operator closed over it would break the "does not re-summon
-   * itself" rule (spec/behaviour/overseer.md §3).
+   * itself is the list doing its job, not new work starting.
    */
   tick: number;
 }
@@ -51,12 +49,12 @@ export function emptySpace(): SpaceState {
 
 export const EMPTY_SPACE: SpaceState = emptySpace();
 
-/** How many event rows to keep. The window is a view of current work, not an
+/** How many event rows to keep. The list is a view of current work, not an
  * archive — the action register is the archive. */
 const MAX_EVENTS = 200;
 
 /** Service order for reading `state` rows out. Roughly the order discovery
- * runs in, so the window reads the way the pass did. */
+ * runs in, so the list reads the way the pass did. */
 const SERVICE_ORDER: SpaceService[] = [
   "discovery",
   "workspace",
@@ -67,7 +65,7 @@ const SERVICE_ORDER: SpaceService[] = [
   "memory",
 ];
 
-/** The rows the status window renders, conditions first. */
+/** The rows the status list renders, conditions first. */
 export function spaceRows(space: SpaceState): SpaceStatusEntry[] {
   const states = [...space.states.values()].sort(
     (a, b) => SERVICE_ORDER.indexOf(a.service) - SERVICE_ORDER.indexOf(b.service),
@@ -97,8 +95,7 @@ export function applySpaceFrame(
         states.delete(id);
         removed = true;
       }
-      // Clearing never bumps the tick — a condition ending is not a reason to
-      // put a window back in front of the operator.
+      // Clearing never bumps the tick — a condition ending is not new work.
       return removed ? { ...space, states } : space;
     }
 
@@ -106,8 +103,7 @@ export function applySpaceFrame(
       return { ...space, message: frame.message };
 
     case "space.replay": {
-      // A replay is the tab catching up, not new work: the window must not
-      // spring open just because a page was reloaded.
+      // A replay is the tab catching up, not new work, so the tick stays put.
       const states = new Map(space.states);
       for (const entry of frame.entries) states.set(idOf(entry), entry);
       return {
@@ -142,7 +138,7 @@ function applyStatus(
 /**
  * Fold a discovery step into the space.
  *
- * Discovery steps are both beats in a paced pass and rows in the window, and
+ * Discovery steps are both beats in a paced pass and rows in the list, and
  * they arrive as `DiscoveryEvent`s because the pass owns their pacing and
  * furniture reveals. What they carry now is a space identity: the provider
  * steps claim `providers:auth` and `providers:prompt`, so when a login later

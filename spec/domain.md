@@ -46,7 +46,7 @@ code, UI copy and docs; do not coin synonyms (see the "renaming things" anti-pat
 | **Activity** | The one status vocabulary: `approval` → `attention` → `waiting` → `working` → `done` → `idle`, in rank order. |
 | **Message** | The overseer's one uppercase line, in the operator's tone. |
 | **Signal** | A ranked, actionable sentence derived from real state on every render; never stored. Has a kicker (its category). |
-| **Status window** | Telegraphic rows of service work. A row is a **state** (a condition, replaced in place) or an **event** (a happening, append-only). |
+| **Status** | Telegraphic rows of service work, under the signals in the overseer space. A row is a **state** (a condition, replaced in place) or an **event** (a happening, append-only). |
 | **Tone** | `neutral`, `dry` or `warm` — the copy pack the message speaks in. |
 | **Wizard** | The startup state machine: `boot` → `welcome` → `discovery` → `settling` → `ready`. |
 | **Discovery** | The startup pass that learns time, personality, projects and providers. |

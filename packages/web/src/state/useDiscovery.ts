@@ -22,7 +22,7 @@ import {
  * it means.
  *
  * Discovery is requested explicitly rather than run on connect (see the
- * `ClientMessage` note in the protocol): the status window has to be
+ * `ClientMessage` note in the protocol): the status list has to be
  * mounted before steps start arriving, and a reconnect must not silently
  * re-run a scan nobody asked for.
  */

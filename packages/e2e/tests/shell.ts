@@ -137,7 +137,7 @@ export async function runCommand(
 
 /**
  * Assert the shell is legitimately holding the prompt rather than having lost
- * it. The status window's own row and the signal have to agree about why —
+ * it. The status list's own row and the signal have to agree about why —
  * that agreement is the thing worth checking in this branch.
  */
 export async function expectPromptHeld(page: Page): Promise<void> {

@@ -38,16 +38,15 @@ async function openShell(page: Page) {
 }
 
 async function typeInto(page: Page, win: ReturnType<Page["locator"]>, text: string) {
-  // Focus xterm's own input rather than clicking: another window (the
-  // overseer's status window, after a reload) may be lying over this one.
+  // Focus xterm's own input rather than clicking: another window may be
+  // lying over this one.
   await win.locator(".xterm-helper-textarea").focus();
   await page.keyboard.type(text);
   await page.keyboard.press("Enter");
 }
 
 async function cleanUp(page: Page) {
-  // Other windows (the overseer's status window lands top-right after a
-  // reload) can lie over a console's tab.
+  // Other windows can lie over a console's tab.
   while ((await page.locator(".window:not(.window-console) .tab-close").count()) > 0) {
     await page.locator(".window:not(.window-console) .tab-close").first().click();
   }
@@ -204,7 +203,7 @@ test("an agent console carries a callsign the prompt can address", async ({ page
   await page.keyboard.press("Enter");
   await expect(page.locator(".window-console")).toHaveCount(1);
 
-  // A name nobody holds is refused out loud, in the status window.
+  // A name nobody holds is refused out loud, in the status list.
   await page.locator(".prompt-bar").click();
   await page.keyboard.type("@nobody hello");
   await page.keyboard.press("Enter");

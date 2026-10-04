@@ -118,7 +118,7 @@ export interface DiscoveryStepUpdate {
 /**
  * Where a discovery step's row lands in the overseer space.
  *
- * A step is both a beat in a paced pass and a row in the status window, and
+ * A step is both a beat in a paced pass and a row in the status list, and
  * those two needs pull in opposite directions. The pass wants its own
  * ordering, furniture reveals and client-side pacing; the row wants a stable
  * `(service, key)` so a later report can revise it.

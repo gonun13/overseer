@@ -16,8 +16,8 @@ test("boots to a settled state", async ({ page }) => {
   // Footer mounts with "releasing the prompt" — settled discovery, whether or
   // not a provider is signed in (console only appears when one is).
   await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
-  // Discovery ran and reported a world: the operations window is summoned by
-  // the machine and carries the steps of the pass that just happened.
+  // Discovery ran and reported a world: the status rows under the signals
+  // carry the steps of the pass that just happened.
   await expect(page.getByText(/scanning workspace/i)).toBeVisible();
 });
 

@@ -62,7 +62,7 @@ export const ACTIVITY_MESSAGE_KEY: Record<Activity, SpaceMessageKey> = {
   idle: "idle",
 };
 
-/** The bracketed word in the status window's `label... [STATUS]` lines.
+/** The bracketed word in the status list's `label... [STATUS]` lines.
  * A second vocabulary would be a second status system — these are the five
  * operation outcomes wearing the activity register (spec/behaviour/overseer.md §3). An
  * operation step never actually reaches `approval` — kept only so the map

@@ -23,7 +23,7 @@ function row(
 
 describe("space status rows", () => {
   it("supersedes a state row in place rather than stacking a second one", () => {
-    // The reported bug: after signing in, the window still read
+    // The reported bug: after signing in, the list still read
     // "checking provider auth... [BLOCKED] attached claude · not
     // authenticated" while the signal list had already corrected itself.
     let space = applySpaceFrame(EMPTY_SPACE, {
@@ -41,10 +41,9 @@ describe("space status rows", () => {
     assert.equal(rows[0]?.detail, "attached claude");
   });
 
-  it("does not re-summon the window when a state row only revises itself", () => {
-    // A row correcting itself is the window doing its job, not new work — and
-    // re-opening a window the operator closed would break the "does not
-    // re-summon itself" rule (spec/behaviour/overseer.md §3).
+  it("does not count a state row revising itself as a new row", () => {
+    // A row correcting itself is the list doing its job, not new work — a
+    // reset's teardown must not spend furniture on it.
     const first = applySpaceFrame(EMPTY_SPACE, {
       type: "space.status",
       entry: row({ key: "auth" }),
@@ -73,7 +72,7 @@ describe("space status rows", () => {
       rows.map((entry) => entry.label),
       ["committing a", "committing b"],
     );
-    // Each one is a happening, so each one is worth raising the window for.
+    // Each one is a happening, so each one counts.
     assert.equal(space.tick, 2);
   });
 
@@ -121,7 +120,7 @@ describe("space status rows", () => {
     );
   });
 
-  it("catches a joining tab up without springing the window open", () => {
+  it("catches a joining tab up without counting it as new rows", () => {
     const space = applySpaceFrame(EMPTY_SPACE, {
       type: "space.replay",
       entries: [row({ key: "auth" }), row({ key: "prompt", label: "releasing the prompt" })],

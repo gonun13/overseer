@@ -25,7 +25,7 @@ import type { SpaceFrame } from "@overseer/protocol";
 
 /**
  * The wizard's state machine. One place decides which furniture is mounted,
- * what the message says and what the status window shows — the alternative
+ * what the message says and what the status list shows — the alternative
  * is those three answers drifting apart in separate conditionals scattered
  * through App.tsx, which is how a "boots into message-only state" rule quietly
  * stops being true.
@@ -56,7 +56,7 @@ export type WizardPhase =
    * first missing beat. "I AM THE OVERSEER" is the tone-pick message, not a
    * beat of its own. */
   | "welcome"
-  /** Discovery running; the status window is up and steps are arriving. */
+  /** Discovery running; the status list is up and steps are arriving. */
   | "discovery"
   /** Discovery complete; furniture mounting per resolved capability. */
   | "settling"
@@ -121,7 +121,7 @@ export interface WizardState {
   phase: WizardPhase;
   /** Only set while `phase === "welcome"`. */
   welcomeBeat?: WelcomeBeat;
-  /** The overseer space: status rows, the last message, and the summon tick.
+  /** The overseer space: status rows, the last message, and the tick of rows appearing.
    * Was `steps: OperationStep[]` — an append-only array that could not revise
    * a row, which is why a boot-time line outlived the fact behind it. */
   space: SpaceState;
@@ -554,7 +554,7 @@ export function wizardReducer(
 
     case "space.frame": {
       // Name / tone / intro / greet own the screen. Service rows must not fill
-      // the status list (or summon the window) until setup has handed off.
+      // the status list until setup has handed off.
       if (state.phase === "boot" || state.phase === "welcome") return state;
       const space = applySpaceFrame(state.space, action.frame);
       if (space === state.space) return state;
@@ -615,10 +615,8 @@ export function wizardReducer(
         ...state,
         reset: "working",
         // The teardown is its own report; whatever the last operation left in
-        // the window is not part of it. The tick still advances, which summons
-        // the window before the first delete row lands — the wipe is watched
-        // rather than discovered halfway through.
-        space: { ...emptySpace(), tick: state.space.tick + 1 },
+        // the status list is not part of it.
+        space: { ...emptySpace(), tick: state.space.tick },
       };
 
     case "reset.done":
@@ -684,7 +682,7 @@ function applyReveal(
 
 function applyEvent(state: WizardState, event: DiscoveryEvent): WizardState {
   // Discovery must not start — or stream steps — until welcome has finished.
-  // A stray frame would open the status window over the name/tone ask.
+  // A stray frame would open the status list over the name/tone ask.
   if (
     (state.phase === "boot" || state.phase === "welcome") &&
     event.type.startsWith("discovery.")

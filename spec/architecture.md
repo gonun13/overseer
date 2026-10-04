@@ -399,11 +399,11 @@ example `2.4.1`):
 | --------- | --------------- |
 | **MAJOR** | updates that break old compatibility |
 | **MINOR** | new features added safely |
-| **PATCH** | small bugs or errors are fixed |
+| **PATCH** | fixes, changes to existing behaviour, and other minor work |
 
 Choose a release bump from the operator-visible changes since the last release, verified against
-the diffs on `main`: any addition or observable behaviour change calls for MINOR; fixes alone call
-for PATCH. Refactors, tests, CI, dependency updates and documentation with no operator-visible
+the diffs on `main`: a new feature calls for MINOR; fixes, changes to how existing features look or
+behave, and other minor work call for PATCH. Refactors, tests, CI, dependency updates and documentation with no operator-visible
 effect do not trigger a release. Breaking changes, including removed commands, changed defaults
 and incompatible saved settings, require the operator's decision before choosing a version;
 never bump MAJOR automatically. The milestone map in §8.2 records shipped capabilities and future
@@ -435,7 +435,7 @@ authorize a commit, tag or push.
 ### 8.2 Milestone map
 
 The pre-1.0 rows describe historical milestones, rather than reserving future MINOR numbers.
-Additions and observable behaviour changes within an existing tier still call for MINOR (§8).
+New features within an existing tier still call for MINOR (§8).
 Earlier releases retain their original numbers even where their bumps differ from this practice.
 
 A migration that requires manual operator action — a moved directory or renamed setting — is a
@@ -540,8 +540,8 @@ without a display mismatch. Historical headings remain untouched.
 
 ### 8.5 After `1.0.0`
 
-The same rules in §8 apply after `1.0.0`: additions or observable behaviour changes call for MINOR,
-fixes alone call for PATCH, and breaking protocol, settings or UX changes require the operator's
+The same rules in §8 apply after `1.0.0`: new features call for MINOR, fixes, changes and other
+minor work call for PATCH, and breaking protocol, settings or UX changes require the operator's
 decision before a MAJOR bump. Internal cleanup alone does not trigger a release.
 
 ---

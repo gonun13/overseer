@@ -3,7 +3,7 @@ import { passWizardOpening, SETTLED } from "./shell";
 
 /**
  * The overseer space: one API behind the message, the signals and the status
- * window.
+ * list.
  *
  * The bug these guard is a row outliving the fact behind it. Discovery writes
  * "checking provider auth" and "releasing the prompt" at boot; when provider
@@ -11,7 +11,7 @@ import { passWizardOpening, SETTLED } from "./shell";
  * having a contradicting line appended underneath.
  */
 
-test("the status window carries the provider rows, one each", async ({
+test("the status list carries the provider rows, one each", async ({
   page,
 }) => {
   await page.goto("/");

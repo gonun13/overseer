@@ -110,8 +110,8 @@ a single terminal cannot: many consoles across many projects on one desk, and a 
 all of them at once.
 
 - **Consoles** — any number of console windows, across projects, tiled across the centre
-  of the field between a left rail (projects, sessions, shells) and a right rail (clock,
-  overseer, prompt, provider). A console is the provider CLI (`+ new session`, or type a
+  of the field between a left rail (projects, sessions, shells, provider) and a right rail
+  (clock, then the overseer's message, signals and status over the prompt). A console is the provider CLI (`+ new session`, or type a
   prompt into the prompt bar), a plain shell (`/shell`), or the dev loop (`/loop`).
 - **Consoles outlive the tab** — closing a window only detaches it; the process keeps
   running on the server. A reload restores console windows and their scrollback,

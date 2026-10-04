@@ -62,7 +62,7 @@ export type SpaceStatusMode = "state" | "event";
 /** How a row stands: the discovery vocabulary, plus in-flight. */
 export type SpaceOutcome = DiscoveryOutcome | "running";
 
-/** One row in the status window. */
+/** One row in the status list. */
 export interface SpaceStatusEntry {
   service: SpaceService;
   /**

@@ -33,7 +33,7 @@ import {
 /**
  * The discovery pass: what the overseer learns about the world before any
  * session exists. Steps are emitted as they happen rather than collected and
- * flushed at the end — the status window renders a growing list, and a
+ * flushed at the end — the status list renders a growing list, and a
  * batch arriving at completion would defeat the point of showing it at all.
  *
  * Furniture unlocks ride on each step's `done` frame (spec/behaviour/overseer.md §4):

@@ -32,7 +32,7 @@ import {
  * probe local ports while a login is running.
  *
  * Log hygiene: the verification URL is a PKCE challenge and the pasted code is
- * a live grant. Neither reaches the action register or the status window —
+ * a live grant. Neither reaches the action register or the status list —
  * what is recorded is that a login started and how it ended, nothing carried in
  * it.
  */
@@ -189,7 +189,7 @@ export function startLogin(
       });
       if (status.authenticated) scheduleUsageRefresh(providerId);
       else cancelUsageRefresh(providerId);
-      // The status window still carries the rows discovery wrote at boot. A
+      // The status list still carries the rows discovery wrote at boot. A
       // successful login makes both of them wrong, so correct them here
       // rather than leaving `checking provider auth... [BLOCKED]` standing
       // over a provider that is now signed in.

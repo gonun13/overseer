@@ -5,6 +5,15 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [spec/architecture.md §8.4](spec/architecture.md#84-changelog).
 
+## 0.6.1 — 2026-10-04
+
+### Changed
+
+- The overseer's status rows no longer open in a window over your consoles. They sit under the
+  signals, and the message, signals, status and prompt now stack together in the right rail, with
+  the version and help under them.
+- The provider widget sits at the foot of the left rail, under the session buttons.
+
 ## 0.6.0 — 2026-10-04
 
 ### Added

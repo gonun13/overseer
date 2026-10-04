@@ -1,11 +1,12 @@
 import { useEffect, useLayoutEffect, useRef, useState } from "react";
-import type { PersonalityTone } from "@overseer/protocol";
+import type { PersonalityTone, SpaceStatusEntry } from "@overseer/protocol";
 import { LoadingBar } from "./LoadingBar";
 import { StatusLight } from "./StatusLight";
+import { WStep } from "./windows/bits";
 import { useOccasionalTyping } from "../state/useOccasionalTyping";
 import { TONES } from "../state/wizard";
 import type { Signal } from "../state/signals";
-import { ACTIVITY_PULSES, type Activity } from "../status";
+import { ACTIVITY_PULSES, OUTCOME_ACTIVITY, type Activity } from "../status";
 
 /** Matches personality.ts / useDiscovery — keep the blank from offering more
  * than the server will store. */
@@ -23,12 +24,16 @@ const TYPE_MS = 200;
 /** Pause after the default name has finished typing, before advancing. */
 const AFTER_NAME_MS = 2000;
 
+/** How close to the foot of the status list still counts as following it. */
+const FOLLOW_SLACK_PX = 24;
+
 /**
  * The overseer's corner of the field: the stage centre while the field is
  * still being set up (boot, first-run asks, goodbye), and docked into the
  * right rail once windows need the stage. Not a log and not a dashboard: a ranked, derived
- * answer to "what should I be looking at?". Every line is clickable and opens
- * the thing it is talking about (spec/ui-ux.md §4).
+ * answer to "what should I be looking at?". Every signal is clickable and
+ * opens the thing it is talking about (spec/ui-ux.md §4). Under the signals,
+ * the status rows report the services' own work (spec/behaviour/overseer.md §3).
  *
  * During the wizard's opening phases the signal list is empty and the message
  * is the whole message — that is the "message-only" state a fresh instance
@@ -36,6 +41,7 @@ const AFTER_NAME_MS = 2000;
  */
 export function OverseerSpace({
   signals,
+  rows,
   message,
   loading = false,
   typingChance,
@@ -52,6 +58,8 @@ export function OverseerSpace({
   /** In the right rail rather than the stage centre — tighter type. */
   docked?: boolean;
   signals: Signal[];
+  /** Status rows, conditions first (`spaceRows`). */
+  rows: SpaceStatusEntry[];
   message: { text: string; activity: Activity };
   /** Boot phase (minimum beat and any socket wait); nothing is known yet. */
   loading?: boolean;
@@ -135,6 +143,47 @@ export function OverseerSpace({
             <span className="os-kicker">{signal.kicker}</span>
             <span className="os-text">{signal.text}</span>
           </button>
+        ))}
+      </div>
+
+      {rows.length > 0 && <StatusRows rows={rows} />}
+    </div>
+  );
+}
+
+/**
+ * The services' telegraphic report. Conditions first, then what happened,
+ * newest last — so the list follows its foot as rows land, unless the
+ * operator has scrolled up to read something, in which case it stays put.
+ */
+function StatusRows({ rows }: { rows: SpaceStatusEntry[] }) {
+  const listRef = useRef<HTMLDivElement>(null);
+  const following = useRef(true);
+
+  useLayoutEffect(() => {
+    const list = listRef.current;
+    if (list !== null && following.current) list.scrollTop = list.scrollHeight;
+  }, [rows]);
+
+  return (
+    <div className="os-status">
+      <p className="os-status-kicker">status</p>
+      <div
+        ref={listRef}
+        className="w-steps os-status-rows"
+        onScroll={(e) => {
+          const list = e.currentTarget;
+          following.current =
+            list.scrollHeight - list.scrollTop - list.clientHeight <= FOLLOW_SLACK_PX;
+        }}
+      >
+        {rows.map((row) => (
+          <WStep
+            key={`${row.service}:${row.key}:${row.mode === "event" ? row.at : ""}`}
+            label={row.label}
+            activity={OUTCOME_ACTIVITY[row.outcome]}
+            detail={row.detail}
+          />
         ))}
       </div>
     </div>

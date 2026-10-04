@@ -74,7 +74,7 @@ The server owns all access, in `packages/server/src/memory/internal.ts`.
 |---|---|---|
 | `actions.jsonl` | `ActionRecord` — `at`, `actor` (`overseer` \| `operator`), `action`, `outcome` (`ok` \| `blocked` \| `failed` \| `skipped`), optional `detail` | A report starts a best-effort asynchronous append, then broadcasts without waiting. Never filtered or muted by configuration. |
 | `state.json` | `WorldSnapshot` — `at`, `runCount`, `workspaceRoot`, `projects`, `providers`, `last_active_project?`, `attached_provider?`, `theme?`, `git_identity?` | Its existence is what makes a boot a return visit. Restore `attached_provider` when registered; otherwise attach the first authenticated provider. |
-| `logs/` | one JSONL file per run id | Records, not screen content; the status window shows derived rows. |
+| `logs/` | one JSONL file per run id | Records, not screen content; status shows derived rows. |
 | `callsigns.json` | `{ [sessionId]: callsign }` | Written on assign, rename and release. Consoles keyed by console id are not persisted. [behaviour/relay.md §1](behaviour/relay.md#1-callsigns). |
 
 A usage-history / session / search index (`index.sqlite`) was planned in earlier drafts and does

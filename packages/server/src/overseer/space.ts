@@ -81,8 +81,8 @@ export function createOverseerSpace(
       const id = `${entry.service}:${entry.key}`;
       const before = states.get(id);
       // A condition re-reported unchanged is not news. Dropping it here is
-      // what keeps a periodic re-check from stuttering the window open (see
-      // the "does not re-summon itself" rule in spec/behaviour/overseer.md §3).
+      // what keeps a periodic re-check from re-broadcasting a row that says
+      // nothing new (spec/behaviour/overseer.md §3).
       if (
         before !== undefined &&
         before.outcome === entry.outcome &&

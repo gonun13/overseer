@@ -40,7 +40,7 @@ export function startUsageRefresh(bcast: Broadcast, os: OverseerSpace): void {
  * Tell the space that provider auth moved.
  *
  * Every path that writes provider auth to the snapshot calls this, which is
- * what stops the status window from outliving the fact it describes. Safe to
+ * what stops the status list from outliving the fact it describes. Safe to
  * call on a status that did not actually change — `space.status` drops an
  * unchanged `state` row, so this never stutters the window open.
  */

@@ -1,6 +1,6 @@
 {
   "name": "@overseer/adapter-cursor",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "Interactive CLI consoles, authentication, usage and transcripts for Overseer.",
   "type": "module",
   "main": "./dist/index.js",

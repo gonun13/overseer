@@ -429,7 +429,7 @@ export function attachWebSocketServer(
      *
      * Reported through the space, because this is the app going out to the
      * network on its own initiative. Unannounced work that changes what the
-     * window says is the thing the status window exists to prevent — and a
+     * window says is the thing the status list exists to prevent — and a
      * fetch that *fails* is exactly when the counts on screen stop meaning
      * what they appear to mean, so silence is worst precisely when it matters.
      *
@@ -1126,7 +1126,7 @@ export function attachWebSocketServer(
           // worth keeping the trail.
           //
           // The personality watcher must not treat this delete as an accident
-          // — otherwise the status window gets a second, blocked
+          // — otherwise the status list gets a second, blocked
           // "personality deleted · restart to restore" under the wipe.
           // The legacy plans file is not part of this socket reset sequence and
           // survives it; `clearInternalMemory` removes it for callers using the

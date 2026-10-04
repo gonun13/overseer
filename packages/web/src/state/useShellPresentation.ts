@@ -1,7 +1,6 @@
-import { useEffect, useMemo, useRef } from "react";
-import type { ConsoleInfo, HeldRelay } from "@overseer/protocol";
+import { useMemo } from "react";
+import type { ConsoleInfo, HeldRelay, SpaceStatusEntry } from "@overseer/protocol";
 import type { Project, ProviderInfo } from "../domain";
-import type { WindowKind } from "../windows";
 import { deriveSignals, messageFor, type Signal } from "./signals";
 import { message as toneMessage } from "../lang";
 import type { DiscoveryController } from "./useDiscovery";
@@ -15,16 +14,12 @@ import {
   wizardMessage,
 } from "./wizard";
 import { projectsWithConsoleActivity } from "./project-activity";
+import { spaceRows } from "./space";
 
 /** Stable empty state so OverseerSpace does not repeat its ranking work during boot. */
 const EMPTY_SIGNALS: Signal[] = [];
 const NO_HELD_RELAYS: HeldRelay[] = [];
-
-type OpenWindow = (
-  kind: WindowKind,
-  payload?: unknown,
-  title?: string,
-) => void;
+const NO_ROWS: SpaceStatusEntry[] = [];
 
 /**
  * Adapts discovery state into the values rendered by the application shell.
@@ -32,7 +27,6 @@ type OpenWindow = (
  */
 export function useShellPresentation(
   wizard: DiscoveryController,
-  openWindow: OpenWindow,
   consoles: ConsoleInfo[] = [],
   heldRelays: HeldRelay[] = NO_HELD_RELAYS,
 ) {
@@ -155,33 +149,19 @@ export function useShellPresentation(
   const onGoodbyeClick =
     wizard.reset === "goodbye" ? () => location.reload() : undefined;
 
-  // Discovery and each later operation summon the machine-owned window.
-  useEffect(() => {
-    if (wizard.phase === "discovery" && wizard.connected) {
-      openWindow("overseer");
-    }
-  }, [wizard.phase, wizard.connected, openWindow]);
-
-  // Edge-triggered on the tick, not levelled on `tick > 0`.
-  //
-  // The tick counts rows that *appeared*, so it stays above zero for the life
-  // of the page once discovery has run. A levelled check therefore re-fires on
-  // every later change to the effect's deps — a phase transition, say — and
-  // `openWindow` raises an existing window, so the status window would jump
-  // back on top of whatever the operator had just opened over it.
-  const summonedAt = useRef(0);
-  useEffect(() => {
-    if (
-      wizard.phase !== "discovery" &&
-      wizard.phase !== "settling" &&
-      wizard.phase !== "ready"
-    ) {
-      return;
-    }
-    if (wizard.space.tick <= summonedAt.current) return;
-    summonedAt.current = wizard.space.tick;
-    openWindow("overseer");
-  }, [wizard.space.tick, wizard.phase, openWindow]);
+  // The status rows belong to the pass that wrote them: none behind the
+  // name and tone asks, and none past the goodbye — that is a message and
+  // nothing else (spec/behaviour/overseer.md §3).
+  const statusRows = useMemo(
+    () =>
+      wizard.reset !== "goodbye" &&
+      (wizard.phase === "discovery" ||
+        wizard.phase === "settling" ||
+        wizard.phase === "ready")
+        ? spaceRows(wizard.space)
+        : NO_ROWS,
+    [wizard.phase, wizard.reset, wizard.space],
+  );
 
   return {
     furniture,
@@ -190,6 +170,7 @@ export function useShellPresentation(
     provider,
     workspace,
     signals: furniture.signals ? signals : EMPTY_SIGNALS,
+    statusRows,
     message,
     loading: isLoading(wizard),
     typingChance,

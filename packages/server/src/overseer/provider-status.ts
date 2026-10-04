@@ -3,7 +3,7 @@ import { readSnapshot } from "../memory/internal.js";
 import type { OverseerSpace } from "./space.js";
 
 /**
- * The two provider rows the status window carries, computed in exactly one
+ * The two provider rows the status list carries, computed in exactly one
  * place.
  *
  * These were the rows that stayed stale after a login, and the reason was not

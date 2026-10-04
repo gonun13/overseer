@@ -23,7 +23,7 @@ const signedIn = [
 describe("overseer space", () => {
   it("drops a state row that has not changed", () => {
     // Auth is re-reported from several paths; without this, a periodic
-    // re-check would stutter the status window open over and over.
+    // re-check would stutter the status list open over and over.
     const { sent, broadcast } = collector();
     const space = createOverseerSpace(broadcast);
     const entry = {

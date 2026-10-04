@@ -1,6 +1,17 @@
-/* ---- right rail, foot: the prompt, the provider, the footer --------------
-   The prompt is a surface: it is where you act, so it inverts the field at both
-   sizes. What the agent prints into it arrives as stamps (spec/ui-ux.md §7). */
+/* ---- right rail: the overseer layer, and the footer under it -------------
+   The layer stacks the overseer's message, signals and status over the prompt
+   that answers them, and takes whatever height the clock and footer leave
+   (spec/ui-ux.md §1). The prompt is a surface: it is where you act, so it
+   inverts the field at both sizes (spec/ui-ux.md §7). */
+.overseer-layer {
+  flex: 1 1 auto;
+  min-height: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+/* Above the status rows, so the suggestion list it grows upward covers them. */
 .dock {
   position: relative;
   z-index: 60;
@@ -8,7 +19,6 @@
   display: flex;
   flex-direction: column;
   align-items: stretch;
-  gap: 14px;
 }
 
 /* Ground and ink come from the input rule near the top of this file. One line

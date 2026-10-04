@@ -45,7 +45,7 @@ export interface GitMeta {
   dirty?: boolean;
 }
 
-/** What went wrong (or came right) on a probe, for the status window. */
+/** What went wrong (or came right) on a probe, for the status list. */
 export type ProbeEventKind = "slow" | "timeout" | "failed" | "recovered";
 
 export interface ProbeEvent {

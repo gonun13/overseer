@@ -29,7 +29,7 @@ address that session, and it is shown wherever the session is (§6).
 
 `/rename <callsign> <new>` renames a session. A new callsign starts with a letter, is 2–16
 letters, digits or hyphens, matches no other callsign (ignoring case), and is not `overseer` or
-`operator`. The outcome is a status-window event, `renaming linda...`; a refusal names the reason. Display keeps the operator's capitalisation; addressing
+`operator`. The outcome is a status event, `renaming linda...`; a refusal names the reason. Display keeps the operator's capitalisation; addressing
 ignores case.
 
 ## 2. Addressing — `@callsign`
@@ -73,7 +73,7 @@ held by a live loop run cannot be resumed, so it cannot be relayed to.
 ## 4. Reporting
 
 Relay reports through the overseer space as service `relay`
-([overseer.md §3](overseer.md#3-the-status-window)):
+([overseer.md §3](overseer.md#3-status)):
 
 | Happening | Row |
 |---|---|

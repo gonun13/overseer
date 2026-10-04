@@ -1,5 +1,4 @@
 export type WindowKind =
-  | "overseer"
   | "providers"
   | "sessions"
   | "console"
@@ -31,7 +30,6 @@ export interface OpenWindow {
 /** Every window tiles the stage (useWindows), so a kind carries only its
  * default tab title — no spawn place or size of its own. */
 export const WINDOW_SPEC: Record<WindowKind, { title: string }> = {
-  overseer: { title: "overseer" },
   providers: { title: "providers" },
   sessions: { title: "sessions" },
   // One per console; the payload is the console id (or `pending:<reqId>`
