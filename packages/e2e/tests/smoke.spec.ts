@@ -1,7 +1,9 @@
 import { test, expect } from "@playwright/test";
 import {
+  expectPromptHeld,
   openProviders,
   passWizardOpening,
+  promptAvailable,
   providersFrame,
   SETTLED,
 } from "./shell";
@@ -98,13 +100,43 @@ test("offers a new session only when a provider is signed in", async ({
     // here; only assert the terminal is up, then end it.
     const term = page.locator(".window-console .console-term").last();
     await expect(term).toBeVisible({ timeout: 15_000 });
+    // Kill takes the window with it — there is nothing left to close
+    // (spec/behaviour/consoles.md §3).
+    const consoles = await page.locator(".window-console").count();
     const win = page.locator(".window-console").last();
     await win.getByRole("button", { name: /^kill / }).click();
-    await win.getByRole("button", { name: /^(close|detach) / }).click();
+    await expect(page.locator(".window-console")).toHaveCount(consoles - 1);
     return;
   }
 
   // Not signed in (or nothing attached): there is no CLI to start, and
   // offering it would be a control that cannot do anything.
   await expect(newSession).toHaveCount(0);
+});
+
+test("the prompt grows to show the whole draft", async ({ page }) => {
+  await page.goto("/");
+  await passWizardOpening(page);
+  await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
+  if (!(await promptAvailable(page))) {
+    await expectPromptHeld(page);
+    return;
+  }
+
+  const bar = page.locator(".prompt-bar");
+  const rest = (await bar.boundingBox())!.height;
+  await bar.click();
+  // Never pressed alone: Enter would start a session and spend a model turn.
+  await page.keyboard.type("first line");
+  await page.keyboard.press("Shift+Enter");
+  await page.keyboard.type("second line");
+  await expect(page.locator(".prompt-bar textarea")).toHaveValue(
+    "first line\nsecond line",
+  );
+  await expect(page.locator(".prompt-mirror")).toContainText("second line");
+  expect((await bar.boundingBox())!.height).toBeGreaterThan(rest);
+
+  await page.keyboard.press("ControlOrMeta+a");
+  await page.keyboard.press("Backspace");
+  await page.keyboard.press("Escape");
 });

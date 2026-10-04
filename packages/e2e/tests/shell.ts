@@ -105,9 +105,9 @@ export function runTag(): string {
  * into eight failures that looked like regressions and were not.
  */
 export async function promptAvailable(page: Page): Promise<boolean> {
-  // By CSS rather than by role: the composer's textarea carries only a
-  // placeholder, and the placeholder is copy that changes.
-  const composer = page.locator(".composer textarea");
+  // By CSS rather than by role: the bar's accessible name is copy that
+  // changes. The bar, not its textarea — the textarea mounts only on focus.
+  const composer = page.locator(".prompt-bar");
   // Short: by the time a caller asks, discovery has settled and the prompt is
   // either mounted or gated. Waiting the default timeout here would add ten
   // seconds to every signed-out run.

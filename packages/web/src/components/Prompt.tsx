@@ -37,8 +37,10 @@ function suggestionsFor(value: string, agents: Addressee[]): Suggestion[] {
 }
 
 /**
- * The prompt terminal — one line at the bottom of the field, always. Click or
- * Cmd+K focuses it; Escape blurs. It never grows into a transcript panel.
+ * The prompt terminal at the bottom of the field. Click or Cmd+K focuses it;
+ * Escape blurs. It wraps and grows with the draft so all of it stays in view —
+ * Shift+Enter breaks a line, Enter sends — but it never grows into a
+ * transcript panel.
  *
  * A leading `/` is a command: names autocomplete and Enter runs the highlighted
  * one. A leading `@` addresses an agent by callsign: `@linda <text>` relays the
@@ -67,6 +69,7 @@ export function Prompt({
   const [value, setValue] = useState("");
   const [selected, setSelected] = useState(0);
   const input = useRef<HTMLTextAreaElement>(null);
+  const field = useRef<HTMLDivElement>(null);
   const suggestions = suggestionsFor(value, agents);
   const suggestionKey = suggestions.map((suggestion) => suggestion.key).join(",");
   const active = suggestions.length === 0 ? 0 : selected % suggestions.length;
@@ -81,6 +84,15 @@ export function Prompt({
   useEffect(() => {
     setSelected(0);
   }, [suggestionKey]);
+
+  // Past its cap the field scrolls; typing at the end keeps the end in view.
+  useEffect(() => {
+    const box = field.current;
+    const area = input.current;
+    if (box && area && area.selectionEnd === value.length) {
+      box.scrollTop = box.scrollHeight;
+    }
+  }, [value]);
 
   function submit() {
     const trimmed = value.trim();
@@ -146,7 +158,7 @@ export function Prompt({
       <span className="prompt-caret">›</span>
 
       {focused ? (
-        <div className="prompt-field">
+        <div className="prompt-field" ref={field}>
           <div className="prompt-stack">
             <div className="prompt-mirror" aria-hidden>
               {value}
@@ -193,7 +205,12 @@ export function Prompt({
                   complete(next);
                   return;
                 }
-                if (event.key === "Enter") {
+                // Shift+Enter falls through to the textarea: a line break.
+                if (
+                  event.key === "Enter" &&
+                  !event.shiftKey &&
+                  !event.nativeEvent.isComposing
+                ) {
                   event.preventDefault();
                   submit();
                 }

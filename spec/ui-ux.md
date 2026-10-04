@@ -374,7 +374,9 @@ never use a hover fill.
 
 ## 7. The prompt
 
-One line at the foot of the right rail, on the dark input surface (`--fill`/`--ink`). It never grows into a
+At the foot of the right rail, on the dark input surface (`--fill`/`--ink`). One line tall at rest; a draft
+wraps and the bar grows down from its first line so everything typed stays in view, up to 40% of the
+viewport, past which the draft scrolls inside the bar. `Shift` + `Enter` breaks a line. It never grows into a
 transcript — conversations live in consoles (§5.3).
 
 - A leading `/` starts a command; names autocomplete from `packages/web/src/commands.ts` and open the
@@ -383,7 +385,7 @@ transcript — conversations live in consoles (§5.3).
   agent, Tab completes it), and `@linda <text>` relays the text to that session instead of starting
   one ([behaviour/relay.md §2](behaviour/relay.md#2-addressing--callsign)).
 - Anything else starts a new session in the active project with it as the opening prompt, in a new console.
-- **No exec button.** `Enter` runs it.
+- **No exec button.** `Enter` runs it; `Shift` + `Enter` adds a line instead.
 
 ### 7.1 Keys
 

@@ -11,15 +11,17 @@
   gap: 14px;
 }
 
-/* Ground and ink come from the input rule near the top of this file. */
+/* Ground and ink come from the input rule near the top of this file. One line
+   tall at rest; grows down from the first line as the draft wraps, so the
+   caret stays beside the first line and the whole draft stays in view. */
 .prompt-bar {
   position: relative;
   display: flex;
-  align-items: center;
+  align-items: flex-start;
   gap: 10px;
   width: 100%;
-  height: 38px;
-  padding: 0 12px;
+  min-height: 38px;
+  padding: 7px 12px;
   overflow: visible;
   border-style: solid;
   border-width: 2px 0.5px;
@@ -90,6 +92,7 @@
   flex: none;
   color: var(--accent-fill);
   font-size: 16px;
+  line-height: 20px;
 }
 
 [data-theme="machine"] .prompt-caret {
@@ -103,24 +106,36 @@
   text-overflow: ellipsis;
   white-space: nowrap;
   font-size: 14px;
+  line-height: 20px;
   color: var(--ink-dim);
 }
 
+/* The idle cursor sits beside the one-line placeholder. */
+.prompt-bar > .prompt-cursor {
+  align-self: center;
+}
+
+/* Capped so a long paste cannot push the rest of the rail off screen; past
+   the cap the draft scrolls inside the bar. */
 .prompt-field {
   flex: 1;
   min-width: 0;
-  overflow: hidden;
+  max-height: 40vh;
+  overflow-x: hidden;
+  overflow-y: auto;
+  line-height: 20px;
 }
 
 .prompt-stack {
   position: relative;
 }
 
+/* The visible text. It wraps exactly as the transparent textarea over it does,
+   so the stack is as tall as the draft and the textarea fills it. */
 .prompt-mirror {
   min-width: 0;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   font-size: 14px;
   color: var(--ink);
 }
@@ -142,6 +157,8 @@
   font: inherit;
   font-size: 14px;
   line-height: inherit;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
   outline: none;
 }
 

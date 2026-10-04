@@ -5,7 +5,7 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [spec/architecture.md §8.4](spec/architecture.md#84-changelog).
 
-## Unreleased
+## 0.6.0 — 2026-10-04
 
 ### Added
 
@@ -18,6 +18,11 @@ rules for writing an entry live in
   resumed first. `@linda` alone brings its console up.
 - Agents can message each other with `overseer who` and `overseer tell <name> <message>`; an
   agent that sends too often is held for your approval, and `/drop` drops what is held.
+
+### Changed
+
+- The prompt wraps and grows as you type, so a long prompt is shown in full instead of cut off;
+  `Shift` + `Enter` starts a new line.
 
 ### Fixed
 
