@@ -18,7 +18,7 @@ The field is **three columns**: two rails of furniture around a stage that holds
 else. It is a harness for many agents at once, so the middle of the screen belongs to their consoles.
 
 ```
-┌ left rail · 1/5 ──────┬──────────────── stage · 3/5 ────────────────┬ right rail · 1/5 ─────┐
+┌ left rail · 1/8 ──────┬──────────────── stage · rest ───────────────┬ right rail · 1/8 ─────┐
 │ ACTIVE PROJECT        │ ○ /// SHELL · API      ✕ │ ● /// CLAUDE · API  ✕ │        14:32:07  [⚙] │
 │ ● BILLING-SERVICE     │ ┌──────────────────────┐ │ ┌──────────────────┐ │                       │
 │ fix/refund… · dirty   │ │ $ npm test           │ │ │ > refactor the…  │ │  NOTHING. AS USUAL    │
@@ -42,7 +42,7 @@ else. It is a harness for many agents at once, so the middle of the screen belon
 | stage       | **windows only** — every window tiles it                                                                |
 | right rail  | **clock** and the **settings** gear · **the overseer layer** (message, signals, status, **the prompt**) · footer |
 
-The rails take a fifth of the width each, floored at 260px; the stage takes the rest. A hairline in
+The rails take an eighth of the screen width each, floored at 260px; the stage takes the rest. A hairline in
 `--stamp-edge` is all that separates a rail from the stage — rails are furniture on the field, not
 panels. Each rail is a column that never scrolls sideways; its lists scroll inside themselves.
 
@@ -169,7 +169,8 @@ command, or a system escalation.
 
 - `position: absolute` and **tiled**: every window, of every kind, takes
   a cell of one near-square grid over the stage, in the order it was opened, with a 2px gap between
-  cells. The grid re-tiles whenever a window opens or closes and when the viewport resizes. A window can
+  cells. Tiling goes vertical first: the second window stacks under the first, each column fills top
+  to bottom before the next starts, and a last column with fewer windows shares the full height. The grid re-tiles whenever a window opens or closes and when the viewport resizes. A window can
   still be dragged or resized; horizontal dragging stays inside the stage, while vertical dragging
   keeps only the tab reachable and can leave the body below it. Resize aims at the stage edge, but
   the 420×240 minimum can overrun a smaller available area. `/tile` puts everything back on the grid. A tiled

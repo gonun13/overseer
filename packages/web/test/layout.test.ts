@@ -8,8 +8,8 @@ import {
   type Geometry,
 } from "../src/layout.ts";
 
-/** The stage of a 1920×1080 field: the middle three fifths, less gutter. */
-const STAGE: Bounds = { left: 396, top: 12, right: 1524, bottom: 1068 };
+/** The stage of a 1920×1080 field: between the two 260px rails, less gutter. */
+const STAGE: Bounds = { left: 272, top: 12, right: 1648, bottom: 1068 };
 
 function overlaps(a: Geometry, b: Geometry): boolean {
   const ah = a.h ?? 0;
@@ -71,8 +71,30 @@ describe("tileGrid", () => {
     }
   });
 
-  it("leaves only the minimum gap between neighbours", () => {
+  it("stacks the second window under the first", () => {
     const [a, b] = tileGrid(2, STAGE);
-    assert.equal(b.x - (a.x + a.w), TILE_GAP);
+    assert.equal(a.x, b.x);
+    assert.equal(a.w, STAGE.right - STAGE.left);
+    assert.ok(b.y > a.y);
+  });
+
+  it("fills each column top to bottom before the next", () => {
+    const cells = tileGrid(4, STAGE);
+    assert.equal(cells[0].x, cells[1].x);
+    assert.equal(cells[2].x, cells[3].x);
+    assert.ok(cells[2].x > cells[0].x);
+    assert.ok(cells[1].y > cells[0].y);
+  });
+
+  it("gives a short last column the full height", () => {
+    const [, , third] = tileGrid(3, STAGE);
+    assert.equal(third.y, STAGE.top);
+    assert.equal(third.h, STAGE.bottom - STAGE.top);
+  });
+
+  it("leaves only the minimum gap between neighbours", () => {
+    const [a, b, c] = tileGrid(3, STAGE);
+    assert.equal(b.y - (a.y + (a.h ?? 0)), TILE_GAP);
+    assert.equal(c.x - (a.x + a.w), TILE_GAP);
   });
 });

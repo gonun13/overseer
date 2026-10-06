@@ -30,7 +30,7 @@ export const MIN_WINDOW_W = 320;
 /**
  * The stage, in viewport coordinates, less its gutter. Measured from the DOM
  * so the rails' `minmax` floor is honoured; before the stage has mounted it
- * falls back to the 1/5 · 3/5 · 1/5 split the grid declares.
+ * falls back to the rail widths the grid declares.
  */
 export function stageBounds(): Bounds {
   const el =
@@ -47,9 +47,9 @@ export function stageBounds(): Bounds {
           bottom: rect.bottom,
         }
       : {
-          left: window.innerWidth / 5,
+          left: railWidth(),
           top: 0,
-          right: (window.innerWidth * 4) / 5,
+          right: window.innerWidth - railWidth(),
           bottom: window.innerHeight,
         };
   return {
@@ -60,12 +60,20 @@ export function stageBounds(): Bounds {
   };
 }
 
+/** One rail's width, as the field grid declares it: an eighth of the
+ * screen, floored at 260px. */
+function railWidth(): number {
+  return Math.max(260, window.innerWidth / 8);
+}
+
 /**
- * A grid of `n` cells filling `bounds`, row-major, as near square as the count
- * allows — but never more columns than fit at `MIN_WINDOW_W`: a crowded stage
- * gets more rows rather than columns too narrow to read. Cells always stay
- * inside `bounds`; on a stage too small for the minimum they shrink rather
- * than overlap.
+ * A grid of `n` cells filling `bounds`, as near square as the count allows,
+ * vertical first: the second window stacks under the first, and each column
+ * fills top to bottom before the next one starts. A last column holding fewer
+ * windows shares the full height among them rather than leaving a hole. Never
+ * more columns than fit at `MIN_WINDOW_W`: a crowded stage gets more rows
+ * rather than columns too narrow to read. Cells always stay inside `bounds`;
+ * on a stage too small for the minimum they shrink rather than overlap.
  */
 export function tileGrid(
   n: number,
@@ -76,13 +84,18 @@ export function tileGrid(
   const width = bounds.right - bounds.left;
   const height = bounds.bottom - bounds.top;
   const fit = Math.max(1, Math.floor((width + gap) / (MIN_WINDOW_W + gap)));
-  const cols = Math.min(Math.ceil(Math.sqrt(n)), fit);
-  const rows = Math.ceil(n / cols);
+  let rows = Math.ceil(Math.sqrt(n));
+  let cols = Math.ceil(n / rows);
+  if (cols > fit) {
+    cols = fit;
+    rows = Math.ceil(n / cols);
+  }
   const cellW = Math.floor((width - gap * (cols - 1)) / cols);
-  const cellH = Math.floor((height - gap * (rows - 1)) / rows);
   return Array.from({ length: n }, (_, i) => {
-    const col = i % cols;
-    const row = Math.floor(i / cols);
+    const col = Math.floor(i / rows);
+    const row = i % rows;
+    const inCol = Math.min(rows, n - col * rows);
+    const cellH = Math.floor((height - gap * (inCol - 1)) / inCol);
     return {
       x: bounds.left + col * (cellW + gap),
       y: bounds.top + row * (cellH + gap),

@@ -209,8 +209,8 @@
   animation: settle-in 200ms ease-out both;
 }
 
-/* Centred on the stage — the middle fifth-to-four-fifths of the field is also
-   the viewport's middle — so the right rail's message, where the overseer
+/* Centred on the stage — the rails are the same width, so the stage's middle
+   is also the viewport's middle — so the right rail's message, where the overseer
    answers it, stays readable beside it. */
 .decision {
   position: absolute;

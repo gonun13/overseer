@@ -122,7 +122,7 @@
   padding-left: 7px;
 }
 
-/* The rail is a fifth of the field: a long name ellipsises rather than
+/* The rail is an eighth of the field: a long name ellipsises rather than
    wrapping the row onto two lines. */
 .project-row-name,
 .session-row-name {
