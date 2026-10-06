@@ -1,6 +1,6 @@
 {
   "name": "@overseer/adapter-claude",
-  "version": "0.6.1",
+  "version": "0.6.2",
   "description": "Interactive CLI consoles, authentication, usage and transcripts for Overseer.",
   "type": "module",
   "main": "./dist/index.js",

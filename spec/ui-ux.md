@@ -42,7 +42,7 @@ else. It is a harness for many agents at once, so the middle of the screen belon
 | stage       | **windows only** — every window tiles it                                                                |
 | right rail  | **clock** and the **settings** gear · **the overseer layer** (message, signals, status, **the prompt**) · footer |
 
-The rails take an eighth of the screen width each, floored at 260px; the stage takes the rest. A hairline in
+The rails take an eighth of the screen width each, floored at 286px; the stage takes the rest. A hairline in
 `--stamp-edge` is all that separates a rail from the stage — rails are furniture on the field, not
 panels. Each rail is a column that never scrolls sideways; its lists scroll inside themselves.
 

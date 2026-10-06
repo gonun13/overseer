@@ -5,12 +5,12 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [spec/architecture.md §8.4](spec/architecture.md#84-changelog).
 
-## Unreleased
+## 0.6.2 — 2026-10-06
 
 ### Changed
 
-- The left and right rails are narrower on wide screens — an eighth of the screen each — leaving
-  more room for your consoles.
+- The left and right rails take an eighth of the screen each, a little wider than before on small
+  screens and narrower on wide ones, leaving more room for your consoles.
 - Tiling stacks windows vertically first: a second window opens under the first, and each column
   fills before the next one starts.
 

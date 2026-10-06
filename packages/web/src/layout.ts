@@ -61,9 +61,9 @@ export function stageBounds(): Bounds {
 }
 
 /** One rail's width, as the field grid declares it: an eighth of the
- * screen, floored at 260px. */
+ * screen, floored at 286px. */
 function railWidth(): number {
-  return Math.max(260, window.innerWidth / 8);
+  return Math.max(286, window.innerWidth / 8);
 }
 
 /**

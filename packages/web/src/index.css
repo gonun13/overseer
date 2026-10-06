@@ -273,7 +273,7 @@ button {
 .field {
   position: relative;
   display: grid;
-  grid-template-columns: max(260px, 12.5vw) minmax(0, 1fr) max(260px, 12.5vw);
+  grid-template-columns: max(286px, 12.5vw) minmax(0, 1fr) max(286px, 12.5vw);
   height: 100%;
   width: 100%;
   overflow: hidden;

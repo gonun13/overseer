@@ -8,8 +8,8 @@ import {
   type Geometry,
 } from "../src/layout.ts";
 
-/** The stage of a 1920×1080 field: between the two 260px rails, less gutter. */
-const STAGE: Bounds = { left: 272, top: 12, right: 1648, bottom: 1068 };
+/** The stage of a 1920×1080 field: between the two 286px rails, less gutter. */
+const STAGE: Bounds = { left: 298, top: 12, right: 1622, bottom: 1068 };
 
 function overlaps(a: Geometry, b: Geometry): boolean {
   const ah = a.h ?? 0;
