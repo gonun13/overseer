@@ -10,6 +10,9 @@ services:
   dind:
     image: docker:28-dind
     privileged: true
+    # Matches overseer's policy: when the Docker daemon brings overseer back
+    # after a reboot it ignores depends_on, so this has to come back on its own.
+    restart: unless-stopped
     environment:
       # Plain tcp, which is only acceptable because 2375 is never published and
       # is reachable on this compose network alone.
@@ -31,6 +34,19 @@ services:
     # Reap orphans — PTY children (raw console, loop runs) leave <defunct>
     # entries behind otherwise, since the node entrypoint never calls wait().
     init: true
+    # Every console is a PTY child of this process (spec/architecture.md §1.2),
+    # so a crashed server takes them with it; coming back is the most this can
+    # do. Unhandled rejections already crash Node, which lands here.
+    restart: unless-stopped
+    # Compose does not restart an unhealthy container — this only makes a
+    # wedged server show as `unhealthy` in `docker compose ps` instead of
+    # `running`. Loopback inside the container, whatever HOST binds.
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://127.0.0.1:3000/api/health"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
     ports:
       - "127.0.0.1:3000:3000" # loopback only — this is RCE-as-a-service (spec/architecture.md §6)
     volumes:

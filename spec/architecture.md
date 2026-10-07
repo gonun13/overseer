@@ -142,6 +142,10 @@ Every CLI process runs in a PTY owned by the server's console registry
   closing App Server and launching `codex resume <id>`. Failed preparation refuses the open;
   failed spawning deletes the newly prepared thread. Resumes preserve the thread id and callsign.
 - **Exited consoles stay listed** until dismissed, so a failure can still be read.
+- **Consoles die with the server.** The registry is in memory and every PTY is its child, so a
+  server crash ends every console. The production stack restarts the service
+  (`restart: unless-stopped`) and health-checks `GET /api/health`; a wedged server shows as
+  `unhealthy` in `docker compose ps` but is not restarted for it.
 - **Activity.** Claude Code consoles are started with a `--settings` layer of hooks
   (`SessionStart`, `UserPromptSubmit`, `Pre/PostToolUse`, `Notification` on permission prompts,
   `Stop`) that `curl` the server's loopback-only `POST /hooks/<console>/<token>?activity=…`. The

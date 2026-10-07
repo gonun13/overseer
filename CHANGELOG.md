@@ -5,6 +5,13 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [spec/architecture.md §8.4](spec/architecture.md#84-changelog).
 
+## 0.7.1 — 2026-10-08
+
+### Changed
+
+- The production server comes back by itself after a crash or a Docker restart, and Docker reports
+  it unhealthy when it stops answering.
+
 ## 0.7.0 — 2026-10-07
 
 ### Added
