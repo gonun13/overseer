@@ -94,6 +94,15 @@ Observed shapes:
   `gitBranch`, `version`, `userType`, `promptId`, `isMeta`, `isSidechain`.
 - **Operation records:** `type`, `operation`, `sessionId`, `timestamp` (compaction and similar).
 
+Codex: native threads listed through App Server `thread/list` with exact `cwd` filtering and
+cursor pagination. Interactive `cli`, `vscode` and `appServer` sources are included; subagents
+and ephemeral threads are excluded. Use each thread's `id`, never the shared session-tree id.
+Titles, timestamps and git branch metadata populate session rows. A `new session` title gives
+way to the first-message preview when available. The pinned CLI omits threads without a first
+user message from `thread/list`; named empty threads remain resumable by id and live consoles
+remain listed independently. Delete through `thread/delete` only after the
+server's live-session guard. Watch `$CODEX_HOME/sessions` (default `$HOME/.codex/sessions`).
+
 Cursor: read by `packages/adapters/cursor/src` (`transcripts` tests pin the observed shape).
 
 ## 4. Contracts

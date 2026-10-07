@@ -112,6 +112,7 @@ export interface AuthFlow {
   providerId: string;
   phase: AuthStateMessage["phase"];
   verificationUrl?: string;
+  userCode?: string;
   detail?: string;
   retryable?: boolean;
   status?: AdapterStatus;

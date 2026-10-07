@@ -2,7 +2,7 @@
 
 Structure, components, boundaries and interfaces. Purpose and requirements are in [PROJECT.md](PROJECT.md); stores and formats in [data.md](data.md); operator-visible flows in [behaviour/](behaviour/).
 
-**What it is:** a single-page, fullscreen web console for driving CLI coding agents. `claude` and `cursor` are fully wired providers; the catalog also lists stub providers (`codex`, `opencode`, `github-copilot`) whose CLIs ship in the image but whose adapters are not implemented yet. The architecture assumes more full adapters will follow.
+**What it is:** a single-page, fullscreen web console for driving CLI coding agents. `claude`, `cursor` and `codex` are wired for sessions; Claude and Cursor also support the dev loop. The catalog lists stub providers (`opencode`, `github-copilot`) whose CLIs ship in the image but whose adapters are not implemented yet. The architecture assumes more full adapters will follow.
 
 **Shape:** one Docker container holds the agent CLIs, their state, and the web server. In production the only bind mount is the workspace — a directory *outside* this repo, containing git projects. Development also binds the writable source repo at `/app`, accessible to agent shells. Auth and application state live in container-owned volumes.
 
@@ -23,6 +23,7 @@ packages/
                       session index, CLI hook endpoint
   adapters/
     claude/      Claude Code adapter — login, usage, console command line + hooks, transcripts
+    codex/       Codex adapter — ChatGPT device login, subscription quotas, native threads and TUI
     cursor/           Cursor adapter — login, usage, console command line, transcripts
   e2e/                Playwright acceptance tests (container-only)
 loop/                 the dev-loop CLI — bash, a provider CLI, and plain files
@@ -95,7 +96,11 @@ directory carries `provider.sh`, `none` otherwise. `claude` and `cursor`
 are both `adapter`/`bundle` today: the loop runs on either and the app has real
 wiring for either. `loopSubagents: "unverified"` on `cursor` means the loop's
 delegation to subagents has not been confirmed. The app exposes login and usage checking,
-not subagent file management.
+not subagent file management. Codex is `adapter`/`none`: ordinary sessions are implemented,
+while dev-loop support and API-key entry are excluded. Its CLI is pinned to `0.160.1`.
+Consoles launch it with `check_for_update_on_startup=false`, as Claude's run with its
+autoupdater disabled: the npm prefix is root-owned, so an in-TUI update could only fail, and a
+version bump goes through the manifest pin.
 
 Three consumers, no duplication between them:
 
@@ -130,9 +135,12 @@ Every CLI process runs in a PTY owned by the server's console registry
   console attaches to that console instead of starting a second CLI on the same JSONL. A session
   a live dev-loop run holds is refused; its loop console is the way in. A project's loop console
   is likewise attached rather than started twice.
-- **Ids are minted up front.** A new session gets an id from `sessions.mintSessionId()` and passes
+- **Ids are minted up front.** A new session gets an id from `sessions.mintSessionId({ projectDir, prompt? })` and passes
   it to the CLI (claude `--session-id`, cursor `--resume`, which adopts an unseen id), so the
-  console and its transcript are linked from the first byte.
+  console and its transcript are linked from the first byte. Codex creates a native thread in
+  that directory and names it from the opening prompt, or `new session`, to persist it before
+  closing App Server and launching `codex resume <id>`. Failed preparation refuses the open;
+  failed spawning deletes the newly prepared thread. Resumes preserve the thread id and callsign.
 - **Exited consoles stay listed** until dismissed, so a failure can still be read.
 - **Activity.** Claude Code consoles are started with a `--settings` layer of hooks
   (`SessionStart`, `UserPromptSubmit`, `Pre/PostToolUse`, `Notification` on permission prompts,
@@ -158,7 +166,7 @@ The container owns the agent's home in a named volume, `agent-home` — every pr
 
 **Login from the frontend.** The providers window runs `claude auth login`, renders the emitted verification URL, and writes the returned code to the same subprocess. Account status comes from `claude auth status` JSON, never from inspecting credential files.
 
-**The browser is the operator's, on the operator's machine, and paste-back is the only channel.** The container is headless — no `xdg-open`, no `DISPLAY` — so its own "Opening browser to sign in…" is a no-op that is dropped rather than rendered. The URL goes out over `/ws`, the operator opens it themselves, claude.com shows them a code, and that code comes back over `/ws` into the subprocess's stdin. There is no callback for a browser to reach: the printed URL redirects to `platform.claude.com`, not to us, so no port is published and no compose change is needed. The CLI does open a loopback listener during a login; it is unreachable from the host, its port is ephemeral, and one GET to it with a wrong `state` kills the login in flight — nothing in the container may probe local ports while one is running.
+**Claude uses the operator's browser and paste-back.** The container is headless — no `xdg-open`, no `DISPLAY` — so its own "Opening browser to sign in…" is a no-op that is dropped rather than rendered. The URL goes out over `/ws`, the operator opens it themselves, claude.com shows them a code, and that code comes back over `/ws` into the subprocess's stdin. There is no callback for a browser to reach: the printed URL redirects to `platform.claude.com`, not to us, so no port is published and no compose change is needed. The CLI does open a loopback listener during a login; it is unreachable from the host, its port is ephemeral, and one GET to it with a wrong `state` kills the login in flight — nothing in the container may probe local ports while one is running.
 
 The pasted value is `<code>#<state>` and reaches stdin verbatim. The `#` is not a URL fragment: stripping it fails every login with a message that blames the operator's copy/paste.
 
@@ -169,6 +177,19 @@ Plain pipes work with CLI 2.1.226; no PTY is required. Login is single-flight be
 `claude setup-token` is for long-lived CI/script credentials, not interactive subscription login.
 
 **Cursor** (`agent login`, `packages/adapters/cursor/src/login.ts`) is a poll-until-authorized flow, not a paste-back one: the URL goes out the same way and there is no code to send back. Its exit code is likewise never trusted — `agent status --format json` is re-asked when the child ends.
+
+**Codex** uses a bounded, short-lived `codex app-server` over stdio for account and thread
+operations, initialized using the pinned CLI protocol. `account/login/start` with
+`chatgptDeviceCode` emits a verification URL and device code: the operator enters that code in
+the browser; there is no paste-back field or callback. The shared login broker replays both
+fields to reconnecting tabs. Cancellation uses `account/login/cancel`, sign-out uses
+`account/logout`, and completion closes the client and freshly checks `account/read`.
+Credentials remain in `agent-home`; URLs, codes, credentials and raw RPC auth errors are never
+logged. Every child has request and process deadlines and is reaped on all paths.
+Consoles launch Codex with `--sandbox danger-full-access`: the container is the sandbox
+([PROJECT.md](PROJECT.md)), and Docker refuses the user namespaces and `/proc` mount that Codex's
+bubblewrap sandbox needs, so a nested sandbox could only warn and fail. Codex's approval policy is
+left to its own config and `/permissions`.
 
 **Compliance.** Subscription OAuth is restricted to Claude Code and claude.ai, while the Agent SDK requires API billing. Overseer therefore spawns the Claude Code binary. Re-check [Anthropic's legal and compliance docs](https://code.claude.com/docs/en/legal-and-compliance) before release.
 
@@ -188,6 +209,11 @@ Signed-in providers are rechecked every five minutes. Hide each gauge until a
 parse supplies a percentage. Never present local token estimates as plan
 consumption or billing data.
 
+Codex background refresh and manual checks use `account/rateLimits/read` without model turns.
+The widget shows both scheduled readings and a check button. Only supplied quota windows become
+gauges, labelled using actual durations and reset timestamps. Missing data is unavailable; a
+quota error preserves auth status. The same five-minute refresh cadence applies. API-key entry
+and dollar-cost estimates are excluded.
 
 ### 2.2 Git access
 
@@ -270,7 +296,7 @@ around it. Ordered by priority.
 
 | Feature                              | Zone     | Mechanism                                                               |
 | ------------------------------------ | -------- | ----------------------------------------------------------------------- |
-| Consoles for the catalog providers   | Consoles | a `consoleCommand` for `codex`, `opencode`, `github-copilot`            |
+| Consoles for the catalog providers   | Consoles | a `consoleCommand` for `opencode`, `github-copilot`            |
 | Git worktree per console             | Consoles | `-w/--worktree` — how parallel agents stop fighting over one tree       |
 | Desktop notifications                | global   | on a console going `waiting`                                            |
 | Cross-console search                 | Sessions | index transcripts                                                        |
@@ -421,6 +447,7 @@ The repo is private and unpublished. Every workspace package stays in **lockstep
 | `@overseer/web`                 | SPA — footer reads root version via `appVersion.ts` |
 | `@overseer/server`              | API / WS                      |
 | `@overseer/adapter-claude` | adapter                       |
+| `@overseer/adapter-codex`       | adapter                       |
 | `@overseer/adapter-cursor`      | adapter                       |
 | `@overseer/e2e`                 | Playwright suite              |
 
@@ -465,7 +492,8 @@ capabilities inventory and its editor, turn context attachment, and §5 provider
 window at that tier; each carried a `WUnavailable` note naming what was missing rather than
 rendering an empty frame that reads as a working-but-idle surface
 (`packages/web/src/components/windows/bits.tsx`). Adapters for the remaining catalog stubs
-(`codex`, `opencode`, `github-copilot`) are also out of tier. The raw OPEN CONSOLE PTY escape hatch
+(`opencode`, `github-copilot`) are also out of tier. Codex dev-loop support and API-key entry
+remain out of tier. The raw OPEN CONSOLE PTY escape hatch
 (ui-ux.md §5.3) is separate from the MVP "Console" zone in §3 and shipped in `0.1.x`.
 
 **Explicit non-goals for `0.4.x`:** skills in dev-loop sessions. `providers/claude/provider.sh`

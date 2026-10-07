@@ -1,5 +1,6 @@
 import type { AgentAdapter } from "@overseer/protocol";
 import { claudeAdapter } from "@overseer/adapter-claude";
+import { codexAdapter } from "@overseer/adapter-codex";
 import { cursorAdapter } from "@overseer/adapter-cursor";
 import { readProviderManifests } from "./provider-registry.js";
 import { stubAdapter } from "./stub-adapters.js";
@@ -29,6 +30,7 @@ const register = (adapter: AgentAdapter) => registry.set(adapter.id, adapter);
 const implemented = new Map<string, AgentAdapter>([
   [claudeAdapter.id, claudeAdapter],
   [cursorAdapter.id, cursorAdapter],
+  [codexAdapter.id, codexAdapter],
 ]);
 
 for (const manifest of readProviderManifests()) {

@@ -2,7 +2,7 @@
   "id": "codex",
   "cli": "codex",
   "configDir": ".codex",
-  "install": { "kind": "npm", "spec": "@openai/codex@0.147.0" },
-  "app": "stub",
+  "install": { "kind": "npm", "spec": "@openai/codex@0.160.1" },
+  "app": "adapter",
   "loop": "none"
 }

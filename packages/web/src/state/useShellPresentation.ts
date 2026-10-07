@@ -53,6 +53,7 @@ export function useShellPresentation(
       usage: reported?.status.usage ?? [],
       usageState: reported?.status.usageState,
       usageCheck: reported?.usageCheck === true,
+      usageRefresh: reported?.usageRefresh === true,
       spend: "",
       context: "",
     };

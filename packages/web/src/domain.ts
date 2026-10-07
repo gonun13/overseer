@@ -57,11 +57,10 @@ export interface ProviderInfo {
   usage: AdapterUsageWindow[];
   /** How the usage read went when signed in. */
   usageState?: "pending" | "ready" | "unavailable";
-  /** Mirrors `AdapterCapabilities.usageCheck`: this provider has no automatic
-   * gauges, but can be asked for a report on demand. Drives the widget's
-   * CHECK USAGE button, and suppresses the "not available" line that would
-   * otherwise describe the missing automatic path. */
+  /** Offers the manual check button, whether or not automatic readings exist. */
   usageCheck: boolean;
+  /** Automatic quota refresh is available from this provider. */
+  usageRefresh?: boolean;
   spend: string;
   context: string;
 }

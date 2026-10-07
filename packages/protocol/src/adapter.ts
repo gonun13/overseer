@@ -120,7 +120,7 @@ export interface AdapterStatus {
 }
 
 /**
- * Where a login has got to. The same five words the server puts on the wire —
+ * Where a login has got to. The same phases the server puts on the wire —
  * the adapter owns the machine, the server only relays it, so there is one
  * definition rather than two that can drift.
  *
@@ -131,6 +131,7 @@ export interface AdapterStatus {
 export type LoginPhase =
   | "starting"
   | "awaiting-code"
+  | "awaiting-browser"
   | "verifying"
   | "success"
   | "failed";
@@ -144,6 +145,8 @@ export interface LoginUpdate {
    * Carries a PKCE challenge. It is a secret: it must not be logged.
    */
   verificationUrl?: string;
+  /** Device code entered on the verification site; never logged. */
+  userCode?: string;
   /** Operator-facing reason, in the CLI's own words, when something failed. */
   detail?: string;
   /** True when the CLI is still at its prompt and another code may be pasted. */
@@ -256,15 +259,15 @@ export interface ConsoleHandle {
  * Where an adapter's own session transcripts live, for the server to list,
  * title and delete them without knowing the on-disk format.
  *
- * `mintSessionId` is `Promise`-returning to leave room for a provider whose
- * id must round-trip its own CLI — neither shipped adapter needs that today:
- * both mint locally with `randomUUID()` and pass it to the CLI (claude's
- * `--session-id`, cursor's `--resume`, which accepts an id it has never seen).
+ * `mintSessionId` receives the project and opening prompt. Claude and Cursor
+ * mint locally; Codex prepares and persists a native thread before returning.
  */
 export interface AdapterSessionStore {
   /** Every session this adapter's own transcripts show for one project. */
   listProjectSessions(projectDir: string): Promise<SessionMeta[]>;
-  mintSessionId(): Promise<string>;
+  mintSessionId(opts: { projectDir: string; prompt?: string }): Promise<string>;
+  /** Remove a provider-native thread prepared for a console that could not spawn. */
+  discardPreparedSession?(projectDir: string, sessionId: string): Promise<void>;
   lookupSessionTitle(projectDir: string, sessionId: string): Promise<string | undefined>;
   deleteSession(projectDir: string, sessionId: string): Promise<void>;
 }

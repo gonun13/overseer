@@ -269,6 +269,7 @@ export function useDiscovery(): DiscoveryController {
             providerId: message.providerId,
             phase: message.phase,
             verificationUrl: message.verificationUrl,
+            userCode: message.userCode,
             detail: message.detail,
             retryable: message.retryable,
             status: message.status,

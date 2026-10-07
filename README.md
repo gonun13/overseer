@@ -2,7 +2,8 @@
 
 A single-page web console for driving CLI coding agents. 
 
-For now only `claude` and `cursor` are fully wired providers but others are ready to be implemented.
+`claude`, `cursor` and `codex` support ordinary sessions. Claude and Cursor also support the dev
+loop; Codex does not. OpenCode and GitHub Copilot remain catalog stubs.
 
 Built sandboxed, with the paranoid in mind: protect the host from runaway LLMs.
 Agents run in Docker, not on your desktop — they cannot wipe your home directory or
@@ -118,7 +119,7 @@ all of them at once.
   then tiles them on the stage. Kill is a separate, explicit control.
 - **Sessions** — every provider session in the workspace, read from the CLIs' own
   transcripts. Opening one shows the console running it, or resumes it in a new one
-  (`claude --resume`, `agent --resume`).
+  (`claude --resume`, `agent --resume`, `codex resume`).
 - **Monitoring** — Claude Code reports through hooks, so a console waiting on a
   permission prompt lights up and the overseer points you straight at it. Other CLIs
   are watched by their output.
@@ -150,3 +151,16 @@ A [Playwright MCP server](https://github.com/microsoft/playwright-mcp) is regist
 `.mcp.json` for editor-side click-through against a running stack
 (`./bin/dev-start`). Acceptance tests still run only via
 `./bin/test-e2e`.
+
+## Codex sessions
+
+Connect `codex` in the providers window, then start login. Open the verification link in your
+browser, sign in with ChatGPT, and enter the displayed device code on that site. No code is
+pasted back into Overseer. Credentials stay in the container's `agent-home` volume.
+
+New and saved sessions open in Codex's own terminal UI, with its normal configuration, models
+and approvals. Saved threads appear for their exact project directory and keep their callsign
+when resumed. End a live console before deleting its saved session. Subscription quota windows
+refresh every five minutes; **check usage** reads them immediately without a model turn.
+Unavailable readings never stand in for zero consumption. Codex CLI is pinned to `0.160.1`;
+dev-loop support and API-key entry are not available.

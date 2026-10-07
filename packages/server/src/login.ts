@@ -86,6 +86,7 @@ function toFrame(providerId: string, update: LoginUpdate): AuthStateMessage {
     ...(update.verificationUrl !== undefined
       ? { verificationUrl: update.verificationUrl }
       : {}),
+    ...(update.userCode !== undefined ? { userCode: update.userCode } : {}),
     ...(update.detail !== undefined ? { detail: update.detail } : {}),
     ...(update.retryable !== undefined ? { retryable: update.retryable } : {}),
     ...(update.status !== undefined ? { status: update.status } : {}),
@@ -222,6 +223,8 @@ export function startLogin(
  * deliberately does nothing to the string. */
 export function submitCode(code: string): LoginResult {
   if (live === undefined) return { ok: false, reason: "no login is running" };
+  if (live.last.phase === "awaiting-browser")
+    return { ok: false, reason: "enter the device code in your browser" };
   live.handle.submitCode(code);
   return { ok: true };
 }

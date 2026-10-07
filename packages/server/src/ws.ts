@@ -46,6 +46,7 @@ import {
   clearRunLogs,
   clearSnapshot,
   readSnapshot,
+  setProviderStatus,
   recordAction,
   readGitIdentity,
   setActiveProjectPath,
@@ -1296,6 +1297,12 @@ export function attachWebSocketServer(
               message: result.reason,
             });
             return;
+          }
+          const provider = (await readSnapshot())?.providers.find((p) => p.id === result.providerId);
+          if (provider?.usageRefresh && provider.status.authenticated) {
+            const status = { ...provider.status, usageState: "ready" as const, usage: result.windows };
+            await setProviderStatus(result.providerId, status);
+            broadcast({ type: "provider.status", id: result.providerId, status });
           }
           broadcast({
             type: "provider.usageCheck",

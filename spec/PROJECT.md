@@ -43,8 +43,9 @@ One developer, on their own local machine. There is no multi-user story and no a
    are the CLI's own; Overseer does not re-implement them.
 5. **Consoles belong to the server.** Closing a window detaches; a reload restores every console with
    its scrollback; killing is explicit.
-6. **Provider-neutral.** A provider is a registry entry plus an adapter. `claude` and `cursor` are fully
-   wired; `codex`, `opencode` and `github-copilot` are catalog stubs whose CLIs ship in the image.
+6. **Provider-neutral.** A provider is a registry entry plus an adapter. `claude`, `cursor` and `codex`
+   are wired for ordinary sessions. Claude and Cursor also support the dev loop; Codex does not. `opencode` and `github-copilot` remain catalog stubs whose CLIs
+   ship in the image.
 7. **Publishing is an explicit step.** The dev loop commits locally. `publish` accepts an
    approved/followups review artifact for that request, or an operator's `--force`; it does not
    verify a recorded sign-off or approvals for stacked ancestry. Opening a pull request is the

@@ -105,7 +105,12 @@ export interface ConsoleRegistry {
    * Nobody is attached yet: the caller acks the id first, then attaches, so
    * the replay never reaches a client that cannot route it. */
   open(request: OpenRequest): Promise<OpenResult>;
-  attach(id: string, sink: ConsoleSink, cols: number, rows: number): ConsoleResult;
+  attach(
+    id: string,
+    sink: ConsoleSink,
+    cols: number,
+    rows: number,
+  ): ConsoleResult;
   detach(id: string, sink: ConsoleSink): void;
   /** A socket went away — drop it from every console, kill nothing. */
   detachAll(sink: ConsoleSink): void;
@@ -141,11 +146,17 @@ function defaultShell(): { file: string; args: string[] } {
  * this container from the host. Loop's own provider choice, session leasing
  * and prompt are entirely its own business.
  */
-function defaultLoop(name: string): { file: string; args: string[]; cwd: string } {
+function defaultLoop(name: string): {
+  file: string;
+  args: string[];
+  cwd: string;
+} {
   return { file: "/app/loop/run", args: [name], cwd: "/app" };
 }
 
-export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistry {
+export function createConsoleRegistry(
+  deps: ConsoleRegistryDeps,
+): ConsoleRegistry {
   const getAdapterFn = deps.getAdapter ?? getAdapter;
   const isInsideWorkspaceFn = deps.isInsideWorkspace ?? isInsideWorkspace;
   const recordActionFn = deps.recordAction ?? recordAction;
@@ -161,10 +172,13 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
   const consoles = new Map<string, LiveConsole>();
   /** Agents can reach `/relay` only when they have a URL and a command. */
   const relayEnabled =
-    deps.hookBase !== undefined && deps.relayBin !== undefined && deps.callsigns !== undefined;
+    deps.hookBase !== undefined &&
+    deps.relayBin !== undefined &&
+    deps.callsigns !== undefined;
 
   const list = () => [...consoles.values()].map((c) => ({ ...c.info }));
-  const announceList = () => deps.broadcast({ type: "console.list", consoles: list() });
+  const announceList = () =>
+    deps.broadcast({ type: "console.list", consoles: list() });
 
   const setActivity = (record: LiveConsole, activity: ConsoleActivity) => {
     if (record.info.activity === activity) return;
@@ -176,7 +190,10 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
   const pushScrollback = (record: LiveConsole, data: string) => {
     record.scrollback.push(data);
     record.scrollbackChars += data.length;
-    while (record.scrollbackChars > SCROLLBACK_MAX_CHARS && record.scrollback.length > 1) {
+    while (
+      record.scrollbackChars > SCROLLBACK_MAX_CHARS &&
+      record.scrollback.length > 1
+    ) {
       const dropped = record.scrollback.shift()!;
       record.scrollbackChars -= dropped.length;
     }
@@ -191,7 +208,10 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
   /** The running console that already owns this provider session. */
   const runningOn = (sessionId: string): LiveConsole | undefined => {
     for (const record of consoles.values()) {
-      if (record.info.status === "running" && record.info.sessionId === sessionId) {
+      if (
+        record.info.status === "running" &&
+        record.info.sessionId === sessionId
+      ) {
         return record;
       }
     }
@@ -211,9 +231,18 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
     return undefined;
   };
 
-  const attachSink = (record: LiveConsole, sink: ConsoleSink, cols: number, rows: number) => {
+  const attachSink = (
+    record: LiveConsole,
+    sink: ConsoleSink,
+    cols: number,
+    rows: number,
+  ) => {
     record.sinks.add(sink);
-    sink({ type: "console.replay", id: record.info.id, data: record.scrollback.join("") });
+    sink({
+      type: "console.replay",
+      id: record.info.id,
+      data: record.scrollback.join(""),
+    });
     if (record.info.status === "running") {
       // Last writer wins: the attaching terminal's size is the one on screen
       // now, and a TUI redraws on resize so the replay is followed by a frame
@@ -224,7 +253,9 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
         type: "console.exit",
         id: record.info.id,
         exitCode: record.info.exitCode ?? -1,
-        ...(record.info.signal !== undefined ? { signal: record.info.signal } : {}),
+        ...(record.info.signal !== undefined
+          ? { signal: record.info.signal }
+          : {}),
       });
     }
   };
@@ -243,6 +274,7 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
         sessionId?: string;
         callsign?: string;
         callsignKey?: string;
+        cleanup?: () => Promise<void>;
       }
     | { ok: false; reason: string }
   > => {
@@ -250,7 +282,11 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
 
     if (request.kind === "shell") {
       const { file, args } = shell();
-      return { ok: true, command: { file, args, cwd: request.projectPath }, title: `shell · ${name}` };
+      return {
+        ok: true,
+        command: { file, args, cwd: request.projectPath },
+        title: `shell · ${name}`,
+      };
     }
 
     if (request.kind === "loop") {
@@ -270,9 +306,11 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
     }
 
     const providerId = request.providerId;
-    if (providerId === undefined) return { ok: false, reason: "no provider given" };
+    if (providerId === undefined)
+      return { ok: false, reason: "no provider given" };
     const adapter = getAdapterFn(providerId);
-    if (adapter === undefined) return { ok: false, reason: `unknown provider: ${providerId}` };
+    if (adapter === undefined)
+      return { ok: false, reason: `unknown provider: ${providerId}` };
     if (adapter.consoleCommand === undefined) {
       return { ok: false, reason: `${providerId} has no interactive console` };
     }
@@ -283,7 +321,10 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
     } catch (error) {
       return {
         ok: false,
-        reason: error instanceof Error ? error.message : "could not read provider status",
+        reason:
+          error instanceof Error
+            ? error.message
+            : "could not read provider status",
       };
     }
     if (!status.authenticated) {
@@ -292,6 +333,7 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
     }
 
     let sessionId = request.sessionId;
+    let cleanup: (() => Promise<void>) | undefined;
     const resume = request.resume === true && sessionId !== undefined;
     if (resume) {
       // A live loop run owns its transcript through a CLI that is still
@@ -306,11 +348,27 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
     } else if (sessionId === undefined && adapter.sessions !== undefined) {
       // Mint the id up front so the new session links to this console the
       // moment its transcript appears. A CLI that cannot adopt it ignores it.
-      sessionId = await adapter.sessions.mintSessionId();
+      try {
+        sessionId = await adapter.sessions.mintSessionId({
+          projectDir: request.projectPath,
+          prompt: request.prompt,
+        });
+        const discard = adapter.sessions.discardPreparedSession?.bind(
+          adapter.sessions,
+        );
+        if (discard) {
+          const preparedId = sessionId;
+          cleanup = () => discard(request.projectPath, preparedId);
+        }
+      } catch {
+        return { ok: false, reason: "could not prepare provider session" };
+      }
     }
 
     const hookUrl =
-      deps.hookBase !== undefined ? `${deps.hookBase}/hooks/${id}/${hookToken}` : undefined;
+      deps.hookBase !== undefined
+        ? `${deps.hookBase}/hooks/${id}/${hookToken}`
+        : undefined;
 
     // Named before the CLI starts, so it can be told who it is. Keyed by the
     // session it will run; re-keyed below if the CLI did not take the id.
@@ -327,7 +385,9 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
         cwd: request.projectPath,
         ...(sessionId !== undefined ? { sessionId } : {}),
         ...(resume ? { resume: true } : {}),
-        ...(request.prompt !== undefined && !resume ? { prompt: request.prompt } : {}),
+        ...(request.prompt !== undefined && !resume
+          ? { prompt: request.prompt }
+          : {}),
         ...(hookUrl !== undefined ? { hookUrl } : {}),
         ...(callsign !== undefined && relayEnabled ? { callsign } : {}),
       });
@@ -349,125 +409,173 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
       return {
         ok: true,
         command,
+        ...(cleanup ? { cleanup } : {}),
         title: `${providerId} · ${name}`,
         providerId,
         ...(adopted && sessionId !== undefined ? { sessionId } : {}),
-        ...(callsign !== undefined ? { callsign, callsignKey: callsignKey! } : {}),
+        ...(callsign !== undefined
+          ? { callsign, callsignKey: callsignKey! }
+          : {}),
       };
     } catch (error) {
+      await cleanup?.().catch(() => undefined);
+      if (cleanup && callsignKey) deps.callsigns?.release(callsignKey);
       return {
         ok: false,
-        reason: error instanceof Error ? error.message : "could not prepare console",
+        reason:
+          error instanceof Error ? error.message : "could not prepare console",
       };
     }
   };
 
+  const opening = new Map<string, Promise<OpenResult>>();
+  const open = async (request: OpenRequest): Promise<OpenResult> => {
+    if (!(await isInsideWorkspaceFn(request.projectPath))) {
+      return { ok: false, reason: "project is not inside the workspace" };
+    }
+
+    // One CLI per transcript: a session that is already open is attached,
+    // not started a second time. Same for a project's loop run.
+    const existing =
+      request.kind === "agent" &&
+      request.resume === true &&
+      request.sessionId !== undefined
+        ? runningOn(request.sessionId)
+        : request.kind === "loop" && request.takeover !== true
+          ? runningLoop(request.projectPath)
+          : undefined;
+    if (existing !== undefined) {
+      return { ok: true, console: { ...existing.info }, attached: true };
+    }
+
+    const id = randomUUID();
+    const hookToken = randomBytes(16).toString("hex");
+    const resolved = await resolveCommand(request, id, hookToken);
+    if (!resolved.ok) return resolved;
+
+    let handle: PtyHandle;
+    try {
+      handle = await spawn({
+        file: resolved.command.file,
+        args: resolved.command.args,
+        cwd: resolved.command.cwd,
+        cols: request.cols,
+        rows: request.rows,
+        env: consoleEnv(resolved.command.env),
+      });
+    } catch (error) {
+      await resolved.cleanup?.().catch(() => undefined);
+      if (resolved.cleanup && resolved.callsignKey)
+        deps.callsigns?.release(resolved.callsignKey);
+      return {
+        ok: false,
+        reason:
+          error instanceof Error ? error.message : "could not start console",
+      };
+    }
+
+    const record: LiveConsole = {
+      info: {
+        id,
+        kind: request.kind,
+        projectPath: request.projectPath,
+        ...(resolved.providerId !== undefined
+          ? { providerId: resolved.providerId }
+          : {}),
+        ...(resolved.sessionId !== undefined
+          ? { sessionId: resolved.sessionId }
+          : {}),
+        title: resolved.title,
+        startedAt: now().toISOString(),
+        status: "running",
+        activity: "unknown",
+        hooked: resolved.command.hooked === true,
+        ...(resolved.callsign !== undefined
+          ? { callsign: resolved.callsign }
+          : {}),
+      },
+      handle,
+      hookToken,
+      scrollback: [],
+      scrollbackChars: 0,
+      sinks: new Set(),
+      ...(resolved.callsignKey !== undefined
+        ? { callsignKey: resolved.callsignKey }
+        : {}),
+    };
+    consoles.set(id, record);
+
+    handle.onData((data) => {
+      pushScrollback(record, data);
+      for (const target of record.sinks)
+        target({ type: "console.output", id, data });
+      if (record.info.hooked) return;
+      // No hooks: output means work, silence means idle. A TUI that redraws
+      // a spinner reads as working, which is what a spinner means anyway.
+      setActivity(record, "working");
+      if (record.quietTimer !== undefined) clearTimeout(record.quietTimer);
+      record.quietTimer = setTimeout(
+        () => setActivity(record, "idle"),
+        quietMs,
+      );
+    });
+
+    handle.onExit((info) => {
+      if (record.quietTimer !== undefined) clearTimeout(record.quietTimer);
+      record.info.status = "exited";
+      record.info.exitCode = info.exitCode;
+      if (info.signal !== undefined) record.info.signal = info.signal;
+      record.info.activity = "idle";
+      delete record.info.pendingRelays;
+      deps.onExit?.(id);
+      for (const target of record.sinks) {
+        target({
+          type: "console.exit",
+          id,
+          exitCode: info.exitCode,
+          ...(info.signal !== undefined ? { signal: info.signal } : {}),
+        });
+      }
+      announceList();
+    });
+
+    void recordActionFn({
+      actor: "operator",
+      action: "console:open",
+      outcome: "ok",
+      detail: `${resolved.title} · ${request.projectPath}`,
+    });
+    announceList();
+    return { ok: true, console: { ...record.info }, attached: false };
+  };
+
   return {
     async open(request) {
-      if (!(await isInsideWorkspaceFn(request.projectPath))) {
-        return { ok: false, reason: "project is not inside the workspace" };
-      }
-
-      // One CLI per transcript: a session that is already open is attached,
-      // not started a second time. Same for a project's loop run.
-      const existing =
-        request.kind === "agent" && request.resume === true && request.sessionId !== undefined
-          ? runningOn(request.sessionId)
-          : request.kind === "loop" && request.takeover !== true
-            ? runningLoop(request.projectPath)
+      const key =
+        request.kind === "agent" && request.resume && request.sessionId
+          ? `${request.providerId}:${request.sessionId}`
+          : request.kind === "loop" && !request.takeover
+            ? `loop:${request.projectPath}`
             : undefined;
-      if (existing !== undefined) {
-        return { ok: true, console: { ...existing.info }, attached: true };
+      if (!key) return open(request);
+      const pending = opening.get(key);
+      if (pending) {
+        const result = await pending;
+        return result.ok ? { ...result, attached: true } : result;
       }
-
-      const id = randomUUID();
-      const hookToken = randomBytes(16).toString("hex");
-      const resolved = await resolveCommand(request, id, hookToken);
-      if (!resolved.ok) return resolved;
-
-      let handle: PtyHandle;
+      const promise = open(request);
+      opening.set(key, promise);
       try {
-        handle = await spawn({
-          file: resolved.command.file,
-          args: resolved.command.args,
-          cwd: resolved.command.cwd,
-          cols: request.cols,
-          rows: request.rows,
-          env: consoleEnv(resolved.command.env),
-        });
-      } catch (error) {
-        return {
-          ok: false,
-          reason: error instanceof Error ? error.message : "could not start console",
-        };
+        return await promise;
+      } finally {
+        opening.delete(key);
       }
-
-      const record: LiveConsole = {
-        info: {
-          id,
-          kind: request.kind,
-          projectPath: request.projectPath,
-          ...(resolved.providerId !== undefined ? { providerId: resolved.providerId } : {}),
-          ...(resolved.sessionId !== undefined ? { sessionId: resolved.sessionId } : {}),
-          title: resolved.title,
-          startedAt: now().toISOString(),
-          status: "running",
-          activity: "unknown",
-          hooked: resolved.command.hooked === true,
-          ...(resolved.callsign !== undefined ? { callsign: resolved.callsign } : {}),
-        },
-        handle,
-        hookToken,
-        scrollback: [],
-        scrollbackChars: 0,
-        sinks: new Set(),
-        ...(resolved.callsignKey !== undefined ? { callsignKey: resolved.callsignKey } : {}),
-      };
-      consoles.set(id, record);
-
-      handle.onData((data) => {
-        pushScrollback(record, data);
-        for (const target of record.sinks) target({ type: "console.output", id, data });
-        if (record.info.hooked) return;
-        // No hooks: output means work, silence means idle. A TUI that redraws
-        // a spinner reads as working, which is what a spinner means anyway.
-        setActivity(record, "working");
-        if (record.quietTimer !== undefined) clearTimeout(record.quietTimer);
-        record.quietTimer = setTimeout(() => setActivity(record, "idle"), quietMs);
-      });
-
-      handle.onExit((info) => {
-        if (record.quietTimer !== undefined) clearTimeout(record.quietTimer);
-        record.info.status = "exited";
-        record.info.exitCode = info.exitCode;
-        if (info.signal !== undefined) record.info.signal = info.signal;
-        record.info.activity = "idle";
-        delete record.info.pendingRelays;
-        deps.onExit?.(id);
-        for (const target of record.sinks) {
-          target({
-            type: "console.exit",
-            id,
-            exitCode: info.exitCode,
-            ...(info.signal !== undefined ? { signal: info.signal } : {}),
-          });
-        }
-        announceList();
-      });
-
-      void recordActionFn({
-        actor: "operator",
-        action: "console:open",
-        outcome: "ok",
-        detail: `${resolved.title} · ${request.projectPath}`,
-      });
-      announceList();
-      return { ok: true, console: { ...record.info }, attached: false };
     },
 
     attach(id, sink, cols, rows) {
       const record = consoles.get(id);
-      if (record === undefined) return { ok: false, reason: "no console with that id" };
+      if (record === undefined)
+        return { ok: false, reason: "no console with that id" };
       attachSink(record, sink, cols, rows);
       return { ok: true };
     },
@@ -482,14 +590,16 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
 
     input(id, data) {
       const record = consoles.get(id);
-      if (record === undefined) return { ok: false, reason: "no console with that id" };
+      if (record === undefined)
+        return { ok: false, reason: "no console with that id" };
       record.handle.write(data);
       return { ok: true };
     },
 
     resize(id, cols, rows) {
       const record = consoles.get(id);
-      if (record === undefined) return { ok: false, reason: "no console with that id" };
+      if (record === undefined)
+        return { ok: false, reason: "no console with that id" };
       record.handle.resize(cols, rows);
       return { ok: true };
     },
@@ -532,7 +642,8 @@ export function createConsoleRegistry(deps: ConsoleRegistryDeps): ConsoleRegistr
     verify(id, token) {
       const record = consoles.get(id);
       if (record === undefined || record.hookToken !== token) return undefined;
-      if (record.info.status !== "running" || record.info.kind !== "agent") return undefined;
+      if (record.info.status !== "running" || record.info.kind !== "agent")
+        return undefined;
       return { ...record.info };
     },
 

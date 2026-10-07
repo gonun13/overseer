@@ -1,6 +1,6 @@
 {
   "name": "@overseer/server",
-  "version": "0.6.2",
+  "version": "0.7.0",
   "description": "Node WS + REST server — console registry, adapter registry, static SPA host.",
   "type": "module",
   "main": "./dist/index.js",
@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@overseer/adapter-claude": "*",
+    "@overseer/adapter-codex": "*",
     "@overseer/adapter-cursor": "*",
     "@overseer/protocol": "*",
     "express": "^4.21.2",

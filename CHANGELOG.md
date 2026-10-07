@@ -5,6 +5,18 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [spec/architecture.md §8.4](spec/architecture.md#84-changelog).
 
+## 0.7.0 — 2026-10-07
+
+### Added
+
+- Connect Codex, sign in with ChatGPT using a browser device code, check subscription usage, and
+  start, resume or delete saved project sessions in its own terminal UI. Dev-loop support is not
+  available for Codex.
+
+### Fixed
+
+- Production builds include the release notes the changelog window reads.
+
 ## 0.6.2 — 2026-10-06
 
 ### Changed

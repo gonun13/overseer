@@ -515,6 +515,7 @@ export interface AuthStateMessage {
    * operations window.
    */
   verificationUrl?: string;
+  userCode?: string;
   /** Operator-facing reason when `phase === "failed"`, in the CLI's own words. */
   detail?: string;
   /** True when the CLI is still at the prompt and another code may be pasted. */

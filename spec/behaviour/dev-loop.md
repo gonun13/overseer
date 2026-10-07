@@ -72,6 +72,9 @@ frontmatter and isn't per-request — it's a living document per workspace, read
 and rewritten on every `research` run, flowing forward to every future
 step/request for that workspace rather than just the next one.
 
+Codex supports ordinary app sessions only (`app: "adapter"`, `loop: "none"`); it is not a
+loop provider and is absent from the loop picker.
+
 **Provider abstraction.** `loop/bin/lib/providers.sh` loads a bundle from the
 shared registry at `providers/<id>/` ([architecture.md §1.1.2](../architecture.md#112-the-provider-registry)) — `manifest.json` plus
 `provider.sh` plus that provider's config tree. The contract is two functions,

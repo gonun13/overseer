@@ -28,8 +28,10 @@ Opening never starts a second process on something that already has one:
   only reachable by a take-over: a decision ([ui-ux.md §5.4](../ui-ux.md#54-the-decision--the-one-surface-that-blocks))
   asks first, because confirming ends that run. A session a live loop run holds is never resumed
   as an `agent` console.
-- **Ids are minted up front**, so a brand-new console is listed as a session before its CLI has
-  written a byte of transcript.
+- **Ids are minted up front** with the project directory and optional opening prompt, so a new
+  console is linked to its session immediately. Codex prepares and names a native thread before
+  launching `codex resume <id>`; preparation failure refuses the open, and spawning failure
+  deletes that prepared thread. Concurrent opens on the same saved session join one open.
 
 Before an `agent` console spawns Claude Code, Overseer marks the CLI's interactive onboarding
 complete and trusts the project, so the TUI does not re-run the theme picker or browser login that
@@ -69,7 +71,7 @@ The session panel merges two sources: every console the server runs (any project
 project's dormant sessions read from the providers' own transcripts by the session index
 (rebuilt whenever a transcript changes, broadcast to every tab). Picking a console brings its
 window back — which is how a detached console is found again; picking a dormant session resumes it
-in a new console (`claude --resume`, `agent --resume`). Agent rows lead with their callsign
+in a new console (`claude --resume`, `agent --resume`, `codex resume`). Agent rows lead with their callsign
 ([relay.md §6](relay.md#6-where-callsigns-show)).
 
 ## 6. Keyboard

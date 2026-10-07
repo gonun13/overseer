@@ -24,12 +24,12 @@ import { StatusLight } from "./StatusLight";
  * the provider picker. New sessions start from the left rail or the prompt.
  *
  * Usage gauges stay hidden until the provider has a real reading, from either
- * of two paths that never both apply to one provider:
+ * of two paths, which Codex supports together:
  *
- * - automatic (`refreshUsage`, claude) — the widget counts down while a
+ * - automatic (`refreshUsage`, claude and codex) — the widget counts down while a
  *   refresh is in flight and says so after a miss, because something is
  *   genuinely happening on its own;
- * - on demand (`checkUsage`, cursor) — nothing happens until the operator
+ * - on demand (`checkUsage`, cursor and codex) — nothing happens until the operator
  *   presses CHECK USAGE, so there is no "retrieving…" to show and no miss to
  *   report; the button is the whole story until a reading comes back.
  *
@@ -57,7 +57,8 @@ export function ProviderWidget({
   // On-demand providers own the usage block outright: their status carries no
   // automatic reading to wait on or to mourn, so the countdown and the "not
   // available" line would both be describing a path that does not exist here.
-  const manual = provider.usageCheck && provider.authenticated;
+  const canCheck = provider.usageCheck && provider.authenticated;
+  const manual = canCheck && !provider.usageRefresh;
   const showPending = !manual && usageState === "pending" && !timedOut;
   const showUnavailable =
     !manual && (usageState === "unavailable" || timedOut);
@@ -148,7 +149,7 @@ export function ProviderWidget({
               </span>
             )}
 
-            {manual && !usageCheck.checking && usageCheck.error && (
+            {canCheck && !usageCheck.checking && usageCheck.error && (
               <span className="widget-row">
                 <span className="widget-dim">{usageCheck.error}</span>
               </span>
@@ -166,7 +167,7 @@ export function ProviderWidget({
         )}
       </button>
 
-      {manual && (
+      {canCheck && (
         <button
           type="button"
           className="widget-action"

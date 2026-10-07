@@ -323,6 +323,7 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
             status,
             login: adapter.capabilities.login,
             usageCheck: adapter.capabilities.usageCheck,
+            usageRefresh: adapter.refreshUsage !== undefined,
             ...(isCatalogOnly(adapter.id) ? { catalogOnly: true as const } : {}),
             ...(expired ? { authExpired: true as const } : {}),
           };

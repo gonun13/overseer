@@ -379,6 +379,11 @@ The brackets are eight background gradients keyed off `--edge`, so hover re-poin
 lights the whole frame at once. A widget "sits on top of" the background by tint and bracket, never by a
 shadow.
 
+Provider sign-in uses each adapter's flow. Codex's `awaiting-browser` state shows a verification
+link and device code to enter on the site, with cancel and no paste-back form. Both fields
+survive a tab reconnect. Its usage widget shows scheduled quota readings and a manual check
+button; missing readings say usage is unavailable without changing the sign-in light.
+
 ### 6.3 Choice groups
 
 For a small fixed choice, show every option inline instead of a button describing the next state. Mark the

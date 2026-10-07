@@ -52,6 +52,7 @@ export interface DiscoveredProvider {
   /** Mirrors `AdapterCapabilities.usageCheck` — gates the "check usage"
    * button the same way `login` gates the sign-in controls. */
   usageCheck: boolean;
+  usageRefresh?: boolean;
   /**
    * True when this build lists the provider but drives nothing behind it —
    * the CLI is in the image, sessions/auth/console are not wired (`app:

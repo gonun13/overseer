@@ -102,10 +102,11 @@ COPY packages/server/package.json packages/server/package.json
 COPY packages/web/package.json packages/web/package.json
 COPY packages/adapters/claude/package.json packages/adapters/claude/package.json
 COPY packages/adapters/cursor/package.json packages/adapters/cursor/package.json
+COPY packages/adapters/codex/package.json packages/adapters/codex/package.json
 COPY packages/e2e/package.json packages/e2e/package.json
 RUN npm ci
 
-COPY tsconfig.base.json ./
+COPY tsconfig.base.json CHANGELOG.md ./
 COPY packages ./packages
 RUN npm run build
 
@@ -118,7 +119,7 @@ RUN npm run build
 #
 #   id              cli      app      loop
 #   claude          claude   adapter  bundle
-#   codex           codex    stub     none
+#   codex           codex    adapter  none
 #   opencode        opencode stub     none
 #   github-copilot  copilot  stub     none
 #   cursor          agent    adapter  bundle
@@ -134,10 +135,17 @@ FROM base AS agents
 # provider-cli: github-copilot
 RUN npm install -g \
       @anthropic-ai/claude-code@2.1.287 \
-      @openai/codex@0.147.0 \
+      @openai/codex@0.160.1 \
       opencode-ai@1.18.18 \
       @github/copilot@1.0.80 \
     && npm cache clean --force
+
+# Codex's system config layer, the counterpart of DISABLE_AUTOUPDATER above:
+# its in-TUI update could only fail against the root-owned npm prefix. Set
+# here rather than as a `-c` launch flag, which would force the TUI off its
+# shared background server.
+RUN mkdir -p /etc/codex \
+    && printf 'check_for_update_on_startup = false\n' > /etc/codex/config.toml
 
 # provider-cli: cursor
 # Cursor ships a self-contained bundle with its own node, not an npm package,
@@ -163,6 +171,7 @@ COPY packages/server/package.json packages/server/package.json
 COPY packages/web/package.json packages/web/package.json
 COPY packages/adapters/claude/package.json packages/adapters/claude/package.json
 COPY packages/adapters/cursor/package.json packages/adapters/cursor/package.json
+COPY packages/adapters/codex/package.json packages/adapters/codex/package.json
 COPY packages/e2e/package.json packages/e2e/package.json
 RUN npm ci
 
@@ -202,10 +211,12 @@ COPY packages/protocol/package.json packages/protocol/package.json
 COPY packages/server/package.json packages/server/package.json
 COPY packages/adapters/claude/package.json packages/adapters/claude/package.json
 COPY packages/adapters/cursor/package.json packages/adapters/cursor/package.json
+COPY packages/adapters/codex/package.json packages/adapters/codex/package.json
 RUN npm ci --omit=dev --workspace packages/server \
       --workspace packages/protocol \
       --workspace packages/adapters/claude \
       --workspace packages/adapters/cursor \
+      --workspace packages/adapters/codex \
     && apt-get purge -y python3 make g++ \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
@@ -216,6 +227,7 @@ COPY --from=builder /app/packages/server/dist packages/server/dist
 COPY --chmod=755 packages/server/relay-bin packages/server/relay-bin
 COPY --from=builder /app/packages/adapters/claude/dist packages/adapters/claude/dist
 COPY --from=builder /app/packages/adapters/cursor/dist packages/adapters/cursor/dist
+COPY --from=builder /app/packages/adapters/codex/dist packages/adapters/codex/dist
 COPY --from=builder /app/packages/web/dist packages/web/dist
 
 # The loop and the registry are code, so they ship with the image. In dev the

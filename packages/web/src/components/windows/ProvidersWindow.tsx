@@ -112,7 +112,9 @@ function ProvidersTab({
   onCancelLogin: () => void;
   onSignOut: (id: string) => void;
 }) {
-  const [selected, setSelected] = useState(attachedId ?? providers[0]?.id ?? "");
+  const [selected, setSelected] = useState(
+    attachedId ?? providers[0]?.id ?? "",
+  );
 
   const attached = providers.find((provider) => provider.id === attachedId);
   const flowing =
@@ -157,8 +159,10 @@ function ProvidersTab({
             )}
             primary={provider.id}
             secondary={
-              providerAuthLabel(provider.status, provider.catalogOnly === true) +
-              (isAttached ? " · attached" : "")
+              providerAuthLabel(
+                provider.status,
+                provider.catalogOnly === true,
+              ) + (isAttached ? " · attached" : "")
             }
             right={active ? "▪" : undefined}
             onClick={() => setSelected(provider.id)}
@@ -253,6 +257,7 @@ const PHASE_WORD: Record<AuthFlow["phase"], string> = {
   idle: "not signed in",
   starting: "starting the cli…",
   "awaiting-code": "waiting for your code",
+  "awaiting-browser": "waiting for browser authorization",
   verifying: "checking the code…",
   success: "signed in",
   failed: "login failed",
@@ -285,7 +290,11 @@ function LoginStep({
 
   const phase = auth?.phase;
   const running =
-    phase === "starting" || phase === "awaiting-code" || phase === "verifying";
+    phase === "starting" ||
+    phase === "awaiting-code" ||
+    phase === "awaiting-browser" ||
+    phase === "verifying";
+  const device = phase === "awaiting-browser";
   const url = auth?.verificationUrl;
 
   const copy = () => {
@@ -327,8 +336,8 @@ function LoginStep({
         <>
           <p className="w-note">
             opens a verification link in your browser, on your machine. the
-            container never opens anything — you copy the code back into the
-            field below.
+            container never opens anything. follow the verification instructions
+            shown when login starts.
           </p>
           <div className="btn-row">
             <button type="button" className="w-btn" onClick={onStartLogin}>
@@ -345,9 +354,15 @@ function LoginStep({
           ) : (
             <>
               <p className="w-note">
-                1 · open this on your machine and authorize. 2 · paste the code
-                the site shows you, exactly as given.
+                {device
+                  ? "open this on your machine, sign in with ChatGPT, and enter this code on the site."
+                  : "1 · open this on your machine and authorize. 2 · paste the code the site shows you, exactly as given."}
               </p>
+              {device && (
+                <p className="w-note">
+                  verification code · <strong>{auth?.userCode}</strong>
+                </p>
+              )}
               <div className="btn-row">
                 {/* `noopener noreferrer`: this opens on the operator's machine
                     and the console must not be reachable from that tab. */}
@@ -369,29 +384,33 @@ function LoginStep({
           )}
 
           <div className="btn-row">
-            <input
-              className="w-input"
-              type="text"
-              value={code}
-              spellCheck={false}
-              autoComplete="off"
-              autoCapitalize="off"
-              autoCorrect="off"
-              placeholder="paste the code here"
-              aria-label="verification code"
-              onChange={(event) => setCode(event.target.value)}
-              onKeyDown={(event) => {
-                if (event.key === "Enter") submit();
-              }}
-            />
-            <button
-              type="button"
-              className="w-btn"
-              disabled={code.trim() === ""}
-              onClick={submit}
-            >
-              submit
-            </button>
+            {!device && phase !== "starting" && (
+              <>
+                <input
+                  className="w-input"
+                  type="text"
+                  value={code}
+                  spellCheck={false}
+                  autoComplete="off"
+                  autoCapitalize="off"
+                  autoCorrect="off"
+                  placeholder="paste the code here"
+                  aria-label="verification code"
+                  onChange={(event) => setCode(event.target.value)}
+                  onKeyDown={(event) => {
+                    if (event.key === "Enter") submit();
+                  }}
+                />
+                <button
+                  type="button"
+                  className="w-btn"
+                  disabled={code.trim() === ""}
+                  onClick={submit}
+                >
+                  submit
+                </button>
+              </>
+            )}
             <button type="button" className="w-btn" onClick={onCancelLogin}>
               cancel
             </button>
