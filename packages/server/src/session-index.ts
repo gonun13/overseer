@@ -47,7 +47,10 @@ async function defaultListProjects(): Promise<string[]> {
   return scan.projects.map((project) => project.path);
 }
 
-export function createSessionIndex(broadcast: Broadcast, deps: SessionIndexDeps = {}) {
+export function createSessionIndex(
+  broadcast: Broadcast,
+  deps: SessionIndexDeps = {},
+) {
   const listAdaptersFn = deps.listAdapters ?? listAdapters;
   const listProjects = deps.listProjects ?? defaultListProjects;
   const loopSessionIndexFn = deps.loopSessionIndex ?? loopSessionIndex;
@@ -75,7 +78,10 @@ export function createSessionIndex(broadcast: Broadcast, deps: SessionIndexDeps 
         try {
           all.push(...(await store.listProjectSessions(projectDir)));
         } catch (error) {
-          console.error(`overseer: could not list ${adapter.id} sessions in ${projectDir}`, error);
+          console.error(
+            `overseer: could not list ${adapter.id} sessions in ${projectDir}`,
+            error,
+          );
         }
       }
     }
@@ -102,7 +108,8 @@ export function createSessionIndex(broadcast: Broadcast, deps: SessionIndexDeps 
     });
 
     return stamped.sort(
-      (a, b) => new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime(),
+      (a, b) =>
+        new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime(),
     );
   }
 
@@ -127,23 +134,31 @@ export function createSessionIndex(broadcast: Broadcast, deps: SessionIndexDeps 
     /** Permanently remove a session's transcript. */
     async delete(sessionId: string): Promise<SessionResult> {
       const meta = known.get(sessionId);
-      if (meta === undefined) return { ok: false, reason: "no session with that id" };
+      if (meta === undefined)
+        return { ok: false, reason: "no session with that id" };
       if (meta.origin === "loop") {
         return { ok: false, reason: "a live loop run owns this session" };
       }
       if (isRunning(sessionId)) {
-        return { ok: false, reason: "a console is running this session — kill it first" };
+        return {
+          ok: false,
+          reason: "a console is running this session — kill it first",
+        };
       }
       const adapter = listAdaptersFn().find((a) => a.id === meta.adapterId);
       if (adapter?.sessions === undefined) {
-        return { ok: false, reason: `${meta.adapterId} cannot manage sessions` };
+        return {
+          ok: false,
+          reason: `${meta.adapterId} cannot manage sessions`,
+        };
       }
       try {
         await adapter.sessions.deleteSession(meta.projectDir, sessionId);
       } catch (error) {
         return {
           ok: false,
-          reason: error instanceof Error ? error.message : "could not delete session",
+          reason:
+            error instanceof Error ? error.message : "could not delete session",
         };
       }
       void recordActionFn({

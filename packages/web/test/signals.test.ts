@@ -72,7 +72,10 @@ describe("deriveSignals usage", () => {
         usage: [{ id: "week", label: "week", used: 0.79 }],
       },
     });
-    assert.equal(signals.find((signal) => signal.id === "usage"), undefined);
+    assert.equal(
+      signals.find((signal) => signal.id === "usage"),
+      undefined,
+    );
   });
 });
 
@@ -94,7 +97,10 @@ describe("deriveSignals consoles", () => {
       ...baseWorld,
       consoles: [consoleInfo({ activity: "working" })],
     });
-    assert.equal(signals.some((signal) => signal.id.endsWith("c1")), false);
+    assert.equal(
+      signals.some((signal) => signal.id.endsWith("c1")),
+      false,
+    );
   });
 
   it("reports a console that died with an error, not one that was ended", () => {
@@ -107,7 +113,10 @@ describe("deriveSignals consoles", () => {
       ...baseWorld,
       consoles: [consoleInfo({ status: "exited", exitCode: 0, signal: 15 })],
     });
-    assert.equal(killed.find((signal) => signal.id === "exited-c1"), undefined);
+    assert.equal(
+      killed.find((signal) => signal.id === "exited-c1"),
+      undefined,
+    );
   });
 
   it("reads 128 + signal exit codes as ended, not failed", () => {
@@ -116,7 +125,11 @@ describe("deriveSignals consoles", () => {
         ...baseWorld,
         consoles: [consoleInfo({ status: "exited", exitCode })],
       });
-      assert.equal(ended.find((signal) => signal.id === "exited-c1"), undefined, `${exitCode}`);
+      assert.equal(
+        ended.find((signal) => signal.id === "exited-c1"),
+        undefined,
+        `${exitCode}`,
+      );
     }
   });
 });
@@ -125,7 +138,9 @@ describe("deriveSignals relays", () => {
   it("asks the operator about a held agent relay, releasing it when followed", () => {
     const signals = deriveSignals({
       ...baseWorld,
-      heldRelays: [{ id: "h1", from: "Bob", to: "Linda", text: "rebuild it", at: "" }],
+      heldRelays: [
+        { id: "h1", from: "Bob", to: "Linda", text: "rebuild it", at: "" },
+      ],
     });
     const held = signals.find((s) => s.id === "relay-h1")!;
     assert.equal(held.activity, "approval");

@@ -158,7 +158,9 @@ export interface Addressee {
  * `@linda build it` → `{ to: "linda", text: "build it" }`. `undefined` when
  * this is not addressed input. `""` as `to` means only `@` is typed so far.
  */
-export function addressInput(input: string): { to: string; text: string } | undefined {
+export function addressInput(
+  input: string,
+): { to: string; text: string } | undefined {
   const trimmed = input.trim();
   if (!trimmed.startsWith("@")) return undefined;
   const match = /^@(\S*)\s*([\s\S]*)$/.exec(trimmed)!;
@@ -170,7 +172,10 @@ export function addressInput(input: string): { to: string; text: string } | unde
  * behaviour/relay.md §2). None once the name is complete and the message has
  * begun — Enter then relays it.
  */
-export function suggestAddressees(input: string, agents: Addressee[]): Addressee[] {
+export function suggestAddressees(
+  input: string,
+  agents: Addressee[],
+): Addressee[] {
   const trimmed = input.trimStart();
   if (!trimmed.startsWith("@") || /^@\S*\s/.test(trimmed)) return [];
   const needle = trimmed.slice(1).toLowerCase();

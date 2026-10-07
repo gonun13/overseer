@@ -25,11 +25,15 @@ export function SessionsWindow({
             key={s.id}
             activity={s.activity}
             primary={s.name}
-            secondary={[project?.name, s.providerId, s.branch].filter(Boolean).join(" · ")}
+            secondary={[project?.name, s.providerId, s.branch]
+              .filter(Boolean)
+              .join(" · ")}
             actions={
               <>
                 <button className="w-btn" onClick={() => onOpenSession(s)}>
-                  {s.consoleId !== undefined || s.origin === "loop" ? "console" : "resume"}
+                  {s.consoleId !== undefined || s.origin === "loop"
+                    ? "console"
+                    : "resume"}
                 </button>
                 {s.origin !== "loop" && s.consoleId === undefined && (
                   <button

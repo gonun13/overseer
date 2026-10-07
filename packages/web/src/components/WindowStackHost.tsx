@@ -122,14 +122,18 @@ export function WindowStackHost({
       title: agentName(info.callsign, consoleKind(info)),
       // Relays queued for it ride on the tab too (spec/ui-ux.md §5.3).
       detail:
-        info.pendingRelays !== undefined ? `${project} · ${info.pendingRelays} queued` : project,
+        info.pendingRelays !== undefined
+          ? `${project} · ${info.pendingRelays} queued`
+          : project,
     };
   };
 
   return windows.map((windowState) => {
     const payload = String(windowState.payload ?? "");
     const consoleInfo =
-      windowState.kind === "console" ? consoles.find((c) => c.id === payload) : undefined;
+      windowState.kind === "console"
+        ? consoles.find((c) => c.id === payload)
+        : undefined;
     const pending =
       windowState.kind === "console" && payload.startsWith(PENDING_PREFIX)
         ? pendingConsoles.find((p) => `${PENDING_PREFIX}${p.reqId}` === payload)
@@ -152,7 +156,9 @@ export function WindowStackHost({
         width={windowState.w}
         height={windowState.h}
         variant={windowState.kind === "console" ? "console" : undefined}
-        light={consoleInfo !== undefined ? consoleLight(consoleInfo) : undefined}
+        light={
+          consoleInfo !== undefined ? consoleLight(consoleInfo) : undefined
+        }
         closeLabel={running ? "detach" : undefined}
         actions={
           running ? (
@@ -232,7 +238,9 @@ export function WindowStackHost({
             connected={wizard.connected}
             send={send}
             subscribe={subscribeConsole}
-            onProcessExit={(clean) => onConsoleExit(windowState.id, payload, clean)}
+            onProcessExit={(clean) =>
+              onConsoleExit(windowState.id, payload, clean)
+            }
           />
         )}
         {windowState.kind === "help" && <HelpWindow provider={provider} />}
@@ -253,13 +261,22 @@ export function WindowStackHost({
             // is what turns that name into a path, and joining the two here is
             // the whole of how the walk goes deeper.
             onOpenFile={(name) => {
-              const view = parseFolderViewKey(String(windowState.payload ?? ""));
+              const view = parseFolderViewKey(
+                String(windowState.payload ?? ""),
+              );
               if (!view) return;
               const file = `${view.folder}/${name}`;
-              openWindow("diff", fileViewKey(view.projectPath, file), name, file);
+              openWindow(
+                "diff",
+                fileViewKey(view.projectPath, file),
+                name,
+                file,
+              );
             }}
             onOpenFolder={(name) => {
-              const view = parseFolderViewKey(String(windowState.payload ?? ""));
+              const view = parseFolderViewKey(
+                String(windowState.payload ?? ""),
+              );
               if (!view) return;
               openFolder(view.projectPath, `${view.folder}/${name}`);
             }}

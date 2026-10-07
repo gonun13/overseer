@@ -157,7 +157,11 @@ function describeCloneFailure(error: unknown): string {
   if (fatal !== undefined) {
     const message = fatal.replace(/^fatal:\s*/i, "");
     // Authentication failures read as a wall of URL; say the useful part.
-    if (/authentication failed|could not read username|terminal prompts/i.test(message)) {
+    if (
+      /authentication failed|could not read username|terminal prompts/i.test(
+        message,
+      )
+    ) {
       return "that repository is private, or does not exist";
     }
     return message;

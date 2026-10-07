@@ -17,7 +17,9 @@ export interface PtyProcess {
   resize(cols: number, rows: number): void;
   kill(signal?: string): void;
   onData(listener: (data: string) => void): void;
-  onExit(listener: (event: { exitCode: number; signal?: number }) => void): void;
+  onExit(
+    listener: (event: { exitCode: number; signal?: number }) => void,
+  ): void;
 }
 
 export interface PtySpawnOpts {
@@ -149,7 +151,9 @@ export async function spawnPty(opts: PtySpawnOpts): Promise<PtyHandle> {
 }
 
 /** Environment every console gets on top of the server's own. */
-export function consoleEnv(extra: Record<string, string> = {}): NodeJS.ProcessEnv {
+export function consoleEnv(
+  extra: Record<string, string> = {},
+): NodeJS.ProcessEnv {
   return {
     ...process.env,
     TERM: "xterm-256color",

@@ -18,11 +18,7 @@ import {
 } from "./memory/personality/api.js";
 import { isCatalogOnly, listAdapters } from "./adapters.js";
 import { authDetail, promptReady } from "./overseer/provider-status.js";
-import {
-  WORKSPACE_ROOT,
-  describeProject,
-  scanWorkspace,
-} from "./workspace.js";
+import { WORKSPACE_ROOT, describeProject, scanWorkspace } from "./workspace.js";
 import {
   readSnapshot,
   recordAction,
@@ -230,36 +226,32 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
   const { projects, untrackedFolders } = await step<{
     projects: DiscoveredProject[];
     untrackedFolders: UntrackedFolder[];
-  }>(
-    "workspace",
-    "scanning workspace",
-    async () => {
-      const found = await scanWorkspace();
-      const untracked = found.untracked;
-      const projectsFound = found.projects;
-      const detailParts: string[] = [];
-      if (projectsFound.length > 0) {
-        detailParts.push(
-          `${projectsFound.length} project${projectsFound.length === 1 ? "" : "s"}`,
-        );
-      } else {
-        detailParts.push("no git projects");
-      }
-      if (untracked.length > 0) {
-        detailParts.push(
-          `${untracked.length} folder${untracked.length === 1 ? "" : "s"} without git`,
-        );
-      }
-      return {
-        value: { projects: projectsFound, untrackedFolders: untracked },
-        outcome:
-          projectsFound.length === 0 || untracked.length > 0 ? "blocked" : "ok",
-        detail: `${detailParts.join(" · ")} in ${WORKSPACE_ROOT}`,
-        projects: projectsFound,
-        untrackedFolders: untracked,
-      };
-    },
-  );
+  }>("workspace", "scanning workspace", async () => {
+    const found = await scanWorkspace();
+    const untracked = found.untracked;
+    const projectsFound = found.projects;
+    const detailParts: string[] = [];
+    if (projectsFound.length > 0) {
+      detailParts.push(
+        `${projectsFound.length} project${projectsFound.length === 1 ? "" : "s"}`,
+      );
+    } else {
+      detailParts.push("no git projects");
+    }
+    if (untracked.length > 0) {
+      detailParts.push(
+        `${untracked.length} folder${untracked.length === 1 ? "" : "s"} without git`,
+      );
+    }
+    return {
+      value: { projects: projectsFound, untrackedFolders: untracked },
+      outcome:
+        projectsFound.length === 0 || untracked.length > 0 ? "blocked" : "ok",
+      detail: `${detailParts.join(" · ")} in ${WORKSPACE_ROOT}`,
+      projects: projectsFound,
+      untrackedFolders: untracked,
+    };
+  });
 
   // 4. Active project from internal memory, else overseer-personality.
   const personalityPath = personalityDir();
@@ -273,14 +265,12 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
         projects.some((project) => project.path === remembered);
       const chosen = stillThere
         ? remembered
-        : projects.find((project) => project.path === personalityPath)?.path ??
-          personalityPath;
+        : (projects.find((project) => project.path === personalityPath)?.path ??
+          personalityPath);
       return {
         value: chosen,
         outcome: "ok",
-        detail: stillThere
-          ? chosen
-          : `${PERSONALITY_PROJECT} (default)`,
+        detail: stillThere ? chosen : `${PERSONALITY_PROJECT} (default)`,
         activeProjectPath: chosen,
         reveal: ["activeProject"],
       };
@@ -324,13 +314,18 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
             login: adapter.capabilities.login,
             usageCheck: adapter.capabilities.usageCheck,
             usageRefresh: adapter.refreshUsage !== undefined,
-            ...(isCatalogOnly(adapter.id) ? { catalogOnly: true as const } : {}),
+            ...(isCatalogOnly(adapter.id)
+              ? { catalogOnly: true as const }
+              : {}),
             ...(expired ? { authExpired: true as const } : {}),
           };
         }),
       );
 
-      const attached = pickAttachedProvider(previous?.attached_provider, results);
+      const attached = pickAttachedProvider(
+        previous?.attached_provider,
+        results,
+      );
 
       // Registered alone is not success — the operator still needs to connect
       // (and sign in). Maps to [BLOCKED] so the operations line matches the
@@ -371,7 +366,9 @@ export async function runDiscovery(emit: Emit): Promise<DiscoveryEvent[]> {
     async () => ({
       value: ready,
       outcome: ready ? "ok" : "blocked",
-      detail: ready ? "prompt ready" : "held · connect an authenticated provider",
+      detail: ready
+        ? "prompt ready"
+        : "held · connect an authenticated provider",
       reveal: ["footer", "prompt"],
     }),
     { service: "providers", spaceKey: "prompt" },

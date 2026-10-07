@@ -28,7 +28,12 @@ const snapshot: WorldSnapshot = {
   runCount: 1,
   workspaceRoot: "/workspace",
   projects: [
-    { name: "alpha", path: "/workspace/alpha", gitBranch: "main", dirty: false },
+    {
+      name: "alpha",
+      path: "/workspace/alpha",
+      gitBranch: "main",
+      dirty: false,
+    },
     { name: "overseer-personality", path: "/workspace/overseer-personality" },
   ],
   providers: [],
@@ -93,20 +98,17 @@ describe("workspace membership helpers", () => {
 describe("createWorkspaceMembershipWorker", () => {
   it("seeds from discovery snapshot on first refresh", async () => {
     const { broadcast, space } = collectMessages();
-    const worker = createWorkspaceMembershipWorker(
-      () => {},
-      {
-        scanWorkspace: mock.fn(async (_root, opts) =>
-          opts?.git === false
-            ? { projects: snapshot.projects, untracked: [] }
-            : { projects: snapshot.projects, untracked: [] },
-        ),
-        gitMeta: mock.fn(async (projects) => projects),
-        syncSnapshotProjects: mock.fn(async () => true),
-        recordAction: mock.fn(async () => {}),
-        watchWithRetry: () => () => undefined,
-      },
-    );
+    const worker = createWorkspaceMembershipWorker(() => {}, {
+      scanWorkspace: mock.fn(async (_root, opts) =>
+        opts?.git === false
+          ? { projects: snapshot.projects, untracked: [] }
+          : { projects: snapshot.projects, untracked: [] },
+      ),
+      gitMeta: mock.fn(async (projects) => projects),
+      syncSnapshotProjects: mock.fn(async () => true),
+      recordAction: mock.fn(async () => {}),
+      watchWithRetry: () => () => undefined,
+    });
 
     await worker.refresh({
       broadcast,
@@ -129,22 +131,19 @@ describe("createWorkspaceMembershipWorker", () => {
         : project,
     );
     let gitRefreshCalls = 0;
-    const worker = createWorkspaceMembershipWorker(
-      () => {},
-      {
-        scanWorkspace: mock.fn(async () => ({
-          projects: listed,
-          untracked: [],
-        })),
-        gitMeta: mock.fn(async (projects) => {
-          gitRefreshCalls += 1;
-          return gitRefreshCalls === 1 ? projects : refreshed;
-        }),
-        syncSnapshotProjects: mock.fn(async () => true),
-        recordAction: mock.fn(async () => {}),
-        watchWithRetry: () => () => undefined,
-      },
-    );
+    const worker = createWorkspaceMembershipWorker(() => {}, {
+      scanWorkspace: mock.fn(async () => ({
+        projects: listed,
+        untracked: [],
+      })),
+      gitMeta: mock.fn(async (projects) => {
+        gitRefreshCalls += 1;
+        return gitRefreshCalls === 1 ? projects : refreshed;
+      }),
+      syncSnapshotProjects: mock.fn(async () => true),
+      recordAction: mock.fn(async () => {}),
+      watchWithRetry: () => () => undefined,
+    });
 
     await worker.refresh({
       broadcast,
@@ -182,24 +181,21 @@ describe("createWorkspaceMembershipWorker", () => {
     ];
 
     let listingCalls = 0;
-    const worker = createWorkspaceMembershipWorker(
-      () => {},
-      {
-        scanWorkspace: mock.fn(async (_root, opts) => {
-          if (opts?.git === false) {
-            listingCalls += 1;
-            return listingCalls === 1
-              ? { projects: before, untracked: [] }
-              : { projects: after, untracked: [] };
-          }
-          return { projects: after, untracked: [] };
-        }),
-        gitMeta: mock.fn(async (projects) => projects),
-        syncSnapshotProjects: mock.fn(async () => true),
-        recordAction: mock.fn(async () => {}),
-        watchWithRetry: () => () => undefined,
-      },
-    );
+    const worker = createWorkspaceMembershipWorker(() => {}, {
+      scanWorkspace: mock.fn(async (_root, opts) => {
+        if (opts?.git === false) {
+          listingCalls += 1;
+          return listingCalls === 1
+            ? { projects: before, untracked: [] }
+            : { projects: after, untracked: [] };
+        }
+        return { projects: after, untracked: [] };
+      }),
+      gitMeta: mock.fn(async (projects) => projects),
+      syncSnapshotProjects: mock.fn(async () => true),
+      recordAction: mock.fn(async () => {}),
+      watchWithRetry: () => () => undefined,
+    });
 
     await worker.refresh({
       broadcast,
@@ -220,7 +216,9 @@ describe("createWorkspaceMembershipWorker", () => {
 
     const steps = messages.filter(isStatus);
     const panel = messages.find((m) => m.type === "workspace.projects");
-    assert.ok(steps.some((m) => labelOf(m)?.includes("removing project alpha")));
+    assert.ok(
+      steps.some((m) => labelOf(m)?.includes("removing project alpha")),
+    );
     assert.equal(
       (panel as { activeProjectPath?: string } | undefined)?.activeProjectPath,
       "/workspace/overseer-personality",
@@ -239,25 +237,22 @@ describe("createWorkspaceMembershipWorker", () => {
     ];
 
     let listingCalls = 0;
-    const worker = createWorkspaceMembershipWorker(
-      () => {},
-      {
-        scanWorkspace: mock.fn(async (_root, opts) => {
-          if (opts?.git === false) {
-            listingCalls += 1;
-            return listingCalls === 1
-              ? { projects: before, untracked: [] }
-              : { projects: after, untracked: [] };
-          }
-          return { projects: after, untracked: [] };
-        }),
-        gitMeta: mock.fn(async (projects) => projects),
-        syncSnapshotProjects: mock.fn(async () => true),
-        recordAction: mock.fn(async () => {}),
-        personalityDir: () => personalityPath,
-        watchWithRetry: () => () => undefined,
-      },
-    );
+    const worker = createWorkspaceMembershipWorker(() => {}, {
+      scanWorkspace: mock.fn(async (_root, opts) => {
+        if (opts?.git === false) {
+          listingCalls += 1;
+          return listingCalls === 1
+            ? { projects: before, untracked: [] }
+            : { projects: after, untracked: [] };
+        }
+        return { projects: after, untracked: [] };
+      }),
+      gitMeta: mock.fn(async (projects) => projects),
+      syncSnapshotProjects: mock.fn(async () => true),
+      recordAction: mock.fn(async () => {}),
+      personalityDir: () => personalityPath,
+      watchWithRetry: () => () => undefined,
+    });
 
     await worker.refresh({
       broadcast,
@@ -279,13 +274,13 @@ describe("createWorkspaceMembershipWorker", () => {
     const steps = messages.filter(isStatus);
     assert.ok(
       steps.every(
-        (s) =>
-          !labelOf(s)?.includes("removing project overseer-personality"),
+        (s) => !labelOf(s)?.includes("removing project overseer-personality"),
       ),
     );
     const panel = messages.find((m) => m.type === "workspace.projects");
     assert.equal(
-      (panel as { personalityMissing?: boolean } | undefined)?.personalityMissing,
+      (panel as { personalityMissing?: boolean } | undefined)
+        ?.personalityMissing,
       true,
     );
   });
@@ -299,22 +294,19 @@ describe("createWorkspaceMembershipWorker", () => {
 
     const scans: (boolean | undefined)[] = [];
     let listingCalls = 0;
-    const worker = createWorkspaceMembershipWorker(
-      () => {},
-      {
-        scanWorkspace: mock.fn(async (_root, opts) => {
-          scans.push(opts?.git);
-          listingCalls += 1;
-          return listingCalls === 1
-            ? { projects: before, untracked: [] }
-            : { projects: after, untracked: [] };
-        }),
-        gitMeta: mock.fn(async (projects) => projects),
-        syncSnapshotProjects: mock.fn(async () => true),
-        recordAction: mock.fn(async () => {}),
-        watchWithRetry: () => () => undefined,
-      },
-    );
+    const worker = createWorkspaceMembershipWorker(() => {}, {
+      scanWorkspace: mock.fn(async (_root, opts) => {
+        scans.push(opts?.git);
+        listingCalls += 1;
+        return listingCalls === 1
+          ? { projects: before, untracked: [] }
+          : { projects: after, untracked: [] };
+      }),
+      gitMeta: mock.fn(async (projects) => projects),
+      syncSnapshotProjects: mock.fn(async () => true),
+      recordAction: mock.fn(async () => {}),
+      watchWithRetry: () => () => undefined,
+    });
 
     await worker.refresh({
       broadcast,
@@ -346,24 +338,21 @@ describe("createWorkspaceMembershipWorker", () => {
     const forgotten: string[] = [];
 
     let listingCalls = 0;
-    const worker = createWorkspaceMembershipWorker(
-      () => {},
-      {
-        scanWorkspace: mock.fn(async () => {
-          listingCalls += 1;
-          return listingCalls === 1
-            ? { projects: before, untracked: [] }
-            : { projects: after, untracked: [] };
-        }),
-        gitMeta: mock.fn(async (projects) => projects),
-        forgetGit: (dir) => {
-          forgotten.push(dir);
-        },
-        syncSnapshotProjects: mock.fn(async () => true),
-        recordAction: mock.fn(async () => {}),
-        watchWithRetry: () => () => undefined,
+    const worker = createWorkspaceMembershipWorker(() => {}, {
+      scanWorkspace: mock.fn(async () => {
+        listingCalls += 1;
+        return listingCalls === 1
+          ? { projects: before, untracked: [] }
+          : { projects: after, untracked: [] };
+      }),
+      gitMeta: mock.fn(async (projects) => projects),
+      forgetGit: (dir) => {
+        forgotten.push(dir);
       },
-    );
+      syncSnapshotProjects: mock.fn(async () => true),
+      recordAction: mock.fn(async () => {}),
+      watchWithRetry: () => () => undefined,
+    });
 
     await worker.refresh({
       broadcast,
@@ -386,33 +375,30 @@ describe("createWorkspaceMembershipWorker", () => {
   it("reports a stalled probe as a status row", async () => {
     const { messages, broadcast, space } = collectMessages();
     let taken = 0;
-    const worker = createWorkspaceMembershipWorker(
-      () => {},
-      {
-        scanWorkspace: mock.fn(async () => ({
-          projects: snapshot.projects,
-          untracked: [],
-        })),
-        gitMeta: mock.fn(async (projects) => projects),
-        takeProbeEvents: () => {
-          taken += 1;
-          return taken === 1
-            ? [
-                {
-                  dir: "/workspace/alpha",
-                  kind: "timeout" as const,
-                  command: "git status --porcelain",
-                  ms: 15_000,
-                  detail: "killed after 15.0s",
-                },
-              ]
-            : [];
-        },
-        syncSnapshotProjects: mock.fn(async () => true),
-        recordAction: mock.fn(async () => {}),
-        watchWithRetry: () => () => undefined,
+    const worker = createWorkspaceMembershipWorker(() => {}, {
+      scanWorkspace: mock.fn(async () => ({
+        projects: snapshot.projects,
+        untracked: [],
+      })),
+      gitMeta: mock.fn(async (projects) => projects),
+      takeProbeEvents: () => {
+        taken += 1;
+        return taken === 1
+          ? [
+              {
+                dir: "/workspace/alpha",
+                kind: "timeout" as const,
+                command: "git status --porcelain",
+                ms: 15_000,
+                detail: "killed after 15.0s",
+              },
+            ]
+          : [];
       },
-    );
+      syncSnapshotProjects: mock.fn(async () => true),
+      recordAction: mock.fn(async () => {}),
+      watchWithRetry: () => () => undefined,
+    });
 
     await worker.refresh({
       broadcast,
@@ -434,18 +420,16 @@ describe("createWorkspaceMembershipWorker", () => {
 describe("createPersonalityFileWatcher", () => {
   it("announces deletion once and reports missing state", async () => {
     const { messages, broadcast, space } = collectMessages();
-    const watcher = createPersonalityFileWatcher(
-      () => {},
-      {
-        personalityConfigExists: mock.fn(async () => false),
-        personalityConfigPath: () => "/workspace/overseer-personality/personality.json",
-        personalityDir: () => "/workspace/overseer-personality",
-        readPersonality: mock.fn(async () => ({ applied: {}, rejected: [] })),
-        readFile: mock.fn(async () => '{"tone":"dry"}'),
-        recordAction: mock.fn(async () => {}),
-        watchWithRetry: () => () => undefined,
-      },
-    );
+    const watcher = createPersonalityFileWatcher(() => {}, {
+      personalityConfigExists: mock.fn(async () => false),
+      personalityConfigPath: () =>
+        "/workspace/overseer-personality/personality.json",
+      personalityDir: () => "/workspace/overseer-personality",
+      readPersonality: mock.fn(async () => ({ applied: {}, rejected: [] })),
+      readFile: mock.fn(async () => '{"tone":"dry"}'),
+      recordAction: mock.fn(async () => {}),
+      watchWithRetry: () => () => undefined,
+    });
 
     const first = await watcher.refresh({
       broadcast,
@@ -472,28 +456,25 @@ describe("createPersonalityFileWatcher", () => {
 
   it("stays quiet when personality is deleted by an intentional reset", async () => {
     const { messages, broadcast, space } = collectMessages();
-    const watcher = createPersonalityFileWatcher(
-      () => {},
-      {
-        personalityConfigExists: mock.fn(async () => false),
-        personalityConfigPath: () =>
-          "/workspace/overseer-personality/personality.json",
-        personalityDir: () => "/workspace/overseer-personality",
-        readPersonality: mock.fn(async () => ({ applied: {}, rejected: [] })),
-        readFile: mock.fn(async () => {
-          throw new Error("ENOENT");
-        }),
-        recordAction: mock.fn(async () => {}),
-        watchWithRetry: () => () => undefined,
-      },
-    );
+    const watcher = createPersonalityFileWatcher(() => {}, {
+      personalityConfigExists: mock.fn(async () => false),
+      personalityConfigPath: () =>
+        "/workspace/overseer-personality/personality.json",
+      personalityDir: () => "/workspace/overseer-personality",
+      readPersonality: mock.fn(async () => ({ applied: {}, rejected: [] })),
+      readFile: mock.fn(async () => {
+        throw new Error("ENOENT");
+      }),
+      recordAction: mock.fn(async () => {}),
+      watchWithRetry: () => () => undefined,
+    });
 
     beginIntentionalPersonalityDelete();
     try {
       await watcher.refresh({
         broadcast,
         space,
-      space,
+        space,
         snapshot,
         lastProjects: snapshot.projects,
         lastUntracked: [],
@@ -502,30 +483,25 @@ describe("createPersonalityFileWatcher", () => {
       endIntentionalPersonalityDelete();
     }
 
-    assert.equal(
-      messages.filter(isStatus).length,
-      0,
-    );
+    assert.equal(messages.filter(isStatus).length, 0);
   });
 
   it("re-reads personality edits and broadcasts applied fields", async () => {
     const { messages, broadcast, space } = collectMessages();
     let body = '{"tone":"dry"}';
-    const watcher = createPersonalityFileWatcher(
-      () => {},
-      {
-        personalityConfigExists: mock.fn(async () => true),
-        personalityConfigPath: () => "/workspace/overseer-personality/personality.json",
-        personalityDir: () => "/workspace/overseer-personality",
-        readPersonality: mock.fn(async () => ({
-          applied: { tone: "warm" },
-          rejected: [],
-        })),
-        readFile: mock.fn(async () => body),
-        recordAction: mock.fn(async () => {}),
-        watchWithRetry: () => () => undefined,
-      },
-    );
+    const watcher = createPersonalityFileWatcher(() => {}, {
+      personalityConfigExists: mock.fn(async () => true),
+      personalityConfigPath: () =>
+        "/workspace/overseer-personality/personality.json",
+      personalityDir: () => "/workspace/overseer-personality",
+      readPersonality: mock.fn(async () => ({
+        applied: { tone: "warm" },
+        rejected: [],
+      })),
+      readFile: mock.fn(async () => body),
+      recordAction: mock.fn(async () => {}),
+      watchWithRetry: () => () => undefined,
+    });
 
     await watcher.refresh({
       broadcast,
@@ -547,7 +523,10 @@ describe("createPersonalityFileWatcher", () => {
 
     const step = messages.find(isStatus);
     const panel = messages.find((m) => m.type === "workspace.projects");
-    assert.equal(step === undefined ? undefined : labelOf(step), "reading personality");
+    assert.equal(
+      step === undefined ? undefined : labelOf(step),
+      "reading personality",
+    );
     assert.deepEqual(
       (panel as { personality?: { tone?: string } } | undefined)?.personality,
       { tone: "warm" },
@@ -561,25 +540,22 @@ describe("createPersonalityFileWatcher", () => {
     const { messages, broadcast, space } = collectMessages();
     let exists = true;
     let body = '{"tone":"dry","name":"Ada"}';
-    const watcher = createPersonalityFileWatcher(
-      () => {},
-      {
-        personalityConfigExists: mock.fn(async () => exists),
-        personalityConfigPath: () =>
-          "/workspace/overseer-personality/personality.json",
-        personalityDir: () => "/workspace/overseer-personality",
-        readPersonality: mock.fn(async () => ({
-          applied: { tone: "neutral", name: "HUMAN" },
-          rejected: [],
-        })),
-        readFile: mock.fn(async () => {
-          if (!exists) throw new Error("ENOENT");
-          return body;
-        }),
-        recordAction: mock.fn(async () => {}),
-        watchWithRetry: () => () => undefined,
-      },
-    );
+    const watcher = createPersonalityFileWatcher(() => {}, {
+      personalityConfigExists: mock.fn(async () => exists),
+      personalityConfigPath: () =>
+        "/workspace/overseer-personality/personality.json",
+      personalityDir: () => "/workspace/overseer-personality",
+      readPersonality: mock.fn(async () => ({
+        applied: { tone: "neutral", name: "HUMAN" },
+        rejected: [],
+      })),
+      readFile: mock.fn(async () => {
+        if (!exists) throw new Error("ENOENT");
+        return body;
+      }),
+      recordAction: mock.fn(async () => {}),
+      watchWithRetry: () => () => undefined,
+    });
 
     await watcher.refresh({
       broadcast,
@@ -610,10 +586,7 @@ describe("createPersonalityFileWatcher", () => {
     });
 
     assert.equal(
-      messages.filter(
-        (m) =>
-          labelOf(m) === "reading personality",
-      ).length,
+      messages.filter((m) => labelOf(m) === "reading personality").length,
       0,
     );
     const panel = messages.find((m) => m.type === "workspace.projects");

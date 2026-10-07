@@ -1,6 +1,9 @@
 import { useEffect, useState } from "react";
 import type { ProviderOption } from "@overseer/protocol";
-import type { LoopConfigState, LoopModelsEntry } from "../../state/useLoopConfig";
+import type {
+  LoopConfigState,
+  LoopModelsEntry,
+} from "../../state/useLoopConfig";
 import { ChevronIcon } from "../icons";
 import { WTitle } from "./bits";
 
@@ -73,8 +76,8 @@ export function LoopModelsWindow({
       <WTitle>{providerId} · step models</WTitle>
       {!provider.subagentsVerified && (
         <p className="w-note">
-          {providerId} runs every step itself for now — its ability to delegate a
-          step to a subagent is not yet confirmed working. only the overseer's
+          {providerId} runs every step itself for now — its ability to delegate
+          a step to a subagent is not yet confirmed working. only the overseer's
           own model below takes effect until that changes.
         </p>
       )}
@@ -120,8 +123,12 @@ export function LoopModelsWindow({
                       className={`session-ctl-option ${selected ? "current" : ""}`}
                       onClick={() => pick(slot, option.value)}
                     >
-                      <span className="session-ctl-mark">{selected ? "▪" : ""}</span>
-                      <span className="session-ctl-option-text">{option.label}</span>
+                      <span className="session-ctl-mark">
+                        {selected ? "▪" : ""}
+                      </span>
+                      <span className="session-ctl-option-text">
+                        {option.label}
+                      </span>
                     </button>
                   );
                 })}
@@ -143,7 +150,11 @@ export function LoopModelsWindow({
                     if (event.key === "Enter") pick(slot, draft.trim());
                   }}
                 />
-                <button type="button" className="w-btn" onClick={() => pick(slot, draft.trim())}>
+                <button
+                  type="button"
+                  className="w-btn"
+                  onClick={() => pick(slot, draft.trim())}
+                >
                   set
                 </button>
               </div>

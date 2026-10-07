@@ -33,7 +33,9 @@ export function GitConfigWindow({
   onSaveIdentity: (name: string, email: string) => void;
 }) {
   if (access === undefined) {
-    return <div className="w-empty">the server has not reported git access</div>;
+    return (
+      <div className="w-empty">the server has not reported git access</div>
+    );
   }
 
   return (
@@ -57,8 +59,8 @@ export function GitConfigWindow({
           {!access.permissionsOk && (
             <p className="panel-note">
               this key cannot be used — its file permissions are wrong, which
-              usually means it was written under a different user id. generate
-              a new one.
+              usually means it was written under a different user id. generate a
+              new one.
             </p>
           )}
           <WInline label="fingerprint" value={access.key.fingerprint} />
@@ -192,14 +194,13 @@ function IdentityRow({
   const [email, setEmail] = useState(identity?.email ?? "");
   const [saved, setSaved] = useState(false);
 
-  const dirty = name !== (identity?.name ?? "") || email !== (identity?.email ?? "");
+  const dirty =
+    name !== (identity?.name ?? "") || email !== (identity?.email ?? "");
   const complete = name.trim().length > 0 && email.includes("@");
 
   return (
     <>
-      <p className="panel-note">
-        who commits made from here are authored as.
-      </p>
+      <p className="panel-note">who commits made from here are authored as.</p>
       <WInline
         label="name"
         value={

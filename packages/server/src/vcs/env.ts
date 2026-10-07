@@ -42,7 +42,9 @@ export const IDENTITY_VARS = [
  * work at all for anything the server did not spawn with explicit overrides.
  * A *non-empty* value is left alone: that is a host that meant it.
  */
-export function dropEmptyIdentityEnv(env: NodeJS.ProcessEnv = process.env): string[] {
+export function dropEmptyIdentityEnv(
+  env: NodeJS.ProcessEnv = process.env,
+): string[] {
   const dropped: string[] = [];
   for (const name of IDENTITY_VARS) {
     if (env[name] === "") {

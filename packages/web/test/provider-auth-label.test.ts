@@ -20,7 +20,10 @@ describe("providerAuthLabel", () => {
   // looking for one.
   it("says not available yet for a catalog stub", () => {
     assert.equal(
-      providerAuthLabel({ authenticated: false, detail: "not implemented" }, true),
+      providerAuthLabel(
+        { authenticated: false, detail: "not implemented" },
+        true,
+      ),
       "not available yet",
     );
   });

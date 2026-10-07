@@ -55,7 +55,12 @@
         }
       ],
       "output_style": "default",
-      "available_output_styles": ["default", "Proactive", "Explanatory", "Learning"],
+      "available_output_styles": [
+        "default",
+        "Proactive",
+        "Explanatory",
+        "Learning"
+      ],
       "models": [
         {
           "value": "default",

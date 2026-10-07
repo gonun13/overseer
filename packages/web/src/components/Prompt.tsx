@@ -6,7 +6,8 @@ import {
   type Addressee,
 } from "../commands";
 
-const IDLE_TEXT = "type / for a command, @ to address an agent, or a prompt to start a new session";
+const IDLE_TEXT =
+  "type / for a command, @ to address an agent, or a prompt to start a new session";
 
 /** One row of the suggestion list — a command or an agent. Enter runs `run`;
  * Tab completes to `complete` and keeps typing. */
@@ -71,7 +72,9 @@ export function Prompt({
   const input = useRef<HTMLTextAreaElement>(null);
   const field = useRef<HTMLDivElement>(null);
   const suggestions = suggestionsFor(value, agents);
-  const suggestionKey = suggestions.map((suggestion) => suggestion.key).join(",");
+  const suggestionKey = suggestions
+    .map((suggestion) => suggestion.key)
+    .join(",");
   const active = suggestions.length === 0 ? 0 : selected % suggestions.length;
   const listing = focused && suggestions.length > 0;
   const idleText = value.trim() || IDLE_TEXT;
@@ -181,9 +184,7 @@ export function Prompt({
               onKeyDown={(event) => {
                 if (listing && event.key === "ArrowDown") {
                   event.preventDefault();
-                  setSelected(
-                    (current) => (current + 1) % suggestions.length,
-                  );
+                  setSelected((current) => (current + 1) % suggestions.length);
                   return;
                 }
                 if (listing && event.key === "ArrowUp") {

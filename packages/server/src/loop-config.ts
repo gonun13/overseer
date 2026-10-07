@@ -21,12 +21,17 @@ import { readProviderManifests } from "./provider-registry.js";
  * `loop/bin/lib/providers.sh`'s `resolve_provider_id`.
  */
 
-const LOOP_BIN_MODELS = process.env.OVERSEER_LOOP_BIN_MODELS ?? "/app/loop/bin/models";
-const LOOP_BIN_PROVIDER = process.env.OVERSEER_LOOP_BIN_PROVIDER ?? "/app/loop/bin/provider";
+const LOOP_BIN_MODELS =
+  process.env.OVERSEER_LOOP_BIN_MODELS ?? "/app/loop/bin/models";
+const LOOP_BIN_PROVIDER =
+  process.env.OVERSEER_LOOP_BIN_PROVIDER ?? "/app/loop/bin/provider";
 
 const TIMEOUT_MS = 15_000;
 
-export type RunLoopBin = (bin: string, args: string[]) => Promise<{ stdout: string }>;
+export type RunLoopBin = (
+  bin: string,
+  args: string[],
+) => Promise<{ stdout: string }>;
 
 const defaultRun: RunLoopBin = async (bin, args) => {
   const run = promisify(execFile);
@@ -40,7 +45,10 @@ export interface LoopConfigDeps {
 }
 
 interface ModelsJson {
-  providers: Record<string, { overseer: string | null; steps: Record<string, string> }>;
+  providers: Record<
+    string,
+    { overseer: string | null; steps: Record<string, string> }
+  >;
   steps: string[];
   current: string;
 }
@@ -49,7 +57,9 @@ interface ModelsJson {
  * field, folded into one wire frame. Command failures and invalid JSON fall
  * back to an empty config. A parseable reply with the wrong nested shape may
  * still throw while it is mapped. */
-export async function readLoopConfig(deps: LoopConfigDeps = {}): Promise<LoopConfigMessage> {
+export async function readLoopConfig(
+  deps: LoopConfigDeps = {},
+): Promise<LoopConfigMessage> {
   const run = deps.run ?? defaultRun;
   const readManifests = deps.readProviderManifests ?? readProviderManifests;
 
@@ -65,14 +75,14 @@ export async function readLoopConfig(deps: LoopConfigDeps = {}): Promise<LoopCon
     readManifests().map((m) => [m.id, m.loopSubagents !== "unverified"]),
   );
 
-  const providers: LoopProviderInfo[] = Object.entries(parsed?.providers ?? {}).map(
-    ([id, cfg]) => ({
-      id,
-      subagentsVerified: verifiedById.get(id) ?? true,
-      overseer: cfg.overseer,
-      steps: cfg.steps,
-    }),
-  );
+  const providers: LoopProviderInfo[] = Object.entries(
+    parsed?.providers ?? {},
+  ).map(([id, cfg]) => ({
+    id,
+    subagentsVerified: verifiedById.get(id) ?? true,
+    overseer: cfg.overseer,
+    steps: cfg.steps,
+  }));
 
   return {
     type: "loop.config",
@@ -84,7 +94,10 @@ export async function readLoopConfig(deps: LoopConfigDeps = {}): Promise<LoopCon
 
 /** `loop/bin/provider <id>` — validates against the loop-runnable providers
  * itself; a bad id surfaces as a rejected promise carrying its message. */
-export async function setLoopProvider(id: string, deps: LoopConfigDeps = {}): Promise<void> {
+export async function setLoopProvider(
+  id: string,
+  deps: LoopConfigDeps = {},
+): Promise<void> {
   const run = deps.run ?? defaultRun;
   await run(LOOP_BIN_PROVIDER, [id]);
 }

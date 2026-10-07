@@ -47,8 +47,13 @@ export interface ProviderManifest {
   loopSubagents?: ProviderLoopSubagentsRole;
 }
 
-function isRole<T extends string>(value: unknown, allowed: readonly T[]): value is T {
-  return typeof value === "string" && (allowed as readonly string[]).includes(value);
+function isRole<T extends string>(
+  value: unknown,
+  allowed: readonly T[],
+): value is T {
+  return (
+    typeof value === "string" && (allowed as readonly string[]).includes(value)
+  );
 }
 
 /**
@@ -63,7 +68,9 @@ function parseManifest(dir: string, raw: string): ProviderManifest | undefined {
     value = JSON.parse(raw);
   } catch (error) {
     const detail = error instanceof Error ? error.message : "unparseable";
-    console.error(`provider-registry: ${dir}/manifest.json is not valid JSON — ${detail}`);
+    console.error(
+      `provider-registry: ${dir}/manifest.json is not valid JSON — ${detail}`,
+    );
     return undefined;
   }
 
@@ -84,19 +91,27 @@ function parseManifest(dir: string, raw: string): ProviderManifest | undefined {
     return undefined;
   }
   if (typeof cli !== "string" || cli.length === 0) {
-    console.error(`provider-registry: ${dir}/manifest.json must set a non-empty "cli"`);
+    console.error(
+      `provider-registry: ${dir}/manifest.json must set a non-empty "cli"`,
+    );
     return undefined;
   }
   if (typeof configDir !== "string" || configDir.length === 0) {
-    console.error(`provider-registry: ${dir}/manifest.json must set a non-empty "configDir"`);
+    console.error(
+      `provider-registry: ${dir}/manifest.json must set a non-empty "configDir"`,
+    );
     return undefined;
   }
   if (!isRole(app, ["adapter", "stub", "none"] as const)) {
-    console.error(`provider-registry: ${dir}/manifest.json "app" must be adapter, stub or none`);
+    console.error(
+      `provider-registry: ${dir}/manifest.json "app" must be adapter, stub or none`,
+    );
     return undefined;
   }
   if (!isRole(loop, ["bundle", "none"] as const)) {
-    console.error(`provider-registry: ${dir}/manifest.json "loop" must be bundle or none`);
+    console.error(
+      `provider-registry: ${dir}/manifest.json "loop" must be bundle or none`,
+    );
     return undefined;
   }
   if (

@@ -8,7 +8,10 @@ import {
   setLoopProvider,
 } from "../src/loop-config.js";
 
-const manifest = (id: string, loopSubagents?: "verified" | "unverified"): ProviderManifest => ({
+const manifest = (
+  id: string,
+  loopSubagents?: "verified" | "unverified",
+): ProviderManifest => ({
   id,
   cli: id,
   configDir: `.${id}`,
@@ -26,7 +29,7 @@ describe("readLoopConfig", () => {
         return {
           stdout: JSON.stringify({
             providers: {
-              "claude": { overseer: null, steps: { request: "haiku" } },
+              claude: { overseer: null, steps: { request: "haiku" } },
               cursor: { overseer: "auto", steps: {} },
             },
             steps: ["request", "commit"],
@@ -34,14 +37,21 @@ describe("readLoopConfig", () => {
           }),
         };
       },
-      readProviderManifests: () => [manifest("claude"), manifest("cursor", "unverified")],
+      readProviderManifests: () => [
+        manifest("claude"),
+        manifest("cursor", "unverified"),
+      ],
     });
 
     assert.equal(config.current, "cursor");
     assert.deepEqual(config.steps, ["request", "commit"]);
 
     const claude = config.providers.find((p) => p.id === "claude");
-    assert.equal(claude?.subagentsVerified, true, "absent manifest field reads as verified");
+    assert.equal(
+      claude?.subagentsVerified,
+      true,
+      "absent manifest field reads as verified",
+    );
     assert.deepEqual(claude?.steps, { request: "haiku" });
 
     const cursor = config.providers.find((p) => p.id === "cursor");
@@ -54,7 +64,12 @@ describe("readLoopConfig", () => {
       run: async () => ({ stdout: "not json" }),
       readProviderManifests: () => [],
     });
-    assert.deepEqual(config, { type: "loop.config", current: "", providers: [], steps: [] });
+    assert.deepEqual(config, {
+      type: "loop.config",
+      current: "",
+      providers: [],
+      steps: [],
+    });
   });
 });
 
@@ -82,7 +97,12 @@ describe("setLoopProvider / setLoopModel", () => {
     });
     assert.equal(calls.length, 1);
     assert.match(calls[0]!.bin, /loop\/bin\/models$/);
-    assert.deepEqual(calls[0]!.args, ["set", "cursor", "overseer", "gpt-5.3-codex"]);
+    assert.deepEqual(calls[0]!.args, [
+      "set",
+      "cursor",
+      "overseer",
+      "gpt-5.3-codex",
+    ]);
   });
 
   it("propagates a rejection from the script (e.g. an unknown step)", async () => {
@@ -128,7 +148,9 @@ describe("readLoopModels", () => {
 
   it("omits defaultModel when the script reports null", async () => {
     const result = await readLoopModels("claude", {
-      run: async () => ({ stdout: JSON.stringify({ models: [], defaultModel: null }) }),
+      run: async () => ({
+        stdout: JSON.stringify({ models: [], defaultModel: null }),
+      }),
     });
     assert.deepEqual(result.models, []);
     assert.equal("defaultModel" in result, false);
@@ -140,6 +162,10 @@ describe("readLoopModels", () => {
         throw new Error("agent CLI not found");
       },
     });
-    assert.deepEqual(result, { type: "loop.models", providerId: "cursor", models: [] });
+    assert.deepEqual(result, {
+      type: "loop.models",
+      providerId: "cursor",
+      models: [],
+    });
   });
 });

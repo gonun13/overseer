@@ -74,4 +74,8 @@ export const cursorAdapter: AgentAdapter = {
 
 export default cursorAdapter;
 
-export { listProjectSessions, lookupSessionTitle, deleteSession } from "./transcripts.js";
+export {
+  listProjectSessions,
+  lookupSessionTitle,
+  deleteSession,
+} from "./transcripts.js";

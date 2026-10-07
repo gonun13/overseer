@@ -142,10 +142,14 @@ export async function runCommand(
  */
 export async function expectPromptHeld(page: Page): Promise<void> {
   await expect(
-    page.locator(".w-steps .w-step").filter({ hasText: /releasing the prompt/i }),
+    page
+      .locator(".w-steps .w-step")
+      .filter({ hasText: /releasing the prompt/i }),
   ).toContainText(/held/i);
   await expect(
-    page.locator(".os-signal").filter({ hasText: /not authenticated|no provider/i }),
+    page
+      .locator(".os-signal")
+      .filter({ hasText: /not authenticated|no provider/i }),
   ).toBeVisible();
 }
 
@@ -199,9 +203,7 @@ export function providersFrame(page: Page): Locator {
  * thing worth offering at that point. Both are correct, so a spec reads which
  * one it got rather than assuming the signed-in one.
  */
-export async function openProviders(
-  page: Page,
-): Promise<"picker" | "login"> {
+export async function openProviders(page: Page): Promise<"picker" | "login"> {
   const widget = page.getByRole("button", { name: /choose provider/i });
   await expect(widget).toBeVisible({ timeout: 45_000 });
   await widget.click();

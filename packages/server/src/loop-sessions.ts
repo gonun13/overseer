@@ -60,7 +60,11 @@ function parseLease(slug: string, raw: string): LoopLease | undefined {
     return undefined;
   }
   if (typeof record !== "object" || record === null) return undefined;
-  const { pid, started_at: startedAt, session_id: sessionId } = record as {
+  const {
+    pid,
+    started_at: startedAt,
+    session_id: sessionId,
+  } = record as {
     pid?: unknown;
     started_at?: unknown;
     session_id?: unknown;
@@ -74,9 +78,7 @@ function parseLease(slug: string, raw: string): LoopLease | undefined {
     startedAt: typeof startedAt === "string" ? startedAt : "",
     // `session_id` is written as an explicit null when the bundle had no id to
     // give, so absent and null must read the same way.
-    ...(typeof sessionId === "string" && sessionId !== ""
-      ? { sessionId }
-      : {}),
+    ...(typeof sessionId === "string" && sessionId !== "" ? { sessionId } : {}),
   };
 }
 

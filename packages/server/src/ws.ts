@@ -66,7 +66,12 @@ import {
 } from "./personality-file-watcher.js";
 import { refreshPendingUsage } from "./usage-refresh.js";
 import { createProject } from "./project-create.js";
-import { gitSsh, parseRemoteHost, projectGit, type GitOpResult } from "./vcs/index.js";
+import {
+  gitSsh,
+  parseRemoteHost,
+  projectGit,
+  type GitOpResult,
+} from "./vcs/index.js";
 import { isInsideWorkspace, scanWorkspace } from "./workspace.js";
 
 /**
@@ -216,7 +221,10 @@ async function resolveInProject(
  * Resolved from this module, which sits one level under `packages/server` in
  * both `src/` and `dist/`.
  */
-const RELAY_BIN = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "../relay-bin");
+const RELAY_BIN = path.resolve(
+  path.dirname(fileURLToPath(import.meta.url)),
+  "../relay-bin",
+);
 
 export function attachWebSocketServer(
   httpServer: Server,
@@ -463,7 +471,10 @@ export function attachWebSocketServer(
           // The counts on screen are now known-stale rather than merely old,
           // and that is worth the operator's attention: it is the difference
           // between "0 behind" meaning something and meaning nothing.
-          report("failed", `could not reach origin · showing the last known ${branch}`);
+          report(
+            "failed",
+            `could not reach origin · showing the last known ${branch}`,
+          );
           return;
         }
 
@@ -672,7 +683,10 @@ export function attachWebSocketServer(
               type: "error",
               about: "project.git.status",
               benign: true,
-              message: error instanceof Error ? error.message : "could not read git status",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "could not read git status",
             });
           }
           return;
@@ -857,7 +871,11 @@ export function attachWebSocketServer(
           const result =
             parsed.mode === "content"
               ? await projectGit.readFile(projectDir, parsed.file)
-              : await projectGit.diffFile(projectDir, parsed.file, parsed.previousPath);
+              : await projectGit.diffFile(
+                  projectDir,
+                  parsed.file,
+                  parsed.previousPath,
+                );
           if (!result.ok) {
             send({
               type: "error",
@@ -976,7 +994,10 @@ export function attachWebSocketServer(
               email: parsed.email,
             });
           } catch (error) {
-            console.error("overseer: could not write the global git identity", error);
+            console.error(
+              "overseer: could not write the global git identity",
+              error,
+            );
           }
           await announceGitAccess();
           return;
@@ -1222,7 +1243,12 @@ export function attachWebSocketServer(
           return;
         }
         case "console.attach": {
-          const result = consoles.attach(parsed.id, send, parsed.cols, parsed.rows);
+          const result = consoles.attach(
+            parsed.id,
+            send,
+            parsed.cols,
+            parsed.rows,
+          );
           if (!result.ok) send(consoleError("console.attach", result.reason));
           return;
         }
@@ -1275,7 +1301,9 @@ export function attachWebSocketServer(
             mode: "event",
             label: `renaming ${parsed.from.toLowerCase()}...`,
             outcome: result.ok ? "ok" : "failed",
-            detail: result.ok ? `${parsed.from.toLowerCase()} → ${parsed.to}` : result.reason,
+            detail: result.ok
+              ? `${parsed.from.toLowerCase()} → ${parsed.to}`
+              : result.reason,
             action: "callsign:rename",
             actor: "operator",
           });
@@ -1298,11 +1326,21 @@ export function attachWebSocketServer(
             });
             return;
           }
-          const provider = (await readSnapshot())?.providers.find((p) => p.id === result.providerId);
+          const provider = (await readSnapshot())?.providers.find(
+            (p) => p.id === result.providerId,
+          );
           if (provider?.usageRefresh && provider.status.authenticated) {
-            const status = { ...provider.status, usageState: "ready" as const, usage: result.windows };
+            const status = {
+              ...provider.status,
+              usageState: "ready" as const,
+              usage: result.windows,
+            };
             await setProviderStatus(result.providerId, status);
-            broadcast({ type: "provider.status", id: result.providerId, status });
+            broadcast({
+              type: "provider.status",
+              id: result.providerId,
+              status,
+            });
           }
           broadcast({
             type: "provider.usageCheck",
@@ -1319,7 +1357,12 @@ export function attachWebSocketServer(
         case "session.delete": {
           const result = await sessionIndex.delete(parsed.sessionId);
           if (!result.ok) {
-            send({ type: "error", about: "session.delete", benign: true, message: result.reason });
+            send({
+              type: "error",
+              about: "session.delete",
+              benign: true,
+              message: result.reason,
+            });
           }
           return;
         }
@@ -1331,7 +1374,10 @@ export function attachWebSocketServer(
               type: "error",
               about: "loop.config.read",
               benign: true,
-              message: error instanceof Error ? error.message : "could not read loop config",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "could not read loop config",
             });
           }
           return;
@@ -1344,7 +1390,10 @@ export function attachWebSocketServer(
               type: "error",
               about: "loop.provider.set",
               benign: true,
-              message: error instanceof Error ? error.message : "could not set loop provider",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "could not set loop provider",
             });
             return;
           }
@@ -1359,7 +1408,10 @@ export function attachWebSocketServer(
               type: "error",
               about: "loop.model.set",
               benign: true,
-              message: error instanceof Error ? error.message : "could not set loop model",
+              message:
+                error instanceof Error
+                  ? error.message
+                  : "could not set loop model",
             });
             return;
           }

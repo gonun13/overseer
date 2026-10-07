@@ -7,7 +7,10 @@ import { CALLSIGN_POOL, createCallsignBook } from "../src/callsigns.js";
  * only for session keys (spec/behaviour/relay.md §1).
  */
 
-function book(initial: Record<string, string> = {}, exists: (key: string) => boolean = () => true) {
+function book(
+  initial: Record<string, string> = {},
+  exists: (key: string) => boolean = () => true,
+) {
   const writes: Array<Record<string, string>> = [];
   const b = createCallsignBook({
     read: async () => ({ ...initial }),
@@ -98,7 +101,9 @@ describe("callsigns", () => {
   });
 
   it("reclaims names of sessions that no longer exist, then numbers", async () => {
-    const full = Object.fromEntries(CALLSIGN_POOL.map((name, i) => [`s${i}`, name]));
+    const full = Object.fromEntries(
+      CALLSIGN_POOL.map((name, i) => [`s${i}`, name]),
+    );
     const gone = new Set(["s1"]);
     const { b } = book(full, (key) => !gone.has(key));
     await b.ready;

@@ -1,9 +1,6 @@
 import { readdir, realpath, stat } from "node:fs/promises";
 import path from "node:path";
-import type {
-  DiscoveredProject,
-  UntrackedFolder,
-} from "@overseer/protocol";
+import type { DiscoveredProject, UntrackedFolder } from "@overseer/protocol";
 import { gitProbe } from "./vcs/index.js";
 
 /**

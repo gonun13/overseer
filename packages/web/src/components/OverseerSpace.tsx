@@ -254,10 +254,7 @@ function NameAsk({
   }
 
   return (
-    <div
-      className="os-name-ask"
-      onClick={() => inputRef.current?.focus()}
-    >
+    <div className="os-name-ask" onClick={() => inputRef.current?.focus()}>
       <p className="os-message os-name-line">
         <span>{prefix}</span>
         <span className="os-name-field">

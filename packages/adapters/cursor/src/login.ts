@@ -1,6 +1,10 @@
 import { execFile, spawn } from "node:child_process";
 import { promisify } from "node:util";
-import type { AdapterStatus, LoginHandle, LoginUpdate } from "@overseer/protocol";
+import type {
+  AdapterStatus,
+  LoginHandle,
+  LoginUpdate,
+} from "@overseer/protocol";
 
 /**
  * Every point of contact with the `agent` CLI's *undocumented* surface lives
@@ -113,7 +117,9 @@ export async function readAuthStatus(): Promise<AdapterStatus> {
   }
 
   const email =
-    typeof payload.userInfo?.email === "string" ? payload.userInfo.email : undefined;
+    typeof payload.userInfo?.email === "string"
+      ? payload.userInfo.email
+      : undefined;
   return {
     authenticated: true,
     version,
@@ -186,7 +192,8 @@ export function startLogin(
 
   const urlTimer = setTimeout(() => {
     if (verificationUrl !== undefined) return;
-    failure = "could not read the CLI's login output — no verification URL appeared";
+    failure =
+      "could not read the CLI's login output — no verification URL appeared";
     end("SIGKILL");
   }, URL_TIMEOUT_MS);
 
@@ -261,7 +268,9 @@ export function startLogin(
           : {
               phase: "failed",
               status,
-              detail: cancelled ? "login cancelled" : (failure ?? "login did not complete"),
+              detail: cancelled
+                ? "login cancelled"
+                : (failure ?? "login did not complete"),
             };
         settled = true;
         notify(update);

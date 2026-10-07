@@ -96,7 +96,9 @@ async function readJsonlRecords(
   return records;
 }
 
-function titleFromJsonlRecords(records: JsonlTitleRecord[]): string | undefined {
+function titleFromJsonlRecords(
+  records: JsonlTitleRecord[],
+): string | undefined {
   for (const record of records) {
     if (record.type === "custom-title" && isUsableTitle(record.customTitle)) {
       return truncateTitle(record.customTitle);

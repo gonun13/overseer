@@ -27,7 +27,7 @@ export function useOccasionalTyping(text: string, chance = 0.15) {
 
     // chance ≥ 1 is "always" — do not roll. A float compare against Math.random
     // is how a forced type used to lose to a remount and look optional.
-    if (reduced || chance < 1 && Math.random() > chance) {
+    if (reduced || (chance < 1 && Math.random() > chance)) {
       prev.current = text;
       setDisplay(text);
       setTyping(false);

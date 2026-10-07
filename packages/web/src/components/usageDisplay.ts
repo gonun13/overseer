@@ -12,8 +12,7 @@ export function providerUsageDisplay(provider: ProviderInfo): {
   }
 
   const state =
-    provider.usageState ??
-    (provider.usage.length > 0 ? "ready" : "pending");
+    provider.usageState ?? (provider.usage.length > 0 ? "ready" : "pending");
 
   const windows =
     state === "ready" && provider.usage.length > 0 ? provider.usage : [];

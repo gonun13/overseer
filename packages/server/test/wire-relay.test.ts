@@ -6,18 +6,45 @@ import { isClientMessage } from "@overseer/protocol";
 
 describe("relay frames", () => {
   it("accepts a well-formed relay, rename and release", () => {
-    assert.ok(isClientMessage({ type: "console.relay", reqId: "r1", to: "linda", text: "go" }));
-    assert.ok(isClientMessage({ type: "callsign.rename", from: "linda", to: "Lucy" }));
-    assert.ok(isClientMessage({ type: "relay.release", id: "h1", release: false }));
+    assert.ok(
+      isClientMessage({
+        type: "console.relay",
+        reqId: "r1",
+        to: "linda",
+        text: "go",
+      }),
+    );
+    assert.ok(
+      isClientMessage({ type: "callsign.rename", from: "linda", to: "Lucy" }),
+    );
+    assert.ok(
+      isClientMessage({ type: "relay.release", id: "h1", release: false }),
+    );
   });
 
   it("refuses missing or oversized fields", () => {
-    assert.ok(!isClientMessage({ type: "console.relay", reqId: "r1", to: "", text: "go" }));
-    assert.ok(!isClientMessage({ type: "console.relay", reqId: "r1", to: "linda" }));
     assert.ok(
-      !isClientMessage({ type: "console.relay", reqId: "r1", to: "linda", text: "x".repeat(64_001) }),
+      !isClientMessage({
+        type: "console.relay",
+        reqId: "r1",
+        to: "",
+        text: "go",
+      }),
+    );
+    assert.ok(
+      !isClientMessage({ type: "console.relay", reqId: "r1", to: "linda" }),
+    );
+    assert.ok(
+      !isClientMessage({
+        type: "console.relay",
+        reqId: "r1",
+        to: "linda",
+        text: "x".repeat(64_001),
+      }),
     );
     assert.ok(!isClientMessage({ type: "callsign.rename", from: "linda" }));
-    assert.ok(!isClientMessage({ type: "relay.release", id: "h1", release: "yes" }));
+    assert.ok(
+      !isClientMessage({ type: "relay.release", id: "h1", release: "yes" }),
+    );
   });
 });

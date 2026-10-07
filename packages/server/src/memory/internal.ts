@@ -376,7 +376,8 @@ export async function readCallsigns(): Promise<Record<string, string>> {
   }
   try {
     const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) return {};
+    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed))
+      return {};
     const out: Record<string, string> = {};
     for (const [key, value] of Object.entries(parsed)) {
       if (typeof value === "string") out[key] = value;
@@ -427,9 +428,7 @@ export async function clearInternalMemory(): Promise<void> {
   await clearActionRegister();
 }
 
-export type MemoryWrite =
-  | { ok: true }
-  | { ok: false; reason: string };
+export type MemoryWrite = { ok: true } | { ok: false; reason: string };
 
 /**
  * Record the active project without rewriting the rest of the snapshot.
@@ -523,7 +522,9 @@ export async function setGitIdentity(
     outcome: "ok",
     // The address is the operator's own and goes in the commits themselves;
     // recording it here is no wider a disclosure than the log it authors.
-    detail: written ? `${name} <${email}>` : `${name} <${email}> · pending discovery`,
+    detail: written
+      ? `${name} <${email}>`
+      : `${name} <${email}> · pending discovery`,
   });
   return { ok: true };
 }
@@ -564,7 +565,9 @@ export function clearPendingOperatorChoices(): void {
 export async function setAttachedProvider(id: string): Promise<boolean> {
   const written = await updateSnapshot(() => ({ attached_provider: id }));
   if (!written) {
-    console.error("overseer: cannot attach a provider before the first discovery pass");
+    console.error(
+      "overseer: cannot attach a provider before the first discovery pass",
+    );
     return false;
   }
   await recordAction({
@@ -599,7 +602,8 @@ export async function setProviderAuthenticated(
   authenticated: boolean,
 ): Promise<boolean> {
   return updateSnapshot((previous) => {
-    if (!previous.providers.some((provider) => provider.id === id)) return undefined;
+    if (!previous.providers.some((provider) => provider.id === id))
+      return undefined;
     return {
       providers: previous.providers.map((provider) => {
         if (provider.id !== id) return provider;

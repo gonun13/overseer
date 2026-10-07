@@ -268,7 +268,10 @@ export interface AdapterSessionStore {
   mintSessionId(opts: { projectDir: string; prompt?: string }): Promise<string>;
   /** Remove a provider-native thread prepared for a console that could not spawn. */
   discardPreparedSession?(projectDir: string, sessionId: string): Promise<void>;
-  lookupSessionTitle(projectDir: string, sessionId: string): Promise<string | undefined>;
+  lookupSessionTitle(
+    projectDir: string,
+    sessionId: string,
+  ): Promise<string | undefined>;
   deleteSession(projectDir: string, sessionId: string): Promise<void>;
 }
 

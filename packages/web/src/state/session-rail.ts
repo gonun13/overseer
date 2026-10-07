@@ -4,7 +4,10 @@ import type { Session } from "../domain";
 /** What a console or session is called on its tab and rail row: the
  * callsign that addresses it, else `fallback` — never the session's title,
  * which the CLI owns and the operator does not need to read there. */
-export function agentName(callsign: string | undefined, fallback: string): string {
+export function agentName(
+  callsign: string | undefined,
+  fallback: string,
+): string {
   return callsign ?? fallback;
 }
 
@@ -37,7 +40,8 @@ export function railRows(
   const byId = new Map(sessions.map((s) => [s.id, s]));
   const held = new Set<string>();
   const consoleRows: RailRow[] = consoles.map((c) => {
-    const session = c.sessionId === undefined ? undefined : byId.get(c.sessionId);
+    const session =
+      c.sessionId === undefined ? undefined : byId.get(c.sessionId);
     if (c.sessionId !== undefined) held.add(c.sessionId);
     return {
       kind: "console",

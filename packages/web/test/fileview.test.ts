@@ -22,19 +22,29 @@ describe("file and folder view keys", () => {
     );
     assert.deepEqual(
       parseFileViewKey(fileViewKey("/workspace/demo", "to.ts", "from.ts")),
-      { projectPath: "/workspace/demo", file: "to.ts", previousPath: "from.ts" },
+      {
+        projectPath: "/workspace/demo",
+        file: "to.ts",
+        previousPath: "from.ts",
+      },
     );
   });
 
   it("round-trips a folder", () => {
-    assert.deepEqual(parseFolderViewKey(folderViewKey("/workspace/demo", "newdir/sub")), {
-      projectPath: "/workspace/demo",
-      folder: "newdir/sub",
-    });
+    assert.deepEqual(
+      parseFolderViewKey(folderViewKey("/workspace/demo", "newdir/sub")),
+      {
+        projectPath: "/workspace/demo",
+        folder: "newdir/sub",
+      },
+    );
   });
 
   it("declines the other kind's key in both directions", () => {
-    assert.equal(parseFileViewKey(folderViewKey("/workspace/demo", "newdir")), undefined);
+    assert.equal(
+      parseFileViewKey(folderViewKey("/workspace/demo", "newdir")),
+      undefined,
+    );
     assert.equal(
       parseFolderViewKey(fileViewKey("/workspace/demo", "src/app.ts")),
       undefined,
@@ -48,6 +58,9 @@ describe("file and folder view keys", () => {
 
   it("declines a key missing either half", () => {
     assert.equal(parseFolderViewKey(folderViewKey("", "newdir")), undefined);
-    assert.equal(parseFolderViewKey(folderViewKey("/workspace/demo", "")), undefined);
+    assert.equal(
+      parseFolderViewKey(folderViewKey("/workspace/demo", "")),
+      undefined,
+    );
   });
 });

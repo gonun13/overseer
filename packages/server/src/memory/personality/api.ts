@@ -111,7 +111,9 @@ export async function setOperatorName(
 export async function setOperatorTone(
   tone: string,
   root = WORKSPACE_ROOT,
-): Promise<{ ok: true; tone: PersonalityTone } | { ok: false; reason: string }> {
+): Promise<
+  { ok: true; tone: PersonalityTone } | { ok: false; reason: string }
+> {
   const parsed = parseOperatorTone(tone);
   if (!parsed.ok) return parsed;
   const result = await patchPersonality({ tone: parsed.tone }, root);
@@ -169,7 +171,11 @@ async function patchPersonality(
   try {
     const raw = await readFile(file, "utf8");
     const parsed: unknown = JSON.parse(raw);
-    if (typeof parsed !== "object" || parsed === null || Array.isArray(parsed)) {
+    if (
+      typeof parsed !== "object" ||
+      parsed === null ||
+      Array.isArray(parsed)
+    ) {
       body = JSON.parse(SCAFFOLD_CONFIG) as Record<string, unknown>;
     } else {
       body = parsed as Record<string, unknown>;
@@ -186,7 +192,8 @@ async function patchPersonality(
   } catch (error) {
     return {
       ok: false,
-      reason: error instanceof Error ? error.message : "could not write personality",
+      reason:
+        error instanceof Error ? error.message : "could not write personality",
     };
   }
 
@@ -221,7 +228,8 @@ export async function readPersonality(
   root = WORKSPACE_ROOT,
   opts: { scaffold?: boolean } = {},
 ): Promise<PersonalityResult> {
-  const scaffolded = opts.scaffold === false ? false : await ensureScaffold(root);
+  const scaffolded =
+    opts.scaffold === false ? false : await ensureScaffold(root);
 
   let raw: string;
   try {

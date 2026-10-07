@@ -1,0 +1,7 @@
+# Markdown here is hand-wrapped prose, and loop/**/*.md are instructions a loop
+# session reads verbatim: Prettier's markdown rewrites re-indent list
+# continuations and output templates, which changes what they say.
+*.md
+
+# The loop's runtime file store (see loop/.gitignore).
+loop/db/

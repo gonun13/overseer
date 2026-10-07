@@ -101,10 +101,7 @@ export async function noteProviderSignedOut(
  * Ask (or re-ask) subscription windows for one provider. `delayMs` lets the
  * caller defer a recheck without blocking the event that noticed the miss.
  */
-export function scheduleUsageRefresh(
-  providerId: string,
-  delayMs = 0,
-): void {
+export function scheduleUsageRefresh(providerId: string, delayMs = 0): void {
   clearTimer(providerId);
   if (delayMs <= 0) {
     void runRefresh(providerId);

@@ -179,7 +179,9 @@ function readResets(text: string): string | undefined {
 
 function shorten(label: string): string {
   const lower = label.toLowerCase();
-  return lower.length <= MAX_LABEL ? lower : `${lower.slice(0, MAX_LABEL - 1)}…`;
+  return lower.length <= MAX_LABEL
+    ? lower
+    : `${lower.slice(0, MAX_LABEL - 1)}…`;
 }
 
 function slug(value: string): string {
@@ -364,14 +366,7 @@ function runUsageCli(
     // if the ask never settles.
     const child = spawn(
       CLI,
-      [
-        "-p",
-        USAGE_PROMPT,
-        "--output-format",
-        "json",
-        "--trust",
-        "--force",
-      ],
+      ["-p", USAGE_PROMPT, "--output-format", "json", "--trust", "--force"],
       {
         cwd: projectDir,
         detached: true,

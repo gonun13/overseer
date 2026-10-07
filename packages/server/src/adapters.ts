@@ -57,7 +57,9 @@ for (const manifest of readProviderManifests()) {
 // the app with it. Register it anyway and name the missing entry.
 for (const [id, adapter] of implemented) {
   if (registry.has(id)) continue;
-  console.error(`adapters: ${id} has no entry in the provider registry — registering it regardless`);
+  console.error(
+    `adapters: ${id} has no entry in the provider registry — registering it regardless`,
+  );
   register(adapter);
 }
 

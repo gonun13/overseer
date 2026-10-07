@@ -17,7 +17,11 @@ import { GIT_MAX_PATH_CHARS, isClientMessage } from "@overseer/protocol";
  */
 describe("project.git.list guard", () => {
   const list = (folder: unknown) =>
-    isClientMessage({ type: "project.git.list", path: "/workspace/demo", folder });
+    isClientMessage({
+      type: "project.git.list",
+      path: "/workspace/demo",
+      folder,
+    });
 
   it("accepts an ordinary repo-relative folder", () => {
     assert.equal(list("newdir"), true);

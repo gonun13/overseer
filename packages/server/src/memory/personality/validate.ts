@@ -33,17 +33,22 @@ const FORBIDDEN: Record<string, string> = {
   logLevel: "logging is internal · the overseer's record is not editable",
   disableLogging: "logging is internal · the overseer's record is not editable",
   actions: "the action register is an audit trail and cannot be filtered",
-  actionRegister: "the action register is an audit trail and cannot be filtered",
+  actionRegister:
+    "the action register is an audit trail and cannot be filtered",
   hideActions: "the action register is an audit trail and cannot be filtered",
-  permissions: "permissions belong to the permission system, not to a config file",
-  allowedTools: "permissions belong to the permission system, not to a config file",
+  permissions:
+    "permissions belong to the permission system, not to a config file",
+  allowedTools:
+    "permissions belong to the permission system, not to a config file",
   auth: "authentication is not configurable from the workspace",
   workspaceRoot: "paths and mounts are deployment facts, not preferences",
   internalDir: "paths and mounts are deployment facts, not preferences",
   paths: "paths and mounts are deployment facts, not preferences",
   signals: "signals are derived from real state · editable signals are fiction",
-  signalRanking: "signals are derived from real state · editable signals are fiction",
-  headlines: "the state vocabulary is fixed; tone is customizable, meaning is not",
+  signalRanking:
+    "signals are derived from real state · editable signals are fiction",
+  headlines:
+    "the state vocabulary is fixed; tone is customizable, meaning is not",
 };
 
 export function parseOperatorName(
@@ -103,7 +108,11 @@ export function validatePersonalityObject(parsed: Record<string, unknown>): {
         break;
       }
       case "name": {
-        if (typeof value === "string" && value.trim() && value.length <= MAX_NAME) {
+        if (
+          typeof value === "string" &&
+          value.trim() &&
+          value.length <= MAX_NAME
+        ) {
           applied.name = value.trim();
         } else {
           rejected.push({
@@ -147,7 +156,8 @@ export function validatePersonalityObject(parsed: Record<string, unknown>): {
       default:
         rejected.push({
           field: key,
-          reason: "not a customizable field · see spec/behaviour/overseer.md §6.4",
+          reason:
+            "not a customizable field · see spec/behaviour/overseer.md §6.4",
         });
     }
   }

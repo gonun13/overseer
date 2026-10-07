@@ -55,7 +55,10 @@ describe("parseChangelog", () => {
   });
 
   it("ignores everything before the first release heading", () => {
-    assert.deepEqual(parseChangelog("# Changelog\n\njust prose\n\n- a stray item"), []);
+    assert.deepEqual(
+      parseChangelog("# Changelog\n\njust prose\n\n- a stray item"),
+      [],
+    );
   });
 
   it("yields nothing rather than throwing on an empty file", () => {

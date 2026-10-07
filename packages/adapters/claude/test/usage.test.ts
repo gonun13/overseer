@@ -153,7 +153,11 @@ exit 1
   it("marks usage unavailable when the report is empty", async () => {
     const previous = process.env.USAGE_FIXTURE;
     const empty = path.join(binDir, "empty-usage.json");
-    await writeFile(empty, `${JSON.stringify({ type: "result", is_error: false, result: "nope" })}\n`, "utf8");
+    await writeFile(
+      empty,
+      `${JSON.stringify({ type: "result", is_error: false, result: "nope" })}\n`,
+      "utf8",
+    );
     process.env.USAGE_FIXTURE = empty;
     try {
       const status = await withUsage({

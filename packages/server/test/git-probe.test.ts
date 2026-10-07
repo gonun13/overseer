@@ -41,17 +41,26 @@ describe("createGitProbe", () => {
       now: () => clock,
     });
 
-    assert.deepEqual(await probe.read(DIR), { gitBranch: "main", dirty: false });
+    assert.deepEqual(await probe.read(DIR), {
+      gitBranch: "main",
+      dirty: false,
+    });
     assert.equal(args.filter((a) => a[0] === "branch").length, 1);
 
     // Same HEAD, inside the dirtiness floor: no git at all.
     clock += 1_000;
-    assert.deepEqual(await probe.read(DIR), { gitBranch: "main", dirty: false });
+    assert.deepEqual(await probe.read(DIR), {
+      gitBranch: "main",
+      dirty: false,
+    });
     assert.equal(args.length, 2);
 
     // HEAD moved: the branch is read again.
     head = { mtimeMs: 20, size: 21 };
-    assert.deepEqual(await probe.read(DIR), { gitBranch: "main", dirty: false });
+    assert.deepEqual(await probe.read(DIR), {
+      gitBranch: "main",
+      dirty: false,
+    });
     assert.equal(args.filter((a) => a[0] === "branch").length, 2);
   });
 
@@ -97,14 +106,20 @@ describe("createGitProbe", () => {
       now: () => clock,
     });
 
-    assert.deepEqual(await probe.read(DIR), { gitBranch: "main", dirty: false });
+    assert.deepEqual(await probe.read(DIR), {
+      gitBranch: "main",
+      dirty: false,
+    });
     probe.takeEvents();
 
     failing = true;
     head = { mtimeMs: 20, size: 21 };
     clock += 20_000;
     // The mount stalled — the panel must still say `main`, not "unknown".
-    assert.deepEqual(await probe.read(DIR), { gitBranch: "main", dirty: false });
+    assert.deepEqual(await probe.read(DIR), {
+      gitBranch: "main",
+      dirty: false,
+    });
   });
 
   it("reports a stall once, and the recovery once", async () => {
@@ -150,7 +165,10 @@ describe("createGitProbe", () => {
       slowMs: 1_000,
     });
 
-    assert.deepEqual(await probe.read(DIR), { gitBranch: "main", dirty: false });
+    assert.deepEqual(await probe.read(DIR), {
+      gitBranch: "main",
+      dirty: false,
+    });
     const events = probe.takeEvents();
     assert.equal(events.length, 1);
     assert.equal(events[0]?.kind, "slow");
@@ -194,7 +212,12 @@ describe("createGitProbe", () => {
     ]);
 
     assert.deepEqual(filled, [
-      { name: "alpha", path: "/workspace/alpha", gitBranch: "dev", dirty: false },
+      {
+        name: "alpha",
+        path: "/workspace/alpha",
+        gitBranch: "dev",
+        dirty: false,
+      },
       { name: "beta", path: "/workspace/beta", gitBranch: "dev", dirty: false },
     ]);
   });

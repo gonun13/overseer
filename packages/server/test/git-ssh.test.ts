@@ -3,7 +3,11 @@ import { mkdtemp, mkdir, readFile, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { describe, it, mock } from "node:test";
-import { createGitSsh, parseRemoteHost, type RunResult } from "../src/vcs/ssh.js";
+import {
+  createGitSsh,
+  parseRemoteHost,
+  type RunResult,
+} from "../src/vcs/ssh.js";
 
 /** A `run` fake answering a script keyed by the binary and first argument,
  * recording every argv — the same DI shape `project-git.test.ts` uses. */
@@ -24,12 +28,17 @@ async function scratchDir(): Promise<string> {
   return mkdtemp(path.join(tmpdir(), "overseer-ssh-"));
 }
 
-const PUBLIC_KEY = "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyBytes overseer";
-const PRIVATE_KEY = "-----BEGIN OPENSSH PRIVATE KEY-----\nSUPERSECRET\n-----END-----\n";
+const PUBLIC_KEY =
+  "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIExampleKeyBytes overseer";
+const PRIVATE_KEY =
+  "-----BEGIN OPENSSH PRIVATE KEY-----\nSUPERSECRET\n-----END-----\n";
 
 describe("git ssh key store", () => {
   it("reports no key on an empty directory", async () => {
-    const ssh = createGitSsh({ sshDir: await scratchDir(), run: scriptedRun(() => ({})) });
+    const ssh = createGitSsh({
+      sshDir: await scratchDir(),
+      run: scriptedRun(() => ({})),
+    });
     const state = await ssh.status();
     assert.equal(state.key, undefined);
     assert.equal(state.permissionsOk, true);
@@ -56,7 +65,11 @@ describe("git ssh key store", () => {
         return { stdout: "", stderr: "", code: 0 };
       }
       if (file === "ssh-keygen" && args[0] === "-lf") {
-        return { stdout: "256 SHA256:FINGERPRINT overseer (ED25519)\n", stderr: "", code: 0 };
+        return {
+          stdout: "256 SHA256:FINGERPRINT overseer (ED25519)\n",
+          stderr: "",
+          code: 0,
+        };
       }
       return { stdout: "", stderr: "", code: 0 };
     });
@@ -66,10 +79,20 @@ describe("git ssh key store", () => {
 
     const keygen = run.mock.calls
       .map((call) => call.arguments)
-      .find(([file, args]) => file === "ssh-keygen" && (args as string[]).includes("-t"));
+      .find(
+        ([file, args]) =>
+          file === "ssh-keygen" && (args as string[]).includes("-t"),
+      );
     assert.deepEqual(keygen?.[1], [
-      "-t", "ed25519", "-N", "", "-C", "overseer",
-      "-f", path.join(dir, "id_ed25519"), "-q",
+      "-t",
+      "ed25519",
+      "-N",
+      "",
+      "-C",
+      "overseer",
+      "-f",
+      path.join(dir, "id_ed25519"),
+      "-q",
     ]);
 
     // 0700 dir / 0600 key, or ssh refuses to use the key at all.
@@ -131,7 +154,10 @@ describe("git ssh key store", () => {
     const dir = await scratchDir();
     await writeFile(path.join(dir, "id_ed25519"), PRIVATE_KEY, { mode: 0o600 });
     await writeFile(path.join(dir, "id_ed25519.pub"), `${PUBLIC_KEY}\n`);
-    await writeFile(path.join(dir, "known_hosts"), "github.com ssh-ed25519 AAAA\n");
+    await writeFile(
+      path.join(dir, "known_hosts"),
+      "github.com ssh-ed25519 AAAA\n",
+    );
     const ssh = createGitSsh({ sshDir: dir, run: scriptedRun(() => ({})) });
 
     await ssh.remove();
@@ -141,7 +167,11 @@ describe("git ssh key store", () => {
 });
 
 describe("git ssh connection test", () => {
-  const testWith = async (stdout: string, stderr: string, code: number | null) => {
+  const testWith = async (
+    stdout: string,
+    stderr: string,
+    code: number | null,
+  ) => {
     const dir = await scratchDir();
     await mkdir(dir, { recursive: true });
     const ssh = createGitSsh({
@@ -173,7 +203,11 @@ describe("git ssh connection test", () => {
   });
 
   it("classifies a refused key as not-yet-added", async () => {
-    const result = await testWith("", "git@github.com: Permission denied (publickey).\n", 255);
+    const result = await testWith(
+      "",
+      "git@github.com: Permission denied (publickey).\n",
+      255,
+    );
     assert.equal(result.ok, false);
     assert.match(result.message, /add the public key/);
   });
@@ -185,7 +219,11 @@ describe("git ssh connection test", () => {
   });
 
   it("classifies an unreachable host", async () => {
-    const result = await testWith("", "ssh: connect to host x port 22: Connection timed out\n", 255);
+    const result = await testWith(
+      "",
+      "ssh: connect to host x port 22: Connection timed out\n",
+      255,
+    );
     assert.equal(result.ok, false);
     assert.match(result.message, /could not reach/);
   });
@@ -220,7 +258,9 @@ describe("git ssh connection test", () => {
   it("passes a non-default port through to ssh", async () => {
     const dir = await scratchDir();
     const run = scriptedRun((file) =>
-      file === "ssh" ? { stderr: "Welcome to GitLab, @ng!\n", code: 1 } : { code: 1 },
+      file === "ssh"
+        ? { stderr: "Welcome to GitLab, @ng!\n", code: 1 }
+        : { code: 1 },
     );
     const ssh = createGitSsh({ sshDir: dir, run });
     await ssh.test("gitlab.local", 2424);
@@ -244,13 +284,18 @@ describe("parseRemoteHost", () => {
       { host: "gitlab.local", port: 2424 },
     );
     assert.deepEqual(
-      parseRemoteHost("git@[2001:bc8:1d90:1f48:dc00:ff:fe2b:14e1]:repos/gonun13.git"),
+      parseRemoteHost(
+        "git@[2001:bc8:1d90:1f48:dc00:ff:fe2b:14e1]:repos/gonun13.git",
+      ),
       { host: "[2001:bc8:1d90:1f48:dc00:ff:fe2b:14e1]" },
     );
   });
 
   it("returns nothing for an https remote — the key does not apply to it", () => {
-    assert.equal(parseRemoteHost("https://github.com/gonun13/json-timesync.git"), undefined);
+    assert.equal(
+      parseRemoteHost("https://github.com/gonun13/json-timesync.git"),
+      undefined,
+    );
     assert.equal(parseRemoteHost("git://example.com/x.git"), undefined);
   });
 

@@ -51,10 +51,7 @@ describe("readLoopLeases", () => {
     assert.equal(leases.length, 1);
     assert.equal(leases[0]!.slug, "personal");
     assert.equal(leases[0]!.pid, 4242);
-    assert.equal(
-      leases[0]!.sessionId,
-      "8709ee38-a414-40b1-b2d7-a22c6f63ba09",
-    );
+    assert.equal(leases[0]!.sessionId, "8709ee38-a414-40b1-b2d7-a22c6f63ba09");
   });
 
   it("accepts a lease written before session ids were recorded", async () => {

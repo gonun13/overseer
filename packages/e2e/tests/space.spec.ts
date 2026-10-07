@@ -49,9 +49,7 @@ test("the provider rows agree with each other", async ({ page }) => {
   // (packages/server/test/overseer-space.test.ts).
 });
 
-test("the message surface is one uppercase line of text", async ({
-  page,
-}) => {
+test("the message surface is one uppercase line of text", async ({ page }) => {
   await page.goto("/");
   await passWizardOpening(page);
   await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });

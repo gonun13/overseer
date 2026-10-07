@@ -2,11 +2,7 @@ import { useCallback, useState } from "react";
 import { addressInput, commandArgs, matchCommand } from "../commands";
 import type { WindowKind } from "../windows";
 
-type OpenWindow = (
-  kind: WindowKind,
-  payload?: unknown,
-  title?: string,
-) => void;
+type OpenWindow = (kind: WindowKind, payload?: unknown, title?: string) => void;
 
 interface PromptTerminalActions {
   openWindow: OpenWindow;

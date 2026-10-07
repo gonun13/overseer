@@ -182,7 +182,10 @@ export function Window({
             <span className="window-tab-detail" aria-hidden>
               ·
             </span>
-            <span className="window-tab-detail window-tab-project" title={detail}>
+            <span
+              className="window-tab-detail window-tab-project"
+              title={detail}
+            >
               {detail}
             </span>
           </>
@@ -204,9 +207,7 @@ export function Window({
         </span>
       </div>
       <div className="window-frame">
-        <div
-          className={`window-body no-drag ${expanded ? "expanded" : ""}`}
-        >
+        <div className={`window-body no-drag ${expanded ? "expanded" : ""}`}>
           {children}
         </div>
         {onResize && height !== undefined && (

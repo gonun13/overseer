@@ -50,7 +50,11 @@ describe("provider registry", () => {
 
   it("reads every manifest, sorted by id", async () => {
     await bundle(root, "zeta", valid("zeta"));
-    await bundle(root, "alpha", valid("alpha", { app: "adapter", loop: "bundle" }));
+    await bundle(
+      root,
+      "alpha",
+      valid("alpha", { app: "adapter", loop: "bundle" }),
+    );
 
     const manifests = readProviderManifests(root);
     assert.deepEqual(
@@ -75,11 +79,20 @@ describe("provider registry", () => {
     await bundle(root, "broken-json", "{ not json");
     await bundle(root, "wrong-id", valid("something-else"));
     await bundle(root, "bad-role", valid("bad-role", { app: "sometimes" }));
-    await bundle(root, "no-cli", { id: "no-cli", configDir: ".x", app: "stub", loop: "none" });
+    await bundle(root, "no-cli", {
+      id: "no-cli",
+      configDir: ".x",
+      app: "stub",
+      loop: "none",
+    });
 
     const ids = readProviderManifests(root).map((m) => m.id);
     for (const dropped of ["broken-json", "wrong-id", "bad-role", "no-cli"]) {
-      assert.equal(ids.includes(dropped), false, `${dropped} should be dropped`);
+      assert.equal(
+        ids.includes(dropped),
+        false,
+        `${dropped} should be dropped`,
+      );
       assert.ok(
         errors.some((line) => line.includes(dropped)),
         `${dropped} should be reported`,
@@ -91,20 +104,26 @@ describe("provider registry", () => {
 
   it("leaves loopSubagents undefined when absent, and reads it when set", async () => {
     await bundle(root, "quiet", valid("quiet"));
-    await bundle(
-      root,
-      "loud",
-      valid("loud", { loopSubagents: "unverified" }),
-    );
+    await bundle(root, "loud", valid("loud", { loopSubagents: "unverified" }));
 
     const manifests = readProviderManifests(root);
-    assert.equal(manifests.find((m) => m.id === "quiet")?.loopSubagents, undefined);
-    assert.equal(manifests.find((m) => m.id === "loud")?.loopSubagents, "unverified");
+    assert.equal(
+      manifests.find((m) => m.id === "quiet")?.loopSubagents,
+      undefined,
+    );
+    assert.equal(
+      manifests.find((m) => m.id === "loud")?.loopSubagents,
+      "unverified",
+    );
   });
 
   it("drops a manifest whose loopSubagents is not verified or unverified", async () => {
     const before = errors.length;
-    await bundle(root, "bad-subagents", valid("bad-subagents", { loopSubagents: "yes" }));
+    await bundle(
+      root,
+      "bad-subagents",
+      valid("bad-subagents", { loopSubagents: "yes" }),
+    );
 
     const ids = readProviderManifests(root).map((m) => m.id);
     assert.equal(ids.includes("bad-subagents"), false);

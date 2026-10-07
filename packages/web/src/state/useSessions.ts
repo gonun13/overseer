@@ -20,7 +20,10 @@ function truncateSessionName(name: string): string {
  * One listed session as a row, lit by the console running it when there is
  * one. A session with no console is dormant on disk — its light is off.
  */
-export function metaToSession(meta: SessionMeta, running?: ConsoleInfo): Session {
+export function metaToSession(
+  meta: SessionMeta,
+  running?: ConsoleInfo,
+): Session {
   return {
     id: meta.id,
     activity: running === undefined ? "idle" : consoleLight(running),
@@ -31,7 +34,9 @@ export function metaToSession(meta: SessionMeta, running?: ConsoleInfo): Session
     lastActiveAt: meta.lastActiveAt,
     ...(running !== undefined ? { consoleId: running.id } : {}),
     ...(meta.origin !== undefined ? { origin: meta.origin } : {}),
-    ...(meta.loopWorkspace !== undefined ? { loopWorkspace: meta.loopWorkspace } : {}),
+    ...(meta.loopWorkspace !== undefined
+      ? { loopWorkspace: meta.loopWorkspace }
+      : {}),
     ...((running?.callsign ?? meta.callsign) !== undefined
       ? { callsign: (running?.callsign ?? meta.callsign)! }
       : {}),
@@ -94,7 +99,8 @@ export function useSessions(
   const sessions = useMemo(() => {
     const running = new Map<string, ConsoleInfo>();
     for (const c of consoles) {
-      if (c.sessionId !== undefined && c.status === "running") running.set(c.sessionId, c);
+      if (c.sessionId !== undefined && c.status === "running")
+        running.set(c.sessionId, c);
     }
     const listed = new Set(metas.map((meta) => meta.id));
     return [

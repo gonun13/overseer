@@ -56,7 +56,9 @@ export function ChangelogWindow() {
           className="changelog-arrow"
           disabled={atOldest}
           aria-label="older release"
-          onClick={() => setIndex((current) => Math.min(count - 1, current + 1))}
+          onClick={() =>
+            setIndex((current) => Math.min(count - 1, current + 1))
+          }
         >
           ›
         </button>
@@ -86,7 +88,10 @@ export function ChangelogWindow() {
                   .join(" · ")}
               </WTitle>
               {release.sections.map((section, sectionIndex) => (
-                <div className="w-pre" key={`${release.version}-${sectionIndex}`}>
+                <div
+                  className="w-pre"
+                  key={`${release.version}-${sectionIndex}`}
+                >
                   {[
                     ...(section.heading ? [section.heading] : []),
                     ...section.items.map((item) => `- ${item}`),

@@ -216,7 +216,9 @@ export function createGitProbe(deps: GitProbeDeps = {}) {
             kind: timedOut ? "timeout" : "failed",
             command,
             ms,
-            detail: timedOut ? `killed after ${(ms / 1000).toFixed(1)}s` : describe(error),
+            detail: timedOut
+              ? `killed after ${(ms / 1000).toFixed(1)}s`
+              : describe(error),
           },
         },
       };
@@ -298,7 +300,10 @@ export function createGitProbe(deps: GitProbeDeps = {}) {
 
     const troubles = attempted
       .map((outcome) => outcome.trouble)
-      .filter((trouble): trouble is NonNullable<typeof trouble> => trouble !== undefined)
+      .filter(
+        (trouble): trouble is NonNullable<typeof trouble> =>
+          trouble !== undefined,
+      )
       .sort((a, b) => TROUBLE_RANK[b.kind] - TROUBLE_RANK[a.kind]);
     const worst = troubles[0];
 

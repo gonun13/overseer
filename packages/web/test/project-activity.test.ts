@@ -4,7 +4,10 @@ import type { ConsoleInfo } from "@overseer/protocol";
 import type { Project } from "../src/domain.ts";
 import { projectsWithConsoleActivity } from "../src/state/project-activity.ts";
 
-function consoleIn(projectPath: string, extra: Partial<ConsoleInfo>): ConsoleInfo {
+function consoleIn(
+  projectPath: string,
+  extra: Partial<ConsoleInfo>,
+): ConsoleInfo {
   return {
     id: `${projectPath}-${extra.activity ?? "idle"}`,
     kind: "agent",
@@ -20,8 +23,20 @@ function consoleIn(projectPath: string, extra: Partial<ConsoleInfo>): ConsoleInf
 
 describe("projectsWithConsoleActivity", () => {
   const projects: Project[] = [
-    { id: "/workspace/a", name: "a", path: "/workspace/a", branch: "main", activity: "idle" },
-    { id: "/workspace/b", name: "b", path: "/workspace/b", branch: "main", activity: "idle" },
+    {
+      id: "/workspace/a",
+      name: "a",
+      path: "/workspace/a",
+      branch: "main",
+      activity: "idle",
+    },
+    {
+      id: "/workspace/b",
+      name: "b",
+      path: "/workspace/b",
+      branch: "main",
+      activity: "idle",
+    },
   ];
 
   it("marks a project working when a console in it is working", () => {

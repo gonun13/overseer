@@ -94,7 +94,11 @@ export default function App() {
     },
     [rekey],
   );
-  const consoles = useConsoles(wizard.send, wizard.subscribeConsole, onConsoleOpened);
+  const consoles = useConsoles(
+    wizard.send,
+    wizard.subscribeConsole,
+    onConsoleOpened,
+  );
   const consoleList = consoles.consoles;
   const startConsole = consoles.open;
 
@@ -157,7 +161,8 @@ export default function App() {
     if (!consoles.listed) return;
     const live = new Set(consoleList.map((c) => c.id));
     closeWhere(
-      (w) => w.kind === "console" && isConsoleId(w.payload) && !live.has(w.payload),
+      (w) =>
+        w.kind === "console" && isConsoleId(w.payload) && !live.has(w.payload),
     );
   }, [consoles.listed, consoleList, closeWhere]);
 
@@ -180,7 +185,11 @@ export default function App() {
     (id: string) => {
       const win = windows.find((w) => w.id === id);
       const payload = win?.payload;
-      if (win?.kind === "console" && typeof payload === "string" && payload.startsWith(PENDING_PREFIX)) {
+      if (
+        win?.kind === "console" &&
+        typeof payload === "string" &&
+        payload.startsWith(PENDING_PREFIX)
+      ) {
         forgetPending(payload.slice(PENDING_PREFIX.length));
       }
       close(id);
@@ -217,13 +226,15 @@ export default function App() {
   const shell = useShellPresentation(wizard, consoleList, relay.held);
   const activeProject = shell.activeProject;
   const attachedProviderId = wizard.attachedProviderId;
-  const canStartSession = shell.provider.authenticated && attachedProviderId !== undefined;
+  const canStartSession =
+    shell.provider.authenticated && attachedProviderId !== undefined;
 
   /** A new provider session in the active project, optionally starting on a
    * prompt the operator typed into the prompt bar. */
   const newSession = useCallback(
     (prompt?: string) => {
-      if (activeProject === undefined || attachedProviderId === undefined) return;
+      if (activeProject === undefined || attachedProviderId === undefined)
+        return;
       openConsole({
         kind: "agent",
         projectPath: activeProject.path,
@@ -242,7 +253,10 @@ export default function App() {
   const runningLoop = useCallback(
     (projectPath: string) =>
       consoleList.find(
-        (c) => c.kind === "loop" && c.status === "running" && c.projectPath === projectPath,
+        (c) =>
+          c.kind === "loop" &&
+          c.status === "running" &&
+          c.projectPath === projectPath,
       ),
     [consoleList],
   );
@@ -341,13 +355,20 @@ export default function App() {
    * of the active project (spec/behaviour/relay.md §2). */
   const agents = useMemo((): Addressee[] => {
     const live = consoleList.filter(
-      (c) => c.kind === "agent" && c.status === "running" && c.callsign !== undefined,
+      (c) =>
+        c.kind === "agent" &&
+        c.status === "running" &&
+        c.callsign !== undefined,
     );
     const liveSessions = new Set(live.map((c) => c.sessionId));
     return [
       ...live.map((c) => {
         const title = sessions.find((s) => s.id === c.sessionId)?.name;
-        return { callsign: c.callsign!, running: true, ...(title !== undefined ? { title } : {}) };
+        return {
+          callsign: c.callsign!,
+          running: true,
+          ...(title !== undefined ? { title } : {}),
+        };
       }),
       ...sessions
         .filter(
@@ -366,13 +387,18 @@ export default function App() {
     (callsign: string) => {
       const needle = callsign.toLowerCase();
       const live = consoleList.find(
-        (c) => c.kind === "agent" && c.status === "running" && c.callsign?.toLowerCase() === needle,
+        (c) =>
+          c.kind === "agent" &&
+          c.status === "running" &&
+          c.callsign?.toLowerCase() === needle,
       );
       if (live !== undefined) {
         showConsole(live);
         return;
       }
-      const session = sessions.find((s) => s.callsign?.toLowerCase() === needle);
+      const session = sessions.find(
+        (s) => s.callsign?.toLowerCase() === needle,
+      );
       if (session !== undefined) openSession(session);
     },
     [consoleList, openSession, sessions, showConsole],
@@ -490,7 +516,15 @@ export default function App() {
           return;
       }
     },
-    [newSession, open, openProjectSelector, openSettings, releaseRelay, showConsoleById, startLogin],
+    [
+      newSession,
+      open,
+      openProjectSelector,
+      openSettings,
+      releaseRelay,
+      showConsoleById,
+      startLogin,
+    ],
   );
 
   // The overseer docks into the right rail once the field is set up — the
@@ -681,8 +715,8 @@ export default function App() {
         >
           <p className="w-note">
             the loop on {basename(loopTakeoverFor)} is running in another
-            terminal. this ends that run — including whatever request it is
-            part way through — and starts a new one here.
+            terminal. this ends that run — including whatever request it is part
+            way through — and starts a new one here.
           </p>
           <p className="w-note">
             recorded work is kept; the conversation is not. &gt; there is no

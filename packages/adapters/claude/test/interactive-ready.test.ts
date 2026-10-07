@@ -58,7 +58,10 @@ describe("ensureInteractiveReady", () => {
     ) as {
       hasCompletedOnboarding: boolean;
       theme: string;
-      projects: Record<string, { hasTrustDialogAccepted: boolean; other?: number }>;
+      projects: Record<
+        string,
+        { hasTrustDialogAccepted: boolean; other?: number }
+      >;
     };
     assert.equal(parsed.hasCompletedOnboarding, true);
     assert.equal(parsed.theme, "dark");

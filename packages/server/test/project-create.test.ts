@@ -31,8 +31,14 @@ describe("createProject", () => {
     });
 
     assert.deepEqual(result, { ok: true, path: "/workspace/my-cool-project" });
-    assert.equal(deps.mkdir.mock.calls[0]?.arguments[0], "/workspace/my-cool-project");
-    assert.equal(deps.gitInit.mock.calls[0]?.arguments[0], "/workspace/my-cool-project");
+    assert.equal(
+      deps.mkdir.mock.calls[0]?.arguments[0],
+      "/workspace/my-cool-project",
+    );
+    assert.equal(
+      deps.gitInit.mock.calls[0]?.arguments[0],
+      "/workspace/my-cool-project",
+    );
     assert.deepEqual(deps.writeFile.mock.calls[0]?.arguments, [
       "/workspace/my-cool-project/README.md",
       "# My Cool Project\n\ndoes cool things\n",

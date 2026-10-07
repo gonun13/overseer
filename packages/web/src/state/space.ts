@@ -68,7 +68,8 @@ const SERVICE_ORDER: SpaceService[] = [
 /** The rows the status list renders, conditions first. */
 export function spaceRows(space: SpaceState): SpaceStatusEntry[] {
   const states = [...space.states.values()].sort(
-    (a, b) => SERVICE_ORDER.indexOf(a.service) - SERVICE_ORDER.indexOf(b.service),
+    (a, b) =>
+      SERVICE_ORDER.indexOf(a.service) - SERVICE_ORDER.indexOf(b.service),
   );
   return [...states, ...space.events];
 }
@@ -115,10 +116,7 @@ export function applySpaceFrame(
   }
 }
 
-function applyStatus(
-  space: SpaceState,
-  entry: SpaceStatusEntry,
-): SpaceState {
+function applyStatus(space: SpaceState, entry: SpaceStatusEntry): SpaceState {
   if (entry.mode === "event") {
     const events = [...space.events, entry];
     return {

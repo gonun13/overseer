@@ -14,7 +14,11 @@ const CLI = "claude";
  * is narrowed to permission prompts: the idle-prompt notification fires a
  * minute after a turn already ended, and is not news.
  */
-const HOOK_EVENTS: Array<{ event: string; matcher?: string; activity: string }> = [
+const HOOK_EVENTS: Array<{
+  event: string;
+  matcher?: string;
+  activity: string;
+}> = [
   { event: "SessionStart", activity: "idle" },
   { event: "UserPromptSubmit", activity: "working" },
   { event: "PreToolUse", matcher: "*", activity: "working" },
@@ -72,12 +76,17 @@ export function relayInput(text: string): string {
  * Before spawn we mark interactive onboarding complete so the TUI does not
  * re-ask for a browser login the pipe-based auth flow already finished.
  */
-export async function consoleCommand(opts: ConsoleOpts): Promise<ConsoleCommand> {
+export async function consoleCommand(
+  opts: ConsoleOpts,
+): Promise<ConsoleCommand> {
   await ensureInteractiveReady(opts.cwd);
 
   const args: string[] = [];
   if (opts.sessionId !== undefined) {
-    args.push(opts.resume === true ? "--resume" : "--session-id", opts.sessionId);
+    args.push(
+      opts.resume === true ? "--resume" : "--session-id",
+      opts.sessionId,
+    );
   }
   if (opts.hookUrl !== undefined) {
     args.push("--settings", hookSettings(opts.hookUrl));

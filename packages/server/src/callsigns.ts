@@ -16,20 +16,73 @@ import { readCallsigns, writeCallsigns } from "./memory/internal.js";
  * and none a prefix of another, so `@` completion never stalls on two.
  */
 export const CALLSIGN_POOL: readonly string[] = [
-  "Linda", "Bob", "Alice", "Carlos", "Dana", "Elena", "Felix", "Grace",
-  "Hugo", "Iris", "Jonas", "Kira", "Leo", "Maya", "Nico", "Olga",
-  "Paolo", "Quinn", "Rosa", "Sam", "Tara", "Umar", "Vera", "Walt",
-  "Xena", "Yusuf", "Zoe", "Ada", "Bruno", "Clara", "Diego", "Emil",
-  "Freya", "Gus", "Hana", "Ivan", "Jade", "Kai", "Lena", "Milo",
-  "Nora", "Otto", "Pia", "Rafa", "Sofia", "Theo", "Vito", "Wren",
-  "Yara", "Zane", "Abel", "Bea", "Cyrus", "Dora", "Ezra", "Fay",
-  "Gil", "Hal", "Ines", "Mira",
+  "Linda",
+  "Bob",
+  "Alice",
+  "Carlos",
+  "Dana",
+  "Elena",
+  "Felix",
+  "Grace",
+  "Hugo",
+  "Iris",
+  "Jonas",
+  "Kira",
+  "Leo",
+  "Maya",
+  "Nico",
+  "Olga",
+  "Paolo",
+  "Quinn",
+  "Rosa",
+  "Sam",
+  "Tara",
+  "Umar",
+  "Vera",
+  "Walt",
+  "Xena",
+  "Yusuf",
+  "Zoe",
+  "Ada",
+  "Bruno",
+  "Clara",
+  "Diego",
+  "Emil",
+  "Freya",
+  "Gus",
+  "Hana",
+  "Ivan",
+  "Jade",
+  "Kai",
+  "Lena",
+  "Milo",
+  "Nora",
+  "Otto",
+  "Pia",
+  "Rafa",
+  "Sofia",
+  "Theo",
+  "Vito",
+  "Wren",
+  "Yara",
+  "Zane",
+  "Abel",
+  "Bea",
+  "Cyrus",
+  "Dora",
+  "Ezra",
+  "Fay",
+  "Gil",
+  "Hal",
+  "Ines",
+  "Mira",
 ];
 
 /** Names that would read as something other than an agent. */
 const RESERVED = new Set(["overseer", "operator"]);
 
-export type RenameResult = { ok: true; key: string } | { ok: false; reason: string };
+export type RenameResult =
+  { ok: true; key: string } | { ok: false; reason: string };
 
 export interface CallsignBookDeps {
   read?: () => Promise<Record<string, string>>;
@@ -97,7 +150,8 @@ export function createCallsignBook(deps: CallsignBookDeps = {}): CallsignBook {
     return undefined;
   };
 
-  const held = () => new Set([...names.values()].map((name) => name.toLowerCase()));
+  const held = () =>
+    new Set([...names.values()].map((name) => name.toLowerCase()));
 
   const pick = (): string => {
     const taken = held();
@@ -112,7 +166,9 @@ export function createCallsignBook(deps: CallsignBookDeps = {}): CallsignBook {
       return name;
     }
     for (let n = 2; ; n++) {
-      const numbered = CALLSIGN_POOL.find((name) => !taken.has(`${name}${n}`.toLowerCase()));
+      const numbered = CALLSIGN_POOL.find(
+        (name) => !taken.has(`${name}${n}`.toLowerCase()),
+      );
       if (numbered !== undefined) return `${numbered}${n}`;
     }
   };
@@ -148,14 +204,17 @@ export function createCallsignBook(deps: CallsignBookDeps = {}): CallsignBook {
 
     rename(from, to) {
       const key = keyOf(from);
-      if (key === undefined) return { ok: false, reason: `no agent called ${from}` };
+      if (key === undefined)
+        return { ok: false, reason: `no agent called ${from}` };
       if (!CALLSIGN_PATTERN.test(to)) {
         return {
           ok: false,
-          reason: "a callsign is 2–16 letters, digits or hyphens, starting with a letter",
+          reason:
+            "a callsign is 2–16 letters, digits or hyphens, starting with a letter",
         };
       }
-      if (RESERVED.has(to.toLowerCase())) return { ok: false, reason: `${to} is reserved` };
+      if (RESERVED.has(to.toLowerCase()))
+        return { ok: false, reason: `${to} is reserved` };
       const holder = keyOf(to);
       if (holder !== undefined && holder !== key) {
         return { ok: false, reason: `${names.get(holder)} is already taken` };

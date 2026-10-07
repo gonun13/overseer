@@ -92,7 +92,9 @@ export function createUsageCheck(deps: UsageCheckDeps = {}) {
         const providerId = ctx.adapter.id;
         let result;
         try {
-          result = await ctx.adapter.checkUsage!({ projectDir: ctx.projectDir });
+          result = await ctx.adapter.checkUsage!({
+            projectDir: ctx.projectDir,
+          });
         } catch (error) {
           return {
             ok: false,

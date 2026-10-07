@@ -10,11 +10,7 @@ import type {
 import { useDiscoveryPacing } from "./useDiscoveryPacing";
 import { useOverseerSocket } from "./useOverseerSocket";
 import { useWizardTiming } from "./useWizardTiming";
-import {
-  INITIAL_WIZARD,
-  wizardReducer,
-  type WizardState,
-} from "./wizard";
+import { INITIAL_WIZARD, wizardReducer, type WizardState } from "./wizard";
 
 /**
  * The client half of the discovery pass. Composes transport, pacing, and
@@ -93,18 +89,12 @@ export interface DiscoveryController extends WizardState {
   /** Send a frame on the shared `/ws` socket. */
   send: (message: ClientMessage) => void;
   /** Subscribe to console.* frames (list, state, I/O, refusals). */
-  subscribeConsole: (
-    listener: (message: ServerMessage) => void,
-  ) => () => void;
+  subscribeConsole: (listener: (message: ServerMessage) => void) => () => void;
   /** Subscribe to session.*, usage-check and project.git.* frames and their
    * error frames. */
-  subscribeSession: (
-    listener: (message: ServerMessage) => void,
-  ) => () => void;
+  subscribeSession: (listener: (message: ServerMessage) => void) => () => void;
   /** Subscribe to loop.config and its error frames. */
-  subscribeLoop: (
-    listener: (message: ServerMessage) => void,
-  ) => () => void;
+  subscribeLoop: (listener: (message: ServerMessage) => void) => () => void;
 }
 
 export function useDiscovery(): DiscoveryController {
@@ -118,15 +108,9 @@ export function useDiscovery(): DiscoveryController {
     },
     [],
   );
-  const consoleListeners = useRef(
-    new Set<(message: ServerMessage) => void>(),
-  );
-  const sessionListeners = useRef(
-    new Set<(message: ServerMessage) => void>(),
-  );
-  const loopListeners = useRef(
-    new Set<(message: ServerMessage) => void>(),
-  );
+  const consoleListeners = useRef(new Set<(message: ServerMessage) => void>());
+  const sessionListeners = useRef(new Set<(message: ServerMessage) => void>());
+  const loopListeners = useRef(new Set<(message: ServerMessage) => void>());
 
   const dispatchEvent = useCallback(
     (event: DiscoveryEvent) => dispatch({ type: "server.event", event }),
@@ -243,7 +227,9 @@ export function useDiscovery(): DiscoveryController {
           host: message.host,
           ok: message.ok,
           message: message.message,
-          ...(message.account !== undefined ? { account: message.account } : {}),
+          ...(message.account !== undefined
+            ? { account: message.account }
+            : {}),
           ...(message.hostFingerprint !== undefined
             ? { hostFingerprint: message.hostFingerprint }
             : {}),

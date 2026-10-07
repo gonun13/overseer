@@ -1,11 +1,20 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
-import type { AgentAdapter, ServerMessage, SessionMeta } from "@overseer/protocol";
+import type {
+  AgentAdapter,
+  ServerMessage,
+  SessionMeta,
+} from "@overseer/protocol";
 import { createSessionIndex } from "../src/session-index.js";
 
 /** The workspace-wide session list, and the guards on deleting from it. */
 
-function meta(id: string, adapterId: string, projectDir: string, at: string): SessionMeta {
+function meta(
+  id: string,
+  adapterId: string,
+  projectDir: string,
+  at: string,
+): SessionMeta {
   return {
     id,
     adapterId,
@@ -17,7 +26,11 @@ function meta(id: string, adapterId: string, projectDir: string, at: string): Se
   };
 }
 
-function fakeAdapter(id: string, byProject: Record<string, SessionMeta[]>, deleted: string[]) {
+function fakeAdapter(
+  id: string,
+  byProject: Record<string, SessionMeta[]>,
+  deleted: string[],
+) {
   return {
     id,
     capabilities: { login: true, usageCheck: false },
@@ -39,22 +52,39 @@ function harness(opts: { running?: string[]; loops?: string[] } = {}) {
   const claude = fakeAdapter(
     "claude",
     {
-      "/workspace/a": [meta("c1", "claude", "/workspace/a", "2026-10-01T00:00:00Z")],
-      "/workspace/b": [meta("c2", "claude", "/workspace/b", "2026-10-02T00:00:00Z")],
+      "/workspace/a": [
+        meta("c1", "claude", "/workspace/a", "2026-10-01T00:00:00Z"),
+      ],
+      "/workspace/b": [
+        meta("c2", "claude", "/workspace/b", "2026-10-02T00:00:00Z"),
+      ],
     },
     deleted,
   );
   const cursor = fakeAdapter(
     "cursor",
-    { "/workspace/a": [meta("u1", "cursor", "/workspace/a", "2026-09-30T00:00:00Z")] },
+    {
+      "/workspace/a": [
+        meta("u1", "cursor", "/workspace/a", "2026-09-30T00:00:00Z"),
+      ],
+    },
     deleted,
   );
-  const stub = { id: "codex", capabilities: { login: false, usageCheck: false }, getStatus: async () => ({ authenticated: false }) };
+  const stub = {
+    id: "codex",
+    capabilities: { login: false, usageCheck: false },
+    getStatus: async () => ({ authenticated: false }),
+  };
   const index = createSessionIndex((m) => broadcasts.push(m), {
     listAdapters: () => [claude, cursor, stub],
     listProjects: async () => ["/workspace/a", "/workspace/b"],
     loopSessionIndex: async () =>
-      new Map((opts.loops ?? []).map((id) => [id, { slug: "a", pid: 1, sessionId: id } as never])),
+      new Map(
+        (opts.loops ?? []).map((id) => [
+          id,
+          { slug: "a", pid: 1, sessionId: id } as never,
+        ]),
+      ),
     sweepDeadLoopSessions: async () => [],
     isRunning: (id) => (opts.running ?? []).includes(id),
     recordAction: async () => undefined,

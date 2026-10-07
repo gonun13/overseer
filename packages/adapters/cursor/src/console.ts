@@ -13,7 +13,9 @@ import type { ConsoleCommand, ConsoleOpts } from "@overseer/protocol";
 
 const CLI = "agent";
 
-export async function consoleCommand(opts: ConsoleOpts): Promise<ConsoleCommand> {
+export async function consoleCommand(
+  opts: ConsoleOpts,
+): Promise<ConsoleCommand> {
   const args = opts.sessionId !== undefined ? ["--resume", opts.sessionId] : [];
   if (opts.prompt !== undefined) args.push("--", opts.prompt);
   return { file: CLI, args, cwd: opts.cwd };

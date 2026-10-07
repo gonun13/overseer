@@ -66,7 +66,10 @@ describe("projectGit.status", () => {
     // just characters in a name, and splitting there would report a file that
     // does not exist.
     const run = scriptedRun([
-      { stdout: "## main\n" + " M src/a -> b.ts\n" + "R  old -> x.ts -> new.ts\n" },
+      {
+        stdout:
+          "## main\n" + " M src/a -> b.ts\n" + "R  old -> x.ts -> new.ts\n",
+      },
       { stdout: "" },
     ]);
     const projectGit = createProjectGit({ run, readIdentity: noIdentity });
@@ -166,7 +169,11 @@ describe("projectGit.commit", () => {
     const result = await projectGit.commit("/workspace/demo", "fix things");
 
     assert.deepEqual(result, { ok: true });
-    assert.deepEqual(run.mock.calls[3]?.arguments[1], ["commit", "-m", "fix things"]);
+    assert.deepEqual(run.mock.calls[3]?.arguments[1], [
+      "commit",
+      "-m",
+      "fix things",
+    ]);
     assert.equal(run.mock.calls[3]?.arguments[2], undefined);
   });
 
@@ -187,7 +194,11 @@ describe("projectGit.commit", () => {
     const result = await projectGit.commit("/workspace/demo", "fix things");
 
     assert.deepEqual(result, { ok: true });
-    assert.deepEqual(run.mock.calls[3]?.arguments[1], ["commit", "-m", "fix things"]);
+    assert.deepEqual(run.mock.calls[3]?.arguments[1], [
+      "commit",
+      "-m",
+      "fix things",
+    ]);
     assert.deepEqual(run.mock.calls[3]?.arguments[2], {
       GIT_AUTHOR_NAME: "overseer",
       GIT_AUTHOR_EMAIL: "overseer@localhost",
@@ -215,7 +226,11 @@ describe("projectGit.commit", () => {
 
     assert.deepEqual(result, { ok: true });
     // No `git var GIT_AUTHOR_IDENT` probe: there is nothing it could change.
-    assert.deepEqual(run.mock.calls[2]?.arguments[1], ["commit", "-m", "fix things"]);
+    assert.deepEqual(run.mock.calls[2]?.arguments[1], [
+      "commit",
+      "-m",
+      "fix things",
+    ]);
     assert.deepEqual(run.mock.calls[2]?.arguments[2], {
       GIT_AUTHOR_NAME: "Nuno",
       GIT_AUTHOR_EMAIL: "ada@example.com",
@@ -299,7 +314,10 @@ describe("projectGit.push failure messages", () => {
     ).push("/workspace/demo");
 
     assert.equal(result.ok, false);
-    assert.match((result as { reason: string }).reason, /failed to push some refs/);
+    assert.match(
+      (result as { reason: string }).reason,
+      /failed to push some refs/,
+    );
     assert.doesNotMatch((result as { reason: string }).reason, /settings/);
   });
 });
@@ -355,7 +373,9 @@ describe("projectGit.pull", () => {
     assert.match(reason, /resolve in the project, then commit the merge/);
     // Nothing ran after the conflict listing, and nothing undid the merge.
     assert.equal(run.mock.calls.length, 7);
-    const ran = run.mock.calls.map((call) => (call.arguments[1] ?? []).join(" "));
+    const ran = run.mock.calls.map((call) =>
+      (call.arguments[1] ?? []).join(" "),
+    );
     assert.equal(ran.at(-1), "diff --name-only --diff-filter=U");
     assert.equal(
       ran.some((command) => /--abort|reset|checkout/.test(command)),
@@ -403,7 +423,10 @@ describe("projectGit.pull", () => {
     const result = await projectGit.pull("/workspace/demo");
 
     assert.equal(result.ok, false);
-    assert.match((result as { reason: string }).reason, /no remote to pull from/);
+    assert.match(
+      (result as { reason: string }).reason,
+      /no remote to pull from/,
+    );
   });
 
   it("reports an unreachable remote rather than merging a stale ref", async () => {
@@ -417,7 +440,10 @@ describe("projectGit.pull", () => {
     const result = await projectGit.pull("/workspace/demo");
 
     assert.equal(result.ok, false);
-    assert.match((result as { reason: string }).reason, /could not reach origin/);
+    assert.match(
+      (result as { reason: string }).reason,
+      /could not reach origin/,
+    );
     assert.equal(run.mock.calls.length, 3);
   });
 });
@@ -787,7 +813,8 @@ describe("projectGit.diffFile", () => {
     // The revision diff returns nothing for a path git has never seen, and the
     // fallback exits 1 to mean "they differ" — a normal answer that `execFile`
     // reports as a rejection, with the diff still on the error.
-    const noIndex = "diff --git a/scratch.md b/scratch.md\n+++ b/scratch.md\n+new\n";
+    const noIndex =
+      "diff --git a/scratch.md b/scratch.md\n+++ b/scratch.md\n+new\n";
     const run = scriptedRun([
       headExists,
       { stdout: "" },
@@ -821,7 +848,10 @@ describe("projectGit.diffFile", () => {
   });
 
   it("diffs against the empty tree in a repo with no commits", async () => {
-    const run = scriptedRun([new Error("fatal: bad revision"), { stdout: DIFF }]);
+    const run = scriptedRun([
+      new Error("fatal: bad revision"),
+      { stdout: DIFF },
+    ]);
     const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.diffFile("/workspace/demo", "src/app.ts");
@@ -843,7 +873,9 @@ describe("projectGit.diffFile", () => {
   });
 
   it("clips an oversized diff and says that it did", async () => {
-    const huge = Array.from({ length: 2_050 }, (_, n) => `+line ${n}`).join("\n");
+    const huge = Array.from({ length: 2_050 }, (_, n) => `+line ${n}`).join(
+      "\n",
+    );
     const run = scriptedRun([headExists, { stdout: huge }]);
     const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
@@ -876,9 +908,7 @@ describe("projectGit.diffFile", () => {
 
 describe("projectGit.listDir", () => {
   it("lists the folder's own files with their statuses, hardened", async () => {
-    const run = scriptedRun([
-      { stdout: "?? newdir/a.txt\n M newdir/b.txt\n" },
-    ]);
+    const run = scriptedRun([{ stdout: "?? newdir/a.txt\n M newdir/b.txt\n" }]);
     const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.listDir("/workspace/demo", "newdir");
@@ -901,7 +931,10 @@ describe("projectGit.listDir", () => {
 
   it("rolls a subfolder's descendants up into one folder row", async () => {
     const run = scriptedRun([
-      { stdout: "?? newdir/sub/b.txt\n?? newdir/sub/deep/c.txt\n?? newdir/a.txt\n" },
+      {
+        stdout:
+          "?? newdir/sub/b.txt\n?? newdir/sub/deep/c.txt\n?? newdir/a.txt\n",
+      },
     ]);
     const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
@@ -948,7 +981,9 @@ describe("projectGit.listDir", () => {
   it("ignores a path outside the folder it was asked about", async () => {
     // git is given a pathspec, but a sibling whose name merely starts with the
     // same characters must not be read as a child of it.
-    const run = scriptedRun([{ stdout: "?? newdirectory/a.txt\n?? newdir/b.txt\n" }]);
+    const run = scriptedRun([
+      { stdout: "?? newdirectory/a.txt\n?? newdir/b.txt\n" },
+    ]);
     const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.listDir("/workspace/demo", "newdir");
@@ -970,7 +1005,10 @@ describe("projectGit.listDir", () => {
 
     assert.equal(result.ok, true);
     assert.equal((result as { truncated: boolean }).truncated, true);
-    assert.equal((result as { entries: unknown[] }).entries.length, GIT_MAX_DIR_ENTRIES);
+    assert.equal(
+      (result as { entries: unknown[] }).entries.length,
+      GIT_MAX_DIR_ENTRIES,
+    );
   });
 
   it("treats an empty folder as a success with nothing in it", async () => {
@@ -983,9 +1021,7 @@ describe("projectGit.listDir", () => {
   });
 
   it("reports a benign refusal when git cannot answer", async () => {
-    const run = scriptedRun([
-      new Error("fatal: not a git repository"),
-    ]);
+    const run = scriptedRun([new Error("fatal: not a git repository")]);
     const projectGit = createProjectGit({ run, readIdentity: noIdentity });
 
     const result = await projectGit.listDir("/workspace/demo", "newdir");
@@ -1013,7 +1049,11 @@ describe("projectGit.readFile", () => {
 
     const result = await projectGit.readFile("/workspace/demo", "src/app.ts");
 
-    assert.deepEqual(result, { ok: true, text: "hello\nworld\n", truncated: false });
+    assert.deepEqual(result, {
+      ok: true,
+      text: "hello\nworld\n",
+      truncated: false,
+    });
     assert.deepEqual(seen, ["/workspace/demo/src/app.ts"]);
   });
 
@@ -1026,7 +1066,11 @@ describe("projectGit.readFile", () => {
 
     const result = await projectGit.readFile("/workspace/demo", "logo.png");
 
-    assert.deepEqual(result, { ok: false, benign: true, reason: "binary file" });
+    assert.deepEqual(result, {
+      ok: false,
+      benign: true,
+      reason: "binary file",
+    });
   });
 
   it("clips an oversized file", async () => {
@@ -1034,7 +1078,9 @@ describe("projectGit.readFile", () => {
       run: never,
       readIdentity: noIdentity,
       readFile: async () =>
-        Buffer.from(Array.from({ length: 2_050 }, (_, n) => `line ${n}`).join("\n")),
+        Buffer.from(
+          Array.from({ length: 2_050 }, (_, n) => `line ${n}`).join("\n"),
+        ),
     });
 
     const result = await projectGit.readFile("/workspace/demo", "big.txt");

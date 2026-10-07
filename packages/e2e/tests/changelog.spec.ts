@@ -27,7 +27,9 @@ test("the /changelog command opens the release notes", async ({ page }) => {
   await expect(window).toBeVisible();
   // The version this build reports, marked as the one being run.
   await expect(
-    window.getByText(new RegExp(`${rootPkg.version.replaceAll(".", "\\.")}.*current`)),
+    window.getByText(
+      new RegExp(`${rootPkg.version.replaceAll(".", "\\.")}.*current`),
+    ),
   ).toBeVisible();
 });
 

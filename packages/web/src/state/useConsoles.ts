@@ -68,7 +68,9 @@ export function useConsoles(
           return;
         }
         if (message.type === "console.opened") {
-          setPending((current) => current.filter((p) => p.reqId !== message.reqId));
+          setPending((current) =>
+            current.filter((p) => p.reqId !== message.reqId),
+          );
           setConsoles((current) =>
             current.some((c) => c.id === message.console.id)
               ? current

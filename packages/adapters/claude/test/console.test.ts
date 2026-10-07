@@ -3,7 +3,12 @@ import { mkdtemp, rm } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import path from "node:path";
 import { after, before, describe, it } from "node:test";
-import { consoleCommand, hookSettings, relayBrief, relayInput } from "../src/console.js";
+import {
+  consoleCommand,
+  hookSettings,
+  relayBrief,
+  relayInput,
+} from "../src/console.js";
 
 /** The console command line: session flags and the hook settings layer. */
 
@@ -32,7 +37,10 @@ describe("claude consoleCommand", () => {
   });
 
   it("adopts a minted id for a new session", async () => {
-    const command = await consoleCommand({ cwd: "/workspace/a", sessionId: "abc" });
+    const command = await consoleCommand({
+      cwd: "/workspace/a",
+      sessionId: "abc",
+    });
     assert.deepEqual(command.args, ["--session-id", "abc"]);
   });
 
@@ -51,7 +59,12 @@ describe("claude consoleCommand", () => {
       sessionId: "abc",
       prompt: "-fix the build",
     });
-    assert.deepEqual(command.args, ["--session-id", "abc", "--", "-fix the build"]);
+    assert.deepEqual(command.args, [
+      "--session-id",
+      "abc",
+      "--",
+      "-fix the build",
+    ]);
   });
 
   it("layers hook settings when a hook url is given", async () => {
@@ -62,10 +75,16 @@ describe("claude consoleCommand", () => {
     assert.equal(command.hooked, true);
     assert.equal(command.args[0], "--settings");
     const settings = JSON.parse(command.args[1]!) as {
-      hooks: Record<string, Array<{ matcher?: string; hooks: Array<{ command: string }> }>>;
+      hooks: Record<
+        string,
+        Array<{ matcher?: string; hooks: Array<{ command: string }> }>
+      >;
     };
     assert.match(settings.hooks.Stop![0]!.hooks[0]!.command, /activity=idle/);
-    assert.match(settings.hooks.UserPromptSubmit![0]!.hooks[0]!.command, /activity=working/);
+    assert.match(
+      settings.hooks.UserPromptSubmit![0]!.hooks[0]!.command,
+      /activity=working/,
+    );
     const notification = settings.hooks.Notification!.find(
       (entry) => entry.matcher === "permission_prompt",
     );
@@ -84,8 +103,17 @@ describe("claude consoleCommand", () => {
   });
 
   it("tells a named agent who it is, before the opening prompt", async () => {
-    const command = await consoleCommand({ cwd: "/workspace/a", callsign: "Linda", prompt: "go" });
-    assert.deepEqual(command.args, ["--append-system-prompt", relayBrief("Linda"), "--", "go"]);
+    const command = await consoleCommand({
+      cwd: "/workspace/a",
+      callsign: "Linda",
+      prompt: "go",
+    });
+    assert.deepEqual(command.args, [
+      "--append-system-prompt",
+      relayBrief("Linda"),
+      "--",
+      "go",
+    ]);
     assert.match(relayBrief("Linda"), /You are Linda/);
     assert.match(relayBrief("Linda"), /overseer tell/);
   });

@@ -70,7 +70,11 @@ export function DiffWindow({
         frame.file === view.file
       ) {
         setError(undefined);
-        setShown({ mode: frame.mode, text: frame.text, truncated: frame.truncated });
+        setShown({
+          mode: frame.mode,
+          text: frame.text,
+          truncated: frame.truncated,
+        });
         return;
       }
       if (frame.type === "error" && frame.about === "project.git.show") {

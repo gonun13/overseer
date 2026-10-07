@@ -25,8 +25,7 @@ import type { OverseerSpace } from "./overseer/space.js";
 
 /** Who a relay is from. An agent is identified by the console it relays as. */
 export type RelaySender =
-  | { kind: "operator" }
-  | { kind: "agent"; consoleId: string; callsign: string };
+  { kind: "operator" } | { kind: "agent"; consoleId: string; callsign: string };
 
 export interface RelayOutcome {
   state: RelayState;
@@ -81,7 +80,11 @@ export interface RelayDeps {
 }
 
 export interface Relay {
-  relay(request: { to: string; text: string; from: RelaySender }): Promise<RelayOutcome>;
+  relay(request: {
+    to: string;
+    text: string;
+    from: RelaySender;
+  }): Promise<RelayOutcome>;
   /** Keystrokes the operator typed into a console — the draft guard. */
   noteInput(id: string, data: string): void;
   onActivity(id: string, activity: ConsoleActivity): void;
@@ -152,7 +155,9 @@ export function nextDraft(draft: number, data: string): number {
 
 function excerpt(text: string): string {
   const flat = text.replace(/\s+/g, " ").trim();
-  return flat.length <= EXCERPT_CHARS ? flat : `${flat.slice(0, EXCERPT_CHARS - 1)}…`;
+  return flat.length <= EXCERPT_CHARS
+    ? flat
+    : `${flat.slice(0, EXCERPT_CHARS - 1)}…`;
 }
 
 function projectName(projectPath: string): string {
@@ -202,7 +207,9 @@ export function createRelay(deps: RelayDeps): Relay {
       .list()
       .find(
         (c) =>
-          c.kind === "agent" && c.status === "running" && c.callsign?.toLowerCase() === needle,
+          c.kind === "agent" &&
+          c.status === "running" &&
+          c.callsign?.toLowerCase() === needle,
       );
   };
 
@@ -213,14 +220,22 @@ export function createRelay(deps: RelayDeps): Relay {
    */
   const record = (from: RelaySender, to: string, what: string) =>
     from.kind === "operator"
-      ? { action: "console:relay", actor: "operator" as const, detail: `${to.toLowerCase()} · ${what}` }
+      ? {
+          action: "console:relay",
+          actor: "operator" as const,
+          detail: `${to.toLowerCase()} · ${what}`,
+        }
       : {
           action: "agent:relay",
           actor: "overseer" as const,
           detail: `${from.callsign.toLowerCase()}→${to.toLowerCase()} · ${what}`,
         };
 
-  const refuse = (to: string, reason: string, from: RelaySender): RelayOutcome => {
+  const refuse = (
+    to: string,
+    reason: string,
+    from: RelaySender,
+  ): RelayOutcome => {
     deps.space.status({
       service: "relay",
       key: "refused",
@@ -239,7 +254,8 @@ export function createRelay(deps: RelayDeps): Relay {
       deps.space.clear("relay", rowKey(callsign));
       return;
     }
-    const drafting = info.activity === "idle" && !state.awaitingTurn && state.draft > 0;
+    const drafting =
+      info.activity === "idle" && !state.awaitingTurn && state.draft > 0;
     deps.space.status({
       service: "relay",
       key: rowKey(callsign),
@@ -274,7 +290,8 @@ export function createRelay(deps: RelayDeps): Relay {
     }
     // Idle, but only just: let the TUI finish drawing its prompt. A console
     // idle since before we watched it has long settled.
-    const settling = state.idleSince === undefined ? 0 : settleMs - (now() - state.idleSince);
+    const settling =
+      state.idleSince === undefined ? 0 : settleMs - (now() - state.idleSince);
     if (settling > 0) {
       if (state.settleTimer === undefined) {
         state.settleTimer = setTimeout(() => {
@@ -285,12 +302,17 @@ export function createRelay(deps: RelayDeps): Relay {
       reportWaiting(info, state);
       return false;
     }
-    const adapter = info.providerId !== undefined ? getAdapterFn(info.providerId) : undefined;
+    const adapter =
+      info.providerId !== undefined ? getAdapterFn(info.providerId) : undefined;
     const next = state.queue.shift()!;
     if (adapter?.relayInput === undefined) {
       // Checked when queued; only a provider swapped under a live console
       // gets here.
-      refuse(next.to, `${info.providerId ?? "this console"} cannot take relayed prompts`, next.from);
+      refuse(
+        next.to,
+        `${info.providerId ?? "this console"} cannot take relayed prompts`,
+        next.from,
+      );
     } else {
       deps.consoles.input(id, adapter.relayInput(next.text));
       state.awaitingTurn = true;
@@ -326,20 +348,31 @@ export function createRelay(deps: RelayDeps): Relay {
     from.kind === "agent" ? `[from ${from.callsign}] ${text}` : text;
 
   const broadcastHeld = () =>
-    deps.broadcast({ type: "relay.held", held: [...held.values()].map((h) => h.held) });
+    deps.broadcast({
+      type: "relay.held",
+      held: [...held.values()].map((h) => h.held),
+    });
 
   /** Over a limit — the relay waits on the operator (spec §5.2). */
-  const overLimit = (from: Extract<RelaySender, { kind: "agent" }>, to: string): boolean => {
+  const overLimit = (
+    from: Extract<RelaySender, { kind: "agent" }>,
+    to: string,
+  ): boolean => {
     const at = now();
     const sender = from.callsign.toLowerCase();
-    const recent = (sent.get(sender) ?? []).filter((t) => at - t < limits.windowMs);
+    const recent = (sent.get(sender) ?? []).filter(
+      (t) => at - t < limits.windowMs,
+    );
     sent.set(sender, recent);
     if (recent.length >= limits.rateMax) return true;
     const last = lastPair.get(`${sender}→${to.toLowerCase()}`);
     return last !== undefined && at - last < limits.cooldownMs;
   };
 
-  const countSent = (from: Extract<RelaySender, { kind: "agent" }>, to: string) => {
+  const countSent = (
+    from: Extract<RelaySender, { kind: "agent" }>,
+    to: string,
+  ) => {
     const at = now();
     const sender = from.callsign.toLowerCase();
     sent.set(sender, [...(sent.get(sender) ?? []), at]);
@@ -353,27 +386,41 @@ export function createRelay(deps: RelayDeps): Relay {
     const { from, text } = request;
     await deps.callsigns.ready;
     const key = deps.callsigns.keyOf(request.to);
-    if (key === undefined) return refuse(request.to, `no agent called ${request.to}`, from);
+    if (key === undefined)
+      return refuse(request.to, `no agent called ${request.to}`, from);
     const to = deps.callsigns.nameOf(key)!;
     if (text.trim() === "") return refuse(to, "nothing to relay", from);
 
-    if (from.kind === "agent" && from.callsign.toLowerCase() === to.toLowerCase()) {
+    if (
+      from.kind === "agent" &&
+      from.callsign.toLowerCase() === to.toLowerCase()
+    ) {
       return refuse(to, "an agent cannot relay to itself", from);
     }
 
     const running = runningAgent(to);
     const providerId = running?.providerId ?? sessionOf(key)?.adapterId;
-    const adapter = providerId !== undefined ? getAdapterFn(providerId) : undefined;
+    const adapter =
+      providerId !== undefined ? getAdapterFn(providerId) : undefined;
     if (adapter?.relayInput === undefined) {
-      return refuse(to, `${providerId ?? to} cannot take relayed prompts`, from);
+      return refuse(
+        to,
+        `${providerId ?? to} cannot take relayed prompts`,
+        from,
+      );
     }
 
     if (running === undefined) {
       if (from.kind === "agent") {
-        return refuse(to, `${to} is not running · only the operator can wake a session`, from);
+        return refuse(
+          to,
+          `${to} is not running · only the operator can wake a session`,
+          from,
+        );
       }
       const session = sessionOf(key);
-      if (session === undefined) return refuse(to, `${to} has no session to resume`, from);
+      if (session === undefined)
+        return refuse(to, `${to} has no session to resume`, from);
       if (session.origin === "loop") {
         return refuse(to, `${to} is a live loop run`, from);
       }
@@ -394,7 +441,13 @@ export function createRelay(deps: RelayDeps): Relay {
       if (overLimit(from, to)) {
         const id = randomUUID();
         held.set(id, {
-          held: { id, from: from.callsign, to, text: excerpt(text), at: new Date(now()).toISOString() },
+          held: {
+            id,
+            from: from.callsign,
+            to,
+            text: excerpt(text),
+            at: new Date(now()).toISOString(),
+          },
           from,
           text,
         });
@@ -412,7 +465,15 @@ export function createRelay(deps: RelayDeps): Relay {
     }
     if (from.kind === "agent") countSent(from, to);
 
-    return { state: enqueue(running.id, { text: framed(from, text), raw: text, to, from }), to };
+    return {
+      state: enqueue(running.id, {
+        text: framed(from, text),
+        raw: text,
+        to,
+        from,
+      }),
+      to,
+    };
   };
 
   const drop = (id: string, reason: string) => {
@@ -462,7 +523,8 @@ export function createRelay(deps: RelayDeps): Relay {
         state.awaitingTurn = false;
         cancelTurnTimer(state);
         const info = consoleOf(id);
-        if (info !== undefined && state.queue.length > 0) reportWaiting(info, state);
+        if (info !== undefined && state.queue.length > 0)
+          reportWaiting(info, state);
         return;
       }
       flush(id);
@@ -486,9 +548,16 @@ export function createRelay(deps: RelayDeps): Relay {
           outcome: "skipped",
           ...record(entry.from, entry.held.to, "dropped by the operator"),
         });
-        return { state: "refused", to: entry.held.to, reason: "dropped by the operator" };
+        return {
+          state: "refused",
+          to: entry.held.to,
+          reason: "dropped by the operator",
+        };
       }
-      return route({ to: entry.held.to, text: entry.text, from: entry.from }, true);
+      return route(
+        { to: entry.held.to, text: entry.text, from: entry.from },
+        true,
+      );
     },
 
     held: () => [...held.values()].map((h) => h.held),
@@ -499,7 +568,12 @@ export function createRelay(deps: RelayDeps): Relay {
         id === undefined ? undefined : sessions.find((s) => s.id === id)?.name;
       const live = deps.consoles
         .list()
-        .filter((c) => c.kind === "agent" && c.status === "running" && c.callsign !== undefined);
+        .filter(
+          (c) =>
+            c.kind === "agent" &&
+            c.status === "running" &&
+            c.callsign !== undefined,
+        );
       const entries: RosterEntry[] = live.map((c) => {
         const title = titleOf(c.sessionId);
         return {

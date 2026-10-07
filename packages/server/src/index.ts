@@ -29,7 +29,11 @@ const port = Number(process.env.PORT ?? 3000);
 const host = process.env.HOST ?? "127.0.0.1";
 
 function isLoopback(address: string): boolean {
-  return address === "127.0.0.1" || address === "::1" || address === "::ffff:127.0.0.1";
+  return (
+    address === "127.0.0.1" ||
+    address === "::1" ||
+    address === "::ffff:127.0.0.1"
+  );
 }
 
 const app = express();
@@ -51,17 +55,17 @@ if (process.env.NODE_ENV === "production") {
     res
       .status(404)
       .type("text/plain")
-      .send("overseer dev: this is the API/WS server. The app is at http://127.0.0.1:5173");
+      .send(
+        "overseer dev: this is the API/WS server. The app is at http://127.0.0.1:5173",
+      );
   });
 }
 
 const httpServer = createServer(app);
 // CLIs run in this same container, so their hooks reach the server on
 // loopback whatever interface it is bound to.
-const { broadcast, space, refreshSessions, consoles, relay } = attachWebSocketServer(
-  httpServer,
-  { hookBase: `http://127.0.0.1:${port}` },
-);
+const { broadcast, space, refreshSessions, consoles, relay } =
+  attachWebSocketServer(httpServer, { hookBase: `http://127.0.0.1:${port}` });
 
 // Lifecycle reports from CLI hooks (console-registry.ts). Loopback only, and
 // the path carries a per-console secret: a hook is a `curl` from a process
@@ -72,7 +76,8 @@ app.post("/hooks/:id/:token", (req, res) => {
     res.status(403).end();
     return;
   }
-  const activity = typeof req.query.activity === "string" ? req.query.activity : "";
+  const activity =
+    typeof req.query.activity === "string" ? req.query.activity : "";
   const ok = consoles.reportHook(req.params.id, req.params.token, activity);
   res.status(ok ? 204 : 404).end();
 });

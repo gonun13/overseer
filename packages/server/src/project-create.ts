@@ -23,8 +23,7 @@ export interface CreateProjectInput {
 }
 
 export type CreateProjectResult =
-  | { ok: true; path: string }
-  | { ok: false; reason: string; benign: boolean };
+  { ok: true; path: string } | { ok: false; reason: string; benign: boolean };
 
 export interface CreateProjectDeps {
   root?: string;

@@ -63,8 +63,7 @@ describe("noteProviderSignedOut", () => {
     await noteProviderSignedOut("claude", { authenticated: false });
 
     const snapshot = await readSnapshot();
-    const status = snapshot?.providers.find((p) => p.id === "claude")
-      ?.status;
+    const status = snapshot?.providers.find((p) => p.id === "claude")?.status;
     assert.equal(status?.authenticated, false);
     assert.equal(status?.usageState, undefined);
     assert.equal(status?.usage, undefined);
@@ -81,8 +80,7 @@ describe("noteProviderSignedOut", () => {
     await noteProviderSignedOut("claude", { authenticated: true });
 
     const snapshot = await readSnapshot();
-    const status = snapshot?.providers.find((p) => p.id === "claude")
-      ?.status;
+    const status = snapshot?.providers.find((p) => p.id === "claude")?.status;
     assert.equal(status?.usageState, "ready");
     assert.equal(status?.usage?.length, 1);
     assert.equal(frames.length, 0);

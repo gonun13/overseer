@@ -1,5 +1,9 @@
 import { useMemo } from "react";
-import type { ConsoleInfo, HeldRelay, SpaceStatusEntry } from "@overseer/protocol";
+import type {
+  ConsoleInfo,
+  HeldRelay,
+  SpaceStatusEntry,
+} from "@overseer/protocol";
 import type { Project, ProviderInfo } from "../domain";
 import { deriveSignals, messageFor, type Signal } from "./signals";
 import { message as toneMessage } from "../lang";
@@ -132,11 +136,11 @@ export function useShellPresentation(
               activity: wizard.space.message.activity,
             }
           : {
-            // A signal's own override is verbatim — alarm words are not for a
-            // tone pack to soften.
-            text: derived.text ?? toneMessage(tone, derived.key),
-            activity: derived.activity,
-          };
+              // A signal's own override is verbatim — alarm words are not for a
+              // tone pack to soften.
+              text: derived.text ?? toneMessage(tone, derived.key),
+              activity: derived.activity,
+            };
   const typingChance = wizard.error
     ? 0
     : wizard.reset || wizard.forceMessageType || wizardWord

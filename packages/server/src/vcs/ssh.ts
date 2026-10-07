@@ -1,5 +1,12 @@
 import { execFile } from "node:child_process";
-import { chmod, mkdir, readFile, stat, unlink, writeFile } from "node:fs/promises";
+import {
+  chmod,
+  mkdir,
+  readFile,
+  stat,
+  unlink,
+  writeFile,
+} from "node:fs/promises";
 import path from "node:path";
 import type { GitRemoteHost } from "@overseer/protocol";
 
@@ -66,11 +73,7 @@ export interface RunResult {
 }
 
 export interface GitSshDeps {
-  run?: (
-    file: string,
-    args: string[],
-    timeoutMs: number,
-  ) => Promise<RunResult>;
+  run?: (file: string, args: string[], timeoutMs: number) => Promise<RunResult>;
   sshDir?: string;
 }
 
@@ -94,7 +97,7 @@ function defaultRun(
       (error, stdout, stderr) => {
         const code =
           error && typeof (error as { code?: unknown }).code === "number"
-            ? ((error as { code: number }).code)
+            ? (error as { code: number }).code
             : error
               ? null
               : 0;
@@ -283,9 +286,7 @@ export function createGitSsh(deps: GitSshDeps = {}) {
       said.match(/Welcome to GitLab,\s*@?([^!\s]+)!/)?.[1];
     if (greeted !== undefined || /successfully authenticated/i.test(said)) {
       return found(
-        greeted !== undefined
-          ? `authenticated as ${greeted}`
-          : "authenticated",
+        greeted !== undefined ? `authenticated as ${greeted}` : "authenticated",
         true,
         greeted,
       );
@@ -305,7 +306,9 @@ export function createGitSsh(deps: GitSshDeps = {}) {
     if (/could not resolve hostname|name or service not known/i.test(said)) {
       return found("no such host", false);
     }
-    if (/connection timed out|operation timed out|connection refused/i.test(said)) {
+    if (
+      /connection timed out|operation timed out|connection refused/i.test(said)
+    ) {
       return found("could not reach the host", false);
     }
     return found(
@@ -316,7 +319,9 @@ export function createGitSsh(deps: GitSshDeps = {}) {
 
   /** The pinned fingerprint for a host, so the operator can compare it with
    * the one the forge publishes. Absent until something has connected. */
-  async function knownHostFingerprint(host: string): Promise<string | undefined> {
+  async function knownHostFingerprint(
+    host: string,
+  ): Promise<string | undefined> {
     const { stdout, code } = await run(
       "ssh-keygen",
       ["-F", host, "-l", "-f", knownHostsPath],

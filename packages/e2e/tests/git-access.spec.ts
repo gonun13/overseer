@@ -61,8 +61,12 @@ test("configure git opens the ssh key and identity controls", async ({
   await expect(generate.or(remove).first()).toBeVisible();
 
   // The identity fields are always offered, key or no key.
-  await expect(win.getByRole("textbox", { name: "git author name" })).toBeVisible();
-  await expect(win.getByRole("textbox", { name: "git author email" })).toBeVisible();
+  await expect(
+    win.getByRole("textbox", { name: "git author name" }),
+  ).toBeVisible();
+  await expect(
+    win.getByRole("textbox", { name: "git author email" }),
+  ).toBeVisible();
 });
 
 test("the git identity fields do not answer to the wizard's name ask", async ({
@@ -77,7 +81,7 @@ test("the git identity fields do not answer to the wizard's name ask", async ({
   await page.getByRole("button", { name: "configure git" }).click();
   await expect(gitConfigWindow(page)).toBeVisible();
 
-  await expect(
-    page.getByRole("textbox", { name: /your name/i }),
-  ).toHaveCount(0);
+  await expect(page.getByRole("textbox", { name: /your name/i })).toHaveCount(
+    0,
+  );
 });

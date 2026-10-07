@@ -77,7 +77,10 @@ describe("railRows", () => {
       [session("y", { projectId: "/workspace/b" })],
       "/workspace/a",
     );
-    assert.deepEqual(rows.map((r) => r.kind), ["console"]);
+    assert.deepEqual(
+      rows.map((r) => r.kind),
+      ["console"],
+    );
   });
 });
 

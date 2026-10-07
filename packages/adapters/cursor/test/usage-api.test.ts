@@ -94,7 +94,10 @@ describe("readDashboardUsage", () => {
     ]);
     assert.equal(result?.spend, "$0.38");
     assert.match(result?.report ?? "", /\*\*Plan:\*\* Pro \$20\/mo/);
-    assert.match(result?.report ?? "", /\| included \| 1\.9% \(\$0\.38 of \$20\.00\) \|/);
+    assert.match(
+      result?.report ?? "",
+      /\| included \| 1\.9% \(\$0\.38 of \$20\.00\) \|/,
+    );
     assert.match(result?.report ?? "", /used 2% of your included usage/);
   });
 

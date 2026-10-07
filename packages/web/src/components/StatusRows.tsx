@@ -36,7 +36,8 @@ export function StatusRows({ rows }: { rows: SpaceStatusEntry[] }) {
         onScroll={(e) => {
           const list = e.currentTarget;
           following.current =
-            list.scrollHeight - list.scrollTop - list.clientHeight <= FOLLOW_SLACK_PX;
+            list.scrollHeight - list.scrollTop - list.clientHeight <=
+            FOLLOW_SLACK_PX;
         }}
       >
         {rows.map((row) => (

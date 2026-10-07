@@ -14,10 +14,20 @@ function collector() {
 }
 
 const signedOut = [
-  { id: "claude", status: { authenticated: false }, login: true, usageCheck: true },
+  {
+    id: "claude",
+    status: { authenticated: false },
+    login: true,
+    usageCheck: true,
+  },
 ];
 const signedIn = [
-  { id: "claude", status: { authenticated: true }, login: true, usageCheck: true },
+  {
+    id: "claude",
+    status: { authenticated: true },
+    login: true,
+    usageCheck: true,
+  },
 ];
 
 describe("overseer space", () => {
@@ -111,7 +121,11 @@ describe("overseer space", () => {
   it("carries the last message into a replay", () => {
     const { broadcast } = collector();
     const space = createOverseerSpace(broadcast);
-    space.say({ key: "authRestored", activity: "done", vars: { provider: "claude" } });
+    space.say({
+      key: "authRestored",
+      activity: "done",
+      vars: { provider: "claude" },
+    });
     assert.equal(space.replay().message?.key, "authRestored");
   });
 });
@@ -153,7 +167,10 @@ describe("provider rows", () => {
 
   it("words the auth row the same way the signals do", () => {
     assert.equal(authDetail([], undefined), "no providers registered");
-    assert.equal(authDetail(signedOut, undefined), "1 registered · none attached");
+    assert.equal(
+      authDetail(signedOut, undefined),
+      "1 registered · none attached",
+    );
     assert.equal(
       authDetail(signedOut, "claude"),
       "attached claude · not authenticated",

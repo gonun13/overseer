@@ -19,7 +19,9 @@ export function personalityConfigPath(root = WORKSPACE_ROOT): string {
 }
 
 /** Whether the personality project directory exists (scaffold may still be needed). */
-export async function personalityExists(root = WORKSPACE_ROOT): Promise<boolean> {
+export async function personalityExists(
+  root = WORKSPACE_ROOT,
+): Promise<boolean> {
   try {
     await access(personalityDir(root));
     return true;
@@ -81,7 +83,10 @@ export async function ensureScaffold(root: string): Promise<boolean> {
       // up in the project panel with no special-casing anywhere in the UI.
       // -b main: don't inherit whatever init.defaultBranch happens to be, and
       // don't emit git's "using master" advice into the scaffold path.
-      await run("git", ["init", "-q", "-b", "main"], { cwd: dir, timeout: 10_000 });
+      await run("git", ["init", "-q", "-b", "main"], {
+        cwd: dir,
+        timeout: 10_000,
+      });
       await run("git", ["add", "-A"], { cwd: dir, timeout: 10_000 });
       await run(
         "git",

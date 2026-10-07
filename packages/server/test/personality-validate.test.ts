@@ -55,10 +55,11 @@ describe("validatePersonalityObject", () => {
     assert.deepEqual(applied, {});
     assert.equal(rejected.length, 3);
     assert.ok(rejected.every((entry) => entry.reason.length > 0));
-    assert.deepEqual(
-      rejected.map((entry) => entry.field).sort(),
-      ["logging", "permissions", "signals"],
-    );
+    assert.deepEqual(rejected.map((entry) => entry.field).sort(), [
+      "logging",
+      "permissions",
+      "signals",
+    ]);
   });
 
   it("rejects unknown fields by default", () => {
@@ -69,7 +70,8 @@ describe("validatePersonalityObject", () => {
     assert.deepEqual(rejected, [
       {
         field: "favoriteColor",
-        reason: "not a customizable field · see spec/behaviour/overseer.md §6.4",
+        reason:
+          "not a customizable field · see spec/behaviour/overseer.md §6.4",
       },
     ]);
   });

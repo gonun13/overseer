@@ -1,11 +1,7 @@
 import { dry } from "./dry";
 import { neutral } from "./neutral";
 import { warm } from "./warm";
-import type {
-  MessageKey,
-  OverseerMessages,
-  OverseerTone,
-} from "./types";
+import type { MessageKey, OverseerMessages, OverseerTone } from "./types";
 
 export type { MessageKey, OverseerMessages, OverseerTone } from "./types";
 

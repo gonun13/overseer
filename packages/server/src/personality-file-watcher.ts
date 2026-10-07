@@ -87,7 +87,9 @@ export function createPersonalityFileWatcher(
   deps: Partial<PersonalityFileWatcherDeps> = {},
 ): {
   attach: () => void;
-  refresh: (ctx: PersonalityRefreshContext) => Promise<PersonalityRefreshResult>;
+  refresh: (
+    ctx: PersonalityRefreshContext,
+  ) => Promise<PersonalityRefreshResult>;
   destroy: () => void;
 } {
   const d = { ...defaultDeps, ...deps };

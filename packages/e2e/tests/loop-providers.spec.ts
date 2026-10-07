@@ -24,9 +24,15 @@ test("switches to the loop tab and opens a provider's model window", async ({
   await expect(page.getByText("claude · step models")).toBeVisible();
 
   // The overseer slot plus every loop step should be listed.
-  await expect(page.locator(".loop-slot-name", { hasText: "overseer" })).toBeVisible();
-  await expect(page.locator(".loop-slot-name", { hasText: "request" })).toBeVisible();
-  await expect(page.locator(".loop-slot-name", { hasText: "review" })).toBeVisible();
+  await expect(
+    page.locator(".loop-slot-name", { hasText: "overseer" }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".loop-slot-name", { hasText: "request" }),
+  ).toBeVisible();
+  await expect(
+    page.locator(".loop-slot-name", { hasText: "review" }),
+  ).toBeVisible();
 });
 
 test("shows a non-active provider's real models, not just a free-text field", async ({
@@ -58,7 +64,9 @@ test("shows a non-active provider's real models, not just a free-text field", as
   // A real model list — not the free-text fallback, which has no listbox.
   const values = page.locator(".loop-slot-values").first();
   await expect(values).toBeVisible({ timeout: 15_000 });
-  await expect(values.getByRole("option", { name: /sonnet|opus|haiku|default/i }).first()).toBeVisible();
+  await expect(
+    values.getByRole("option", { name: /sonnet|opus|haiku|default/i }).first(),
+  ).toBeVisible();
 });
 
 test("cursor's loop row notes that delegation is not yet confirmed", async ({

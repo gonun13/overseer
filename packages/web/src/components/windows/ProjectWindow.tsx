@@ -1,5 +1,9 @@
 import { useEffect, useState } from "react";
-import type { ClientMessage, GitFileChange, ServerMessage } from "@overseer/protocol";
+import type {
+  ClientMessage,
+  GitFileChange,
+  ServerMessage,
+} from "@overseer/protocol";
 import { canPull, canPush } from "../../state/git-actions";
 import { FILE_TONE } from "../../status";
 import { WInline, WRow, WTitle } from "./bits";
@@ -51,8 +55,26 @@ export function ProjectWindow({
     if (!path) return;
     return subscribe((frame) => {
       if (frame.type === "project.git.status" && frame.path === path) {
-        const { branch, dirty, hasRemote, remoteUrl, ahead, behind, defaultBranch, files } = frame;
-        setStatus({ branch, dirty, hasRemote, remoteUrl, ahead, behind, defaultBranch, files });
+        const {
+          branch,
+          dirty,
+          hasRemote,
+          remoteUrl,
+          ahead,
+          behind,
+          defaultBranch,
+          files,
+        } = frame;
+        setStatus({
+          branch,
+          dirty,
+          hasRemote,
+          remoteUrl,
+          ahead,
+          behind,
+          defaultBranch,
+          files,
+        });
         return;
       }
       if (
@@ -128,7 +150,10 @@ export function ProjectWindow({
               value={`${status.ahead ?? 0} ahead · ${status.behind ?? 0} behind`}
             />
           )}
-          <WInline label="remote" value={status.remoteUrl ?? (status.hasRemote ? "attached" : "none")} />
+          <WInline
+            label="remote"
+            value={status.remoteUrl ?? (status.hasRemote ? "attached" : "none")}
+          />
 
           {status.files.length === 0 ? (
             <div className="w-empty">clean — nothing changed</div>
@@ -231,12 +256,14 @@ export function ProjectWindow({
                   {status.behind !== undefined && status.behind > 0 && (
                     <p className="w-note">
                       origin has {status.behind} commit
-                      {status.behind === 1 ? "" : "s"} this checkout does not · pull before
-                      pushing.
+                      {status.behind === 1 ? "" : "s"} this checkout does not ·
+                      pull before pushing.
                     </p>
                   )}
                   {status.ahead === 0 && status.behind === 0 && (
-                    <p className="w-note">nothing to push · the remote is up to date.</p>
+                    <p className="w-note">
+                      nothing to push · the remote is up to date.
+                    </p>
                   )}
                 </>
               )}
@@ -247,7 +274,8 @@ export function ProjectWindow({
           {confirming === "merge" && (
             <div className="btn-row">
               <span className="w-note">
-                merge {status.branch} into {status.defaultBranch} — cannot be undone.
+                merge {status.branch} into {status.defaultBranch} — cannot be
+                undone.
               </span>
               <button
                 type="button"

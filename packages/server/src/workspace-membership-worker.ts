@@ -75,9 +75,7 @@ function gitMetaKey(projects: DiscoveredProject[]): string {
     .join("\0");
 }
 
-function fallbackActive(
-  projects: DiscoveredProject[],
-): string | undefined {
+function fallbackActive(projects: DiscoveredProject[]): string | undefined {
   return (
     projects.find((p) => p.name === PERSONALITY_PROJECT)?.path ??
     projects[0]?.path
@@ -223,8 +221,13 @@ export function createWorkspaceMembershipWorker(
   };
 
   const refresh = async (ctx: MembershipRefreshContext): Promise<void> => {
-    const { broadcast, space, snapshot, personalityMissing, justNoticedMissing } =
-      ctx;
+    const {
+      broadcast,
+      space,
+      snapshot,
+      personalityMissing,
+      justNoticedMissing,
+    } = ctx;
 
     // One readdir per tick, and the git meta is filled onto its result — the
     // membership-changed path used to scan the root a second time (probing

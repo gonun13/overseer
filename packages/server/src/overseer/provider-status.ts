@@ -27,7 +27,8 @@ export function promptReady(
 ): boolean {
   if (attachedProviderId === undefined) return false;
   return providers.some(
-    (provider) => provider.id === attachedProviderId && provider.status.authenticated,
+    (provider) =>
+      provider.id === attachedProviderId && provider.status.authenticated,
   );
 }
 

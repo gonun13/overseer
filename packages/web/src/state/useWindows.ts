@@ -35,17 +35,14 @@ export function useWindows() {
 
   /** Wrap an updater so that any window opening or closing re-tiles the
    * stage in the same render — a new window never flashes at a spawn point. */
-  const update = useCallback(
-    (fn: (current: OpenWindow[]) => OpenWindow[]) => {
-      setWindows((current) => {
-        const next = fn(current);
-        return next.length !== current.length
-          ? retile(next, stageBounds())
-          : next;
-      });
-    },
-    [],
-  );
+  const update = useCallback((fn: (current: OpenWindow[]) => OpenWindow[]) => {
+    setWindows((current) => {
+      const next = fn(current);
+      return next.length !== current.length
+        ? retile(next, stageBounds())
+        : next;
+    });
+  }, []);
 
   // The stage follows the viewport.
   useEffect(() => {
@@ -57,12 +54,7 @@ export function useWindows() {
   }, []);
 
   const open = useCallback(
-    (
-      kind: WindowKind,
-      payload?: unknown,
-      title?: string,
-      detail?: string,
-    ) => {
+    (kind: WindowKind, payload?: unknown, title?: string, detail?: string) => {
       update((current) => {
         // Re-summoning a window that's already up raises it rather than stacking a duplicate.
         const existing = current.find(
@@ -189,9 +181,13 @@ export function useWindows() {
       detail?: string,
     ) => {
       update((current) => {
-        const placeholder = current.find((w) => w.kind === kind && w.payload === from);
+        const placeholder = current.find(
+          (w) => w.kind === kind && w.payload === from,
+        );
         if (placeholder === undefined) return current;
-        const existing = current.find((w) => w.kind === kind && w.payload === to);
+        const existing = current.find(
+          (w) => w.kind === kind && w.payload === to,
+        );
         if (existing !== undefined) {
           return current
             .filter((w) => w !== placeholder)

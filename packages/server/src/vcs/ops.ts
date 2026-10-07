@@ -24,8 +24,7 @@ export interface GitStatus {
 }
 
 export type GitOpResult =
-  | { ok: true }
-  | { ok: false; reason: string; benign: boolean };
+  { ok: true } | { ok: false; reason: string; benign: boolean };
 
 /** What a read of one file returns — a diff or the file's own contents.
  *
@@ -156,7 +155,9 @@ const NO_INDEX_DIFF_FLAGS = [
 function capped(text: string): GitReadResult {
   const lines = text.split("\n");
   const overLines = lines.length > GIT_MAX_DIFF_LINES;
-  const clipped = overLines ? lines.slice(0, GIT_MAX_DIFF_LINES).join("\n") : text;
+  const clipped = overLines
+    ? lines.slice(0, GIT_MAX_DIFF_LINES).join("\n")
+    : text;
   const overChars = clipped.length > GIT_MAX_DIFF_CHARS;
   return {
     ok: true,
@@ -182,7 +183,8 @@ function stdoutOf(error: unknown): string | undefined {
 export function createProjectGit(deps: ProjectGitDeps = {}) {
   const run = deps.run ?? defaultRun;
   const readIdentity = deps.readIdentity ?? defaultReadIdentity;
-  const readFileBytes = deps.readFile ?? ((absolute: string) => fsReadFile(absolute));
+  const readFileBytes =
+    deps.readFile ?? ((absolute: string) => fsReadFile(absolute));
 
   /** The identity overrides for a write in `dir` — see `env.ts` for why this
    * is environment rather than config. */
@@ -190,11 +192,7 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     resolveIdentityEnv(dir, readIdentity, hasIdentity);
 
   async function status(dir: string): Promise<GitStatus> {
-    const { stdout } = await run(dir, [
-      "status",
-      "--porcelain=v1",
-      "--branch",
-    ]);
+    const { stdout } = await run(dir, ["status", "--porcelain=v1", "--branch"]);
     const lines = stdout.split("\n").filter((line) => line.length > 0);
 
     let branch = "detached";
@@ -207,7 +205,8 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
         const header = line.slice(3);
         // "main...origin/main [ahead 1, behind 2]" | "main" | "HEAD (no branch)"
         const branchPart = header.split("...")[0]?.trim();
-        if (branchPart && branchPart !== "HEAD (no branch)") branch = branchPart;
+        if (branchPart && branchPart !== "HEAD (no branch)")
+          branch = branchPart;
         // git prints the divergence bracket only when there *is* divergence:
         // an upstream that matches HEAD exactly prints nothing after the
         // "branch...upstream" pair. So presence of the pair — not of the
@@ -215,7 +214,8 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
         // upstream and no bracket is 0 ahead, 0 behind rather than unknown.
         // "[gone]" is the exception: the upstream is configured but no longer
         // exists, so there is nothing to compare against and both stay absent.
-        const hasUpstream = header.includes("...") && !header.includes("[gone]");
+        const hasUpstream =
+          header.includes("...") && !header.includes("[gone]");
         if (hasUpstream) {
           ahead = 0;
           behind = 0;
@@ -377,7 +377,10 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     // Insertion order is git's, which is not the order the window shows; the
     // sort below is what decides that. A map rather than a list because a
     // folder is named once per descendant and must appear once.
-    const children = new Map<string, { kind: GitDirEntry["kind"]; statuses: Set<string> }>();
+    const children = new Map<
+      string,
+      { kind: GitDirEntry["kind"]; statuses: Set<string> }
+    >();
 
     for (const line of stdout.split("\n")) {
       if (line.length === 0) continue;
@@ -388,7 +391,8 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
       // `-uall` that happens for a directory it was told to ignore, and the
       // name is still the child.
       const slash = rest.indexOf("/");
-      const name = slash === -1 ? rest.replace(/\/$/, "") : rest.slice(0, slash);
+      const name =
+        slash === -1 ? rest.replace(/\/$/, "") : rest.slice(0, slash);
       if (name.length === 0) continue;
       const kind: GitDirEntry["kind"] =
         slash === -1 && !rest.endsWith("/") ? "file" : "dir";
@@ -402,7 +406,8 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
         // A folder gets a status only when its descendants agree on one.
         // Disagreement is a real answer, and the row says so in words rather
         // than picking a winner.
-        const only = child.statuses.size === 1 ? [...child.statuses][0] : undefined;
+        const only =
+          child.statuses.size === 1 ? [...child.statuses][0] : undefined;
         return {
           name,
           kind: child.kind,
@@ -521,13 +526,18 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
   async function pull(dir: string): Promise<PullResult> {
     const { branch, hasRemote, dirty } = await status(dir);
     if (!hasRemote) {
-      return { ok: false, benign: true, reason: "this project has no remote to pull from" };
+      return {
+        ok: false,
+        benign: true,
+        reason: "this project has no remote to pull from",
+      };
     }
     if (dirty) {
       return {
         ok: false,
         benign: true,
-        reason: "commit or discard your changes before pulling — a merge cannot run over uncommitted work",
+        reason:
+          "commit or discard your changes before pulling — a merge cannot run over uncommitted work",
       };
     }
 
@@ -548,13 +558,21 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
       };
     }
     if (behind === 0) {
-      return { ok: false, benign: true, reason: `${branch} is already up to date with origin` };
+      return {
+        ok: false,
+        benign: true,
+        reason: `${branch} is already up to date with origin`,
+      };
     }
 
     try {
       // A merge writes a commit when the histories have both moved, so it
       // needs an identity for the same reason `commit` does.
-      await run(dir, ["merge", "--no-edit", `origin/${branch}`], await identityFor(dir));
+      await run(
+        dir,
+        ["merge", "--no-edit", `origin/${branch}`],
+        await identityFor(dir),
+      );
       return { ok: true, branch, merged: behind };
     } catch (error) {
       // Both streams: git announces "CONFLICT (content): …" and "Automatic
@@ -584,7 +602,11 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
    * them rather than leaving the operator to go looking. */
   async function conflictedFiles(dir: string): Promise<string[]> {
     try {
-      const { stdout } = await run(dir, ["diff", "--name-only", "--diff-filter=U"]);
+      const { stdout } = await run(dir, [
+        "diff",
+        "--name-only",
+        "--diff-filter=U",
+      ]);
       return stdout.split("\n").filter((line) => line.trim().length > 0);
     } catch {
       return [];
@@ -647,7 +669,11 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     if (/host key verification failed/i.test(full)) {
       return `the remote's host key changed — check settings › git access · ${summary}`;
     }
-    if (/could not read from remote repository|permission denied \(publickey\)/i.test(full)) {
+    if (
+      /could not read from remote repository|permission denied \(publickey\)/i.test(
+        full,
+      )
+    ) {
       if (await hasHttpsOrigin(dir)) {
         return `this project's remote uses https, so the ssh key does not apply — switch the remote to ssh to use it · ${summary}`;
       }
@@ -656,7 +682,11 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     // The everyday one, and the only failure here that is nobody's mistake:
     // the remote moved on. Worth naming, because "fetch first" is git's
     // instruction to a terminal and this app has no terminal to obey it in.
-    if (/\(fetch first\)|\(non-fast-forward\)|behind its remote counterpart/i.test(full)) {
+    if (
+      /\(fetch first\)|\(non-fast-forward\)|behind its remote counterpart/i.test(
+        full,
+      )
+    ) {
       return `the remote has commits this project does not — pull them in first · ${summary}`;
     }
     return summary;

@@ -60,7 +60,9 @@ async function readTrustedPath(slug: string): Promise<string | undefined> {
       "utf8",
     );
     const obj = JSON.parse(raw) as { workspacePath?: unknown };
-    return typeof obj.workspacePath === "string" ? obj.workspacePath : undefined;
+    return typeof obj.workspacePath === "string"
+      ? obj.workspacePath
+      : undefined;
   } catch {
     return undefined;
   }
@@ -83,7 +85,10 @@ async function slugForProject(projectDir: string): Promise<string | undefined> {
 
 /** The chat's first operator message, for its title. Stops reading there —
  * the rest of the transcript is the CLI's to show, in its own console. */
-async function readFirstUserText(slug: string, chatId: string): Promise<string | undefined> {
+async function readFirstUserText(
+  slug: string,
+  chatId: string,
+): Promise<string | undefined> {
   const file = path.join(
     projectsRoot(),
     slug,
@@ -159,7 +164,9 @@ async function findChatMeta(chatId: string): Promise<ChatMeta | undefined> {
   return undefined;
 }
 
-export async function listProjectSessions(projectDir: string): Promise<SessionMeta[]> {
+export async function listProjectSessions(
+  projectDir: string,
+): Promise<SessionMeta[]> {
   const slug = await slugForProject(projectDir);
   if (slug === undefined) return [];
 
@@ -191,12 +198,15 @@ export async function listProjectSessions(projectDir: string): Promise<SessionMe
       createdAt,
       lastActiveAt,
       totalCostUsd: 0,
-      ...(firstUserText !== undefined ? { name: truncateTitle(firstUserText) } : {}),
+      ...(firstUserText !== undefined
+        ? { name: truncateTitle(firstUserText) }
+        : {}),
     });
   }
 
   return sessions.sort(
-    (a, b) => new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime(),
+    (a, b) =>
+      new Date(b.lastActiveAt).getTime() - new Date(a.lastActiveAt).getTime(),
   );
 }
 
@@ -212,7 +222,10 @@ export async function lookupSessionTitle(
 
 /** Permanently remove a session's transcript from both places it lives.
  * Idempotent: an already-gone (or never-written) session is not an error. */
-export async function deleteSession(projectDir: string, sessionId: string): Promise<void> {
+export async function deleteSession(
+  projectDir: string,
+  sessionId: string,
+): Promise<void> {
   const slug = await slugForProject(projectDir);
   if (slug !== undefined) {
     await rm(path.join(projectsRoot(), slug, "agent-transcripts", sessionId), {
@@ -228,7 +241,10 @@ export async function deleteSession(projectDir: string, sessionId: string): Prom
     hashDirs = [];
   }
   for (const hash of hashDirs) {
-    await rm(path.join(chatsRoot(), hash, sessionId), { recursive: true, force: true });
+    await rm(path.join(chatsRoot(), hash, sessionId), {
+      recursive: true,
+      force: true,
+    });
   }
 }
 

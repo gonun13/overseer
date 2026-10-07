@@ -51,10 +51,7 @@ export function useUsageCheck(
         setSpend(message.spend);
         return;
       }
-      if (
-        message.type === "error" &&
-        message.about === "provider.checkUsage"
-      ) {
+      if (message.type === "error" && message.about === "provider.checkUsage") {
         setChecking(false);
         setError(message.message);
       }

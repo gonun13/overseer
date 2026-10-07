@@ -130,7 +130,12 @@ export function ConsoleTerminal({
     const term = termRef.current;
     if (!reconnected || !term) return;
     replayed.current = false;
-    sendRef.current({ type: "console.attach", id: consoleId, cols: term.cols, rows: term.rows });
+    sendRef.current({
+      type: "console.attach",
+      id: consoleId,
+      cols: term.cols,
+      rows: term.rows,
+    });
   }, [connected, consoleId]);
 
   // Only the xterm chrome follows a theme flip; the console keeps running.
@@ -175,7 +180,9 @@ export function ConsoleTerminal({
       if (message.type === "console.exit") {
         const signal =
           message.signal !== undefined ? ` · signal ${message.signal}` : "";
-        term.writeln(`\r\n[process exited with code ${message.exitCode}${signal}]`);
+        term.writeln(
+          `\r\n[process exited with code ${message.exitCode}${signal}]`,
+        );
         onProcessExitRef.current(message.exitCode === 0);
       }
     });

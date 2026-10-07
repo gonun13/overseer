@@ -1,5 +1,9 @@
 import { useCallback, useEffect, useState } from "react";
-import type { ClientMessage, HeldRelay, ServerMessage } from "@overseer/protocol";
+import type {
+  ClientMessage,
+  HeldRelay,
+  ServerMessage,
+} from "@overseer/protocol";
 
 /**
  * Callsign relay as this tab sees it (spec/behaviour/relay.md): sending a
@@ -26,7 +30,12 @@ export function useRelay(
 
   const relay = useCallback(
     (to: string, text: string) => {
-      send({ type: "console.relay", reqId: `relay-${Date.now().toString(36)}-${++reqSeq}`, to, text });
+      send({
+        type: "console.relay",
+        reqId: `relay-${Date.now().toString(36)}-${++reqSeq}`,
+        to,
+        text,
+      });
     },
     [send],
   );

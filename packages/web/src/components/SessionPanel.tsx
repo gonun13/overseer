@@ -4,7 +4,11 @@ import { ChevronIcon, CloseIcon, StopIcon, TrashIcon } from "./icons";
 import type { Session } from "../domain";
 import { ACTIVITY_RANK, type Activity } from "../status";
 import { consoleLight } from "../state/useConsoles";
-import { agentName, projectName as nameOf, railRows } from "../state/session-rail";
+import {
+  agentName,
+  projectName as nameOf,
+  railRows,
+} from "../state/session-rail";
 
 /**
  * Left rail, under the project panel. A readout header over one list
@@ -101,7 +105,9 @@ export function SessionPanel({
               <span className="row-sep" aria-hidden>
                 ·
               </span>
-              <span className="session-row-project">{nameOf(row.session.projectId)}</span>
+              <span className="session-row-project">
+                {nameOf(row.session.projectId)}
+              </span>
               {/* Not for a loop run's transcript, which its lease owns. A
                   session a console is running is listed as that console. */}
               {row.session.origin !== "loop" && (

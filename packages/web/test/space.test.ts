@@ -28,7 +28,10 @@ describe("space status rows", () => {
     // authenticated" while the signal list had already corrected itself.
     let space = applySpaceFrame(EMPTY_SPACE, {
       type: "space.status",
-      entry: row({ key: "auth", detail: "attached claude · not authenticated" }),
+      entry: row({
+        key: "auth",
+        detail: "attached claude · not authenticated",
+      }),
     });
     space = applySpaceFrame(space, {
       type: "space.status",
@@ -62,7 +65,13 @@ describe("space status rows", () => {
     for (const label of ["committing a", "committing b"]) {
       space = applySpaceFrame(space, {
         type: "space.status",
-        entry: row({ service: "git", key: "git:commit", mode: "event", label, outcome: "ok" }),
+        entry: row({
+          service: "git",
+          key: "git:commit",
+          mode: "event",
+          label,
+          outcome: "ok",
+        }),
       });
     }
 
@@ -79,7 +88,11 @@ describe("space status rows", () => {
   it("clears a service's state rows without touching its event history", () => {
     let space = applySpaceFrame(EMPTY_SPACE, {
       type: "space.status",
-      entry: row({ service: "workspace", key: "probe:/w/a", label: "git slow in a" }),
+      entry: row({
+        service: "workspace",
+        key: "probe:/w/a",
+        label: "git slow in a",
+      }),
     });
     space = applySpaceFrame(space, {
       type: "space.status",
@@ -107,7 +120,13 @@ describe("space status rows", () => {
   it("reads conditions before happenings", () => {
     let space = applySpaceFrame(EMPTY_SPACE, {
       type: "space.status",
-      entry: row({ service: "git", key: "git:commit", mode: "event", label: "committing a", outcome: "ok" }),
+      entry: row({
+        service: "git",
+        key: "git:commit",
+        mode: "event",
+        label: "committing a",
+        outcome: "ok",
+      }),
     });
     space = applySpaceFrame(space, {
       type: "space.status",
@@ -123,7 +142,10 @@ describe("space status rows", () => {
   it("catches a joining tab up without counting it as new rows", () => {
     const space = applySpaceFrame(EMPTY_SPACE, {
       type: "space.replay",
-      entries: [row({ key: "auth" }), row({ key: "prompt", label: "releasing the prompt" })],
+      entries: [
+        row({ key: "auth" }),
+        row({ key: "prompt", label: "releasing the prompt" }),
+      ],
     });
 
     assert.equal(spaceRows(space).length, 2);

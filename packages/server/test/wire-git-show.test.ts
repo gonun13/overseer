@@ -16,7 +16,11 @@ import { GIT_MAX_PATH_CHARS, isClientMessage } from "@overseer/protocol";
  * have to prove it does not.
  */
 describe("project.git.show guard", () => {
-  const show = (file: unknown, mode: unknown = "diff", previousPath?: unknown) => {
+  const show = (
+    file: unknown,
+    mode: unknown = "diff",
+    previousPath?: unknown,
+  ) => {
     const frame: Record<string, unknown> = {
       type: "project.git.show",
       path: "/workspace/demo",

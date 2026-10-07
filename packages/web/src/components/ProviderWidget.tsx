@@ -60,8 +60,7 @@ export function ProviderWidget({
   const canCheck = provider.usageCheck && provider.authenticated;
   const manual = canCheck && !provider.usageRefresh;
   const showPending = !manual && usageState === "pending" && !timedOut;
-  const showUnavailable =
-    !manual && (usageState === "unavailable" || timedOut);
+  const showUnavailable = !manual && (usageState === "unavailable" || timedOut);
 
   const windows = manual ? usageCheck.windows : reported;
   const spend = usageCheck.spend ?? provider.spend;

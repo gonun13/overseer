@@ -21,7 +21,14 @@ async function writeTranscript(
   lines: unknown[],
   meta: { createdAtMs: number; updatedAtMs: number; cwd: string },
 ): Promise<void> {
-  const transcriptDir = path.join(home, ".cursor", "projects", slug, "agent-transcripts", chatId);
+  const transcriptDir = path.join(
+    home,
+    ".cursor",
+    "projects",
+    slug,
+    "agent-transcripts",
+    chatId,
+  );
   await mkdir(transcriptDir, { recursive: true });
   await writeFile(
     path.join(transcriptDir, `${chatId}.jsonl`),
@@ -29,24 +36,48 @@ async function writeTranscript(
     "utf8",
   );
 
-  const chatDir = path.join(home, ".cursor", "chats", `hash-of-${slug}`, chatId);
+  const chatDir = path.join(
+    home,
+    ".cursor",
+    "chats",
+    `hash-of-${slug}`,
+    chatId,
+  );
   await mkdir(chatDir, { recursive: true });
-  await writeFile(path.join(chatDir, "meta.json"), JSON.stringify(meta), "utf8");
+  await writeFile(
+    path.join(chatDir, "meta.json"),
+    JSON.stringify(meta),
+    "utf8",
+  );
 }
 
-async function trustProject(slug: string, workspacePath: string): Promise<void> {
+async function trustProject(
+  slug: string,
+  workspacePath: string,
+): Promise<void> {
   const dir = path.join(home, ".cursor", "projects", slug);
   await mkdir(dir, { recursive: true });
   await writeFile(
     path.join(dir, ".workspace-trusted"),
-    JSON.stringify({ trustedAt: "2026-01-01T00:00:00.000Z", workspacePath, trustMethod: "cli-flag" }),
+    JSON.stringify({
+      trustedAt: "2026-01-01T00:00:00.000Z",
+      workspacePath,
+      trustMethod: "cli-flag",
+    }),
     "utf8",
   );
 }
 
 const userTurn = (text: string) => ({
   role: "user",
-  message: { content: [{ type: "text", text: `<timestamp>x</timestamp>\n<user_query>\n${text}\n</user_query>` }] },
+  message: {
+    content: [
+      {
+        type: "text",
+        text: `<timestamp>x</timestamp>\n<user_query>\n${text}\n</user_query>`,
+      },
+    ],
+  },
 });
 const agentTurn = (text: string) => ({
   role: "assistant",
@@ -74,7 +105,11 @@ describe("cursor transcripts", () => {
     await writeTranscript(
       "demo",
       "chat-1",
-      [userTurn("Reply with PONG."), agentTurn("PONG"), { type: "turn_ended", status: "success" }],
+      [
+        userTurn("Reply with PONG."),
+        agentTurn("PONG"),
+        { type: "turn_ended", status: "success" },
+      ],
       { createdAtMs: 1000, updatedAtMs: 2000, cwd: "/workspace/demo" },
     );
 
@@ -111,7 +146,10 @@ describe("cursor transcripts", () => {
       [userTurn("hello"), agentTurn("hi there")],
       { createdAtMs: 1, updatedAtMs: 1, cwd: "/workspace/demo3" },
     );
-    assert.equal(await lookupSessionTitle("/workspace/demo3", "chat-3"), "hello");
+    assert.equal(
+      await lookupSessionTitle("/workspace/demo3", "chat-3"),
+      "hello",
+    );
   });
 
   it("deletes a session's transcript from both projects/ and chats/, idempotently", async () => {

@@ -39,17 +39,26 @@ function harness(overrides: Partial<ConsoleRegistryDeps> = {}) {
   const adapter = {
     id: "claude",
     getStatus: async () => status,
-    consoleCommand: async (opts: { cwd: string; sessionId?: string; resume?: boolean; hookUrl?: string; callsign?: string }) => {
+    consoleCommand: async (opts: {
+      cwd: string;
+      sessionId?: string;
+      resume?: boolean;
+      hookUrl?: string;
+      callsign?: string;
+    }) => {
       if (opts.hookUrl !== undefined) hookUrls.push(opts.hookUrl);
       commandOpts.push(opts);
       return {
-      file: "claude",
-      args:
-        opts.sessionId === undefined
-          ? []
-          : [opts.resume === true ? "--resume" : "--session-id", opts.sessionId],
-      cwd: opts.cwd,
-      hooked: opts.hookUrl !== undefined,
+        file: "claude",
+        args:
+          opts.sessionId === undefined
+            ? []
+            : [
+                opts.resume === true ? "--resume" : "--session-id",
+                opts.sessionId,
+              ],
+        cwd: opts.cwd,
+        hooked: opts.hookUrl !== undefined,
       };
     },
     sessions: { mintSessionId: () => `minted-${++minted}` },
@@ -155,10 +164,16 @@ describe("console registry", () => {
     registry.attach(id, second.send, 100, 30);
     ptys[0]!.emitData("world");
 
-    assert.deepEqual(second.frames[0], { type: "console.replay", id, data: "hello " });
+    assert.deepEqual(second.frames[0], {
+      type: "console.replay",
+      id,
+      data: "hello ",
+    });
     assert.deepEqual(ptys[0]!.resizes.at(-1), [100, 30]);
     const outputs = (frames: ServerMessage[]) =>
-      frames.filter((f) => f.type === "console.output").map((f) => (f as { data: string }).data);
+      frames
+        .filter((f) => f.type === "console.output")
+        .map((f) => (f as { data: string }).data);
     assert.deepEqual(outputs(first.frames), ["hello ", "world"]);
     assert.deepEqual(outputs(second.frames), ["world"]);
   });
@@ -172,7 +187,10 @@ describe("console registry", () => {
     registry.detachAll(tab.send);
     ptys[0]!.emitData("still here");
     assert.equal(ptys[0]!.kills, 0);
-    assert.equal(tab.frames.filter((f) => f.type === "console.output").length, 0);
+    assert.equal(
+      tab.frames.filter((f) => f.type === "console.output").length,
+      0,
+    );
 
     const again = sink();
     registry.attach(result.console.id, again.send, 80, 24);
@@ -202,7 +220,9 @@ describe("console registry", () => {
   it("attaches to the console already running a session instead of starting another", async () => {
     const { registry, ptys } = harness();
     const first = await registry.open(agent({ sessionId: "s1", resume: true }));
-    const second = await registry.open(agent({ sessionId: "s1", resume: true }));
+    const second = await registry.open(
+      agent({ sessionId: "s1", resume: true }),
+    );
     assert.ok(first.ok && second.ok);
     assert.equal(second.attached, true);
     assert.equal(second.console.id, first.console.id);
@@ -216,7 +236,9 @@ describe("console registry", () => {
       loopSessionIndex: async () =>
         new Map([["s1", { slug: "a", pid: 1, sessionId: "s1" } as never]]),
     });
-    const result = await registry.open(agent({ sessionId: "s1", resume: true }));
+    const result = await registry.open(
+      agent({ sessionId: "s1", resume: true }),
+    );
     assert.equal(result.ok, false);
   });
 
@@ -224,7 +246,10 @@ describe("console registry", () => {
     const h = harness();
     h.status.authenticated = false;
     assert.equal((await h.registry.open(agent())).ok, false);
-    assert.equal((await h.registry.open(agent({ projectPath: "/etc" }))).ok, false);
+    assert.equal(
+      (await h.registry.open(agent({ projectPath: "/etc" }))).ok,
+      false,
+    );
   });
 
   it("keeps an exited console listed until dismissed", async () => {
@@ -267,7 +292,11 @@ describe("console registry", () => {
 
     assert.equal(registry.reportHook(id!, token!, "waiting"), true);
     assert.equal(registry.list()[0]!.activity, "waiting");
-    assert.deepEqual(broadcasts.at(-1), { type: "console.state", id, activity: "waiting" });
+    assert.deepEqual(broadcasts.at(-1), {
+      type: "console.state",
+      id,
+      activity: "waiting",
+    });
   });
 
   it("ignores output for activity once hooks are wired", async () => {
@@ -290,23 +319,36 @@ describe("console registry", () => {
   });
 
   it("names an agent console, keeps the name on resume, and tells it how to relay", async () => {
-    const callsigns = createCallsignBook({ read: async () => ({}), write: async () => undefined });
-    const { registry, ptys, commandOpts } = harness({ callsigns, relayBin: "/app/relay-bin" });
+    const callsigns = createCallsignBook({
+      read: async () => ({}),
+      write: async () => undefined,
+    });
+    const { registry, ptys, commandOpts } = harness({
+      callsigns,
+      relayBin: "/app/relay-bin",
+    });
     const first = await registry.open(agent());
     assert.ok(first.ok);
     assert.equal(first.console.callsign, "Linda");
     assert.equal(commandOpts[0]!.callsign, "Linda");
     const env = ptys[0]!.opts.env;
     assert.equal(env.OVERSEER_CALLSIGN, "Linda");
-    assert.match(env.OVERSEER_RELAY_URL!, new RegExp(`/relay/${first.console.id}/[0-9a-f]+$`));
+    assert.match(
+      env.OVERSEER_RELAY_URL!,
+      new RegExp(`/relay/${first.console.id}/[0-9a-f]+$`),
+    );
     assert.ok(env.PATH!.startsWith("/app/relay-bin:"));
 
-    const token = /\/relay\/[^/]+\/([0-9a-f]+)$/.exec(env.OVERSEER_RELAY_URL!)![1]!;
+    const token = /\/relay\/[^/]+\/([0-9a-f]+)$/.exec(
+      env.OVERSEER_RELAY_URL!,
+    )![1]!;
     assert.equal(registry.verify(first.console.id, token)?.callsign, "Linda");
     assert.equal(registry.verify(first.console.id, "wrong"), undefined);
 
     ptys[0]!.emitExit({ exitCode: 0 });
-    const resumed = await registry.open(agent({ sessionId: "minted-1", resume: true }));
+    const resumed = await registry.open(
+      agent({ sessionId: "minted-1", resume: true }),
+    );
     assert.ok(resumed.ok);
     assert.equal(resumed.console.callsign, "Linda");
 
@@ -317,7 +359,10 @@ describe("console registry", () => {
   });
 
   it("relabels consoles on rename and carries a pending count", async () => {
-    const callsigns = createCallsignBook({ read: async () => ({}), write: async () => undefined });
+    const callsigns = createCallsignBook({
+      read: async () => ({}),
+      write: async () => undefined,
+    });
     const { registry } = harness({ callsigns });
     const result = await registry.open(agent());
     assert.ok(result.ok);

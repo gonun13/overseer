@@ -37,7 +37,11 @@ async function openShell(page: Page) {
   return win;
 }
 
-async function typeInto(page: Page, win: ReturnType<Page["locator"]>, text: string) {
+async function typeInto(
+  page: Page,
+  win: ReturnType<Page["locator"]>,
+  text: string,
+) {
   // Focus xterm's own input rather than clicking: another window may be
   // lying over this one.
   await win.locator(".xterm-helper-textarea").focus();
@@ -47,14 +51,27 @@ async function typeInto(page: Page, win: ReturnType<Page["locator"]>, text: stri
 
 async function cleanUp(page: Page) {
   // Other windows can lie over a console's tab.
-  while ((await page.locator(".window:not(.window-console) .tab-close").count()) > 0) {
-    await page.locator(".window:not(.window-console) .tab-close").first().click();
+  while (
+    (await page.locator(".window:not(.window-console) .tab-close").count()) > 0
+  ) {
+    await page
+      .locator(".window:not(.window-console) .tab-close")
+      .first()
+      .click();
   }
   // Windows sit above the panel — tiled ones can cover it — so detach them
   // all first, then kill everything still running and dismiss every row.
-  while ((await page.locator(".window-console [aria-label^='detach '], .window-console [aria-label^='close ']").count()) > 0) {
+  while (
+    (await page
+      .locator(
+        ".window-console [aria-label^='detach '], .window-console [aria-label^='close ']",
+      )
+      .count()) > 0
+  ) {
     await page
-      .locator(".window-console [aria-label^='detach '], .window-console [aria-label^='close ']")
+      .locator(
+        ".window-console [aria-label^='detach '], .window-console [aria-label^='close ']",
+      )
       .first()
       .click();
   }
@@ -66,7 +83,9 @@ async function cleanUp(page: Page) {
   await expect(page.locator(".sessions .session-row-stop")).toHaveCount(0, {
     timeout: 15_000,
   });
-  while ((await page.locator(".sessions [aria-label^='dismiss ']").count()) > 0) {
+  while (
+    (await page.locator(".sessions [aria-label^='dismiss ']").count()) > 0
+  ) {
     await page.locator(".sessions [aria-label^='dismiss ']").first().click();
   }
 }
@@ -93,12 +112,16 @@ test("a shell console keeps running when its window closes, and comes back", asy
   // Picking it from the list reattaches — with what it printed meanwhile.
   await row.click();
   const again = page.locator(".window-console").last();
-  await expect(again.locator(".xterm-rows")).toContainText(mark, { timeout: 15_000 });
+  await expect(again.locator(".xterm-rows")).toContainText(mark, {
+    timeout: 15_000,
+  });
 
   await cleanUp(page);
 });
 
-test("a reload restores console windows with their scrollback", async ({ page }) => {
+test("a reload restores console windows with their scrollback", async ({
+  page,
+}) => {
   await settle(page);
   const win = await openShell(page);
   const mark = marker();
@@ -110,7 +133,9 @@ test("a reload restores console windows with their scrollback", async ({ page })
   await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
 
   const restored = page.locator(".window-console").last();
-  await expect(restored.locator(".xterm-rows")).toContainText(mark, { timeout: 15_000 });
+  await expect(restored.locator(".xterm-rows")).toContainText(mark, {
+    timeout: 15_000,
+  });
 
   // Still the same live shell, not a replay of a dead one.
   const after = marker();
@@ -175,7 +200,9 @@ test("kill all consoles from settings, after a confirm", async ({ page }) => {
   await cleanUp(page);
 });
 
-test("an agent console carries a callsign the prompt can address", async ({ page }) => {
+test("an agent console carries a callsign the prompt can address", async ({
+  page,
+}) => {
   await settle(page);
   // An agent console needs a signed-in provider; without one there is no
   // prompt and nothing to name, and that is a correct build too.
@@ -199,7 +226,9 @@ test("an agent console carries a callsign the prompt can address", async ({ page
   await expect(page.locator(".window-console")).toHaveCount(0);
   await page.locator(".prompt-bar").click();
   await page.keyboard.type(`@${callsign}`);
-  await expect(page.getByRole("option", { name: new RegExp(`^@${callsign}`) })).toBeVisible();
+  await expect(
+    page.getByRole("option", { name: new RegExp(`^@${callsign}`) }),
+  ).toBeVisible();
   await page.keyboard.press("Enter");
   await expect(page.locator(".window-console")).toHaveCount(1);
 
@@ -207,7 +236,12 @@ test("an agent console carries a callsign the prompt can address", async ({ page
   await page.locator(".prompt-bar").click();
   await page.keyboard.type("@nobody hello");
   await page.keyboard.press("Enter");
-  await expect(page.locator(".w-steps").getByText(/no agent called nobody/i).first()).toBeVisible();
+  await expect(
+    page
+      .locator(".w-steps")
+      .getByText(/no agent called nobody/i)
+      .first(),
+  ).toBeVisible();
 
   await cleanUp(page);
 });

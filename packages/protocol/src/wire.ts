@@ -300,7 +300,8 @@ export interface ProjectCreatedMessage {
  * sides are named. Absent for every other status. */
 export interface GitFileChange {
   path: string;
-  status: "modified" | "added" | "deleted" | "renamed" | "untracked" | "unmerged";
+  status:
+    "modified" | "added" | "deleted" | "renamed" | "untracked" | "unmerged";
   previousPath?: string;
 }
 
@@ -946,10 +947,16 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   if (type === "loop.config.read") return true;
   if (type === "loop.provider.set") {
     const msg = value as { id?: unknown };
-    return typeof msg.id === "string" && msg.id.length > 0 && msg.id.length <= 64;
+    return (
+      typeof msg.id === "string" && msg.id.length > 0 && msg.id.length <= 64
+    );
   }
   if (type === "loop.model.set") {
-    const msg = value as { providerId?: unknown; slot?: unknown; model?: unknown };
+    const msg = value as {
+      providerId?: unknown;
+      slot?: unknown;
+      model?: unknown;
+    };
     return (
       typeof msg.providerId === "string" &&
       msg.providerId.length > 0 &&
@@ -964,7 +971,11 @@ export function isClientMessage(value: unknown): value is ClientMessage {
   }
   if (type === "loop.models.read") {
     const msg = value as { providerId?: unknown };
-    return typeof msg.providerId === "string" && msg.providerId.length > 0 && msg.providerId.length <= 64;
+    return (
+      typeof msg.providerId === "string" &&
+      msg.providerId.length > 0 &&
+      msg.providerId.length <= 64
+    );
   }
   if (type === "project.create") {
     const msg = value as {
@@ -1119,7 +1130,9 @@ function isGitIdentityEmail(value: unknown): value is string {
 
 function isGitPath(value: unknown): value is string {
   return (
-    typeof value === "string" && value.length > 0 && value.length <= GIT_MAX_PATH_CHARS
+    typeof value === "string" &&
+    value.length > 0 &&
+    value.length <= GIT_MAX_PATH_CHARS
   );
 }
 
@@ -1142,7 +1155,9 @@ function isRepoRelativePath(value: unknown): value is string {
   if (value.length === 0 || value.length > GIT_MAX_PATH_CHARS) return false;
   if (value.startsWith("/") || value.startsWith("-")) return false;
   if (value.includes("\0") || value.includes("\\")) return false;
-  return value.split("/").every((segment) => segment !== ".." && segment !== "");
+  return value
+    .split("/")
+    .every((segment) => segment !== ".." && segment !== "");
 }
 
 /** Loose shape for a name in a frame — the server owns callsign rules. */

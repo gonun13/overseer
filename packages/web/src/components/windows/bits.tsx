@@ -128,7 +128,9 @@ export function WRow({
       <span className="w-row-main">
         <span className="w-row-primary">{primary}</span>
         {secondary && (
-          <span className={`w-row-secondary${secondaryLines === 2 ? " lines-2" : ""}`}>
+          <span
+            className={`w-row-secondary${secondaryLines === 2 ? " lines-2" : ""}`}
+          >
             {secondary}
           </span>
         )}

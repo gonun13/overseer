@@ -32,3 +32,6 @@ CLAUDE.md
 
 # Network/execution surface scan — names internal hosts and weak spots, stays local.
 NTA.md
+
+# Stack review notes — local working notes, not part of the repo.
+STACK-ADVICE.md

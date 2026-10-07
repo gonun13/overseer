@@ -128,7 +128,11 @@ describe("usage-check", () => {
       getStatus: async () => ({ authenticated: true }),
     } as unknown as AgentAdapter;
     const service = createUsageCheck(
-      deps(stub, () => "/workspace/demo", () => "claude"),
+      deps(
+        stub,
+        () => "/workspace/demo",
+        () => "claude",
+      ),
     );
 
     const result = await service.check();
@@ -142,7 +146,11 @@ describe("usage-check", () => {
     const { adapter } = countingAdapter();
 
     const noProvider = createUsageCheck(
-      deps(adapter, () => "/workspace/demo", () => undefined),
+      deps(
+        adapter,
+        () => "/workspace/demo",
+        () => undefined,
+      ),
     );
     assert.equal((await noProvider.check()).ok, false);
 

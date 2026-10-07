@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from "react";
-import type { ClientMessage, GitDirEntry, ServerMessage } from "@overseer/protocol";
+import type {
+  ClientMessage,
+  GitDirEntry,
+  ServerMessage,
+} from "@overseer/protocol";
 import { GIT_MAX_DIR_ENTRIES } from "@overseer/protocol";
 import { parseFolderViewKey } from "../../fileview";
 import { FILE_TONE } from "../../status";
@@ -114,7 +118,9 @@ export function FolderWindow({
           right={entry.status ?? "mixed"}
           {...(entry.status ? { tone: FILE_TONE[entry.status] } : {})}
           onClick={() =>
-            entry.kind === "dir" ? onOpenFolder(entry.name) : onOpenFile(entry.name)
+            entry.kind === "dir"
+              ? onOpenFolder(entry.name)
+              : onOpenFile(entry.name)
           }
         />
       ))}

@@ -23,12 +23,7 @@ import type { DiscoveryOutcome } from "./discovery.js";
  * this so the UI's own maps (pulse, rank, step word) stay beside their
  * renderers. */
 export type Activity =
-  | "idle"
-  | "working"
-  | "done"
-  | "waiting"
-  | "attention"
-  | "approval";
+  "idle" | "working" | "done" | "waiting" | "attention" | "approval";
 
 /** Which service is reporting. A closed union rather than a free string: the
  * whole point of routing through one API is that a row can be attributed, and

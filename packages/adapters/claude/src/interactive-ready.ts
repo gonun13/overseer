@@ -62,9 +62,7 @@ export async function ensureInteractiveReady(cwd?: string): Promise<void> {
     const projects = isPlainObject(current.projects)
       ? { ...current.projects }
       : {};
-    const existing = isPlainObject(projects[cwd])
-      ? { ...projects[cwd] }
-      : {};
+    const existing = isPlainObject(projects[cwd]) ? { ...projects[cwd] } : {};
     if (existing.hasTrustDialogAccepted !== true) {
       existing.hasTrustDialogAccepted = true;
       projects[cwd] = existing;

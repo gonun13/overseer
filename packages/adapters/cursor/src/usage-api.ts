@@ -27,7 +27,11 @@ import type { AdapterUsageWindow } from "@overseer/protocol";
 function tokenPaths(home: string): string[] {
   const xdg = process.env.XDG_CONFIG_HOME;
   return [
-    path.join(xdg !== undefined && xdg !== "" ? xdg : path.join(home, ".config"), "cursor", "auth.json"),
+    path.join(
+      xdg !== undefined && xdg !== "" ? xdg : path.join(home, ".config"),
+      "cursor",
+      "auth.json",
+    ),
     path.join(home, ".cursor", "auth.json"),
     path.join(home, "Library", "Application Support", "cursor", "auth.json"),
   ];
@@ -36,7 +40,10 @@ function tokenPaths(home: string): string[] {
 /** The CLI's own endpoint override, so a self-hosted endpoint is honoured. */
 function apiBase(): string {
   const endpoint = process.env.CURSOR_API_ENDPOINT;
-  const base = endpoint !== undefined && endpoint.trim() !== "" ? endpoint.trim() : "https://api2.cursor.sh";
+  const base =
+    endpoint !== undefined && endpoint.trim() !== ""
+      ? endpoint.trim()
+      : "https://api2.cursor.sh";
   return base.replace(/\/+$/, "");
 }
 
@@ -97,7 +104,8 @@ async function post(
 
 /** A number however the wire spelled it — these fields arrive as both. */
 function num(value: unknown): number | undefined {
-  if (typeof value === "number") return Number.isFinite(value) ? value : undefined;
+  if (typeof value === "number")
+    return Number.isFinite(value) ? value : undefined;
   if (typeof value === "string" && value.trim() !== "") {
     const parsed = Number(value);
     return Number.isFinite(parsed) ? parsed : undefined;
@@ -137,7 +145,12 @@ function gauge(
 ): AdapterUsageWindow | undefined {
   if (fraction === undefined || !Number.isFinite(fraction)) return undefined;
   if (fraction < 0 || fraction > 1) return undefined;
-  return { id, label, used: fraction, ...(resets !== undefined ? { resets } : {}) };
+  return {
+    id,
+    label,
+    used: fraction,
+    ...(resets !== undefined ? { resets } : {}),
+  };
 }
 
 export interface DashboardUsage {
@@ -162,7 +175,11 @@ export async function readDashboardUsage(
   const token = await readToken(home);
   if (token === undefined) return undefined;
 
-  const usage = await post({ fetchImpl, timeoutMs }, "GetCurrentPeriodUsage", token);
+  const usage = await post(
+    { fetchImpl, timeoutMs },
+    "GetCurrentPeriodUsage",
+    token,
+  );
   if (usage === undefined) return undefined;
 
   const plan = record(usage["planUsage"]);
@@ -199,10 +216,16 @@ export async function readDashboardUsage(
     windows,
     spend: dollars(spent),
     report: writeReport({
-      planName: typeof planInfo?.["planName"] === "string" ? planInfo["planName"] : undefined,
-      planPrice: typeof planInfo?.["price"] === "string" ? planInfo["price"] : undefined,
+      planName:
+        typeof planInfo?.["planName"] === "string"
+          ? planInfo["planName"]
+          : undefined,
+      planPrice:
+        typeof planInfo?.["price"] === "string" ? planInfo["price"] : undefined,
       message:
-        typeof usage["displayMessage"] === "string" ? usage["displayMessage"] : undefined,
+        typeof usage["displayMessage"] === "string"
+          ? usage["displayMessage"]
+          : undefined,
       spent,
       limit,
       resets,
@@ -225,7 +248,9 @@ function writeReport(input: {
   resets?: string;
   windows: AdapterUsageWindow[];
 }): string {
-  const plan = [input.planName, input.planPrice].filter((part) => part !== undefined).join(" ");
+  const plan = [input.planName, input.planPrice]
+    .filter((part) => part !== undefined)
+    .join(" ");
   const lines = ["## Usage", ""];
   const header = [
     plan !== "" ? `**Plan:** ${plan}` : undefined,

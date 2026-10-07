@@ -38,7 +38,10 @@ export interface TranscriptMonitorDeps {
   readSnapshot?: typeof readSnapshot;
   getAdapter?: (id: string) => AgentAdapter | undefined;
   /** Seam for tests — returns a closable watcher for `dir`. */
-  watchDir?: (dir: string, onChange: (filename: string | null) => void) => {
+  watchDir?: (
+    dir: string,
+    onChange: (filename: string | null) => void,
+  ) => {
     close: () => void;
   };
   debounceMs?: number;

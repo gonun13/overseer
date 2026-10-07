@@ -420,13 +420,19 @@ export function wizardReducer(
       });
 
     case "socket.error":
-      return { ...state, error: action.message, connected: false, phase: "ready" };
+      return {
+        ...state,
+        error: action.message,
+        connected: false,
+        phase: "ready",
+      };
 
     case "boot.ready":
       return leaveBootIfReady({ ...state, bootMinElapsed: true });
 
     case "intro.done":
-      if (state.phase !== "welcome" || state.welcomeBeat !== "intro") return state;
+      if (state.phase !== "welcome" || state.welcomeBeat !== "intro")
+        return state;
       if (!state.personality.name) return { ...state, welcomeBeat: "name" };
       if (!state.personality.tone) return { ...state, welcomeBeat: "tone" };
       return { ...state, welcomeBeat: "greet" };
@@ -447,7 +453,8 @@ export function wizardReducer(
     }
 
     case "operator.toned":
-      if (state.phase !== "welcome" || state.welcomeBeat !== "tone") return state;
+      if (state.phase !== "welcome" || state.welcomeBeat !== "tone")
+        return state;
       return {
         ...state,
         personality: { ...state.personality, tone: action.tone },
@@ -457,7 +464,8 @@ export function wizardReducer(
     case "welcome.done":
       // Never leave welcome while still mid-intro/ask — the greet is the exit.
       // Name and tone are both owed before discovery may run.
-      if (state.phase !== "welcome" || state.welcomeBeat !== "greet") return state;
+      if (state.phase !== "welcome" || state.welcomeBeat !== "greet")
+        return state;
       if (!state.personality.name || !state.personality.tone) return state;
       return { ...state, phase: "discovery", welcomeBeat: undefined };
 
@@ -490,7 +498,10 @@ export function wizardReducer(
       return {
         ...state,
         providerStatusOverrides,
-        providers: withStatusOverrides(state.providers, providerStatusOverrides),
+        providers: withStatusOverrides(
+          state.providers,
+          providerStatusOverrides,
+        ),
       };
     }
 
@@ -598,7 +609,9 @@ export function wizardReducer(
       return { ...state, reset: "confirm" };
 
     case "reset.declined":
-      return state.reset === "confirm" ? { ...state, reset: "declined" } : state;
+      return state.reset === "confirm"
+        ? { ...state, reset: "declined" }
+        : state;
 
     case "reset.dismissed":
       return state.reset === "declined"
@@ -839,8 +852,7 @@ export function furnitureFor(state: WizardState): Furniture {
     prompt:
       revealed.prompt &&
       state.providers.some(
-        (p) =>
-          p.id === state.attachedProviderId && p.status.authenticated,
+        (p) => p.id === state.attachedProviderId && p.status.authenticated,
       ),
     sessions: revealed.prompt,
     // Signals need an active project context to mean anything.
@@ -909,11 +921,9 @@ export function wizardMessage(state: WizardState): string | undefined {
         case "greet": {
           if (state.personality.greeting) return state.personality.greeting;
           const name = state.personality.name!;
-          return message(
-            tone,
-            state.returning ? "welcomeBack" : "welcome",
-            { name },
-          );
+          return message(tone, state.returning ? "welcomeBack" : "welcome", {
+            name,
+          });
         }
         default:
           return undefined;
