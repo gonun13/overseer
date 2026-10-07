@@ -474,7 +474,6 @@ describe("createPersonalityFileWatcher", () => {
       await watcher.refresh({
         broadcast,
         space,
-        space,
         snapshot,
         lastProjects: snapshot.projects,
         lastUntracked: [],

@@ -19,13 +19,14 @@
     "dev:web": "bin/_in-container.sh && npm run dev --workspace packages/web",
     "build": "npm run build --workspace packages/protocol && npm run build --workspace packages/adapters/claude && npm run build --workspace packages/adapters/cursor && npm run build --workspace packages/adapters/codex && npm run build --workspace packages/web && npm run build --workspace packages/server",
     "typecheck": "npm run typecheck --workspaces --if-present",
-    "lint": "npm run lint --workspaces --if-present",
+    "lint": "oxlint packages",
     "test": "npm run test --workspaces --if-present",
     "test:e2e": "npm run test:e2e --workspace packages/e2e",
     "format": "prettier --write .",
     "format:check": "prettier --check ."
   },
   "devDependencies": {
+    "oxlint": "^1.77.0",
     "prettier": "^3.4.2",
     "typescript": "^5.7.2"
   },

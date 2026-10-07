@@ -159,7 +159,7 @@ for (const theme of ["samaritan", "machine"] as const) {
       authenticated: true,
       usageState: "pending",
     });
-    const frame = await attach(page);
+    await attach(page);
     await page.getByLabel("close providers").click();
     const widget = page.locator(".widget");
     await expect(widget).toContainText("retrieving usage");

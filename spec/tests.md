@@ -10,7 +10,7 @@ run anything ([PROJECT.md](PROJECT.md) requirement 1).
 
 | Gate | Command | What it runs |
 |---|---|---|
-| Typecheck + lint + format | `./bin/check` | `tsc --noEmit` in every workspace; `oxlint` in `packages/web`; `prettier --check .` at the root (Markdown excluded, see `.prettierignore`; fix with `./bin/npm run format`) |
+| Typecheck + lint + format | `./bin/check` | `tsc --noEmit` in every workspace; `oxlint packages` from the root, one `.oxlintrc.json` (React rules scoped to `packages/web`); `prettier --check .` at the root (Markdown excluded, see `.prettierignore`; fix with `./bin/npm run format`) |
 | Unit + integration | `./bin/test` | `node:test` in every workspace that has tests — `tsx --test` for server and adapters, `node --experimental-strip-types --test` for web |
 | Acceptance | `./bin/test-e2e [playwright args]` | Playwright, Chromium, in the dev stack's `e2e` service against `web:5173` |
 | Dev loop | `./bin/loop check` → `loop/bin/check` | `bash -n` on every loop script, `shellcheck` (warning/error diagnostics, local rule suppressions), and `check-providers` |
