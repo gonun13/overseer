@@ -43,7 +43,8 @@ workspace, set `OVERSEER_WORKSPACE_HOST` in `.env` (see [`.env.example`](.env.ex
 
 > [!WARNING]
 > There is no authentication. Overseer is for a single developer on their own machine — do not
-> expose it on a public interface or deploy it as a public instance.
+> expose it on a public interface or deploy it as a public instance. [SECURITY.md](SECURITY.md)
+> states the threat model and how to report a vulnerability privately.
 
 ## Develop
 

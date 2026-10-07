@@ -1,6 +1,6 @@
 {
   "name": "@overseer/server",
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "Node WS + REST server — console registry, adapter registry, static SPA host.",
   "type": "module",
   "main": "./dist/index.js",
@@ -24,7 +24,6 @@
     "@types/express": "^5.0.0",
     "@types/node": "^24.13.3",
     "@types/ws": "^8.5.13",
-    "tsx": "^4.19.2",
-    "typescript": "^5.7.2"
+    "tsx": "^4.19.2"
   }
 }

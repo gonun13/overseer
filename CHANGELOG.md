@@ -5,6 +5,12 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [spec/architecture.md §8.4](spec/architecture.md#84-changelog).
 
+## 0.7.2 — 2026-10-08
+
+### Changed
+
+- Every part of the app is now built and type-checked by the same TypeScript version.
+
 ## 0.7.1 — 2026-10-08
 
 ### Changed

@@ -1,7 +1,7 @@
 {
   "name": "overseer",
   "private": true,
-  "version": "0.7.1",
+  "version": "0.7.2",
   "description": "A single-page web console for driving CLI coding agents.",
   "type": "module",
   "workspaces": [
@@ -28,7 +28,7 @@
   "devDependencies": {
     "oxlint": "^1.77.0",
     "prettier": "^3.4.2",
-    "typescript": "^5.7.2"
+    "typescript": "^6.0.3"
   },
   "allowScripts": {
     "node-pty": true,
