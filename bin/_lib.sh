@@ -79,12 +79,34 @@ DEV_COMPOSE="docker-compose.dev.yml"
 PROD_COMPOSE="docker-compose.yml"
 export DEV_COMPOSE PROD_COMPOSE
 
+# Optional, gitignored, one per stack: the operator's own additions, merged over
+# the stack's file. The case they exist for is a name that means the host —
+# `extra_hosts: ["gitlab.local:host-gateway"]` for a self-hosted forge whose
+# remotes say gitlab.local while the host's /etc/hosts says 127.0.0.1, which in
+# here is the container itself (spec/architecture.md §6.4). One file per stack
+# rather than one shared, because the app service is `overseer` in one and
+# `server` in the other, and naming a service a stack lacks is a compose error.
+# Compose's own docker-compose.override.yml never loads: every call names -f.
+DEV_COMPOSE_LOCAL="docker-compose.dev.local.yml"
+PROD_COMPOSE_LOCAL="docker-compose.local.yml"
+
+# _compose <stack file> <local file> <args…>
+_compose() {
+  _stack=$1 _local=$2
+  shift 2
+  if [ -f "$_local" ]; then
+    docker compose -f "$_stack" -f "$_local" "$@"
+  else
+    docker compose -f "$_stack" "$@"
+  fi
+}
+
 dev_compose() {
-  docker compose -f "$DEV_COMPOSE" "$@"
+  _compose "$DEV_COMPOSE" "$DEV_COMPOSE_LOCAL" "$@"
 }
 
 prod_compose() {
-  docker compose -f "$PROD_COMPOSE" "$@"
+  _compose "$PROD_COMPOSE" "$PROD_COMPOSE_LOCAL" "$@"
 }
 
 require_docker() {

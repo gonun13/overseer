@@ -94,7 +94,9 @@ but a way to get the same result *without* the documented path is welcome.
 - **Local access.** Any process or user on the operator's machine that can reach the loopback port
   has full control of the app, because there is no authentication.
 - **Exposing it yourself.** Publishing the port on another interface, putting it behind a proxy or
-  tunnel, or deploying it as a shared instance is unsupported.
+  tunnel, or deploying it as a shared instance is unsupported. So is anything in a local compose
+  file beyond giving host names the host's address
+  ([`spec/architecture.md` §6.4](spec/architecture.md#64-names-that-mean-the-host)).
 - **The agents' own behaviour.** Bugs in the agent CLIs or their sandboxes belong with their
   vendors, unless Overseer makes them worse.
 

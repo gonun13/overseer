@@ -41,6 +41,20 @@ the clone and mounts it as `/workspace`, the only host surface agents get; clone
 create one from the UI. Keep those projects on git remotes so a bad run is recoverable. To move the
 workspace, set `OVERSEER_WORKSPACE_HOST` in `.env` (see [`.env.example`](.env.example)).
 
+A git host on your own machine under a name like `gitlab.local` will not resolve inside the
+container, where `127.0.0.1` is the container itself. Point the name at the host in a
+`docker-compose.local.yml` (dev: `docker-compose.dev.local.yml`, service `server`), which `bin/`
+picks up when present, then restart:
+
+```yaml
+services:
+  overseer:
+    extra_hosts: ["gitlab.local:host-gateway"]
+```
+
+Use the name only, and don't join the git host's Docker network
+([spec/architecture.md §6.4](spec/architecture.md#64-names-that-mean-the-host)).
+
 > [!WARNING]
 > There is no authentication. Overseer is for a single developer on their own machine — do not
 > expose it on a public interface or deploy it as a public instance. [SECURITY.md](SECURITY.md)

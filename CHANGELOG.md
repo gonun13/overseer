@@ -5,6 +5,16 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [spec/architecture.md §8.4](spec/architecture.md#84-changelog).
 
+## 0.7.3 — 2026-10-08
+
+### Added
+
+- Services running on your own machine can be reached by name from inside the app.
+
+### Fixed
+
+- A successful pull now finishes in the project window instead of staying on "pulling…".
+
 ## 0.7.2 — 2026-10-08
 
 ### Changed

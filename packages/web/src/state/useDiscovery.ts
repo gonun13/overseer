@@ -142,16 +142,11 @@ export function useDiscovery(): DiscoveryController {
         // The project management window's own requests — single-window,
         // project-scoped, and their refusals (nothing to commit, no remote,
         // a merge conflict) are exactly the same kind of benign "stay put"
-        // as the rest of this channel.
-        message.type === "project.git.status" ||
-        // One file's diff or contents, for the window a file row opens.
-        message.type === "project.git.show" ||
-        // One folder's changed children, for the window a folder row opens.
-        message.type === "project.git.list" ||
-        message.type === "project.git.committed" ||
-        message.type === "project.git.pushed" ||
-        message.type === "project.git.merged" ||
-        message.type === "project.git.reverted" ||
+        // as the rest of this channel. Also the file and folder windows'
+        // reads (`show`, `list`). By prefix, like their errors below: when
+        // these were listed one by one, `pulled` was missed, and a pull that
+        // succeeded left its button on "pulling…" for good.
+        message.type.startsWith("project.git.") ||
         (message.type === "error" && message.about?.startsWith("session.")) ||
         (message.type === "error" && message.about === "provider.checkUsage") ||
         (message.type === "error" && message.about?.startsWith("project.git."))

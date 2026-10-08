@@ -405,6 +405,36 @@ project's test command from there.
 2375 is never published; it is reachable on the compose network alone, which is
 the only reason plain tcp is acceptable.
 
+### 6.4 Names that mean the host
+
+A service on the operator's machine — a self-hosted GitLab is the case this
+exists for — is often reached by a name the host's `/etc/hosts` points at
+`127.0.0.1`. Inside the container that address is the container itself, so a
+remote like `ssh://git@gitlab.local:2424/…` fails to connect even though the
+port is published on the host.
+
+The container can already reach the host's published ports through Docker's
+host gateway; only the name is missing. The fix is to give the name that
+address with `extra_hosts: ["<name>:host-gateway"]` on the app service, which
+adds no reachability the container did not have and opens nothing inbound.
+
+That line is the operator's, not the stack's, so it lives in an optional,
+gitignored file that `bin/` merges over the stack when it exists:
+`docker-compose.local.yml` for production (service `overseer`) and
+`docker-compose.dev.local.yml` for dev (service `server`). A bare
+`docker compose` call does not read them.
+
+Two alternatives are refused:
+
+- **Joining the other service's compose network.** A network is two-way, and
+  the app listens unauthenticated on the container's own interface, so every
+  container on that network — a CI runner included — could drive every agent.
+- **`network_mode: host`.** It removes the network isolation outright.
+
+Anything else put in a local file (other ports, other mounts) is the
+operator's own configuration and outside what [SECURITY.md](../SECURITY.md)
+defends.
+
 ## 7. Sizing
 
 Targets, not yet enforced — the server does no idle reaping or budget enforcement today.
