@@ -1,6 +1,6 @@
 {
   "name": "@overseer/adapter-codex",
-  "version": "0.7.3",
+  "version": "0.7.4",
   "description": "Codex terminal sessions, ChatGPT device login and subscription usage for Overseer.",
   "type": "module",
   "main": "./dist/index.js",

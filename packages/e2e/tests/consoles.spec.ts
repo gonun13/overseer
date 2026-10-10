@@ -245,3 +245,51 @@ test("an agent console carries a callsign the prompt can address", async ({
 
   await cleanUp(page);
 });
+
+test("a macOS dead-key accent reaches the console as one character", async ({
+  page,
+}) => {
+  // No settle(): its clean-up kills every console, and this needs none gone.
+  await page.goto("/");
+  await passWizardOpening(page);
+  await expect(page.getByText(SETTLED)).toBeVisible({ timeout: 45_000 });
+  const win = await openShell(page);
+  await typeInto(page, win, "od -c");
+
+  // Firefox's shape for ~ then a on a Portuguese layout: a composition opened
+  // and closed by keys that carry their real keyCodes, not 229. Typed as
+  // "são", it once reached the CLI as "s~ão".
+  const cdp = await page.context().newCDPSession(page);
+  const key = (type: "rawKeyDown" | "keyUp", key: string, keyCode: number) =>
+    cdp.send("Input.dispatchKeyEvent", {
+      type,
+      key,
+      windowsVirtualKeyCode: keyCode,
+    });
+  // xterm settles a composition on a zero timeout; a hand never types faster.
+  const beat = () => page.waitForTimeout(50);
+  await page.keyboard.press("s");
+  await beat();
+  await key("rawKeyDown", "Dead", 220);
+  await cdp.send("Input.imeSetComposition", {
+    text: "~",
+    selectionStart: 1,
+    selectionEnd: 1,
+  });
+  await key("keyUp", "Dead", 220);
+  await beat();
+  await key("rawKeyDown", "ã", 65);
+  await cdp.send("Input.insertText", { text: "ã" });
+  await key("keyUp", "a", 65);
+  await beat();
+  await page.keyboard.press("o");
+  await page.keyboard.press("Enter");
+  await page.keyboard.press("Control+d");
+
+  // od prints the bytes: s, ã as UTF-8, o — and no ~ before them.
+  await expect(win.locator(".xterm-rows")).toContainText(
+    /s\s+303\s+243\s+o\s+\\n/,
+  );
+
+  await typeInto(page, win, "exit");
+});

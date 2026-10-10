@@ -5,6 +5,12 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [spec/architecture.md §8.4](spec/architecture.md#84-changelog).
 
+## 0.7.4 — 2026-10-10
+
+### Fixed
+
+- Accented letters typed with a dead key on a Mac arrive in console terminals as one character.
+
 ## 0.7.3 — 2026-10-08
 
 ### Added

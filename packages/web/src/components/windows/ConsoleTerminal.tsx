@@ -204,6 +204,21 @@ export function ConsoleTerminal({
       });
     }, 320);
 
+    // A macOS dead key (~ ´ ^ on Portuguese, Spanish, French layouts) opens a
+    // one-key composition. Firefox reports the key that completes it with its
+    // real keyCode rather than 229, and xterm reads that as "composition
+    // over": it sends the bare accent, then the composed letter (são → s~ão).
+    // Leave printable keys to the composition, which delivers the letter.
+    term.attachCustomKeyEventHandler(
+      (event) =>
+        !(
+          event.type === "keydown" &&
+          event.isComposing &&
+          event.keyCode !== 229 &&
+          event.key.length === 1
+        ),
+    );
+
     const dataDisposable = term.onData((data) => {
       sendRef.current({ type: "console.input", id: consoleId, data });
     });
