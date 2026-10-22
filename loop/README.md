@@ -3,8 +3,8 @@
 A standalone command-line tool that runs development loops — feature requests,
 fixes, changes — against a project living under `/workspace/<name>/`, the host
 directory beside this repo. It exists outside the main Overseer app on purpose: it uses **only
-available system commands, bash scripts, a provider CLI (Claude Code or Cursor
-Agent), and plain files** — no Node/TS, no database server, nothing routes
+available system commands, bash scripts, a provider CLI (Claude Code, Cursor
+Agent or opencode), and plain files** — no Node/TS, no database server, nothing routes
 through npm. It runs inside Overseer's container, never on the host, and can be
 folded into the main app later without that changing what it already does. Its
 spec-level description is [`spec/behaviour/dev-loop.md`](../spec/behaviour/dev-loop.md).
@@ -569,20 +569,28 @@ provider_check_available
 provider_session <prompt> <workspace_dir>
 ```
 
+A bundle whose CLI cannot be told the run's session id also defines
+`provider_mint_session <workspace_dir>` (create it, print its id) and
+`provider_discard_session <id> <workspace_dir>` (remove it when the run does not
+start); `loop/run` leases that id instead of minting one.
+
 **Invariant:** when a provider is active, the only config the session sees is
 that bundle's own — never `loop/` root, never the repo's own, never another
 provider's tree. How that is enforced is the bundle's business, because it
 depends on what its CLI offers: `claude` is handed its settings file by
-name with discovery switched off entirely, while `cursor` has no config-path
-flag, so its bundle keeps the process's working directory on itself.
+name with discovery switched off entirely; `cursor` has no config-path
+flag, so its bundle keeps the process's working directory on itself; `opencode`
+reads its global config from a writable copy of the bundle's (`XDG_CONFIG_HOME`)
+with project config and Claude Code compatibility switched off.
 
 **The session's workspace is the project**, `/workspace/<name>/` — the directory
 the operator named and the one `implement` edits. Only the weaker of the two
 CLIs ties config to that same directory, and it is the one whose cwd therefore
 stays on the bundle; neither opens the operator onto a config folder.
 
-Real providers today: `claude` (`providers/claude/`, CLI `claude`) and
-`cursor` (`providers/cursor/`, CLI `agent`). Which one the *loop* runs stays its
+Real providers today: `claude` (`providers/claude/`, CLI `claude`),
+`cursor` (`providers/cursor/`, CLI `agent`) and `opencode` (`providers/opencode/`,
+CLI `opencode`). Which one the *loop* runs stays its
 own choice, in `loop/.provider`: Overseer's "currently attached provider" is
 about the app's own sessions, and the two are deliberately not the same setting
 even though the registry and the sign-in behind them now are.
@@ -597,7 +605,7 @@ the contract and carry a non-empty config directory.
 **Providers are not equally capable, and the loop degrades rather than
 branches.** `overseer.md` and `steps/*.md` state a fallback for each gap, so the
 same instructions run everywhere — just less comfortably on a thinner CLI.
-Today `cursor` is the thinner one:
+Today `cursor` and `opencode` are the thinner ones:
 
 - **Subagents.** The overseer delegates `request`, `research`, `plan`,
   `implement` and `verify` so their artifacts never enter its window. Cursor's
@@ -605,7 +613,8 @@ Today `cursor` is the thinner one:
   `.claude/agents/*.md` format) — but which of its models actually delegate is
   not yet confirmed in this repo, so it is treated as unverified rather than
   assumed working. `providers/<id>/manifest.json`'s `loopSubagents` field
-  states that per provider (`"unverified"` for `cursor` today), and the
+  states that per provider (`"unverified"` for `cursor` and `opencode`, whose
+  built-in `general` subagent is likewise unconfirmed for this loop), and the
   overseer checks it (`subagents_available` in the step context) before
   attempting to delegate at all — false, it runs the step itself, correct but
   paying the context, the same fallback as a CLI with no subagent mechanism.

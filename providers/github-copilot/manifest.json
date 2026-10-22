@@ -1,8 +1,0 @@
-{
-  "id": "github-copilot",
-  "cli": "copilot",
-  "configDir": ".config/github-copilot",
-  "install": { "kind": "npm", "spec": "@github/copilot@1.0.80" },
-  "app": "stub",
-  "loop": "none"
-}

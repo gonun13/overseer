@@ -206,11 +206,17 @@ async function runRefresh(providerId: string): Promise<void> {
     if (generation.get(providerId) !== gen) return;
 
     // refreshUsage only probes windows — keep version/detail from the last
-    // known status so a miss does not blank the widget's other facts.
+    // known status so a miss does not blank the widget's other facts. A
+    // detail only carries while the auth answer holds: a signed-out "not
+    // logged in" must not ride along on a signed-in status.
     status = {
       authenticated: status.authenticated,
       version: status.version ?? prior?.version,
-      detail: status.detail ?? prior?.detail,
+      detail:
+        status.detail ??
+        (prior?.authenticated === status.authenticated
+          ? prior.detail
+          : undefined),
       // Carried so a probe that found the CLI gone still reads as unreachable
       // in the widget instead of flattening to a plain "not signed in".
       ...(status.reachable !== undefined

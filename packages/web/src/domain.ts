@@ -50,6 +50,9 @@ export interface ProviderInfo {
   reachable?: boolean;
   /** Operator-facing status clause from the adapter, when it gave one. */
   detail?: string;
+  /** Mirrors `AdapterCapabilities.login`. False grows no sign-in or sign-out
+   * control: the provider authenticates in its own CLI. */
+  login: boolean;
   /** True when this instance was signed in on an earlier run and now is not —
    * an expired or revoked credential, not a login never started. */
   authExpired?: boolean;

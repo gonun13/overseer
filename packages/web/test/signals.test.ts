@@ -159,3 +159,35 @@ describe("deriveSignals relays", () => {
     );
   });
 });
+
+describe("deriveSignals provider auth", () => {
+  it("asks for a sign-in only from a provider that offers one", () => {
+    const signals = deriveSignals({
+      ...baseWorld,
+      provider: { ...baseWorld.provider, authenticated: false },
+    });
+    const auth = signals.find((signal) => signal.id === "no-auth");
+    assert.ok(auth);
+    assert.deepEqual(auth.target, { kind: "login" });
+  });
+
+  it("points a provider that connects in its own CLI at the providers window", () => {
+    const signals = deriveSignals({
+      ...baseWorld,
+      provider: {
+        ...baseWorld.provider,
+        name: "opencode",
+        authenticated: false,
+        login: false,
+        detail: "no models available · connect a provider in opencode",
+      },
+    });
+    const auth = signals.find((signal) => signal.id === "no-auth");
+    assert.ok(auth);
+    assert.deepEqual(auth.target, { kind: "window", window: "providers" });
+    assert.equal(
+      auth.text,
+      "opencode is not ready · no models available · connect a provider in opencode.",
+    );
+  });
+});

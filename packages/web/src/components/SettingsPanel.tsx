@@ -78,8 +78,12 @@ export function SettingsPanel({
   const { secondsLeft, timedOut } = useUsageRetrieveCountdown(
     usageState === "pending",
   );
-  const showPending = usageState === "pending" && !timedOut;
-  const showUnavailable = usageState === "unavailable" || timedOut;
+  // A provider that reads no usage at all (opencode) has nothing to wait on or
+  // to miss.
+  const readsUsage = provider.usageRefresh === true || provider.usageCheck;
+  const showPending = readsUsage && usageState === "pending" && !timedOut;
+  const showUnavailable =
+    readsUsage && (usageState === "unavailable" || timedOut);
 
   return (
     // `inert` rather than `aria-hidden`: the panel is always mounted so it can
@@ -109,14 +113,16 @@ export function SettingsPanel({
             </span>
           }
         />
-        <div className="btn-row">
-          <button
-            className="w-btn"
-            onClick={provider.authenticated ? onSignOut : onStartLogin}
-          >
-            {provider.authenticated ? "sign out" : "start login"}
-          </button>
-        </div>
+        {provider.login && (
+          <div className="btn-row">
+            <button
+              className="w-btn"
+              onClick={provider.authenticated ? onSignOut : onStartLogin}
+            >
+              {provider.authenticated ? "sign out" : "start login"}
+            </button>
+          </div>
+        )}
 
         <WTitle>runtime</WTitle>
         {provider.name ? (

@@ -90,6 +90,9 @@ ENV OVERSEER_IN_CONTAINER=1
 # global npm prefix and would only noise an interactive TUI.
 ENV DISABLE_AUTOUPDATER=1
 ENV DISABLE_UPDATES=1
+# opencode's counterpart, for a raw shell's `opencode` too — app consoles and
+# the loop bundle also set it themselves.
+ENV OPENCODE_DISABLE_AUTOUPDATE=1
 
 # ---- builder: full workspace install + build every package -----------------
 # From `base`, not `agents`: building the packages needs no provider CLI, so a
@@ -103,6 +106,7 @@ COPY packages/web/package.json packages/web/package.json
 COPY packages/adapters/claude/package.json packages/adapters/claude/package.json
 COPY packages/adapters/cursor/package.json packages/adapters/cursor/package.json
 COPY packages/adapters/codex/package.json packages/adapters/codex/package.json
+COPY packages/adapters/opencode/package.json packages/adapters/opencode/package.json
 COPY packages/e2e/package.json packages/e2e/package.json
 RUN npm ci
 
@@ -120,8 +124,7 @@ RUN npm run build
 #   id              cli      app      loop
 #   claude          claude   adapter  bundle
 #   codex           codex    adapter  none
-#   opencode        opencode stub     none
-#   github-copilot  copilot  stub     none
+#   opencode        opencode adapter  bundle
 #   cursor          agent    adapter  bundle
 #
 # Versions are pinned: session history is an undocumented format that drifts
@@ -132,12 +135,10 @@ FROM base AS agents
 # provider-cli: claude
 # provider-cli: codex
 # provider-cli: opencode
-# provider-cli: github-copilot
 RUN npm install -g \
-      @anthropic-ai/claude-code@2.1.287 \
-      @openai/codex@0.160.1 \
-      opencode-ai@1.18.18 \
-      @github/copilot@1.0.80 \
+      @anthropic-ai/claude-code@2.1.308 \
+      @openai/codex@0.163.0 \
+      opencode-ai@1.19.4 \
     && npm cache clean --force
 
 # Codex's system config layer, the counterpart of DISABLE_AUTOUPDATER above:
@@ -148,15 +149,23 @@ RUN mkdir -p /etc/codex \
     && printf 'check_for_update_on_startup = false\n' > /etc/codex/config.toml
 
 # provider-cli: cursor
-# Cursor ships a self-contained bundle with its own node, not an npm package,
-# and its installer targets $HOME. $HOME is a volume mount point at runtime, so
-# install it under /opt and put the CLI on PATH from there.
-ARG CURSOR_VERSION=2026.08.25-3e8eec8
-RUN HOME=/opt/cursor CURSOR_VERSION="${CURSOR_VERSION}" \
-      sh -c 'curl -fsS https://cursor.com/install | bash' \
-    && ln -sf /opt/cursor/.local/bin/agent /usr/local/bin/agent \
-    && ln -sf /opt/cursor/.local/bin/cursor-agent /usr/local/bin/cursor-agent \
-    && agent --version
+# Cursor ships a self-contained bundle with its own node, not an npm package.
+# Its cursor.com/install script hardcodes whatever build is current and ignores
+# any requested version, so it is not used: the pinned build's tarball is
+# fetched directly. $HOME is a volume mount point at runtime, so it lives under
+# /opt with the CLI on PATH from there.
+ARG CURSOR_VERSION=2026.10.22-27dcf5f
+RUN case "$(uname -m)" in \
+      x86_64) arch=x64 ;; \
+      aarch64) arch=arm64 ;; \
+      *) echo "unsupported arch: $(uname -m)" >&2; exit 1 ;; \
+    esac \
+    && mkdir -p /opt/cursor \
+    && curl -fsSL "https://downloads.cursor.com/lab/${CURSOR_VERSION}/linux/${arch}/agent-cli-package.tar.gz" \
+      | tar --strip-components=1 -xzf - -C /opt/cursor \
+    && ln -sf /opt/cursor/cursor-agent /usr/local/bin/agent \
+    && ln -sf /opt/cursor/cursor-agent /usr/local/bin/cursor-agent \
+    && test "$(agent --version)" = "${CURSOR_VERSION}"
 
 # ---- dev: full workspace deps; source arrives as a bind mount --------------
 # This project has no host-side run path (README "Run it"): `npm run dev` on the
@@ -172,6 +181,7 @@ COPY packages/web/package.json packages/web/package.json
 COPY packages/adapters/claude/package.json packages/adapters/claude/package.json
 COPY packages/adapters/cursor/package.json packages/adapters/cursor/package.json
 COPY packages/adapters/codex/package.json packages/adapters/codex/package.json
+COPY packages/adapters/opencode/package.json packages/adapters/opencode/package.json
 COPY packages/e2e/package.json packages/e2e/package.json
 RUN npm ci
 
@@ -212,11 +222,13 @@ COPY packages/server/package.json packages/server/package.json
 COPY packages/adapters/claude/package.json packages/adapters/claude/package.json
 COPY packages/adapters/cursor/package.json packages/adapters/cursor/package.json
 COPY packages/adapters/codex/package.json packages/adapters/codex/package.json
+COPY packages/adapters/opencode/package.json packages/adapters/opencode/package.json
 RUN npm ci --omit=dev --workspace packages/server \
       --workspace packages/protocol \
       --workspace packages/adapters/claude \
       --workspace packages/adapters/cursor \
       --workspace packages/adapters/codex \
+      --workspace packages/adapters/opencode \
     && apt-get purge -y python3 make g++ \
     && apt-get autoremove -y \
     && rm -rf /var/lib/apt/lists/*
@@ -228,6 +240,7 @@ COPY --chmod=755 packages/server/relay-bin packages/server/relay-bin
 COPY --from=builder /app/packages/adapters/claude/dist packages/adapters/claude/dist
 COPY --from=builder /app/packages/adapters/cursor/dist packages/adapters/cursor/dist
 COPY --from=builder /app/packages/adapters/codex/dist packages/adapters/codex/dist
+COPY --from=builder /app/packages/adapters/opencode/dist packages/adapters/opencode/dist
 COPY --from=builder /app/packages/web/dist packages/web/dist
 
 # The loop and the registry are code, so they ship with the image. In dev the

@@ -610,7 +610,20 @@ export async function setProviderAuthenticated(
         // `authExpired` is dropped on both paths: a fresh login is not expired,
         // and a sign-out is a choice rather than an expiry.
         const { authExpired: _dropped, ...rest } = provider;
-        return { ...rest, status: { ...provider.status, authenticated } };
+        // A detail describes the old answer ("not logged in") — once the
+        // answer flips it is wrong, and the sign-in window would show it.
+        const { detail, ...status } = provider.status;
+        return {
+          ...rest,
+          status: {
+            ...status,
+            ...(provider.status.authenticated === authenticated &&
+            detail !== undefined
+              ? { detail }
+              : {}),
+            authenticated,
+          },
+        };
       }),
     };
   });

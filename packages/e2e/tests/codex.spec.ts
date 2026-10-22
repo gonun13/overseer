@@ -11,12 +11,12 @@ async function codexWire(
 ) {
   let route!: WebSocketRoute;
   let status = initial;
-  let attached = "opencode";
+  let attached = "example-stub";
   let device = false;
   let checks = 0;
   const providers = () => [
     {
-      id: "opencode",
+      id: "example-stub",
       login: false,
       usageCheck: false,
       catalogOnly: true as const,

@@ -67,6 +67,7 @@ export function providerAuthLabel(
     authenticated: boolean;
     reachable?: boolean;
     detail?: string;
+    login?: boolean;
   },
   /** True for a provider this build only lists (`DiscoveredProvider.catalogOnly`).
    * It is unauthenticated like any signed-out provider, but there is no sign-in
@@ -76,9 +77,14 @@ export function providerAuthLabel(
 ): string {
   // Ahead of the auth read: a stub's status is a placeholder, not a finding.
   if (catalogOnly) return "not available yet";
+  // A provider that signs in inside its own CLI (opencode) was never signed in
+  // here; its own clause says what it is ready with.
+  if (provider.authenticated && provider.login === false)
+    return provider.detail?.trim() || "ready";
   if (provider.authenticated) return "signed in";
   if (provider.reachable === false) {
     return provider.detail?.trim() || "unreachable";
   }
+  if (provider.login === false) return provider.detail?.trim() || "not ready";
   return "not signed in";
 }

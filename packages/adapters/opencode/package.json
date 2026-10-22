@@ -1,0 +1,21 @@
+{
+  "name": "@overseer/adapter-opencode",
+  "version": "0.8.0",
+  "description": "opencode terminal sessions, readiness and activity hooks for Overseer.",
+  "type": "module",
+  "main": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "scripts": {
+    "build": "tsc -p tsconfig.json",
+    "dev": "tsc -p tsconfig.json --watch",
+    "test": "tsx --test test/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json --noEmit"
+  },
+  "dependencies": {
+    "@overseer/protocol": "*"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3",
+    "tsx": "^4.19.2"
+  }
+}

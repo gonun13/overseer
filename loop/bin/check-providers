@@ -188,7 +188,7 @@ done < <(find "$LOOP_DIR/steps" -type f -name '*.md' 2>/dev/null | sort)
 # image carries. Neither can derive the other — a Dockerfile that parsed JSON
 # at build time would be worse to debug than this lint — so they are kept in
 # step by a marker comment per install, `# provider-cli: <id>`, plus the
-# literal spec or URL from the manifest.
+# literal spec or URL from the manifest (and, for a tarball, its version).
 #
 # The Dockerfile is not in the runtime image, so this is a no-op there rather
 # than a failure; the dev tree bind-mounts it and lints for real.
@@ -218,8 +218,18 @@ else
         grep -Fq "$url" "$dockerfile" \
           || err "provider '$id' declares $url, which the Dockerfile does not fetch"
         ;;
+      tarball)
+        url=$(jq -r '.install.url // empty' "$PROVIDERS_DIR/$id/manifest.json")
+        version=$(jq -r '.install.version // empty' "$PROVIDERS_DIR/$id/manifest.json")
+        [ -n "$url" ] && [ -n "$version" ] \
+          || { err "provider '$id' install.kind=tarball needs an install.url and an install.version"; continue; }
+        grep -Fq "$url" "$dockerfile" \
+          || err "provider '$id' declares $url, which the Dockerfile does not fetch"
+        grep -Fq "$version" "$dockerfile" \
+          || err "provider '$id' declares version $version, which the Dockerfile does not pin"
+        ;;
       *)
-        err "provider '$id' has an unknown install.kind '$install_kind' (want npm or script)"
+        err "provider '$id' has an unknown install.kind '$install_kind' (want npm, script or tarball)"
         ;;
     esac
   done < <(provider_ids)

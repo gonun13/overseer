@@ -11,7 +11,7 @@ export interface RpcClient {
   readonly closed?: Promise<void>;
 }
 
-/** Pinned Codex 0.160.1 newline-delimited stdio protocol. No protocol payload
+/** Pinned Codex 0.163.0 newline-delimited stdio protocol. No protocol payload
  * or stderr is logged: either may contain credentials or device grants. */
 export class AppServer implements RpcClient {
   private child: ChildProcessWithoutNullStreams;

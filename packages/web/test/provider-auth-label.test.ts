@@ -33,3 +33,28 @@ describe("providerAuthLabel", () => {
     assert.equal(providerAuthActivity({ authenticated: false }, true), "idle");
   });
 });
+
+describe("providerAuthLabel for a provider that signs in inside its CLI", () => {
+  it("reads its own clause rather than signed in or not signed in", () => {
+    assert.equal(
+      providerAuthLabel({
+        authenticated: true,
+        login: false,
+        detail: "ready · free models",
+      }),
+      "ready · free models",
+    );
+    assert.equal(
+      providerAuthLabel({ authenticated: true, login: false }),
+      "ready",
+    );
+    assert.equal(
+      providerAuthLabel({
+        authenticated: false,
+        login: false,
+        detail: "no models available",
+      }),
+      "no models available",
+    );
+  });
+});

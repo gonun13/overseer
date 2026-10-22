@@ -59,8 +59,13 @@ export function ProviderWidget({
   // available" line would both be describing a path that does not exist here.
   const canCheck = provider.usageCheck && provider.authenticated;
   const manual = canCheck && !provider.usageRefresh;
-  const showPending = !manual && usageState === "pending" && !timedOut;
-  const showUnavailable = !manual && (usageState === "unavailable" || timedOut);
+  // A provider that reads no usage at all (opencode) has nothing to wait on or
+  // to miss.
+  const readsUsage = provider.usageRefresh === true || provider.usageCheck;
+  const showPending =
+    readsUsage && !manual && usageState === "pending" && !timedOut;
+  const showUnavailable =
+    readsUsage && !manual && (usageState === "unavailable" || timedOut);
 
   const windows = manual ? usageCheck.windows : reported;
   const spend = usageCheck.spend ?? provider.spend;

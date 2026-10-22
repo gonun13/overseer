@@ -53,6 +53,7 @@ export function useShellPresentation(
       authenticated: reported?.status.authenticated ?? false,
       reachable: reported?.status.reachable,
       detail: reported?.status.detail,
+      login: reported?.login === true,
       authExpired: reported?.authExpired === true,
       usage: reported?.status.usage ?? [],
       usageState: reported?.status.usageState,

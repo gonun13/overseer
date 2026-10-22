@@ -118,11 +118,13 @@ export function startTranscriptMonitor(
    */
   const attach = async () => {
     let dir: string | undefined;
+    let adapter: AgentAdapter | undefined;
     try {
       const snapshot = await readSnapshotFn();
       const providerId = snapshot?.attached_provider;
       if (providerId !== undefined) {
-        dir = getAdapterFn(providerId)?.sessionsWatchPath?.();
+        adapter = getAdapterFn(providerId);
+        dir = adapter?.sessionsWatchPath?.();
       }
     } catch {
       // No snapshot yet — try again on the next tick.
@@ -131,10 +133,15 @@ export function startTranscriptMonitor(
     if (dir === undefined || dir === watchedDir) return;
     watcher?.close();
     watchedDir = dir;
+    // Transcripts only, by default `.jsonl`. Claude's directory also carries
+    // `sessions-index.json` and per-project `memory/`, which churn without
+    // changing the session list; an adapter that keeps sessions in another
+    // shape names its own files.
+    const counts =
+      adapter?.isSessionsChange?.bind(adapter) ??
+      ((filename: string) => filename.endsWith(".jsonl"));
     watcher = watchDirFn(dir, (filename) => {
-      // Transcripts only. The directory also carries `sessions-index.json` and
-      // per-project `memory/`, which churn without changing the session list.
-      if (filename !== null && !filename.endsWith(".jsonl")) return;
+      if (filename !== null && !counts(filename)) return;
       schedule();
     });
   };

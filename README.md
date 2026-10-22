@@ -1,6 +1,6 @@
 # Overseer
 
-A single-page web console for driving CLI coding agents — Claude Code, Cursor and Codex — across
+A single-page web console for driving CLI coding agents — Claude Code, Cursor, Codex and opencode — across
 many projects at once, each in the CLI's own terminal UI. Built sandboxed, with the paranoid in
 mind: agents run in Docker, not on your desktop, so they cannot wipe your home directory or reach
 your real accounts. The cost is a browser terminal instead of your own, and a Docker footprint
@@ -18,7 +18,7 @@ instead of a single binary.
 - **Monitoring** — a console waiting on you lights up, and the overseer ranks what needs attention.
 - **Callsigns** — every agent has a name; `@linda <message>` prompts Linda, and agents can message
   each other with `overseer tell`.
-- **Dev loop** — automated feature/fix workflows for Claude and Cursor (not Codex); see
+- **Dev loop** — automated feature/fix workflows for Claude, Cursor and opencode (not Codex); see
   [loop/README.md](loop/README.md).
 - **Git over ssh** — generate a key in settings and push from the app or the agent, to any host.
 

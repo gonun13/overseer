@@ -105,6 +105,16 @@ server's live-session guard. Watch `$CODEX_HOME/sessions` (default `$HOME/.codex
 
 Cursor: read by `packages/adapters/cursor/src` (`transcripts` tests pin the observed shape).
 
+opencode: every project's sessions in one SQLite database,
+`$XDG_DATA_HOME/opencode/opencode.db` (default `$HOME/.local/share/opencode`), read read-only from
+its `session` table: rows whose `directory` is exactly the project, with no `parent_id`
+(subagents) and no `time_archived`. Ids are `ses_…`. The CLI titles a session from its first
+message; until then its `New session - <timestamp>` placeholder is shown as an unnamed row.
+Create through `opencode serve` (`POST /session`) and delete through `opencode session delete`,
+never by writing the database, and only for an id the project owns. Watch the data directory for
+changes to `opencode.db` and its `-wal` only, not the CLI's logs beside them. The per-session cost
+column is the CLI's list-price estimate and is not shown as spend.
+
 ## 4. Contracts
 
 The TypeScript in `packages/protocol/src` **is** the contract between web, server and adapters.

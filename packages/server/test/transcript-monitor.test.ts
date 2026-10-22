@@ -161,6 +161,37 @@ describe("startTranscriptMonitor", () => {
     stop();
   });
 
+  it("asks the adapter which changes count when it keeps another shape", async () => {
+    const watch = fakeWatch();
+    let refreshes = 0;
+    const stop = startTranscriptMonitor(
+      () => {
+        refreshes += 1;
+      },
+      {
+        readSnapshot: async () => snapshot("opencode"),
+        getAdapter: () => ({
+          ...adapterWatching("/data/opencode"),
+          isSessionsChange: (filename: string) =>
+            /^opencode\.db(-wal)?$/.test(filename),
+        }),
+        watchDir: watch.watchDir,
+        debounceMs: 10,
+        pollMs: 10_000,
+      },
+    );
+    await tick(10);
+    watch.emit("log/2026-10-22.log");
+    watch.emit("stray.jsonl");
+    await tick(40);
+    assert.equal(refreshes, 0);
+
+    watch.emit("opencode.db-wal");
+    await tick(40);
+    assert.equal(refreshes, 1);
+    stop();
+  });
+
   it("refreshes on the poll even when the watcher reports nothing", async () => {
     const watch = fakeWatch();
     let refreshes = 0;

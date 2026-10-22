@@ -160,7 +160,7 @@ function ProvidersTab({
             primary={provider.id}
             secondary={
               providerAuthLabel(
-                provider.status,
+                { ...provider.status, login: provider.login },
                 provider.catalogOnly === true,
               ) + (isAttached ? " · attached" : "")
             }
@@ -181,7 +181,7 @@ function ProvidersTab({
         >
           connect
         </button>
-        {attached?.status.authenticated && (
+        {attached?.login === true && attached.status.authenticated && (
           <button
             type="button"
             className="w-btn"

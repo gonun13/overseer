@@ -383,6 +383,10 @@ Provider sign-in uses each adapter's flow. Codex's `awaiting-browser` state show
 link and device code to enter on the site, with cancel and no paste-back form. Both fields
 survive a tab reconnect. Its usage widget shows scheduled quota readings and a manual check
 button; missing readings say usage is unavailable without changing the sign-in light.
+A provider without an in-app sign-in (`login: false`, opencode) grows no sign-in or sign-out
+control anywhere; its auth line reads the adapter's own clause (`ready · free models`) instead of
+"signed in", and a not-ready one is a signal pointing at the providers window, not a login. A
+provider that reads no usage at all shows no usage line, rather than "not available".
 
 ### 6.3 Choice groups
 

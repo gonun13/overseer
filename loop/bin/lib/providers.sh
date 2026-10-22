@@ -20,6 +20,14 @@
 #                    and readers see a lease with a null session_id. Stated as
 #                    an environment variable rather than a third argument so
 #                    adding it did not change the contract's arity.
+#
+# Optional functions, for a bundle whose CLI cannot be told an id:
+#   provider_mint_session <workspace_dir>
+#                    create the session this run opens under and print its
+#                    id; loop/run uses it in place of a minted uuid, and an
+#                    empty answer leaves the lease without one.
+#   provider_discard_session <session_id> <workspace_dir>
+#                    remove that session again when the run does not start.
 
 # PROVIDERS_DIR — stated by the environment in the container (the image owns
 # where code lives), derived from the repo layout otherwise.

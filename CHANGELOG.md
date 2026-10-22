@@ -5,6 +5,21 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [spec/architecture.md §8.4](spec/architecture.md#84-changelog).
 
+## 0.8.0 — 2026-10-22
+
+### Added
+
+- Connect opencode, start, resume or delete its project sessions in its own terminal UI, and run the dev loop on it.
+
+### Changed
+
+- Every provider's CLI is updated to its latest release.
+- GitHub Copilot is no longer offered as a provider.
+
+### Fixed
+
+- A provider's sign-in window no longer says it is logged out after a successful login.
+
 ## 0.7.4 — 2026-10-10
 
 ### Fixed

@@ -2,7 +2,8 @@
   "id": "opencode",
   "cli": "opencode",
   "configDir": ".config/opencode",
-  "install": { "kind": "npm", "spec": "opencode-ai@1.18.18" },
-  "app": "stub",
-  "loop": "none"
+  "install": { "kind": "npm", "spec": "opencode-ai@1.19.4" },
+  "app": "adapter",
+  "loop": "bundle",
+  "loopSubagents": "unverified"
 }

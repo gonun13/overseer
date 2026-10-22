@@ -260,7 +260,8 @@ export interface ConsoleHandle {
  * title and delete them without knowing the on-disk format.
  *
  * `mintSessionId` receives the project and opening prompt. Claude and Cursor
- * mint locally; Codex prepares and persists a native thread before returning.
+ * mint locally; Codex and opencode prepare and persist a native session
+ * before returning.
  */
 export interface AdapterSessionStore {
   /** Every session this adapter's own transcripts show for one project. */
@@ -318,6 +319,13 @@ export interface AgentAdapter {
    * adapter's business (the same reasoning `CLAUDE_CONFIG_DIR` carries).
    */
   sessionsWatchPath?(): string | undefined;
+  /**
+   * Whether a change to `filename` (relative to `sessionsWatchPath`) can change
+   * the session list. Absent: a `.jsonl` transcript does. An adapter whose CLI
+   * keeps sessions in another shape — opencode's one SQLite database — says
+   * which files count, so the CLI's logs beside them do not churn the list.
+   */
+  isSessionsChange?(filename: string): boolean;
   /**
    * Where this adapter's own session transcripts live, for the server to
    * list, title and delete without knowing the on-disk format. Absent for a

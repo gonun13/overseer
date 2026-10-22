@@ -2,7 +2,7 @@
 
 Structure, components, boundaries and interfaces. Purpose and requirements are in [PROJECT.md](PROJECT.md); stores and formats in [data.md](data.md); operator-visible flows in [behaviour/](behaviour/).
 
-**What it is:** a single-page, fullscreen web console for driving CLI coding agents. `claude`, `cursor` and `codex` are wired for sessions; Claude and Cursor also support the dev loop. The catalog lists stub providers (`opencode`, `github-copilot`) whose CLIs ship in the image but whose adapters are not implemented yet. The architecture assumes more full adapters will follow.
+**What it is:** a single-page, fullscreen web console for driving CLI coding agents. `claude`, `cursor`, `codex` and `opencode` are wired for sessions; Claude, Cursor and opencode also support the dev loop. The registry can still list a catalog stub (`app: "stub"`) whose CLI ships in the image before its adapter does; none does today.
 
 **Shape:** one Docker container holds the agent CLIs, their state, and the web server. In production the only bind mount is the workspace — a directory *outside* this repo, containing git projects. Development also binds the writable source repo at `/app`, accessible to agent shells. Auth and application state live in container-owned volumes.
 
@@ -15,7 +15,7 @@ Structure, components, boundaries and interfaces. Purpose and requirements are i
 ```
 bin/                  docker shortcuts — the only supported way to run anything
 providers/            one directory per agent CLI, read by the app and the loop alike
-                      (claude, cursor, codex, opencode, github-copilot)
+                      (claude, cursor, codex, opencode)
 packages/
   protocol/           shared TS types — the frontend/backend/adapter contract
   web/                React + Vite + Tailwind SPA
@@ -25,6 +25,7 @@ packages/
     claude/      Claude Code adapter — login, usage, console command line + hooks, transcripts
     codex/       Codex adapter — ChatGPT device login, subscription quotas, native threads and TUI
     cursor/           Cursor adapter — login, usage, console command line, transcripts
+    opencode/    opencode adapter — readiness, prepared sessions, TUI plugin for hooks
   e2e/                Playwright acceptance tests (container-only)
 loop/                 the dev-loop CLI — bash, a provider CLI, and plain files
                       the workspace is not in here — it is a host directory beside the repo
@@ -82,7 +83,7 @@ open a session on it — `provider.sh` plus that provider's own config tree.
   "id": "claude",
   "cli": "claude",
   "configDir": ".claude",
-  "install": { "kind": "npm", "spec": "@anthropic-ai/claude-code@2.1.287" },
+  "install": { "kind": "npm", "spec": "@anthropic-ai/claude-code@2.1.308" },
   "app": "adapter",
   "loop": "bundle"
 }
@@ -96,8 +97,10 @@ directory carries `provider.sh`, `none` otherwise. `claude` and `cursor`
 are both `adapter`/`bundle` today: the loop runs on either and the app has real
 wiring for either. `loopSubagents: "unverified"` on `cursor` means the loop's
 delegation to subagents has not been confirmed. The app exposes login and usage checking,
-not subagent file management. Codex is `adapter`/`none`: ordinary sessions are implemented,
-while dev-loop support and API-key entry are excluded. Its CLI is pinned to `0.160.1`.
+not subagent file management. `opencode` is `adapter`/`bundle` with `loopSubagents:
+"unverified"` too; its bundle and adapter are described in §2 and
+[behaviour/dev-loop.md](behaviour/dev-loop.md). Codex is `adapter`/`none`: ordinary sessions are implemented,
+while dev-loop support and API-key entry are excluded. Its CLI is pinned to `0.163.0`.
 Consoles launch it with `check_for_update_on_startup=false`, as Claude's run with its
 autoupdater disabled: the npm prefix is root-owned, so an in-TUI update could only fail, and a
 version bump goes through the manifest pin.
@@ -139,8 +142,12 @@ Every CLI process runs in a PTY owned by the server's console registry
   it to the CLI (claude `--session-id`, cursor `--resume`, which adopts an unseen id), so the
   console and its transcript are linked from the first byte. Codex creates a native thread in
   that directory and names it from the opening prompt, or `new session`, to persist it before
-  closing App Server and launching `codex resume <id>`. Failed preparation refuses the open;
-  failed spawning deletes the newly prepared thread. Resumes preserve the thread id and callsign.
+  closing App Server and launching `codex resume <id>`. opencode cannot adopt an id either: a
+  short-lived `opencode serve` creates an empty session in the project, and the TUI opens it with
+  `--session <id>`; its own `--prompt` is ignored beside `--session`, so the opening prompt is
+  sent into the empty session by Overseer's plugin (below). Failed preparation refuses the open;
+  failed spawning deletes the newly prepared thread or session. Resumes preserve the id and
+  callsign.
 - **Exited consoles stay listed** until dismissed, so a failure can still be read.
 - **Consoles die with the server.** The registry is in memory and every PTY is its child, so a
   server crash ends every console. The production stack restarts the service
@@ -149,7 +156,11 @@ Every CLI process runs in a PTY owned by the server's console registry
 - **Activity.** Claude Code consoles are started with a `--settings` layer of hooks
   (`SessionStart`, `UserPromptSubmit`, `Pre/PostToolUse`, `Notification` on permission prompts,
   `Stop`) that `curl` the server's loopback-only `POST /hooks/<console>/<token>?activity=…`. The
-  per-console token means only the CLI the server spawned can report for it. A CLI without hooks
+  per-console token means only the CLI the server spawned can report for it. opencode consoles
+  load a plugin from the adapter's build (named in `OPENCODE_CONFIG_CONTENT`, which merges with
+  the operator's own config) that posts the same endpoint from the CLI's events: a session going
+  busy is `working`, idle is `idle`, and a permission or question prompt — a subagent's included —
+  is `waiting`. The same plugin appends the relay brief to the system prompt. A CLI without hooks
   is read from its output: output means `working`, two quiet seconds mean `idle`.
 - **Relay.** Activity is also what gates a relay: `relay.ts` types a queued prompt into an agent
   console only on an idle transition with no operator draft ([behaviour/relay.md](behaviour/relay.md)).
@@ -195,6 +206,15 @@ Consoles launch Codex with `--sandbox danger-full-access`: the container is the 
 bubblewrap sandbox needs, so a nested sandbox could only warn and fail. Codex's approval policy is
 left to its own config and `/permissions`.
 
+**opencode** has no single account: it fronts many model providers and answers on its own free
+models with no credential at all. Connecting a provider (`/connect`) is done in its TUI, so the
+adapter offers no login or sign-out (`login: false`), and status reads ready rather than signed
+in: `opencode --version` answers and `opencode models` lists at least one model, reported as the
+providers that have models (`ready · free models` when only the free ones do). With no model, it
+is not ready and points the operator at a console rather than a sign-in. Credentials stay in the
+CLI's own data directory on `agent-home`. The image, consoles and the loop bundle all set
+`OPENCODE_DISABLE_AUTOUPDATE`, for the same root-owned-prefix reason as Claude and Codex.
+
 **Compliance.** Subscription OAuth is restricted to Claude Code and claude.ai, while the Agent SDK requires API billing. Overseer therefore spawns the Claude Code binary. Re-check [Anthropic's legal and compliance docs](https://code.claude.com/docs/en/legal-and-compliance) before release.
 
 ### 2.1 Account usage
@@ -218,6 +238,9 @@ The widget shows both scheduled readings and a check button. Only supplied quota
 gauges, labelled using actual durations and reset timestamps. Missing data is unavailable; a
 quota error preserves auth status. The same five-minute refresh cadence applies. API-key entry
 and dollar-cost estimates are excluded.
+
+opencode reads no usage: its per-session cost is the CLI's estimate from list prices, not a plan's
+quota, so there is no refresh, no check button and no usage line.
 
 ### 2.2 Git access
 
@@ -284,9 +307,9 @@ around it. Ordered by priority.
 | Many consoles, any project, freely placed | Consoles  | console registry; window stack; `/tile`                                   |
 | Consoles survive the tab                  | Consoles  | attach/detach + scrollback ring; layout in localStorage                   |
 | New session with an opening prompt        | Prompt    | `console.open {prompt}` → CLI positional argument                         |
-| Resume a session                          | Sessions  | `claude --resume`, `agent --resume`; attach if already running            |
+| Resume a session                          | Sessions  | `claude --resume`, `agent --resume`, `codex resume`, `opencode --session`; attach if already running |
 | Session list, every project and provider  | Sessions  | `session-index.ts` over adapter transcripts, rebuilt on transcript change |
-| Waiting / working / idle lights           | Consoles  | Claude Code hooks → `/hooks`; output heuristics otherwise                 |
+| Waiting / working / idle lights           | Consoles  | Claude Code hooks, opencode plugin → `/hooks`; output heuristics otherwise |
 | Callsigns and `@callsign` relay           | Prompt    | `callsigns.ts`, `relay.ts`; typed into an idle console via `relayInput`   |
 | Agents address each other                 | Consoles  | `overseer who`/`tell` → `/relay`; framed, rate-limited, approval past cap  |
 | Plain shell in a project                  | Consoles  | `kind: "shell"`                                                           |
@@ -300,7 +323,6 @@ around it. Ordered by priority.
 
 | Feature                              | Zone     | Mechanism                                                               |
 | ------------------------------------ | -------- | ----------------------------------------------------------------------- |
-| Consoles for the catalog providers   | Consoles | a `consoleCommand` for `opencode`, `github-copilot`            |
 | Git worktree per console             | Consoles | `-w/--worktree` — how parallel agents stop fighting over one tree       |
 | Desktop notifications                | global   | on a console going `waiting`                                            |
 | Cross-console search                 | Sessions | index transcripts                                                        |
@@ -483,6 +505,7 @@ The repo is private and unpublished. Every workspace package stays in **lockstep
 | `@overseer/adapter-claude` | adapter                       |
 | `@overseer/adapter-codex`       | adapter                       |
 | `@overseer/adapter-cursor`      | adapter                       |
+| `@overseer/adapter-opencode`    | adapter                       |
 | `@overseer/e2e`                 | Playwright suite              |
 
 On every release bump **all** of those `version` fields and sync `package-lock.json`. Use the
@@ -525,9 +548,9 @@ capabilities inventory and its editor, turn context attachment, and §5 provider
 [behaviour/overseer.md](behaviour/overseer.md) ("planned, not built"). Every one of those had a
 window at that tier; each carried a `WUnavailable` note naming what was missing rather than
 rendering an empty frame that reads as a working-but-idle surface
-(`packages/web/src/components/windows/bits.tsx`). Adapters for the remaining catalog stubs
-(`opencode`, `github-copilot`) are also out of tier. Codex dev-loop support and API-key entry
-remain out of tier. The raw OPEN CONSOLE PTY escape hatch
+(`packages/web/src/components/windows/bits.tsx`). Adapters for the catalog stubs of that time
+were also out of tier; `opencode` has one since `0.8.0` and `github-copilot` was dropped from the
+registry then. Codex dev-loop support and API-key entry remain out of tier. The raw OPEN CONSOLE PTY escape hatch
 (ui-ux.md §5.3) is separate from the MVP "Console" zone in §3 and shipped in `0.1.x`.
 
 **Explicit non-goals for `0.4.x`:** skills in dev-loop sessions. `providers/claude/provider.sh`

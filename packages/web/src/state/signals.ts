@@ -67,6 +67,8 @@ export interface WorldState {
     detail?: string;
     /** True when this instance was signed in and now is not. */
     authExpired?: boolean;
+    /** False when the provider signs in inside its own CLI, not here. */
+    login?: boolean;
   };
   /** Customizations in `overseer-personality` the overseer refused to apply.
    * Optional because a world that has not run discovery has not been told. */
@@ -186,6 +188,17 @@ export function deriveSignals(world: WorldState): Signal[] {
       text: provider.detail
         ? `${provider.name} is unreachable · ${provider.detail}.`
         : `${provider.name} is unreachable · the provider runtime did not answer.`,
+      target: { kind: "window", window: "providers" },
+    });
+  } else if (!provider.authenticated && provider.login === false) {
+    // Nothing to sign in to here: the provider connects in its own CLI.
+    signals.push({
+      id: "no-auth",
+      activity: "waiting",
+      kicker: "provider",
+      text: provider.detail
+        ? `${provider.name} is not ready · ${provider.detail}.`
+        : `${provider.name} is not ready · sessions cannot start.`,
       target: { kind: "window", window: "providers" },
     });
   } else if (!provider.authenticated) {

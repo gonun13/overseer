@@ -69,6 +69,7 @@ services:
       - node-modules-claude:/app/packages/adapters/claude/node_modules
       - node-modules-cursor:/app/packages/adapters/cursor/node_modules
       - node-modules-codex:/app/packages/adapters/codex/node_modules
+      - node-modules-opencode:/app/packages/adapters/opencode/node_modules
     environment:
       # Bind mounts on Docker Desktop do not deliver inotify reliably; polling
       # is the cost of hot reload here. Set to 0 in the shell if you'd rather
@@ -78,7 +79,7 @@ services:
       test:
         [
           "CMD-SHELL",
-          "test -f /app/packages/protocol/dist/index.js && test -f /app/packages/adapters/claude/dist/index.js && test -f /app/packages/adapters/cursor/dist/index.js && test -f /app/packages/adapters/codex/dist/index.js",
+          "test -f /app/packages/protocol/dist/index.js && test -f /app/packages/adapters/claude/dist/index.js && test -f /app/packages/adapters/cursor/dist/index.js && test -f /app/packages/adapters/codex/dist/index.js && test -f /app/packages/adapters/opencode/dist/index.js",
         ]
       interval: 2s
       timeout: 5s
@@ -147,6 +148,7 @@ services:
       - node-modules-claude:/app/packages/adapters/claude/node_modules
       - node-modules-cursor:/app/packages/adapters/cursor/node_modules
       - node-modules-codex:/app/packages/adapters/codex/node_modules
+      - node-modules-opencode:/app/packages/adapters/opencode/node_modules
       # Anonymous volume shadows any stale build a host `npm run build` left in
       # web/dist. The server refuses to serve it in dev anyway (NODE_ENV
       # guard), but this means the directory doesn't even exist to trip over.
@@ -174,6 +176,7 @@ services:
       - node-modules-claude:/app/packages/adapters/claude/node_modules
       - node-modules-cursor:/app/packages/adapters/cursor/node_modules
       - node-modules-codex:/app/packages/adapters/codex/node_modules
+      - node-modules-opencode:/app/packages/adapters/opencode/node_modules
     depends_on:
       deps:
         condition: service_healthy
@@ -202,6 +205,7 @@ services:
       - node-modules-claude:/app/packages/adapters/claude/node_modules
       - node-modules-cursor:/app/packages/adapters/cursor/node_modules
       - node-modules-codex:/app/packages/adapters/codex/node_modules
+      - node-modules-opencode:/app/packages/adapters/opencode/node_modules
       - node-modules-e2e:/app/packages/e2e/node_modules
       # Reports and traces land on the host so a failure can be inspected
       # after the container exits.
@@ -234,4 +238,5 @@ volumes:
   node-modules-claude:
   node-modules-cursor:
   node-modules-codex:
+  node-modules-opencode:
   node-modules-e2e:

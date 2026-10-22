@@ -28,7 +28,8 @@ adapter packages they import are current.
 | `adapters/claude` | `packages/adapters/claude/test/` | console command line, hooks and relay input, transcript (JSONL) parsing, session titles, login, usage — with recorded fixtures in `test/fixtures/` |
 | `adapters/codex` | `packages/adapters/codex/test/` | device login, cancellation, deadlines, quotas, native threads and isolated pinned-CLI persistence |
 | `adapters/cursor` | `packages/adapters/cursor/test/` | adapter, transcripts, usage |
-| `e2e` | `packages/e2e/tests/*.spec.ts` | boot and wizard (`smoke`), overseer space, consoles, git access, loop providers, changelog window |
+| `adapters/opencode` | `packages/adapters/opencode/test/` | readiness, console command line and plugin env, the plugin's hooks, opening prompt and brief, session database reads, and isolated pinned-CLI session create/list/delete |
+| `e2e` | `packages/e2e/tests/*.spec.ts` | boot and wizard (`smoke`), overseer space, consoles, git access, loop providers, Codex and opencode provider surfaces, changelog window |
 
 ## 3. Conventions
 

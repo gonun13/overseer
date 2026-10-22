@@ -79,18 +79,28 @@ loop provider and is absent from the loop picker.
 shared registry at `providers/<id>/` ([architecture.md §1.1.2](../architecture.md#112-the-provider-registry)) — `manifest.json` plus
 `provider.sh` plus that provider's config tree. The contract is two functions,
 `provider_check_available` and `provider_session <prompt> <workspace_dir>`,
-because a provider's whole job is to open one session. **Invariant:** the only
+because a provider's whole job is to open one session. A bundle whose CLI cannot
+adopt the run's session id adds `provider_mint_session <workspace_dir>`, which
+creates the session and prints its id for `loop/run` to lease in place of a
+minted uuid (empty on failure, leaving the lease without one), and
+`provider_discard_session <id> <workspace_dir>`, which removes it again when the
+run does not start. **Invariant:** the only
 config a session sees is its own bundle's — never `loop/` root, never another
 provider. Each bundle enforces that with whatever its CLI gives it, and the two
 differ: `claude` takes `--settings <file>` with `--setting-sources ""`, so
-no discovery runs at all, while `cursor` has no config-path flag and pins the
-process's working directory to the bundle instead. Stating the mechanism per
+no discovery runs at all; `cursor` has no config-path flag and pins the
+process's working directory to the bundle instead; `opencode` points
+`XDG_CONFIG_HOME` at a writable copy of its bundle's config on `agent-home` (the
+CLI installs its plugin runtime into whatever config directory it reads, so the
+repo copy is never read in place) and sets `OPENCODE_DISABLE_PROJECT_CONFIG` and
+`OPENCODE_DISABLE_CLAUDE_CODE`, so neither the project's config nor another
+provider's instructions and skills reach the session. Stating the mechanism per
 bundle rather than as one sentence matters, because the weaker form is only as
 good as the CLI's preference for the nearest config — and the repo root is
 itself a git root carrying `.claude/`. **The session's workspace is always the
 project**, never the bundle: the operator asked for a project, and `implement`
-edits one. Both `claude` (CLI `claude`) and
-`cursor` (CLI `agent`) are real implementations; which one runs is the loop's
+edits one. `claude` (CLI `claude`), `cursor` (CLI `agent`) and `opencode` (CLI
+`opencode`) are real implementations; which one runs is the loop's
 own choice, in `loop/.provider`, and stays separate from the app's
 `attached_provider` ([architecture.md §2](../architecture.md#2-auth--config)). `loop/bin/check-providers` lints that a provider's
 CLI name and config directory stay inside its own bundle, deriving what to look
