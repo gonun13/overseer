@@ -5,6 +5,12 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [spec/architecture.md §8.4](spec/architecture.md#84-changelog).
 
+## 0.8.1 — 2026-11-08
+
+### Fixed
+
+- Text in console terminals can be selected, copied and pasted through your clipboard, including from CLIs that take over the mouse.
+
 ## 0.8.0 — 2026-10-22
 
 ### Added

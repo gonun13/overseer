@@ -7,6 +7,7 @@ import type {
   ServerMessage,
 } from "@overseer/protocol";
 import "@xterm/xterm/css/xterm.css";
+import { clipboardChord, isMacPlatform, osc52Text } from "./terminalClipboard";
 
 /**
  * Mounts an xterm.js terminal on one of the server's consoles.
@@ -83,6 +84,16 @@ function xtermTheme(theme: OverseerTheme): ITheme {
   };
 }
 
+/** The clipboard API needs a secure context (localhost is one) and, in some
+ * browsers, a recent gesture; when it refuses, the copy is simply lost. */
+async function writeClipboard(text: string): Promise<void> {
+  try {
+    await navigator.clipboard?.writeText(text);
+  } catch {
+    // Nothing useful to tell the operator mid-stream.
+  }
+}
+
 export function ConsoleTerminal({
   consoleId,
   send,
@@ -156,6 +167,9 @@ export function ConsoleTerminal({
       scrollback: 5000,
       theme: xtermTheme(themeRef.current),
       allowProposedApi: true,
+      // Codex and opencode capture the mouse, so a plain drag is theirs.
+      // ⌥-drag selects anyway on a Mac; Shift-drag does elsewhere.
+      macOptionClickForcesSelection: true,
     });
     const fitAddon = new FitAddon();
     term.loadAddon(fitAddon);
@@ -209,15 +223,34 @@ export function ConsoleTerminal({
     // real keyCode rather than 229, and xterm reads that as "composition
     // over": it sends the bare accent, then the composed letter (são → s~ão).
     // Leave printable keys to the composition, which delivers the letter.
-    term.attachCustomKeyEventHandler(
-      (event) =>
-        !(
-          event.type === "keydown" &&
-          event.isComposing &&
-          event.keyCode !== 229 &&
-          event.key.length === 1
-        ),
-    );
+    //
+    // Off a Mac, Ctrl+Shift+C copies the selection and Ctrl+Shift+V is left to
+    // the browser, whose paste event xterm turns into input.
+    const mac = isMacPlatform(navigator);
+    term.attachCustomKeyEventHandler((event) => {
+      const chord = clipboardChord(event, mac);
+      if (chord === "copy") {
+        event.preventDefault();
+        const selection = term.getSelection();
+        if (selection) void writeClipboard(selection);
+        return false;
+      }
+      if (chord === "paste") return false;
+      return !(
+        event.type === "keydown" &&
+        event.isComposing &&
+        event.keyCode !== 229 &&
+        event.key.length === 1
+      );
+    });
+
+    // A TUI's own copy (OSC 52) goes to the operator's clipboard. Reads are
+    // swallowed unanswered: a console never sees what the operator copied.
+    const osc52 = term.parser.registerOscHandler(52, (data) => {
+      const text = osc52Text(data);
+      if (text !== null) void writeClipboard(text);
+      return true;
+    });
 
     const dataDisposable = term.onData((data) => {
       sendRef.current({ type: "console.input", id: consoleId, data });
@@ -229,6 +262,7 @@ export function ConsoleTerminal({
     return () => {
       window.clearTimeout(attachTimer);
       observer.disconnect();
+      osc52.dispose();
       dataDisposable.dispose();
       unsubscribe();
       // Detach only: closing a window is not ending the process.

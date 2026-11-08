@@ -239,6 +239,16 @@ console is [behaviour/consoles.md §3](behaviour/consoles.md#3-lifecycle).
 While focus is in a terminal the keyboard is the CLI's: Overseer's own keys stand down, except
 `Ctrl` + `` ` ``, which is how you leave.
 
+**Copy and paste go through the operator's clipboard.** Drag selects; where the CLI has taken the
+mouse (Codex and opencode do), `⌥`-drag on a Mac and `Shift`-drag elsewhere select anyway. On a Mac
+`⌘C` / `⌘V` copy the selection and paste; elsewhere it is `Ctrl` + `Shift` + `C` / `V`, because
+`Ctrl` + `C` and `Ctrl` + `V` are the CLI's. A paste arrives as typed input (bracketed when the CLI
+asks for it). A CLI's own copy — an OSC 52 write, which is how Codex copies a selection, since the
+container has no clipboard — lands on the operator's clipboard too; an OSC 52 *read* is never
+answered, so nothing in a console can see what the operator copied. The clipboard API needs a
+secure context, which `127.0.0.1` is. Pasting an image is out of reach: the CLI reads the
+container's clipboard, which is empty.
+
 The console is a continuous stream on the window surface (`--fill-solid`) — dark in samaritan, light in
 machine — not stamp paper. Frame chrome matches other windows (horizontal edges only).
 

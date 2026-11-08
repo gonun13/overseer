@@ -1,6 +1,6 @@
 {
   "name": "@overseer/adapter-opencode",
-  "version": "0.8.0",
+  "version": "0.8.1",
   "description": "opencode terminal sessions, readiness and activity hooks for Overseer.",
   "type": "module",
   "main": "./dist/index.js",
