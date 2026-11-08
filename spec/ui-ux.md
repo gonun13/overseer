@@ -55,6 +55,26 @@ into the layer above them, and the stage is handed to windows.
 Furniture appears progressively as its state becomes knowable; the prompt appears only after an
 authenticated provider is attached. Below 1024px is out of scope.
 
+### 1.1 Fullscreen
+
+Settings → appearance → **layout** chooses `rails` (the default, above) or `fullscreen`. In fullscreen
+the rails stand down and the stage takes the whole viewport. Every window tiles it exactly as §5
+says; switching either way re-tiles at once. Only the **clock** and the **settings** gear are left,
+floating over the stage's top-right corner: a chip exactly as tall as a window tab and on the tab's
+own `--void`, so it reads as part of the tab row. It is the time alone, the date a hover away. It sits
+above the windows and below the settings panel, and a tab that runs under it leaves it room at its
+right, so a window's close is never covered (`layout.ts` `clockOverlap`).
+
+Nothing else is on the field: no project or session panel, no start buttons, no provider widget, no
+overseer layer, no prompt, no footer. They are hidden, not torn down — a prompt draft and the status
+log are still there when the rails come back. With the prompt gone, `Ctrl`/`Cmd` + `K` and `P` stand
+down too (§7.1); `Ctrl` + `` ` ``, `Ctrl`/`Cmd` + `,` and `Esc` still work. The settings panel slides
+in over the windows as it does over the rail.
+
+Fullscreen applies only to a field that is set up. Boot, the first-run asks, discovery and the goodbye
+speak from the stage centre with the rails around them whatever the setting says, and fullscreen takes
+over once the overseer docks. The choice is this browser's own ([data.md §5](data.md#5-browser-storage)).
+
 ---
 
 ## 2. Colour — four levels, and the inversion
@@ -176,7 +196,9 @@ command, or a system escalation.
   the 420×240 minimum can overrun a smaller available area. `/tile` puts everything back on the grid. A tiled
   window's height is its whole box, tab included, and the body flexes to fill it, scrolling vertically.
   Columns never go narrower than 320px: a crowded stage gets more rows instead, and cells never overlap.
-  `packages/web/src/layout.ts` owns the stage bounds and the grid.
+  `packages/web/src/layout.ts` owns the stage bounds and the grid. Windows stack by rank from z 101
+  up, not by a counter that climbs on every click, so the stack never rises over the floating clock
+  (§1.1) or the settings panel.
 - The **frame width is the contract**: it comes from `WINDOW_SPEC`, and content never sets its own width.
   Long paths ellipsise, preformatted blocks wrap (`pre-wrap` + `overflow-wrap: anywhere`). **Windows scroll
   vertically only** — a window that scrolls sideways has failed to lay out.
@@ -351,7 +373,8 @@ options use void.
 5. **ProviderWidget** (left rail, foot) — see §6.2. It is a readout and the way into the providers
    window; it does not start sessions. It sits at the foot of the rail from the moment it mounts, even
    before the session panel above it is revealed.
-6. **Clock** (right rail, top) — `HH:MM:SS` tabular plus the date, and the gear that opens settings. The
+6. **Clock** (right rail, top; the only furniture left in fullscreen, §1.1) — `HH:MM:SS` tabular
+   plus the date, and the gear that opens settings. The
    gear is unboxed and drawn larger than the other glyphs: the clock beside it has no frame either, so
    a border would make the gear the only boxed thing there. `.icon-btn` — the boxed variant — stays
    for small glyphs that do, like the panel's ✕.
@@ -431,7 +454,8 @@ transcript — conversations live in consoles (§5.3).
 | `Ctrl`/`Cmd` + `,` | toggle settings                                                            |
 | `Esc`              | dismiss the topmost surface: settings → top window → prompt                |
 
-None of these fire while a terminal has focus, except `Ctrl` + `` ` ``. The project panel is furniture and
+None of these fire while a terminal has focus, except `Ctrl` + `` ` ``. In fullscreen (§1.1) the prompt
+and the project panel are not on the field, so `Ctrl`/`Cmd` + `K` and `P` do nothing. The project panel is furniture and
 is never in the `Esc` chain.
 
 ---

@@ -307,6 +307,60 @@ button {
   min-height: 0;
 }
 
+/* Fullscreen (spec/ui-ux.md §1.1): the rails stand down and the stage takes
+   the whole viewport. Hidden, not unmounted, so a prompt draft, the status
+   log and the furniture's settled state are all still there when the rails
+   come back. What is left of the right rail is the clock and the gear,
+   floating in the stage's top-right corner as a chip the size of a window
+   tab and on the tab's own `--void` — it reads as part of the tab row, and
+   the tab beneath it leaves it room (layout.ts `clockOverlap`). Above the
+   windows, below the settings panel. */
+.field.fullscreen {
+  grid-template-columns: minmax(0, 1fr);
+}
+
+.field.fullscreen .rail-left,
+.field.fullscreen .rail-right > :not(.clock),
+.field.fullscreen .clock-date {
+  display: none;
+}
+
+.field.fullscreen .rail-right {
+  position: absolute;
+  top: 2px;
+  right: 2px;
+  z-index: 190;
+  width: var(--clock-w);
+  height: var(--clock-h);
+  padding: 0 6px 0 10px;
+  border-left: 0;
+  justify-content: center;
+  background: var(--void);
+  color: var(--void-ink);
+}
+
+.field.fullscreen .clock {
+  justify-content: space-between;
+}
+
+.field.fullscreen .clock-time {
+  font-size: 14px;
+}
+
+.field.fullscreen .gear-btn {
+  color: var(--void-ink);
+  opacity: 0.6;
+}
+
+.field.fullscreen .gear-btn:hover {
+  opacity: 1;
+}
+
+.field.fullscreen .gear-btn svg {
+  width: 20px;
+  height: 20px;
+}
+
 /* Field-level button for the rail's own actions — `.w-btn`'s shape with the
    field's ink, since the rail is not a surface. */
 .rail-btn {

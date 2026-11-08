@@ -2,6 +2,7 @@ import { useCallback, useEffect, useState } from "react";
 import { WINDOW_SPEC, type OpenWindow, type WindowKind } from "../windows";
 import {
   MIN_WINDOW_W,
+  restack,
   stageBounds,
   tileGrid,
   type Bounds,
@@ -9,9 +10,6 @@ import {
 } from "../layout";
 
 let seq = 0;
-/** Above every piece of permanent furniture, below the settings panel. Windows
- * carry this inline, so it — not the .window rule — decides the stack. */
-let zSeq = 100;
 
 /** Every window fills the stage as one grid, in the order it was opened —
  * the harness view: everything on the desk visible at once, nothing stacked
@@ -26,11 +24,10 @@ export function useWindows() {
   const [windows, setWindows] = useState<OpenWindow[]>([]);
 
   /** Stacking is z-index, never DOM order: reordering the array makes React move
-   * the node on pointerdown, which swallows the click that follows. */
+   * the node on pointerdown, which swallows the click that follows. Called on
+   * every click in a window, so raising the top one changes nothing. */
   const raise = useCallback((id: string) => {
-    setWindows((current) =>
-      current.map((w) => (w.id === id ? { ...w, z: ++zSeq } : w)),
-    );
+    setWindows((current) => restack(current, id));
   }, []);
 
   /** Wrap an updater so that any window opening or closing re-tiles the
@@ -39,7 +36,7 @@ export function useWindows() {
     setWindows((current) => {
       const next = fn(current);
       return next.length !== current.length
-        ? retile(next, stageBounds())
+        ? retile(restack(next), stageBounds())
         : next;
     });
   }, []);
@@ -60,14 +57,13 @@ export function useWindows() {
         const existing = current.find(
           (w) => w.kind === kind && w.payload === payload,
         );
-        if (existing) {
-          return current.map((w) => (w === existing ? { ...w, z: ++zSeq } : w));
-        }
+        if (existing) return restack(current, existing.id);
 
-        return [
+        const id = `${kind}-${++seq}`;
+        const next = [
           ...current,
           {
-            id: `${kind}-${++seq}`,
+            id,
             kind,
             title: title ?? WINDOW_SPEC[kind].title,
             ...(detail !== undefined ? { detail } : {}),
@@ -75,10 +71,12 @@ export function useWindows() {
             x: 0,
             y: 0,
             w: MIN_WINDOW_W,
-            z: ++zSeq,
+            // Ranked onto the top of the stack just below.
+            z: 0,
             payload,
           },
         ];
+        return restack(next, id);
       });
     },
     [update],
@@ -189,9 +187,10 @@ export function useWindows() {
           (w) => w.kind === kind && w.payload === to,
         );
         if (existing !== undefined) {
-          return current
-            .filter((w) => w !== placeholder)
-            .map((w) => (w === existing ? { ...w, z: ++zSeq } : w));
+          return restack(
+            current.filter((w) => w !== placeholder),
+            existing.id,
+          );
         }
         return current.map((w) =>
           w === placeholder

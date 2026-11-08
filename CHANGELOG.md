@@ -5,6 +5,12 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [spec/architecture.md §8.4](spec/architecture.md#84-changelog).
 
+## 0.8.2 — 2026-11-08
+
+### Added
+
+- A fullscreen layout, chosen in settings, gives the whole browser window to the tiled windows and keeps only the clock and settings.
+
 ## 0.8.1 — 2026-11-08
 
 ### Fixed

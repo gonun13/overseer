@@ -104,3 +104,59 @@ export function tileGrid(
     };
   });
 }
+
+/**
+ * The clock in fullscreen (spec/ui-ux.md §1.1): a chip floating in the stage's
+ * top-right corner, over the windows, exactly as tall as a window tab so it
+ * reads as part of the tab row. The CSS takes its size from these, so the
+ * room a tab leaves for it and the chip itself cannot disagree.
+ */
+export const FLOATING_CLOCK_W = 124;
+export const FLOATING_CLOCK_H = 27;
+
+/**
+ * How much of a window's tab runs under the floating clock: the room the tab
+ * has to leave at its right so its close stays clear. Zero for a window whose
+ * tab does not reach the corner — on a tiled stage, every window but the
+ * top-right one.
+ */
+export function clockOverlap(win: Geometry, bounds: Bounds): number {
+  const clockLeft = bounds.right - FLOATING_CLOCK_W;
+  const clockBottom = bounds.top + FLOATING_CLOCK_H;
+  if (win.y >= clockBottom || win.y + FLOATING_CLOCK_H <= bounds.top) return 0;
+  const overlap =
+    Math.min(win.x + win.w, bounds.right) - Math.max(win.x, clockLeft);
+  return Math.max(0, overlap);
+}
+
+/** The lowest window's z-index: above every rail, below the floating clock
+ * (190) and the settings panel (200). */
+export const WINDOW_Z_BASE = 101;
+
+/**
+ * Rank the stack from `WINDOW_Z_BASE` up, with `topId` (when given) on top.
+ * Ranks, not an ever-growing counter: a window is raised on every click, and
+ * a counter would carry the stack over the clock and the settings panel within
+ * a hundred of them. Windows whose rank did not change keep their object, and
+ * an unchanged stack comes back as the same array.
+ */
+export function restack<T extends { id: string; z: number }>(
+  list: T[],
+  topId?: string,
+): T[] {
+  const order = [...list].sort(
+    (a, b) =>
+      Number(a.id === topId) - Number(b.id === topId) ||
+      a.z - b.z ||
+      list.indexOf(a) - list.indexOf(b),
+  );
+  const rank = new Map(order.map((w, i) => [w.id, WINDOW_Z_BASE + i]));
+  let changed = false;
+  const next = list.map((w) => {
+    const z = rank.get(w.id)!;
+    if (z === w.z) return w;
+    changed = true;
+    return { ...w, z };
+  });
+  return changed ? next : list;
+}

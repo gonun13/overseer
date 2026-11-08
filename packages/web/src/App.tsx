@@ -1,4 +1,12 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import {
+  useCallback,
+  useEffect,
+  useLayoutEffect,
+  useMemo,
+  useRef,
+  useState,
+  type CSSProperties,
+} from "react";
 import type { ConsoleInfo } from "@overseer/protocol";
 import { ActiveProject } from "./components/ActiveProject";
 import { Clock } from "./components/Clock";
@@ -23,6 +31,8 @@ import {
 } from "./state/console-layout";
 import { useConsoles, type ConsoleOpenRequest } from "./state/useConsoles";
 import { useDiscovery } from "./state/useDiscovery";
+import { useFullscreen } from "./state/fullscreen";
+import { FLOATING_CLOCK_H, FLOATING_CLOCK_W } from "./layout";
 import { furnitureFor } from "./state/wizard";
 import { useLoopConfig } from "./state/useLoopConfig";
 import { usePromptSession } from "./state/usePromptSession";
@@ -44,11 +54,19 @@ function pendingTitle(request: ConsoleOpenRequest): string {
   return request.kind;
 }
 
+/** The floating clock's size, handed to the CSS from the numbers the tabs
+ * make room by, so the two cannot drift apart. */
+const FLOATING_CLOCK_SIZE = {
+  "--clock-w": `${FLOATING_CLOCK_W}px`,
+  "--clock-h": `${FLOATING_CLOCK_H}px`,
+} as CSSProperties;
+
 export default function App() {
   const [projectsOpen, setProjectsOpen] = useState(true);
   // Open by default: the consoles and sessions are the point of the field.
   const [sessionsOpen, setSessionsOpen] = useState(true);
   const [settingsOpen, setSettingsOpen] = useState(false);
+  const [fullscreen, setFullscreen] = useFullscreen();
   const wizard = useDiscovery();
   const {
     windows,
@@ -444,8 +462,25 @@ export default function App() {
 
   const deciding = wizard.reset === "confirm" || loopTakeoverFor !== null;
 
+  // The overseer docks into the right rail once the field is set up — the
+  // stage is for windows. Boot, the first-run asks and the goodbye are the
+  // whole of the field, so they keep the stage centre.
+  const overseerDocked = shell.furniture.sessions && wizard.reset !== "goodbye";
+  // Fullscreen is a way of looking at a field that is set up: boot, the
+  // first-run asks and the goodbye speak from the stage centre with the rails
+  // around them whatever the setting says (spec/ui-ux.md §1.1).
+  const fullscreenActive = fullscreen && overseerDocked;
+
+  // The stage just changed size without the viewport doing so, which is the
+  // only re-tile `useWindows` would not see. Before paint, so the windows
+  // never show in the old grid over the new stage.
+  useLayoutEffect(() => {
+    tileWindows();
+  }, [fullscreenActive, tileWindows]);
+
   useShellKeyboard({
     blocked: deciding,
+    fullscreen: fullscreenActive,
     settingsOpen,
     windowCount: windows.length,
     closeSettings,
@@ -527,10 +562,6 @@ export default function App() {
     ],
   );
 
-  // The overseer docks into the right rail once the field is set up — the
-  // stage is for windows. Boot, the first-run asks and the goodbye are the
-  // whole of the field, so they keep the stage centre.
-  const overseerDocked = shell.furniture.sessions && wizard.reset !== "goodbye";
   const overseerSpace = (
     <OverseerSpace
       docked={overseerDocked}
@@ -554,7 +585,11 @@ export default function App() {
       {/* `inert` rather than a scrim alone: a covering layer stops the mouse
           and nothing else, and the field behind a decision must not be
           reachable by Tab either. */}
-      <div className="field" inert={deciding}>
+      <div
+        className={fullscreenActive ? "field fullscreen" : "field"}
+        style={fullscreenActive ? FLOATING_CLOCK_SIZE : undefined}
+        inert={deciding}
+      >
         {/* Left rail: what to work on — the project, every project, every
             console and session, the ways to start another, and the provider
             they run on. */}
@@ -657,6 +692,7 @@ export default function App() {
 
         <WindowStackHost
           windows={windows}
+          fullscreen={fullscreenActive}
           wizard={wizard}
           projects={shell.projects}
           provider={shell.provider}
@@ -686,10 +722,12 @@ export default function App() {
         <SettingsPanel
           open={settingsOpen}
           theme={wizard.theme}
+          fullscreen={fullscreen}
           provider={shell.provider}
           workspace={shell.workspace}
           onClose={closeSettings}
           onSelectTheme={selectTheme}
+          onSelectFullscreen={setFullscreen}
           onOpenGitConfig={() => {
             open("gitConfig");
             closeSettings();

@@ -19,6 +19,7 @@ export function Window({
   x,
   y,
   z,
+  clockOverlap = 0,
   width,
   height,
   variant,
@@ -39,6 +40,9 @@ export function Window({
   x: number;
   y: number;
   z: number;
+  /** How much of the tab runs under the floating clock in fullscreen; the tab
+   * leaves that much room at its right so its close stays clear. */
+  clockOverlap?: number;
   width: number;
   /** Whole window height, tab included — every tiled window has one. Absent
    * = the body's CSS max-height default. */
@@ -165,7 +169,12 @@ export function Window({
         setDragging(true);
       }}
     >
-      <div className={`window-tab ${revealed ? "revealed" : ""}`}>
+      <div
+        className={`window-tab ${revealed ? "revealed" : ""}`}
+        style={
+          clockOverlap > 0 ? { paddingRight: 6 + clockOverlap } : undefined
+        }
+      >
         {light !== undefined ? (
           <StatusLight activity={light} />
         ) : (

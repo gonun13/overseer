@@ -318,6 +318,7 @@ around it. Ordered by priority.
 | Subscription login                        | Provider  | `claude auth login` / `agent login`, plain spawn; URL out (§2)            |
 | Projects, git, file view                  | Projects  | workspace monitor, `vcs/*`                                                |
 | Theme switch                              | System    | `data-theme` on `:root`; choice persisted in internal memory             |
+| Fullscreen field                          | System    | `.field.fullscreen` hides the rails, floats the clock; choice in localStorage |
 
 ### Next
 

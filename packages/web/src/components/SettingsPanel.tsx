@@ -22,11 +22,13 @@ import { StatusLight } from "./StatusLight";
 export function SettingsPanel({
   open,
   theme,
+  fullscreen,
   provider,
   workspace,
   gitAccess,
   onClose,
   onSelectTheme,
+  onSelectFullscreen,
   onOpenGitConfig,
   onStartLogin,
   onSignOut,
@@ -36,6 +38,8 @@ export function SettingsPanel({
 }: {
   open: boolean;
   theme: OverseerTheme;
+  /** Rails stood down, windows over the whole viewport (spec/ui-ux.md §1.1). */
+  fullscreen: boolean;
   provider: ProviderInfo;
   /** The container's mounts, which only the server knows; empty until it says. */
   workspace: { root: string };
@@ -43,6 +47,7 @@ export function SettingsPanel({
   gitAccess?: GitAccessState;
   onClose: () => void;
   onSelectTheme: (theme: OverseerTheme) => void;
+  onSelectFullscreen: (on: boolean) => void;
   /** Close settings and open the git config window, where setup happens. */
   onOpenGitConfig: () => void;
   /** Close settings, open the login surface, and start the flow. */
@@ -212,6 +217,27 @@ export function SettingsPanel({
                   {theme === "machine" ? "▪" : ""}
                 </span>
                 machine
+              </button>
+            </span>
+          }
+        />
+        <WInline
+          label="layout"
+          value={
+            <span className="btn-row inline">
+              <button
+                className="w-btn"
+                onClick={() => fullscreen && onSelectFullscreen(false)}
+              >
+                <span className="w-btn-mark">{fullscreen ? "" : "▪"}</span>
+                rails
+              </button>
+              <button
+                className="w-btn"
+                onClick={() => !fullscreen && onSelectFullscreen(true)}
+              >
+                <span className="w-btn-mark">{fullscreen ? "▪" : ""}</span>
+                fullscreen
               </button>
             </span>
           }

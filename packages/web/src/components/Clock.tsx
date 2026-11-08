@@ -24,7 +24,9 @@ export function Clock({ onOpenSettings }: { onOpenSettings: () => void }) {
 
   return (
     <div className="clock settles-in">
-      <div className="clock-read">
+      {/* The title keeps the date a hover away in fullscreen, where the
+          floating clock is the time alone. */}
+      <div className="clock-read" title={date}>
         <span className="clock-time">{time}</span>
         <span className="clock-date">{date}</span>
       </div>

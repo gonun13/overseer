@@ -4,6 +4,9 @@ interface ShellKeyboardOptions {
   /** A decision is up. Every command is off, including Escape: the decision is
    * answered with its own two buttons or not at all (spec/ui-ux.md §5.4). */
   blocked: boolean;
+  /** The rails have stood down, so the prompt and the project panel they
+   * hold are not there to open (spec/ui-ux.md §1.1). */
+  fullscreen: boolean;
   settingsOpen: boolean;
   windowCount: number;
   closeSettings: () => void;
@@ -25,6 +28,7 @@ interface ShellKeyboardOptions {
  */
 export function useShellKeyboard({
   blocked,
+  fullscreen,
   settingsOpen,
   windowCount,
   closeSettings,
@@ -57,9 +61,11 @@ export function useShellKeyboard({
 
       if (!(event.metaKey || event.ctrlKey)) return;
       if (event.key === "k") {
+        if (fullscreen) return;
         event.preventDefault();
         focusPrompt();
       } else if (event.key === "p") {
+        if (fullscreen) return;
         event.preventDefault();
         toggleProjects();
       } else if (event.key === ",") {
@@ -77,6 +83,7 @@ export function useShellKeyboard({
     closeTopWindow,
     cycleConsoles,
     focusPrompt,
+    fullscreen,
     settingsOpen,
     toggleProjects,
     toggleSettings,

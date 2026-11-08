@@ -134,11 +134,17 @@ This spec does not restate its types; change the type, and the compiler finds ev
 
 ## 5. Browser storage
 
-Only one thing persists in the browser: console window state (ids, opening order and geometry;
-restore uses the ids/order and tiles the windows)
-(`packages/web/src/state/console-layout.ts`, `localStorage`, best effort). Everything else the
-operator chooses — theme, active project, attached provider, git identity — lives server-side in
-`state.json`, so it survives a different browser.
+Two things persist in the browser, both about this screen rather than the overseer, and both in
+`localStorage`, best effort:
+
+- console window state (ids, opening order and geometry; restore uses the ids/order and tiles the
+  windows) — `packages/web/src/state/console-layout.ts`;
+- whether the field is in fullscreen ([ui-ux.md §1.1](ui-ux.md#11-fullscreen)) —
+  `packages/web/src/state/fullscreen.ts`. A big monitor and a laptop sharing one overseer can want
+  different answers.
+
+Everything else the operator chooses — theme, active project, attached provider, git identity —
+lives server-side in `state.json`, so it survives a different browser.
 
 ## 6. Runtime overrides
 

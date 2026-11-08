@@ -11,6 +11,7 @@ import { consoleLight, type PendingConsole } from "../state/useConsoles";
 import { PENDING_PREFIX } from "../state/console-layout";
 import { agentName, consoleKind, projectName } from "../state/session-rail";
 import type { OpenWindow, WindowKind } from "../windows";
+import { clockOverlap, stageBounds } from "../layout";
 import { Window } from "./Window";
 import { ChangelogWindow } from "./windows/ChangelogWindow";
 import { GitConfigWindow } from "./windows/GitConfigWindow";
@@ -38,6 +39,9 @@ type OpenWindowAction = (
 
 interface WindowStackHostProps {
   windows: OpenWindow[];
+  /** The clock floats over the stage's top-right corner, and the tab under it
+   * has to make room (spec/ui-ux.md §1.1). */
+  fullscreen: boolean;
   wizard: DiscoveryController;
   projects: Project[];
   provider: ProviderInfo;
@@ -74,6 +78,7 @@ interface WindowStackHostProps {
 /** Renders window frames and dispatches each window kind to its content. */
 export function WindowStackHost({
   windows,
+  fullscreen,
   wizard,
   projects,
   provider,
@@ -128,6 +133,8 @@ export function WindowStackHost({
     };
   };
 
+  const stage = fullscreen ? stageBounds() : undefined;
+
   return windows.map((windowState) => {
     const payload = String(windowState.payload ?? "");
     const consoleInfo =
@@ -153,6 +160,7 @@ export function WindowStackHost({
         x={windowState.x}
         y={windowState.y}
         z={windowState.z}
+        clockOverlap={stage ? clockOverlap(windowState, stage) : 0}
         width={windowState.w}
         height={windowState.h}
         variant={windowState.kind === "console" ? "console" : undefined}

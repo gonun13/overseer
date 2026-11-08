@@ -1,8 +1,13 @@
 import assert from "node:assert/strict";
 import { describe, it } from "node:test";
 import {
+  FLOATING_CLOCK_H,
+  FLOATING_CLOCK_W,
   MIN_WINDOW_W,
   TILE_GAP,
+  WINDOW_Z_BASE,
+  clockOverlap,
+  restack,
   tileGrid,
   type Bounds,
   type Geometry,
@@ -96,5 +101,54 @@ describe("tileGrid", () => {
     const [a, b, c] = tileGrid(3, STAGE);
     assert.equal(b.y - (a.y + (a.h ?? 0)), TILE_GAP);
     assert.equal(c.x - (a.x + a.w), TILE_GAP);
+  });
+});
+
+describe("clockOverlap", () => {
+  /** A 1280×720 fullscreen stage, less its gutter. */
+  const FULL: Bounds = { left: 2, top: 2, right: 1278, bottom: 718 };
+
+  it("gives the top-right window's tab exactly the clock's width", () => {
+    const cells = tileGrid(4, FULL);
+    const overlaps = cells.map((cell) => clockOverlap(cell, FULL));
+    // Vertical first: the top-right cell is the third.
+    assert.deepEqual(overlaps, [0, 0, FLOATING_CLOCK_W, 0]);
+  });
+
+  it("leaves a window below the clock alone", () => {
+    assert.equal(
+      clockOverlap({ x: 600, y: 2 + FLOATING_CLOCK_H, w: 678 }, FULL),
+      0,
+    );
+  });
+
+  it("counts only the part of the tab under the clock", () => {
+    const right = FULL.right - FLOATING_CLOCK_W + 30;
+    assert.equal(clockOverlap({ x: 200, y: 10, w: right - 200 }, FULL), 30);
+  });
+});
+
+describe("restack", () => {
+  const w = (id: string, z: number) => ({ id, z });
+
+  it("ranks from the base, keeping the order", () => {
+    assert.deepEqual(restack([w("a", 900), w("b", 400)]), [
+      w("a", WINDOW_Z_BASE + 1),
+      w("b", WINDOW_Z_BASE),
+    ]);
+  });
+
+  it("puts the raised window on top without growing the stack", () => {
+    let stack = [w("a", 0), w("b", 0), w("c", 0)];
+    stack = restack(stack);
+    for (let i = 0; i < 500; i++) stack = restack(stack, i % 2 ? "a" : "b");
+    const max = Math.max(...stack.map((x) => x.z));
+    assert.equal(max, WINDOW_Z_BASE + 2);
+    assert.equal(stack.find((x) => x.z === max)?.id, "a");
+  });
+
+  it("returns the same array when the raised window is already on top", () => {
+    const stack = restack([w("a", 0), w("b", 1)]);
+    assert.equal(restack(stack, "b"), stack);
   });
 });
