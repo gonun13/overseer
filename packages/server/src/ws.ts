@@ -159,9 +159,9 @@ function gitStepOutcome(result: GitOpResult): DiscoveryOutcome {
  * through, before anything on disk is touched. Returns the project's real
  * directory, or sends the refusal and returns `undefined`.
  *
- * Shared by `project.git.show` and `project.git.list` rather than written
- * twice: this is the security contract, and a second copy of it is a second
- * thing to keep correct.
+ * Shared by `project.git.show`, `project.git.image` and `project.git.list`
+ * rather than written per frame: this is the security contract, and a second
+ * copy of it is a second thing to keep correct.
  *
  * Stage one is workspace containment for the project itself. Stage two
  * resolves `relative` against the *real* project directory and checks again —
@@ -892,6 +892,35 @@ export function attachWebSocketServer(
             mode: parsed.mode,
             text: result.text,
             truncated: result.truncated,
+          });
+          return;
+        }
+        case "project.git.image": {
+          // The same containment contract and the same silence as `show`.
+          const projectDir = await resolveInProject(
+            parsed.path,
+            parsed.file,
+            "project.git.image",
+            send,
+          );
+          if (projectDir === undefined) return;
+          const result = await projectGit.readImage(projectDir, parsed.file);
+          if (!result.ok) {
+            send({
+              type: "error",
+              about: "project.git.image",
+              benign: result.benign,
+              message: result.reason,
+            });
+            return;
+          }
+          send({
+            type: "project.git.image",
+            path: parsed.path,
+            file: parsed.file,
+            mime: result.mime,
+            data: result.data,
+            bytes: result.bytes,
           });
           return;
         }

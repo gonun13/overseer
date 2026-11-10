@@ -5,6 +5,7 @@ export type WindowKind =
   | "help"
   | "changelog"
   | "diff"
+  | "image"
   | "folder"
   | "loopModels"
   | "projectCreate"
@@ -39,6 +40,8 @@ export const WINDOW_SPEC: Record<WindowKind, { title: string }> = {
   changelog: { title: "changelog" },
   // Payload carries the project and file, and doubles as the dedupe key.
   diff: { title: "diff" },
+  // Same payload as `diff`: an image file's project and path.
+  image: { title: "image" },
   // Payload carries the project and folder, and doubles as the dedupe key.
   folder: { title: "folder" },
   // One per provider; the payload is the provider id.

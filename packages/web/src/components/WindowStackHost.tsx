@@ -1,8 +1,9 @@
-import type {
-  ClientMessage,
-  ConsoleInfo,
-  OverseerTheme,
-  ServerMessage,
+import {
+  imageMimeType,
+  type ClientMessage,
+  type ConsoleInfo,
+  type OverseerTheme,
+  type ServerMessage,
 } from "@overseer/protocol";
 import type { Project, Session } from "../domain";
 import type { DiscoveryController } from "../state/useDiscovery";
@@ -20,6 +21,7 @@ import { ConsoleWindow } from "./windows/ConsoleWindow";
 import { DiffWindow } from "./windows/DiffWindow";
 import { FolderWindow } from "./windows/FolderWindow";
 import { HelpWindow } from "./windows/HelpWindow";
+import { ImageWindow } from "./windows/ImageWindow";
 import { LoopModelsWindow } from "./windows/LoopModelsWindow";
 import { ProjectCreateWindow } from "./windows/ProjectCreateWindow";
 import { ProjectWindow } from "./windows/ProjectWindow";
@@ -61,7 +63,8 @@ interface WindowStackHostProps {
   onDeleteSession: (id: string) => void;
   send: (message: ClientMessage) => void;
   subscribeConsole: (listener: (message: ServerMessage) => void) => () => void;
-  /** Routes `project.git.*` frames to the project, diff and folder windows. */
+  /** Routes `project.git.*` frames to the project, diff, image and folder
+   * windows. */
   subscribeSession: (listener: (message: ServerMessage) => void) => () => void;
   /** The loop's own provider/model configuration — independent of `provider`
    * above, which is the app's single attached one. */
@@ -116,6 +119,28 @@ export function WindowStackHost({
       // file view uses, and for the same reason.
       folder.split("/").pop(),
       folder,
+    );
+  };
+
+  /** Open one changed file. An image opens the image view rather than the
+   * file view: git's diff of one is a single "binary files differ" line, and
+   * the picture is what the operator clicked for. Shared by the project
+   * window and folder listings so both entry points make the same choice and
+   * key the window the same way. */
+  const openFile = (
+    projectPath: string,
+    file: string,
+    previousPath?: string,
+  ) => {
+    const image = imageMimeType(file) !== undefined;
+    openWindow(
+      image ? "image" : "diff",
+      fileViewKey(projectPath, file, image ? undefined : previousPath),
+      // The tab takes the basename and the full path goes in the dim detail
+      // beside it: a deep path would otherwise fill the field and crowd out
+      // every other window's tab.
+      file.split("/").pop(),
+      file,
     );
   };
 
@@ -260,6 +285,13 @@ export function WindowStackHost({
             subscribe={subscribeSession}
           />
         )}
+        {windowState.kind === "image" && (
+          <ImageWindow
+            target={String(windowState.payload ?? "")}
+            send={send}
+            subscribe={subscribeSession}
+          />
+        )}
         {windowState.kind === "folder" && (
           <FolderWindow
             target={String(windowState.payload ?? "")}
@@ -273,13 +305,7 @@ export function WindowStackHost({
                 String(windowState.payload ?? ""),
               );
               if (!view) return;
-              const file = `${view.folder}/${name}`;
-              openWindow(
-                "diff",
-                fileViewKey(view.projectPath, file),
-                name,
-                file,
-              );
+              openFile(view.projectPath, `${view.folder}/${name}`);
             }}
             onOpenFolder={(name) => {
               const view = parseFolderViewKey(
@@ -313,15 +339,7 @@ export function WindowStackHost({
                 openFolder(project, folder);
                 return;
               }
-              openWindow(
-                "diff",
-                fileViewKey(project, file.path, file.previousPath),
-                // The tab takes the basename and the full path goes in the
-                // dim detail beside it: a deep path would otherwise fill the
-                // field and crowd out every other window's tab.
-                file.path.split("/").pop(),
-                file.path,
-              );
+              openFile(project, file.path, file.previousPath);
             }}
           />
         )}

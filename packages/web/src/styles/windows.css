@@ -532,6 +532,16 @@
   min-width: 0;
 }
 
+/* The image view's picture: as wide as the frame allows and never wider, at
+   its own aspect ratio. Never upscaled past its natural size — a 16px icon
+   blown up to the frame width reads as a rendering fault, not a picture. */
+.w-image {
+  display: block;
+  max-width: 100%;
+  height: auto;
+  margin-bottom: 8px;
+}
+
 .w-path {
   margin-bottom: 8px;
   font-size: 11px;

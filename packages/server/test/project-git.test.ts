@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { describe, it, mock } from "node:test";
-import { GIT_MAX_DIR_ENTRIES } from "@overseer/protocol";
+import { GIT_MAX_DIR_ENTRIES, GIT_MAX_IMAGE_BYTES } from "@overseer/protocol";
 import { createProjectGit } from "../src/vcs/ops.js";
 
 type Response = { stdout: string; stderr?: string } | Error;
@@ -1028,6 +1028,90 @@ describe("projectGit.listDir", () => {
 
     assert.equal(result.ok, false);
     assert.equal((result as { benign: boolean }).benign, true);
+  });
+});
+
+describe("projectGit.readImage", () => {
+  const never = async () => {
+    throw new Error("git should not be spawned to read a working-tree image");
+  };
+
+  it("reads the image's bytes from the worktree, base64, with its type", async () => {
+    const png = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x00, 0x0d]);
+    const seen: string[] = [];
+    const projectGit = createProjectGit({
+      run: never,
+      readIdentity: noIdentity,
+      readFile: async (absolute) => {
+        seen.push(absolute);
+        return png;
+      },
+    });
+
+    const result = await projectGit.readImage(
+      "/workspace/demo",
+      "img/logo.png",
+    );
+
+    assert.deepEqual(result, {
+      ok: true,
+      mime: "image/png",
+      data: png.toString("base64"),
+      bytes: png.length,
+    });
+    assert.deepEqual(seen, ["/workspace/demo/img/logo.png"]);
+  });
+
+  it("refuses a file whose name is not an image, without reading it", async () => {
+    const projectGit = createProjectGit({
+      run: never,
+      readIdentity: noIdentity,
+      readFile: async () => {
+        throw new Error("a non-image should never be read");
+      },
+    });
+
+    const result = await projectGit.readImage("/workspace/demo", "src/app.ts");
+
+    assert.deepEqual(result, {
+      ok: false,
+      benign: true,
+      reason: "not an image",
+    });
+  });
+
+  it("refuses an image past the cap rather than clipping it", async () => {
+    const projectGit = createProjectGit({
+      run: never,
+      readIdentity: noIdentity,
+      readFile: async () => Buffer.alloc(GIT_MAX_IMAGE_BYTES + 1),
+    });
+
+    const result = await projectGit.readImage("/workspace/demo", "huge.png");
+
+    assert.equal(result.ok, false);
+    assert.equal((result as { benign: boolean }).benign, true);
+    assert.match((result as { reason: string }).reason, /too large/);
+  });
+
+  it("reports a deleted image as a benign refusal", async () => {
+    const projectGit = createProjectGit({
+      run: never,
+      readIdentity: noIdentity,
+      readFile: async () => {
+        throw Object.assign(new Error("ENOENT: no such file or directory"), {
+          code: "ENOENT",
+        });
+      },
+    });
+
+    const result = await projectGit.readImage("/workspace/demo", "gone.png");
+
+    assert.deepEqual(result, {
+      ok: false,
+      benign: true,
+      reason: "no longer on disk",
+    });
   });
 });
 

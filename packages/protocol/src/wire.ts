@@ -218,6 +218,13 @@ export type ClientMessage =
    * below is the same one `file` is held to, and an empty path segment is
    * exactly what it refuses. The client strips the slash git printed. */
   | { type: "project.git.list"; path: string; folder: string }
+  /** Read one image file from `path`'s worktree, for the image view. Sent
+   * instead of `project.git.show` when the operator clicks a changed file
+   * whose name `imageMimeType` recognises: a diff of an image is a line saying
+   * the binary differs, and its picture is what the operator wants. `file` is
+   * held to the same guard `project.git.show` is, plus that name check — this
+   * frame reads images and nothing else. */
+  | { type: "project.git.image"; path: string; file: string }
   /** Read the container's git access: whether an ssh key exists, the public
    * half of it, and the identity commits are made under. Never carries the
    * private key — nothing in the protocol can ask for it. */
@@ -354,6 +361,20 @@ export interface ProjectGitShowMessage {
   mode: "diff" | "content";
   text: string;
   truncated: boolean;
+}
+
+/** Reply to `project.git.image`: the file's bytes, base64, and the media type
+ * its name implies. Never clipped — an image past `GIT_MAX_IMAGE_BYTES` is
+ * refused with an error instead, since half a picture is not a picture. */
+export interface ProjectGitImageMessage {
+  type: "project.git.image";
+  path: string;
+  file: string;
+  mime: string;
+  /** Base64 of the file's bytes. */
+  data: string;
+  /** The file's size in bytes, before encoding. */
+  bytes: number;
 }
 
 /** Reply to `project.git.list`. `entries` are already ordered the way the
@@ -747,6 +768,7 @@ export type ServerMessage =
   | ProjectGitStatusMessage
   | ProjectGitShowMessage
   | ProjectGitListMessage
+  | ProjectGitImageMessage
   | ProjectGitCommittedMessage
   | ProjectGitPushedMessage
   | ProjectGitPulledMessage
@@ -808,6 +830,37 @@ export const GIT_MAX_DIFF_LINES = 2_000;
  * this is a list the operator scans, and a folder with more changed children
  * than this is one they will navigate into rather than read to the end. */
 export const GIT_MAX_DIR_ENTRIES = 500;
+/** The largest image the image view will carry. One frame holds the whole
+ * file (base64 adds a third again), so the cap is set by what is reasonable
+ * to push over the socket for a glance, not by what a browser can draw. */
+export const GIT_MAX_IMAGE_BYTES = 8 * 1024 * 1024;
+
+/** The image formats a browser draws in an `<img>`, by extension. */
+const IMAGE_MIME_TYPES: Record<string, string> = {
+  png: "image/png",
+  jpg: "image/jpeg",
+  jpeg: "image/jpeg",
+  gif: "image/gif",
+  webp: "image/webp",
+  avif: "image/avif",
+  bmp: "image/bmp",
+  ico: "image/x-icon",
+  // Safe to show: an SVG drawn through `<img>` runs no script and loads
+  // nothing external.
+  svg: "image/svg+xml",
+};
+
+/**
+ * The media type an image file's name implies, or `undefined` for anything
+ * else. Shared so the client's choice of which view to open and the server's
+ * guard on `project.git.image` are one decision, not two that can drift.
+ */
+export function imageMimeType(file: string): string | undefined {
+  const dot = file.lastIndexOf(".");
+  if (dot === -1 || dot < file.lastIndexOf("/")) return undefined;
+  return IMAGE_MIME_TYPES[file.slice(dot + 1).toLowerCase()];
+}
+
 /** A hostname's own limit, brackets of an IPv6 literal included. */
 export const GIT_SSH_MAX_HOST_CHARS = 253;
 export const GIT_MAX_IDENTITY_NAME_CHARS = 128;
@@ -1019,6 +1072,14 @@ export function isClientMessage(value: unknown): value is ClientMessage {
     // trailing slash git prints on a collapsed directory is stripped by the
     // client precisely so it can be.
     return isGitPath(msg.path) && isRepoRelativePath(msg.folder);
+  }
+  if (type === "project.git.image") {
+    const msg = value as { path?: unknown; file?: unknown };
+    return (
+      isGitPath(msg.path) &&
+      isRepoRelativePath(msg.file) &&
+      imageMimeType(msg.file) !== undefined
+    );
   }
   if (type === "project.git.show") {
     const msg = value as {

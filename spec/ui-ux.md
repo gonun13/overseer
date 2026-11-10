@@ -296,7 +296,8 @@ A signal can be ignored and a window can be dismissed; neither is an acceptable 
 
 ### 5.5 The file view
 
-Opened by clicking a changed file in the project window. It shows that file's diff against the last commit —
+Opened by clicking a changed file in the project window — any file but an image, which opens the image view
+(§5.7) instead. It shows that file's diff against the last commit —
 the change a commit made from that window would record, since committing there stages everything first — with
 a choice group switching to the file's current contents.
 
@@ -330,10 +331,26 @@ no diff of a directory to show, and the files inside it are what the operator cl
   already spoken for by the file's fate. A folder whose children disagree about their status reads `mixed`
   rather than picking one of them.
 - **Folders nest as deep as the tree does.** A folder row opens another listing, a file row opens the file
-  view (§5.5), and each window is keyed on its own path, so walking back into a folder raises the window
+  view (§5.5) or, for an image, the image view (§5.7), and each window is keyed on its own path, so walking back into a folder raises the window
   already open on it instead of stacking a second copy.
 - **Read once, on open**, like the file view — and truncated past the cap with a note saying how many entries
   are shown, on the same rule.
+
+### 5.7 The image view
+
+A changed file whose name is an image (png, jpeg, gif, webp, avif, bmp, ico, svg) opens **the picture**
+rather than the file view, from the project window or a folder listing alike. Git's diff of an image is a
+single "binary files differ" line, and the picture is what the operator clicked for.
+
+- **A window like every other**, keyed on the file's path the way the file view is — not a modal (§5): ✕ or
+  `Esc` dismisses it, and clicking the same row again raises it.
+- **The file as it is on disk now**, drawn at its natural size and scaled down, never up, to the frame width
+  (§5). A dim note beneath gives its pixel dimensions and size on disk.
+- **No before-and-after.** A deleted image has nothing left on disk and says so; the last committed version is
+  not fetched in its place.
+- **Too large to show is said.** Past the cap (8 MB) the view says the file is too large rather than clipping
+  it — half a picture is not a picture.
+- **Read once, on open**, like the file view; reopening is the refresh.
 
 ---
 

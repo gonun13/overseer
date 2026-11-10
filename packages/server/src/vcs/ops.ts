@@ -6,6 +6,8 @@ import {
   GIT_MAX_DIFF_CHARS,
   GIT_MAX_DIFF_LINES,
   GIT_MAX_DIR_ENTRIES,
+  GIT_MAX_IMAGE_BYTES,
+  imageMimeType,
   type GitDirEntry,
   type GitFileChange,
 } from "@overseer/protocol";
@@ -39,6 +41,12 @@ export type GitOpResult =
  * refusing it. */
 export type GitReadResult =
   | { ok: true; text: string; truncated: boolean }
+  | { ok: false; reason: string; benign: boolean };
+
+/** What an image read returns: the bytes base64-encoded for the frame, the
+ * media type its name implies, and the raw size so the view can say it. */
+export type GitImageResult =
+  | { ok: true; mime: string; data: string; bytes: number }
   | { ok: false; reason: string; benign: boolean };
 
 /** What a listing of one folder returns — the same result shape a file read
@@ -336,6 +344,48 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     } catch (error) {
       return { ok: false, benign: true, reason: describe(error) };
     }
+  }
+
+  /**
+   * One image's bytes, read from the worktree — the same file `readFile`
+   * would refuse as binary, for the view that can draw it.
+   *
+   * The worktree for the reason `readFile` gives: the picture the operator
+   * clicked is the one on disk now. A deleted image has nothing left there,
+   * and that is said rather than papered over with the last committed blob.
+   * Past the cap the read is refused outright: an image cannot be clipped
+   * into something still worth looking at.
+   */
+  async function readImage(dir: string, file: string): Promise<GitImageResult> {
+    const mime = imageMimeType(file);
+    if (mime === undefined) {
+      return { ok: false, benign: true, reason: "not an image" };
+    }
+    let bytes: Buffer;
+    try {
+      bytes = await readFileBytes(path.resolve(dir, file));
+    } catch (error) {
+      const gone = (error as NodeJS.ErrnoException).code === "ENOENT";
+      return {
+        ok: false,
+        benign: true,
+        reason: gone ? "no longer on disk" : describe(error),
+      };
+    }
+    if (bytes.length > GIT_MAX_IMAGE_BYTES) {
+      const mb = (n: number) => `${Math.round(n / (1024 * 1024))} MB`;
+      return {
+        ok: false,
+        benign: true,
+        reason: `too large to show (${mb(bytes.length)}, the limit is ${mb(GIT_MAX_IMAGE_BYTES)})`,
+      };
+    }
+    return {
+      ok: true,
+      mime,
+      data: bytes.toString("base64"),
+      bytes: bytes.length,
+    };
   }
 
   /**
@@ -847,6 +897,7 @@ export function createProjectGit(deps: ProjectGitDeps = {}) {
     status,
     diffFile,
     readFile,
+    readImage,
     listDir,
     commit,
     push,
