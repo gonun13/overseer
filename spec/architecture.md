@@ -341,13 +341,23 @@ Moved to [data.md §3](data.md#3-provider-transcripts).
 
 ```yaml
 services:
-  dind: # the daemon workspace projects build against (§6.3) — never the host's
+  dind: # optional (§6.3): the daemon workspace projects build against — never the host's
+    profiles: ["docker"]
     image: docker:28-dind
     privileged: true
+    command: ["dockerd", "--host=unix:///run/dind/docker.sock"] # no tcp listener
     volumes:
       - dind-storage:/var/lib/docker
+      - dind-socket:/run/dind
       - ${OVERSEER_WORKSPACE_HOST:-../overseer-workspace}:/workspace # same path the app sees, or bind mounts break
       - loop-db:/app/loop/db
+  docker-filter: # optional (§6.3): the only thing that can reach that daemon
+    profiles: ["docker"]
+    build: { context: ., target: docker-filter }
+    volumes:
+      - dind-socket:/run/dind
+      - ${OVERSEER_WORKSPACE_HOST:-../overseer-workspace}:/workspace:ro
+      - loop-db:/app/loop/db:ro
   overseer:
     build: .
     ports: ["127.0.0.1:3000:3000"]
@@ -357,15 +367,16 @@ services:
       - loop-db:/app/loop/db
       - ${OVERSEER_WORKSPACE_HOST:-../overseer-workspace}:/workspace # the only shared surface
     environment:
-      - DOCKER_HOST=tcp://dind:2375
+      - DOCKER_HOST=${OVERSEER_DOCKER_HOST:-…} # the filter when Docker is on (§6.3)
 volumes:
   agent-home:
   overseer-memory:
   loop-db:
   dind-storage:
+  dind-socket:
 ```
 
-Two services. The Node server serves the built SPA and handles `/api/*` + `/ws` on the same port; agent and auth CLIs run as child processes, and so does the dev loop (§9), so no reverse proxy is needed locally. The sidecar exists only so a workspace project's own `docker compose` test command has a daemon that is not the host's — see §6.3, and [data.md §1](data.md#1-where-things-live) for why paths are stated by the image rather than repeated here.
+One service, or three with Docker for workspace projects turned on. The Node server serves the built SPA and handles `/api/*` + `/ws` on the same port; agent and auth CLIs run as child processes, and so does the dev loop (§9), so no reverse proxy is needed locally. The two optional services exist only so a workspace project's own `docker compose` test command has a daemon that is not the host's — see §6.3, and [data.md §1](data.md#1-where-things-live) for why paths are stated by the image rather than repeated here.
 
 - `/workspace/<project>/` — one git project per directory. Session creation picks one; it becomes the process `cwd`.
 - `/app/.overseer/` — internal memory ([data.md §2](data.md#2-internal-memory--appoverseer)).
@@ -411,16 +422,56 @@ Moved to [data.md §1](data.md#1-where-things-live).
 ### 6.3 The daemon that builds workspace projects
 
 The dev loop's `verify` step ([behaviour/dev-loop.md](behaviour/dev-loop.md)) runs each project's own commands, and some of those are
-`docker compose` — a project's own `bin/test` is. So the stack ships a
-`dind` sidecar, and the app container gets the Docker client plus
-`DOCKER_HOST=tcp://dind:2375`.
+`docker compose` — a project's own `bin/test` is. A project like that needs a Docker daemon inside
+the sandbox, and a daemon is the largest grant the sandbox makes. So it is **off unless the operator
+turns it on**, and filtered when it is on.
+
+**Opt-in.** `OVERSEER_DOCKER=1` in `.env` starts two more services, both behind the `docker` compose
+profile: `dind`, the daemon, and `docker-filter`, the proxy in front of it. `bin/_lib.sh` reads the
+setting, turns the profile on and points the app container's `DOCKER_HOST` at the filter. Without
+it neither service runs, and `DOCKER_HOST` is an address that does not exist and says why — the
+Docker CLI prints it back, which is the whole error message a console needs. An instance that used
+Docker before it became a choice, and has not chosen, is refused at start until it does.
 
 **Not a bind of the host's `/var/run/docker.sock`.** That socket is
 root-equivalent on the host; handing it to a container running an agent with an
 unprefixed `Bash` would let a `docker run -v /:/host` undo the entire boundary
 this section exists to draw. The sidecar's daemon has no view of the host's
-images, containers or filesystem. It is `privileged`, which is a real grant, but
-a scoped one.
+images, containers or filesystem. It is `privileged`, which is a real grant: a
+privileged container has wide access to the kernel of the machine Docker runs on.
+
+**Nothing reaches the daemon but the filter.** `dind` listens on a unix socket only, in a volume
+that only `docker-filter` mounts; it has no tcp listener, so a console cannot go around. The filter
+(`packages/docker-filter`) is its own image in both stacks — never the repo bind mount, which an
+agent can write to — and it:
+
+- answers a short list of requests and refuses the rest: every read; create, start, stop, exec,
+  attach, copy and remove for containers; pull, build, tag, push and remove for images; bridge
+  networks; local volumes. Plugins, swarm and anything not listed are refused;
+- reads the body of the requests that create something and refuses a container that asks for
+  privileged mode, the sidecar's network, pid, IPC, UTS, user or cgroup namespace, a device, a
+  capability beyond Docker's default set (and `SYS_NICE`), a security option other than
+  `no-new-privileges`, unmasked `/proc` paths, another runtime or a cgroup parent; a privileged
+  `exec`; a volume or mount with driver options; a network that is not a bridge;
+- refuses a bind mount whose source is outside the directories the sidecar shares with the app. It
+  mounts those directories itself, read-only, at the same paths, and follows symlinks before
+  deciding, so a link inside the workspace that points at the sidecar's root is refused;
+- re-issues every request rather than relaying bytes, sends on the body *it* parsed, and refuses a
+  path or a field name the daemon would read differently from how it did (an escaped path, a
+  field in another case). A connection becomes a raw stream only after the daemon has agreed to
+  take it over.
+
+A refusal is a `403` in the daemon's own error shape, so the CLI prints
+`Error response from daemon: Overseer's Docker filter: <why>`.
+
+**What the filter does not do.** It narrows what a console can ask for; it does not make the
+sidecar a sealed boundary. The check on a bind source and the daemon's mount are two moments, and
+a process that swaps a directory for a link between them can win that race. A kernel bug that lets
+an ordinary container out lands in a privileged one. And a build can still ask for the sidecar's network.
+With `OVERSEER_DOCKER` unset, none of this exists.
+
+A project that needs something the filter refuses — a container that mounts the Docker socket to
+start other containers is the usual one — cannot run that part inside Overseer.
 
 `/workspace` and the loop's `db/` are mounted into `dind` at the **same absolute
 paths** the app container sees. A project's compose file says
@@ -428,10 +479,10 @@ paths** the app container sees. A project's compose file says
 absolute path, which the daemon then resolves in its own namespace. Without path
 parity every project bind mount silently mounts an empty directory. `db/` is in
 there because a `review` QA run happens in a worktree under it and runs the
-project's test command from there.
+project's test command from there. The filter's bind roots are those same two paths (in dev, all of
+`/app/loop`, which is what that stack shares).
 
-2375 is never published; it is reachable on the compose network alone, which is
-the only reason plain tcp is acceptable.
+A project's published ports are the sidecar's: a console reaches them as `dind:<port>`.
 
 ### 6.4 Names that mean the host
 
@@ -513,6 +564,7 @@ The repo is private and unpublished. Every workspace package stays in **lockstep
 | `@overseer/adapter-cursor`      | adapter                       |
 | `@overseer/adapter-opencode`    | adapter                       |
 | `@overseer/e2e`                 | Playwright suite              |
+| `@overseer/docker-filter`       | proxy in front of the Docker sidecar (§6.3) |
 
 On every release bump **all** of those `version` fields and sync `package-lock.json`. Use the
 container wrapper: `./bin/npm version X.Y.Z --no-git-tag-version --workspaces --include-workspace-root`,
@@ -622,7 +674,7 @@ A bash tool at `loop/` that runs development loops — request through review �
 project, driven by one interactive provider session (the loop's own overseer). It is not a
 `packages/*` workspace and is versioned independently of §8.1. It runs in this container, never on
 the host (`loop/run` refuses without `OVERSEER_IN_CONTAINER`), and shares with the app the one
-`/workspace`, the provider registry (§1.1.2), the `agent-home` auth volume and the `dind` daemon.
+`/workspace`, the provider registry (§1.1.2), the `agent-home` auth volume and, when it is on, the Docker sidecar (§6.3).
 The app reaches it as a `loop` console (§1.2). Its provider choice (`loop/.provider`) is
 independent of the app's `attached_provider`.
 

@@ -5,6 +5,13 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [spec/architecture.md §8.4](spec/architecture.md#84-changelog).
 
+## Unreleased
+
+### Changed
+
+- Docker for workspace projects is now off unless you turn it on in your settings file; an instance that already used it is asked to choose before it starts.
+- With Docker turned on, requests that would let a project's container out of the sandbox, such as privileged containers and mounts from outside the workspace, are refused.
+
 ## 0.8.4 — 2026-11-11
 
 ### Fixed

@@ -34,7 +34,8 @@ One developer, on their own local machine. There is no multi-user story and no a
 1. **Never runs on the host.** The server, the agent CLIs and the dev loop run only in the
    container; `bin/*` is the only supported entry point, and host `npm run dev` / `loop/run` refuse.
 2. **Production reaches the host only through `/workspace`.** Development also shares the source repo. Provider auth lives in a container volume, never
-   the operator's own `~/.<agent>`; workspace builds use a Docker-in-Docker sidecar, never the host's
+   the operator's own `~/.<agent>`. Docker for workspace projects is off unless the operator turns
+   it on; when on, it is a Docker-in-Docker sidecar behind a request filter, never the host's
    daemon socket.
 3. **Local only.** The port is published on `127.0.0.1`; WebSocket upgrades check `Origin`.
    Mutating CLI hooks rely on loopback plus a per-console token and do not check `Origin`.

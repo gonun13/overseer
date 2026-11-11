@@ -108,6 +108,7 @@ COPY packages/adapters/cursor/package.json packages/adapters/cursor/package.json
 COPY packages/adapters/codex/package.json packages/adapters/codex/package.json
 COPY packages/adapters/opencode/package.json packages/adapters/opencode/package.json
 COPY packages/e2e/package.json packages/e2e/package.json
+COPY packages/docker-filter/package.json packages/docker-filter/package.json
 RUN npm ci
 
 COPY tsconfig.base.json CHANGELOG.md ./
@@ -183,6 +184,7 @@ COPY packages/adapters/cursor/package.json packages/adapters/cursor/package.json
 COPY packages/adapters/codex/package.json packages/adapters/codex/package.json
 COPY packages/adapters/opencode/package.json packages/adapters/opencode/package.json
 COPY packages/e2e/package.json packages/e2e/package.json
+COPY packages/docker-filter/package.json packages/docker-filter/package.json
 RUN npm ci
 
 ENV NODE_ENV=development
@@ -212,6 +214,19 @@ ENV PLAYWRIGHT_BROWSERS_PATH=/ms-playwright
 RUN npx playwright install --with-deps chromium \
     && chown -R overseer:overseer "$PLAYWRIGHT_BROWSERS_PATH"
 USER overseer
+
+# ---- docker-filter: the proxy in front of the Docker sidecar ----------------
+# Its own small image, from the Node image alone: no dependencies, no build
+# (Node runs the TypeScript as it is), and nothing of the app's in it. Both
+# stacks build this target, dev included — it is never run from a bind mount,
+# because an agent must not be able to edit what filters it. Root, to open the
+# sidecar's socket; the compose files drop every capability it does not need.
+FROM ${NODE_IMAGE} AS docker-filter
+WORKDIR /filter
+COPY packages/docker-filter/package.json ./
+COPY packages/docker-filter/src ./src
+EXPOSE 2375
+CMD ["node", "src/main.ts"]
 
 # ---- runtime: production deps only + compiled output -----------------------
 FROM agents AS runtime

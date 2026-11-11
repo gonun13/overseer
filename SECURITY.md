@@ -68,6 +68,9 @@ These are in scope. A way through any of them is a vulnerability:
    to the workspace.
 6. **Exposure by default.** A default configuration that publishes the app or the Docker daemon
    sidecar beyond loopback or the internal compose network.
+7. **The Docker filter.** With `OVERSEER_DOCKER=1`, a request from a console that reaches the
+   sidecar's daemon without passing the filter, or that the filter passes although it asks for
+   something the filter is documented to refuse.
 
 ### Known limits: not vulnerabilities
 
@@ -82,11 +85,15 @@ but a way to get the same result *without* the documented path is welcome.
 - **The workspace is shared with the host.** Agents can write anything there, including git hooks,
   build scripts and editor config that the host may later run. Treat what agents leave in the
   workspace as untrusted, and keep projects on a git remote so a bad run is recoverable.
-- **The Docker sidecar is privileged.** Workspace projects that run `docker compose` need a daemon.
-  Overseer ships a `dind` sidecar rather than mounting the host's socket, and every console can
-  reach it. A privileged container has wide access to the kernel of the machine Docker runs on:
-  that is the host on Linux, and Docker Desktop's VM (which mounts your shared folders) elsewhere.
-  This is a known trade-off, not a sealed boundary. See
+- **The Docker sidecar is privileged, if you turn it on.** Workspace projects that run
+  `docker compose` need a daemon. It is off by default; `OVERSEER_DOCKER=1` starts a `dind` sidecar,
+  never the host's socket, behind a filter that refuses the requests that would hand a container
+  the sidecar itself: privileged mode, its namespaces, its devices, and mounts from outside the
+  workspace. The sidecar is still a privileged container, with wide access to the kernel of the
+  machine Docker runs on: that is the host on Linux, and Docker Desktop's VM (which mounts your
+  shared folders) elsewhere. The filter narrows what agents can ask of it and does not seal it: it
+  checks a mount's source a moment before the daemon mounts it, and a kernel bug that lets an
+  ordinary container out lands in a privileged one. See
   [`spec/architecture.md` §6.3](spec/architecture.md#63-the-daemon-that-builds-workspace-projects).
 - **The dev stack is not a sandbox.** `./bin/dev-start` mounts the Overseer repo into the container
   with write access, including the `bin/` scripts the host runs. Use the production stack to contain

@@ -40,18 +40,52 @@ services:
   # path it then resolves in its own namespace. Without path parity every
   # project bind mount silently mounts an empty directory. /app/loop is in
   # there because a `review` QA run happens in a worktree under loop/db/.
+  #
+  # Optional: this and `docker-filter` start only when OVERSEER_DOCKER=1
+  # (.env.example) — the `docker` profile.
   dind:
+    profiles: ["docker"]
     image: docker:28-dind
     privileged: true
-    environment:
-      # Plain tcp, which is only acceptable because 2375 is never published and
-      # is reachable on this compose network alone.
-      - DOCKER_TLS_CERTDIR=
+    # A unix socket and nothing else. The image's default also listens on tcp,
+    # which every console could reach; this socket lives in a volume only
+    # `docker-filter` mounts, so the filter is the one way in
+    # (spec/architecture.md §6.3). Naming the command is what turns the tcp
+    # listener off — the entrypoint adds it only when given no command.
+    command: ["dockerd", "--host=unix:///run/dind/docker.sock"]
     volumes:
       # Named, not a bind: overlayfs will not run on a bind mount.
       - dind-storage:/var/lib/docker
+      - dind-socket:/run/dind
       - ${OVERSEER_WORKSPACE_HOST:-../overseer-workspace}:/workspace
       - ./loop:/app/loop
+
+  # What consoles talk to instead of the daemon: it passes ordinary compose
+  # work on and refuses what would hand a container the sidecar itself
+  # (packages/docker-filter). Built into its own image rather than run from the
+  # repo bind mount like everything else here: an agent can write to /app, and
+  # the filter must not be something an agent can edit.
+  docker-filter:
+    profiles: ["docker"]
+    build:
+      context: .
+      target: docker-filter
+    read_only: true
+    cap_drop: ["ALL"]
+    # To follow a bind source through directories its user cannot enter.
+    cap_add: ["DAC_READ_SEARCH"]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      - DOCKER_FILTER_BIND_ROOTS=/workspace:/app/loop
+    volumes:
+      - dind-socket:/run/dind
+      # The sidecar's shared directories at the sidecar's paths, read-only, so
+      # a link followed here leads where it will lead there.
+      - ${OVERSEER_WORKSPACE_HOST:-../overseer-workspace}:/workspace:ro
+      - ./loop:/app/loop:ro
+    depends_on:
+      dind:
+        condition: service_started
 
   # Builds protocol + adapters once, then holds them in tsc --watch. server and
   # web both resolve @overseer/* through `main: ./dist/index.js`, so neither can
@@ -111,8 +145,11 @@ services:
       # (CLAUDE_CONFIG_DIR, OVERSEER_WORKSPACE, OVERSEER_PROVIDERS_DIR,
       # OVERSEER_INTERNAL_DIR). Repeating a path here is how the two drift.
       #
-      # This one is a fact about *this file's* topology, not the image's:
-      - DOCKER_HOST=tcp://dind:2375
+      # This one is a fact about *this file's* topology, not the image's.
+      # bin/_lib.sh sets it to the filter when OVERSEER_DOCKER=1; otherwise the
+      # address is the message, because the Docker CLI prints it back:
+      # "Cannot connect to the Docker daemon at unix:///docker-is-off/…".
+      - DOCKER_HOST=${OVERSEER_DOCKER_HOST:-unix:///docker-is-off/set-OVERSEER_DOCKER-in-.env}
       # From project .env (see .env.example). Unset → UTC.
       - TZ=${TZ:-UTC}
       - CHOKIDAR_USEPOLLING=${CHOKIDAR_USEPOLLING:-1}
@@ -159,8 +196,10 @@ services:
     depends_on:
       deps:
         condition: service_healthy
-      dind:
+      # Only when the profile is on; ignored otherwise.
+      docker-filter:
         condition: service_started
+        required: false
 
   web:
     build: *app-build
@@ -232,6 +271,8 @@ volumes:
   # The workspace projects' own images and layers, built by the dind sidecar.
   # Discarded by ./bin/reset; the next run rebuilds them.
   dind-storage:
+  # The sidecar daemon's socket, shared with docker-filter and nothing else.
+  dind-socket:
   # These shadow the bind-mounted host node_modules, which is macOS-built and
   # would break native deps in a linux container.
   node-modules-root:

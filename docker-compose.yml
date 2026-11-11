@@ -3,25 +3,60 @@
 name: overseer
 
 services:
+  # Optional — started only when OVERSEER_DOCKER=1 (.env.example), which is what
+  # the `docker` profile on the next two services means. Without it there is no
+  # daemon and `docker` in a console says so.
+  #
   # The Docker daemon the *workspace projects* build and test against. See the
   # long note in docker-compose.dev.yml: a sidecar rather than a bind of the
   # host's /var/run/docker.sock, and /workspace and /app/loop/db mounted at the
   # same paths the app container sees so project bind mounts resolve.
   dind:
+    profiles: ["docker"]
     image: docker:28-dind
     privileged: true
     # Matches overseer's policy: when the Docker daemon brings overseer back
     # after a reboot it ignores depends_on, so this has to come back on its own.
     restart: unless-stopped
-    environment:
-      # Plain tcp, which is only acceptable because 2375 is never published and
-      # is reachable on this compose network alone.
-      - DOCKER_TLS_CERTDIR=
+    # A unix socket and nothing else. The image's default also listens on tcp,
+    # which every console could reach; this socket lives in a volume only
+    # `docker-filter` mounts, so the filter is the one way in
+    # (spec/architecture.md §6.3). Naming the command is what turns the tcp
+    # listener off — the entrypoint adds it only when given no command.
+    command: ["dockerd", "--host=unix:///run/dind/docker.sock"]
     volumes:
       # Named, not a bind: overlayfs will not run on a bind mount.
       - dind-storage:/var/lib/docker
+      - dind-socket:/run/dind
       - ${OVERSEER_WORKSPACE_HOST:-../overseer-workspace}:/workspace
       - loop-db:/app/loop/db
+
+  # What consoles talk to instead of the daemon: it passes ordinary compose
+  # work on and refuses what would hand a container the sidecar itself
+  # (packages/docker-filter). Its own image and never the app's — nothing an
+  # agent can write to is in it.
+  docker-filter:
+    profiles: ["docker"]
+    build:
+      context: .
+      target: docker-filter
+    restart: unless-stopped
+    read_only: true
+    cap_drop: ["ALL"]
+    # To follow a bind source through directories its user cannot enter.
+    cap_add: ["DAC_READ_SEARCH"]
+    security_opt: ["no-new-privileges:true"]
+    environment:
+      - DOCKER_FILTER_BIND_ROOTS=/workspace:/app/loop/db
+    volumes:
+      - dind-socket:/run/dind
+      # The sidecar's shared directories at the sidecar's paths, read-only, so
+      # a link followed here leads where it will lead there.
+      - ${OVERSEER_WORKSPACE_HOST:-../overseer-workspace}:/workspace:ro
+      - loop-db:/app/loop/db:ro
+    depends_on:
+      dind:
+        condition: service_started
 
   overseer:
     build:
@@ -62,8 +97,11 @@ services:
       # (CLAUDE_CONFIG_DIR, OVERSEER_WORKSPACE, OVERSEER_PROVIDERS_DIR,
       # OVERSEER_INTERNAL_DIR). Repeating a path here is how the two drift.
       #
-      # This one is a fact about *this file's* topology, not the image's:
-      - DOCKER_HOST=tcp://dind:2375
+      # This one is a fact about *this file's* topology, not the image's.
+      # bin/_lib.sh sets it to the filter when OVERSEER_DOCKER=1; otherwise the
+      # address is the message, because the Docker CLI prints it back:
+      # "Cannot connect to the Docker daemon at unix:///docker-is-off/…".
+      - DOCKER_HOST=${OVERSEER_DOCKER_HOST:-unix:///docker-is-off/set-OVERSEER_DOCKER-in-.env}
       # From project .env (see .env.example). Unset → UTC.
       - TZ=${TZ:-UTC}
       # Optional, from .env: authorship on the commits loop/bin/land writes.
@@ -82,8 +120,10 @@ services:
       - GIT_COMMITTER_NAME
       - GIT_COMMITTER_EMAIL
     depends_on:
-      dind:
+      # Only when the profile is on; ignored otherwise.
+      docker-filter:
         condition: service_started
+        required: false
 
 volumes:
   # Every provider's config and auth — Claude's subscription token, Cursor's,
@@ -104,3 +144,5 @@ volumes:
   loop-db:
   # The workspace projects' own images and layers, built by the dind sidecar.
   dind-storage:
+  # The sidecar daemon's socket, shared with docker-filter and nothing else.
+  dind-socket:

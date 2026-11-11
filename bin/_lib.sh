@@ -57,6 +57,33 @@ mkdir -p "$OVERSEER_WORKSPACE_HOST"
 OVERSEER_WORKSPACE_HOST=$(CDPATH= cd -- "$OVERSEER_WORKSPACE_HOST" && pwd)
 export OVERSEER_WORKSPACE_HOST
 
+# Docker for workspace projects is opt-in (spec/architecture.md §6.3). With
+# OVERSEER_DOCKER=1 the `docker` compose profile starts the daemon sidecar and
+# the filter in front of it, and consoles are pointed at the filter; without
+# it neither runs and the compose files' own DOCKER_HOST default says so.
+# Same precedence as the workspace above: the shell, then .env.
+OVERSEER_DOCKER_SET=1
+if [ -z "${OVERSEER_DOCKER:-}" ]; then
+  OVERSEER_DOCKER_SET=
+  if [ -f "$REPO_ROOT/.env" ]; then
+    OVERSEER_DOCKER=$(sed -n 's/^[[:space:]]*OVERSEER_DOCKER=//p' "$REPO_ROOT/.env" | tail -n 1)
+    [ -z "$OVERSEER_DOCKER" ] || OVERSEER_DOCKER_SET=1
+  fi
+fi
+case "${OVERSEER_DOCKER:-}" in
+  1 | true | yes | on)
+    OVERSEER_DOCKER=1
+    OVERSEER_DOCKER_HOST=tcp://docker-filter:2375
+    export OVERSEER_DOCKER_HOST
+    COMPOSE_PROFILES="${COMPOSE_PROFILES:+$COMPOSE_PROFILES,}docker"
+    export COMPOSE_PROFILES
+    ;;
+  *)
+    OVERSEER_DOCKER=0
+    unset OVERSEER_DOCKER_HOST
+    ;;
+esac
+
 # Git's four identity variables are read ahead of every config file, so an
 # empty one is worse than an absent one: it beats the identity the operator
 # saved in settings *and* the container's own ~/.gitconfig, and the only thing
@@ -107,6 +134,35 @@ dev_compose() {
 
 prod_compose() {
   _compose "$PROD_COMPOSE" "$PROD_COMPOSE_LOCAL" "$@"
+}
+
+# all_profiles <compose function> <args…> — for the commands that take a stack
+# apart. A sidecar started while OVERSEER_DOCKER was on must still come down
+# after it has been turned off, and compose only sees a profile it is told of.
+all_profiles() {
+  COMPOSE_PROFILES=docker
+  export COMPOSE_PROFILES
+  "$@"
+}
+
+# require_docker_choice <compose project name>
+#
+# Docker for workspace projects used to be always on. An instance that has
+# used it — its build cache volume is the evidence — and has not said either
+# way would otherwise come up with `docker` quietly gone from every console.
+# Refuse once and ask. Delete this guard once the release that made Docker
+# a choice is far enough back that no one upgrades across it.
+require_docker_choice() {
+  [ -z "$OVERSEER_DOCKER_SET" ] || return 0
+  docker volume inspect "$1_dind-storage" >/dev/null 2>&1 || return 0
+  echo "overseer: Docker for workspace projects is now a choice." >&2
+  echo "  This instance has used it, so say which you want in .env, then re-run:" >&2
+  echo >&2
+  echo "    OVERSEER_DOCKER=1   keep it: projects can run docker and docker compose" >&2
+  echo "    OVERSEER_DOCKER=0   turn it off: no Docker daemon inside the sandbox" >&2
+  echo >&2
+  echo "  .env.example says what each one means." >&2
+  exit 1
 }
 
 require_docker() {

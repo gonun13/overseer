@@ -47,8 +47,10 @@ The container runs as the host user's uid/gid (`OVERSEER_UID`/`OVERSEER_GID`,
 filled by `bin/_lib.sh` from `id`). Without that, bind mounts owned by any user
 other than 1000 are unwritable and git refuses the workspace as dubiously owned.
 
-`/workspace` and `/app/loop/db` are also mounted into the `dind` sidecar at the same absolute
-paths, or a workspace project's own bind mounts resolve to empty directories
+With `OVERSEER_DOCKER=1`, `/workspace` and `/app/loop/db` are also mounted into the `dind` sidecar
+at the same absolute paths, or a workspace project's own bind mounts resolve to empty directories,
+and read-only into `docker-filter`, which checks bind mounts against them. The `dind-socket` volume
+holds the daemon's socket and is shared by those two services alone
 ([architecture.md §6.3](architecture.md#63-the-daemon-that-builds-workspace-projects)).
 
 What discards what: `./bin/reset` drops every volume, auth included; `reset overseer` in settings

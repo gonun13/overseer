@@ -5,4 +5,4 @@
 . "$(dirname -- "$0")/_lib.sh"
 
 require_docker
-prod_compose down "$@"
+all_profiles prod_compose down "$@"

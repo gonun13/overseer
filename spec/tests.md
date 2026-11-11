@@ -11,7 +11,7 @@ run anything ([PROJECT.md](PROJECT.md) requirement 1).
 | Gate | Command | What it runs |
 |---|---|---|
 | Typecheck + lint + format | `./bin/check` | `tsc --noEmit` in every workspace; `oxlint packages` from the root, one `.oxlintrc.json` (React rules scoped to `packages/web`); `prettier --check .` at the root (Markdown excluded, see `.prettierignore`; fix with `./bin/npm run format`) |
-| Unit + integration | `./bin/test` | `node:test` in every workspace that has tests — `tsx --test` for server and adapters, `node --experimental-strip-types --test` for web |
+| Unit + integration | `./bin/test` | `node:test` in every workspace that has tests — `tsx --test` for server and adapters, `node --experimental-strip-types --test` for web and the Docker filter |
 | Acceptance | `./bin/test-e2e [playwright args]` | Playwright, Chromium, in the dev stack's `e2e` service against `web:5173` |
 | Dev loop | `./bin/loop check` → `loop/bin/check` | `bash -n` on every loop script, `shellcheck` (warning/error diagnostics, local rule suppressions), and `check-providers` |
 | Provider registry | `loop/bin/check-providers` | each manifest's CLI and config directory stay inside its own bundle; every manifest with an `install` has a matching `# provider-cli: <id>` marker in the `Dockerfile`, and no marker lacks a manifest |
@@ -29,6 +29,7 @@ adapter packages they import are current.
 | `adapters/codex` | `packages/adapters/codex/test/` | device login, cancellation, deadlines, quotas, native threads and isolated pinned-CLI persistence |
 | `adapters/cursor` | `packages/adapters/cursor/test/` | adapter, transcripts, usage |
 | `adapters/opencode` | `packages/adapters/opencode/test/` | readiness, console command line and plugin env, the plugin's hooks, opening prompt and brief, session database reads, and isolated pinned-CLI session create/list/delete |
+| `docker-filter` | `packages/docker-filter/test/` | which Docker requests pass, which are refused and why (`policy`); the proxy against a stand-in daemon — bodies re-issued as read, refusals in the daemon's error shape, a connection handed over only once the daemon upgrades it; following links in a bind source |
 | `e2e` | `packages/e2e/tests/*.spec.ts` | boot and wizard (`smoke`), overseer space, consoles, console clipboard, fullscreen, git access, loop providers, Codex and opencode provider surfaces, changelog window |
 
 ## 3. Conventions
@@ -66,6 +67,11 @@ A change is done when:
    ([architecture.md §8.4](architecture.md#84-changelog)); `changelog.spec.ts` and the web
    changelog tests guard the file's format.
 6. A change under `loop/` or `providers/` passes `loop/bin/check`.
+7. A change to the Docker filter or to how the sidecar is wired is also tried against a real
+   daemon: bring the `dind` and `docker-filter` services up under another compose project name,
+   then check that a compose project still builds, starts and execs through the filter and that a
+   privileged container and a bind from outside the workspace are refused. The unit tests cannot
+   tell you what the daemon accepts.
 
 ## 5. When to run what
 

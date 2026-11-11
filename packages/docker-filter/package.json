@@ -1,0 +1,15 @@
+{
+  "name": "@overseer/docker-filter",
+  "private": true,
+  "version": "0.8.4",
+  "description": "The proxy between consoles and the Docker sidecar — refuses requests that would break out of it.",
+  "type": "module",
+  "scripts": {
+    "start": "node src/main.ts",
+    "test": "node --experimental-strip-types --test test/**/*.test.ts",
+    "typecheck": "tsc -p tsconfig.json"
+  },
+  "devDependencies": {
+    "@types/node": "^24.13.3"
+  }
+}

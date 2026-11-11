@@ -8,6 +8,7 @@
 . "$(dirname -- "$0")/_lib.sh"
 
 require_docker
+require_docker_choice overseer-dev
 
 echo "overseer: starting dev stack — web http://127.0.0.1:5173, server http://127.0.0.1:3001"
 dev_compose up "$@"

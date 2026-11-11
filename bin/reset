@@ -28,5 +28,5 @@ case "$reply" in
     ;;
 esac
 
-dev_compose down -v
+all_profiles dev_compose down -v
 echo "overseer: dev volumes removed. Next ./bin/dev will reinstall and re-auth."

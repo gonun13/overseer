@@ -9,6 +9,7 @@
     "packages/web",
     "packages/server",
     "packages/adapters/*",
+    "packages/docker-filter",
     "packages/e2e"
   ],
   "engines": {

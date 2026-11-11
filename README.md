@@ -41,6 +41,12 @@ the clone and mounts it as `/workspace`, the only host surface agents get; clone
 create one from the UI. Keep those projects on git remotes so a bad run is recoverable. To move the
 workspace, set `OVERSEER_WORKSPACE_HOST` in `.env` (see [`.env.example`](.env.example)).
 
+Projects that need Docker themselves — to build an image, or because their tests run
+`docker compose` — get none by default. Set `OVERSEER_DOCKER=1` in `.env` and restart: Overseer
+then runs a Docker daemon of its own for them, never your machine's, behind a filter that refuses
+privileged containers and mounts from outside the workspace. [`.env.example`](.env.example) and
+[SECURITY.md](SECURITY.md) say what that grants.
+
 A git host on your own machine under a name like `gitlab.local` will not resolve inside the
 container, where `127.0.0.1` is the container itself. Point the name at the host in a
 `docker-compose.local.yml` (dev: `docker-compose.dev.local.yml`, service `server`), which `bin/`
@@ -105,7 +111,8 @@ docker run --rm -v overseer_agent-home:/data -v "$PWD/../overseer-backup:/backup
 
 The `agent-home` archive contains live credentials — store it as you would a password file. Losing
 it only costs you a fresh login per provider and a new ssh key; `loop-db` cannot be regenerated.
-The fourth volume, `overseer_dind-storage`, is a build cache and needs no backup.
+With Docker turned on there are two more, `overseer_dind-storage` and `overseer_dind-socket`: a
+build cache and a socket, neither worth backing up.
 
 ## Develop
 

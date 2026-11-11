@@ -12,8 +12,8 @@ require_docker
 if [ "${1:-}" = "--prod" ]; then
   shift
   echo "overseer: rebuilding production image"
-  prod_compose build "$@"
+  all_profiles prod_compose build "$@"
 else
   echo "overseer: rebuilding dev images"
-  dev_compose build "$@"
+  all_profiles dev_compose build "$@"
 fi
