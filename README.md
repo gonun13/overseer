@@ -60,6 +60,53 @@ Use the name only, and don't join the git host's Docker network
 > expose it on a public interface or deploy it as a public instance. [SECURITY.md](SECURITY.md)
 > states the threat model and how to report a vulnerability privately.
 
+## Upgrade
+
+```sh
+./bin/stop
+git pull
+./bin/start
+```
+
+`./bin/start` rebuilds the image on every run, so there is no separate build step. Stopping ends
+every running console; their sessions stay resumable from the sessions list. Logins, settings and
+the workspace survive, because they live outside the image. `/changelog` in the app lists what
+changed, and a release that needs a manual step says so there.
+
+## Back up
+
+Your projects are ordinary directories in the workspace; back them up like any other code. The
+rest of the instance's state lives in three Docker volumes that no host directory mirrors:
+
+| Volume                     | Holds                                                          |
+| -------------------------- | -------------------------------------------------------------- |
+| `overseer_agent-home`      | every provider's login and config, the ssh key, git identity   |
+| `overseer_overseer-memory` | the overseer's memory: theme, callsigns, logs, action register |
+| `overseer_loop-db`         | the dev loop's requests, plans and per-project memory          |
+
+Stop the stack, then archive each one:
+
+```sh
+./bin/stop
+mkdir -p ../overseer-backup
+for v in agent-home overseer-memory loop-db; do
+  docker run --rm -v "overseer_$v:/data:ro" -v "$PWD/../overseer-backup:/backup" \
+    alpine tar czf "/backup/$v.tgz" -C /data .
+done
+```
+
+To restore, stop the stack and unpack an archive back into its volume; this replaces what the
+volume holds:
+
+```sh
+docker run --rm -v overseer_agent-home:/data -v "$PWD/../overseer-backup:/backup" \
+  alpine sh -c 'find /data -mindepth 1 -delete && tar xzf /backup/agent-home.tgz -C /data'
+```
+
+The `agent-home` archive contains live credentials — store it as you would a password file. Losing
+it only costs you a fresh login per provider and a new ssh key; `loop-db` cannot be regenerated.
+The fourth volume, `overseer_dind-storage`, is a build cache and needs no backup.
+
 ## Develop
 
 ```sh

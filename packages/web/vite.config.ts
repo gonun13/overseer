@@ -23,7 +23,10 @@ export default defineConfig({
     // guard still holds for every other host, localhost included by default.
     allowedHosts: ["web"],
     proxy: {
-      "/api": serverOrigin,
+      // Object form, not a bare string: the string form sets changeOrigin and
+      // rewrites Host to server:3000, and the server's Host allowlist
+      // (packages/server/src/host-guard.ts) must judge the browser's own Host.
+      "/api": { target: serverOrigin },
       "/ws": { target: serverOrigin.replace(/^http/, "ws"), ws: true },
     },
     watch: {

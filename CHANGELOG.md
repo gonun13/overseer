@@ -5,6 +5,12 @@ each. The `/changelog` window renders this file — so does clicking the version
 rules for writing an entry live in
 [spec/architecture.md §8.4](spec/architecture.md#84-changelog).
 
+## 0.8.4 — 2026-11-11
+
+### Fixed
+
+- Web pages on other sites can no longer drive the app through DNS rebinding.
+
 ## 0.8.3 — 2026-11-09
 
 ### Changed

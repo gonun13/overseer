@@ -73,10 +73,13 @@ import {
   type GitOpResult,
 } from "./vcs/index.js";
 import { isInsideWorkspace, scanWorkspace } from "./workspace.js";
+import { allowedHostnames, isAllowedHost } from "./host-guard.js";
 
 /**
  * Any page in the browser can otherwise open a socket to localhost — check
- * Origin on the upgrade (spec/architecture.md §6).
+ * Origin on the upgrade (spec/architecture.md §6). On its own this passes a
+ * DNS-rebinding page, whose Origin and Host agree; the Host allowlist in
+ * `host-guard.ts` is what closes that.
  */
 function isAllowedOrigin(
   origin: string | undefined,
@@ -228,7 +231,11 @@ const RELAY_BIN = path.resolve(
 
 export function attachWebSocketServer(
   httpServer: Server,
-  opts: { hookBase?: string } = {},
+  opts: {
+    hookBase?: string;
+    /** Host names the upgrade is answered on (`host-guard.ts`). */
+    allowedHosts?: ReadonlySet<string>;
+  } = {},
 ): {
   wss: WebSocketServer;
   /** Every console the server runs — `index.ts` routes CLI hooks into it. */
@@ -243,6 +250,7 @@ export function attachWebSocketServer(
   relay: Relay;
 } {
   const wss = new WebSocketServer({ noServer: true });
+  const allowedHosts = opts.allowedHosts ?? allowedHostnames();
 
   const broadcast = (message: ServerMessage) => {
     const raw = JSON.stringify(message);
@@ -376,6 +384,7 @@ export function attachWebSocketServer(
   httpServer.on("upgrade", (req: IncomingMessage, socket, head) => {
     if (
       req.url !== "/ws" ||
+      !isAllowedHost(req.headers.host, allowedHosts) ||
       !isAllowedOrigin(req.headers.origin, req.headers.host)
     ) {
       socket.destroy();

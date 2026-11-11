@@ -104,6 +104,9 @@ services:
     environment:
       - HOST=0.0.0.0 # container-internal; the port mapping above is the real boundary
       - PORT=3000
+      # The e2e browser reaches the app as web:5173 and Vite's proxy keeps that
+      # Host; the server answers loopback names only otherwise (host-guard.ts).
+      - OVERSEER_ALLOWED_HOSTS=web
       # Where code, state and the workspace live is stated by the image
       # (CLAUDE_CONFIG_DIR, OVERSEER_WORKSPACE, OVERSEER_PROVIDERS_DIR,
       # OVERSEER_INTERNAL_DIR). Repeating a path here is how the two drift.

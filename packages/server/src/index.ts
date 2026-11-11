@@ -3,6 +3,7 @@ import path from "node:path";
 import { fileURLToPath } from "node:url";
 import express from "express";
 import { SESSION_MAX_TEXT_CHARS } from "@overseer/protocol";
+import { allowedHostnames, isAllowedHost } from "./host-guard.js";
 import { attachWebSocketServer } from "./ws.js";
 import { startTranscriptMonitor } from "./transcript-monitor.js";
 import { startUsageRefresh } from "./usage-refresh.js";
@@ -36,7 +37,19 @@ function isLoopback(address: string): boolean {
   );
 }
 
+const allowedHosts = allowedHostnames();
+
 const app = express();
+// Before every route: a DNS-rebinding page reaches this port under its own
+// name, and only a loopback name proves the browser meant this app
+// (host-guard.ts, spec/architecture.md §6).
+app.use((req, res, next) => {
+  if (isAllowedHost(req.headers.host, allowedHosts)) {
+    next();
+    return;
+  }
+  res.status(403).type("text/plain").send("overseer: unknown host");
+});
 app.use(express.json());
 
 app.get("/api/health", (_req, res) => {
@@ -65,7 +78,10 @@ const httpServer = createServer(app);
 // CLIs run in this same container, so their hooks reach the server on
 // loopback whatever interface it is bound to.
 const { broadcast, space, refreshSessions, consoles, relay } =
-  attachWebSocketServer(httpServer, { hookBase: `http://127.0.0.1:${port}` });
+  attachWebSocketServer(httpServer, {
+    hookBase: `http://127.0.0.1:${port}`,
+    allowedHosts,
+  });
 
 // Lifecycle reports from CLI hooks (console-registry.ts). Loopback only, and
 // the path carries a per-console secret: a hook is a `curl` from a process

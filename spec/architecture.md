@@ -381,6 +381,11 @@ Two services. The Node server serves the built SPA and handles `/api/*` + `/ws` 
 - This is **remote code execution as a service**. Publish the host port on `127.0.0.1`. LAN access requires authentication.
 - Check `Origin` on WebSocket upgrades. Mutating CLI hooks currently check loopback and their
   per-console token, but do not check `Origin` even when a browser supplies one.
+- Answer only loopback `Host` names (`localhost`, `127.0.0.1`, `[::1]`, any port), on every HTTP
+  route and on the upgrade. A DNS-rebinding page sends an `Origin` that matches its own `Host`, so
+  the `Origin` check alone passes it; the name it cannot fake is the `Host`. Extra names come
+  from `OVERSEER_ALLOWED_HOSTS` (comma-separated); the dev stack sets `web` for the e2e browser,
+  whose `Host` Vite's proxy passes through.
 - The container holds a live subscription token in `agent-home` — one per signed-in provider, since the app and the dev loop share it ([data.md §1](data.md#1-where-things-live)). Any RCE inside it exfiltrates all of them, which is also the argument for not mounting the host's own config.
 - Permission modes, including the CLI's own bypass, are chosen in the CLI's TUI inside its console. Overseer offers no mode control of its own and must not add one that bypasses the CLI's own opt-in gesture.
 
@@ -519,48 +524,27 @@ authorize a commit, tag or push.
 
 ### 8.2 Milestone map
 
-The pre-1.0 rows describe historical milestones, rather than reserving future MINOR numbers.
-New features within an existing tier still call for MINOR (§8).
-Earlier releases retain their original numbers even where their bumps differ from this practice.
+A record of what each pre-1.0 line shipped, not a reservation of future MINOR numbers. Earlier
+releases keep their original numbers even where their bumps differ from §8;
+[CHANGELOG.md](../CHANGELOG.md) has the detail.
+
+| Version | Shipped |
+| ------- | ------- |
+| `0.0.x` | Scaffold: repo layout and container. |
+| `0.1.x` | Overseer shell: wizard, internal memory, `overseer-personality`, workspace discovery, provider status. |
+| `0.2.x` | Live sessions for `claude` and `cursor`, project creation, the dev loop driven from the app. |
+| `0.3.x` | Working-tree diffs in the project window. |
+| `0.4.x` | Skills import (removed in `0.5.0`). |
+| `0.5.x` | CLI harness: conversations run in real console terminals that outlive their windows; the chat, capabilities and plans windows are removed in favour of the CLI. |
+
+Future releases choose versions under §8 from the changes actually shipping. Product readiness and
+any MAJOR bump require an explicit operator decision.
 
 A migration that requires manual operator action — a moved directory or renamed setting — is a
 breaking change even in this private, unpublished repo. Flag it and obtain the operator's version
 decision before preparing a release. The release notes must state the upgrade action; a startup
 check should refuse incompatible configuration and explain what to do. If that check or a
 migration is missing, report the gap rather than assuming compatibility.
-
-| Version   | Design-doc tier | Ship bar |
-| --------- | --------------- | -------- |
-| `0.0.x`   | —               | Scaffold only: repo layout, container, no behavioral spec live. |
-| `0.1.x`   | [behaviour/overseer.md](behaviour/overseer.md) | **Overseer shell** — wizard phases (§4), progressive furniture (§4), internal memory (§6.2), `overseer-personality` (§6.3), workspace discovery, provider status surfacing via `getStatus()`. The overseer path uses real server state; other windows stay empty until live APIs land. |
-| `0.2.x`   | §1 (process model), §3 rows 1–2 + 5, [behaviour/dev-loop.md](behaviour/dev-loop.md) | **Live sessions & providers** — stream-json sessions that spawn, stream, resume and delete, for **two** real adapters (`claude`, `cursor`), each declaring its own `AdapterCapabilities`; session controls populated from the CLI's own report; runtime `set_model` and `set_permission_mode`; project creation into `/workspace`; the dev loop (§9) driven from inside the app. Approvals, capabilities and turn context are **not** in this tier — their windows exist and declare themselves unavailable. |
-| `0.3.x`   | [ui-ux.md](ui-ux.md) §5.5 | **The working tree, readable** — a changed file in the project window opens to its unified diff against the last commit, with a toggle to the file's current contents. Modified, added, deleted, renamed, untracked, binary and no-commits-yet all render honestly rather than as an empty frame, and a diff too large to show is clipped and says so. Diffs of a *tool turn's* own `Edit`/`Write` input stay out of tier — that entry point keeps its unavailable note until a turn target can be resolved to a project and a file. |
-| `0.4.x`   | skills sections, removed in `0.5.0` | **Skills, importable** — the capabilities window's skills tab lists what the attached provider's CLI will actually resolve, across both scopes, and imports from a git url or files off the operator's machine. Both published shapes are accepted: a folder holding a `SKILL.md`, and a flat `<name>.md` whose frontmatter carries a description, which is wrapped into the folder the CLI expects. A source holding several installs all of them, skipping `_`-prefixed templates and anything already present. Each adapter owns its own layout and its own import: `claude` writes `.claude/skills`, `cursor` writes `.cursor/skills` and additionally *lists* the four other config directories its CLI reads, marked as belonging elsewhere and refused for delete. Skills reach app sessions with no injection step, because both CLIs already discover the directories the adapter writes to. MCP stays unavailable, and authoring a skill's prose in place is out of tier. |
-| `0.5.x`   | §1.1–§1.2, [ui-ux.md](ui-ux.md) §5, [behaviour/consoles.md](behaviour/consoles.md) | **CLI harness** — provider conversations run in real console terminals; consoles persist after their windows close; sessions resume from provider transcripts; the prompt starts sessions; `/shell` opens a project shell. Chat, capabilities and plans windows are removed in favour of the CLI. |
-| Future releases | §3, current architecture and UI docs | Choose versions under §8 from the changes actually shipping. Product readiness and any MAJOR bump require an explicit operator decision; the old stream-json chat milestones are not the ship bar for the CLI harness. |
-
-The non-goals below record the older tiers; their removed chat and capabilities windows are not
-current CLI-harness features.
-
-**Explicit non-goals for `0.3.x`:** diff rendering of a *tool turn's* own `Edit` / `Write` input
-(the project window's own file diffs ship in `0.3.x` — this is the other entry point into the same
-window, which at that tier had no way to resolve a turn target to a project and a file), the
-capabilities inventory and its editor, turn context attachment, and §5 provider-backed querying in
-[behaviour/overseer.md](behaviour/overseer.md) ("planned, not built"). Every one of those had a
-window at that tier; each carried a `WUnavailable` note naming what was missing rather than
-rendering an empty frame that reads as a working-but-idle surface
-(`packages/web/src/components/windows/bits.tsx`). Adapters for the catalog stubs of that time
-were also out of tier; `opencode` has one since `0.8.0` and `github-copilot` was dropped from the
-registry then. Codex dev-loop support and API-key entry remain out of tier. The raw OPEN CONSOLE PTY escape hatch
-(ui-ux.md §5.3) is separate from the MVP "Console" zone in §3 and shipped in `0.1.x`.
-
-**Explicit non-goals for `0.4.x`:** skills in dev-loop sessions. `providers/claude/provider.sh`
-runs the CLI with `--setting-sources ""` so the loop bundle reads only its own settings file, and
-that switch suppresses skill discovery in both scopes — verified against `claude 2.1.226`, where a
-skill that resolves normally answers `Unknown command` under the flag. Widening it is not the fix:
-it would re-admit the operator's own `settings.json`, which the bundle overrides deliberately.
-`--plugin-dir` is the lead to chase if loop skills are wanted. Authoring a skill's prose in place
-is also out of tier, as is the MCP tab.
 
 ### 8.3 Release checklist
 
